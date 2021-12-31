@@ -10,7 +10,6 @@ checksum = "fcb51a0695d8f838b1ee009b3fbf66bda078cd64590202a864a8f3e8c4315c47"
 dependencies = [
  "getrandom",
  "once_cell",
- "serde",
  "version_check",
 ]
 
@@ -267,17 +266,18 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 name = "erars"
 version = "0.1.0"
 dependencies = [
- "ahash",
  "anyhow",
  "bitflags",
  "criterion",
  "either",
  "glob",
+ "hashbrown",
  "itertools",
  "k9",
  "once_cell",
  "pest",
  "pest_derive",
+ "rayon",
  "serde",
  "serde_yaml",
 ]
@@ -325,6 +325,11 @@ name = "hashbrown"
 version = "0.11.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
+dependencies = [
+ "ahash",
+ "rayon",
+ "serde",
+]
 
 [[package]]
 name = "hermit-abi"

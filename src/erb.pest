@@ -76,7 +76,7 @@ reuselastline_com = { ^"REUSELASTLINE" ~ print_text? }
 call_com = { ^"CALL" ~ ident ~ comma_seq }
 callform_com = { callform_header ~ print_form_text_space ~ comma_seq? }
 	callform_header = { ^"TRY"? ~ ("CALL" | "JUMP" | "GOTO") ~ "FORM" }
-other_com = { ident ~ comma_seq }
+other_com = { ident ~ comma_seq? }
 
 // control flow
 

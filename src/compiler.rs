@@ -1,8 +1,8 @@
 use crate::vm::VariableInfo;
 
-use self::parser::{Rule, PREC_CLIMBER};
-use ahash::AHashMap;
-use anyhow::{Result, anyhow};
+use self::parser::{ErbParser, Rule, PREC_CLIMBER};
+use anyhow::{anyhow, Result};
+use hashbrown::HashMap;
 use itertools::Itertools;
 use pest::{iterators::Pair, Parser};
 
@@ -28,10 +28,7 @@ pub enum BinOp {
 pub enum Expr {
     Num(i64),
     Str(String),
-    VarExpr {
-        name: String,
-        args: Vec<Self>,
-    },
+    VarExpr { name: String, args: Vec<Self> },
     BinExpr(Box<Self>, BinOp, Box<Self>),
 }
 
@@ -71,7 +68,7 @@ pub enum ProgramLine {
     },
 }
 
-fn parse_expr(p: Pair<Rule>, infos: &AHashMap<String, VariableInfo>) -> Result<Expr> {
+fn parse_expr(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Expr> {
     PREC_CLIMBER.climb(
         p.into_inner(),
         |p| match p.as_rule() {
@@ -80,8 +77,12 @@ fn parse_expr(p: Pair<Rule>, infos: &AHashMap<String, VariableInfo>) -> Result<E
             Rule::var_expr => {
                 let mut pairs = p.into_inner();
                 let var = pairs.next().unwrap();
-                let info = infos.get(var.as_str()).ok_or_else(|| anyhow!("Unknown variable {}", var.as_str()))?;
-                let mut args = pairs.map(|p| parse_expr(p, infos)).collect::<Result<Vec<_>>>()?;
+                let info = infos
+                    .get(var.as_str())
+                    .ok_or_else(|| anyhow!("Unknown variable {}", var.as_str()))?;
+                let mut args = pairs
+                    .map(|p| parse_expr(p, infos))
+                    .collect::<Result<Vec<_>>>()?;
                 args.resize(info.arg_len(), Expr::Num(0));
 
                 Ok(Expr::VarExpr {
@@ -102,11 +103,11 @@ fn parse_expr(p: Pair<Rule>, infos: &AHashMap<String, VariableInfo>) -> Result<E
     )
 }
 
-fn parse_line(p: Pair<Rule>, infos: &AHashMap<String, VariableInfo>) -> Result<ProgramLine> {
+fn parse_line(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<ProgramLine> {
     let rule = p.as_rule();
     let mut pairs = p.into_inner();
 
-    let line = match rule {
+    let line = match dbg!(rule) {
         Rule::print_com | Rule::printform_com => {
             let mut flags = PrintFlags::empty();
 
@@ -146,14 +147,32 @@ fn parse_line(p: Pair<Rule>, infos: &AHashMap<String, VariableInfo>) -> Result<P
     Ok(line)
 }
 
-pub fn compile(s: &str, infos: &AHashMap<String, VariableInfo>) -> Result<Vec<ProgramLine>> {
-    let r = self::parser::ErbParser::parse(self::parser::Rule::program, s).unwrap();
+fn parse_function(
+    p: Pair<Rule>,
+    infos: &HashMap<String, VariableInfo>,
+) -> Result<(String, Vec<ProgramLine>)> {
+    let mut pairs = p.into_inner();
+
+    let label = pairs.next().unwrap().as_str().to_string();
+
+    Ok((
+        label,
+        pairs.map(|p| parse_line(p, infos)).collect::<Result<_>>()?,
+    ))
+}
+
+pub fn compile(
+    s: &str,
+    infos: &HashMap<String, VariableInfo>,
+) -> Result<Vec<(String, Vec<ProgramLine>)>> {
+    let r = ErbParser::parse(Rule::program, s).unwrap();
 
     r.map_while(|p| {
         if p.as_rule() == Rule::EOI {
             None
         } else {
-            Some(parse_line(p, infos))
+            debug_assert_eq!(p.as_rule(), Rule::function);
+            Some(parse_function(p, infos))
         }
     })
     .collect()

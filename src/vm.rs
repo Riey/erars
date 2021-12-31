@@ -2,7 +2,7 @@ use anyhow::{anyhow, bail, Result};
 use either::Either;
 
 use crate::compiler::{Expr, PrintFlags, ProgramLine};
-use ahash::AHashMap;
+use hashbrown::HashMap;
 use serde::{Serialize, Deserialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -108,11 +108,11 @@ impl Variable {
 
 pub struct VariableStorage {
     character_len: usize,
-    variables: AHashMap<String, (VariableInfo, Either<Variable, Vec<Variable>>)>,
+    variables: HashMap<String, (VariableInfo, Either<Variable, Vec<Variable>>)>,
 }
 
 impl VariableStorage {
-    pub fn new(infos: &AHashMap<String, VariableInfo>) -> Self {
+    pub fn new(infos: &HashMap<String, VariableInfo>) -> Self {
         let variables = infos.iter().map(|(name, info)| {
             let var = if info.is_chara {
                 Either::Right(Vec::new())
@@ -159,7 +159,7 @@ pub struct TerminalVm {
 }
 
 impl TerminalVm {
-    pub fn new(infos: &AHashMap<String, VariableInfo>) -> Self {
+    pub fn new(infos: &HashMap<String, VariableInfo>) -> Self {
         Self {
             var: VariableStorage::new(infos),
         }
