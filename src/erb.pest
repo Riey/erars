@@ -25,10 +25,7 @@ var_expr = {
 
 // ident
 
-ident = @{ first_ident_char ~ (first_ident_char | NUMBER)* }
-first_ident_char = _{
-	"_" | LETTER
-}
+ident = @{ (XID_START | "_") ~ (XID_CONTINUE | "_")* }
 
 // string
 

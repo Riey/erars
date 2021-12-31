@@ -33,6 +33,12 @@ mod tests {
     }
 
     #[test]
+    fn underscore() {
+        make_same_case!("_adf1rvdsad_312");
+        make_same_case!("___");
+    }
+
+    #[test]
     fn hangul_ident() {
         make_same_case!("함수이름");
         make_same_case!("가나다");
