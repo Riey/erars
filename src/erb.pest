@@ -37,16 +37,35 @@ string_char = _{ !"\"" ~ ANY }
 
 num = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
 
-operation = _{ add | subtract | multiply | divide | power }
-    add      = { "+" }
-    subtract = { "-" }
-    multiply = { "*" }
-    divide   = { "/" }
-    power    = { "^" }
+binop = _{
+    add | sub | mul | div | rem | shl | shr
+    | bitxor | bitand | bitor | xor | and | or
+    | lt | le | gt | ge | eq | ne
+}
+    add         = { "+" }
+    sub         = { "-" }
+    mul         = { "*" }
+    div         = { "/" }
+    rem         = { "%" }
+    shl         = { "<<" }
+    shr         = { ">>" }
+    bitxor      = { "^" }
+    bitand      = { "&" }
+    bitor       = { "|" }
+    xor         = { "^^" }
+    and         = { "&&" }
+    or          = { "||" }
+    lt          = { "<" }
+    le          = { "<=" }
+    gt          = { ">" }
+    ge          = { ">=" }
+    eq          = { "==" }
+    ne          = { "!=" }
+
 
 // expression
 
-expr = { term ~ (operation ~ term)* }
+expr = { term ~ (binop ~ term)* }
 term = _{ string | num | var_expr | "(" ~ expr ~ ")" }
 comma_seq = _{ term ~ ("," ~ term)* }
 comma_pair = _{ term ~ "," ~ term }

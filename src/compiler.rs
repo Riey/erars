@@ -18,7 +18,7 @@ pub enum BinOp {
     Sub,
     Mul,
     Div,
-    Power,
+    Rem,
 }
 
 #[derive(Clone, Debug)]
@@ -102,10 +102,10 @@ fn parse_expr(p: Pair<Rule>) -> Result<Expr> {
         },
         |lhs, op, rhs| match op.as_rule() {
             Rule::add => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Add, Box::new(rhs?))),
-            Rule::subtract => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Sub, Box::new(rhs?))),
-            Rule::divide => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Div, Box::new(rhs?))),
-            Rule::multiply => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Mul, Box::new(rhs?))),
-            Rule::power => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Power, Box::new(rhs?))),
+            Rule::sub => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Sub, Box::new(rhs?))),
+            Rule::div => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Div, Box::new(rhs?))),
+            Rule::mul => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Mul, Box::new(rhs?))),
+            Rule::rem => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Rem, Box::new(rhs?))),
             _ => todo!(),
         },
     )
