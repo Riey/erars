@@ -77,8 +77,9 @@ excom = _{ printform_com | print_com | call_com | addchara_com | delchara_com | 
 program_line = _{ excom | NEWLINE }
 
 function_label = { "@" ~ ident }
-function = { function_label ~ (NEWLINE ~ program_line*)? }
+function = { function_label ~ program_line* }
 
-program = _{ SOI ~ function* ~ EOI }
+program = _{ SOI ~ (function | NEWLINE)* ~ EOI }
 
 WHITESPACE = _{ " " | "\t" }
+COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
