@@ -104,11 +104,12 @@ excom = _{ printform_com | print_com | call_com | addchara_com | delchara_com | 
 // assign
 
 assign_line = { expr ~ "=" ~ expr }
+sif_line = { "SIF" ~ expr ~ NEWLINE ~ program_line }
 
-program_line = _{ excom | assign_line | NEWLINE }
+program_line = _{ excom | assign_line | sif_line }
 
 function_label = { "@" ~ ident }
-function = { function_label ~ program_line* }
+function = { function_label ~ (program_line | NEWLINE)* }
 
 program = _{ SOI ~ (function | NEWLINE)* ~ EOI }
 
