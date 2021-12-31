@@ -1,0 +1,74 @@
+;[라이센스]퍼블릭 도메인
+;본 파일에 연관된 저작권을 포기한다.
+;본 파일에 연관된 저작인격권은 행사하지 않는다.
+;2009/6/13 MinorShift(Emuera 제작자)
+;2010/4/2 MinorShift(Emuera 제작자) ver 1.736에 맞추어 일부 수정.
+
+;독자적인 타이틀 화면의 예 (Emuera ver 1.736 이후 대상)
+;LOADGAME_EX가 정의되어있는 것이 전제이므로, SAVELOAD.ERB와 동시에 사용해주세요.
+;SAVELOAD.ERB를 사용하지 않는 경우, CALL LOADGAME_EX를 LOADGAME으로 치환해주세요.
+;더해서, SYSTEM_TITLE이 정의되어있으면 TITLE_LOADGAME는 호출하지 못하게 됩니다.
+;사용하고 있는 명령의 자세한 내용은 밑에 쓴 EmueraWiki를 참조해주세요.
+;http://sourceforge.jp/projects/emuera/wiki/FrontPage
+
+@SYSTEM_TITLE
+;@SYSTEM_TITLE이 정의되어있으면, 표준의 타이틀 화면 대신에 SYSTEM_TITLE이 불림.
+
+;이 타이밍에 글로벌 변수를 읽어두면 뭔가 빠트릴 우려가 없어진다.
+;GLOBAL은 RESETDATA나 LOADDATA로 초기화 · 덮어쓰기되지 않는다.
+;필요에 따라서 코멘트아웃을 해제할 것.
+;LOADGLOBAL
+
+;버전 표기를 LOCALS:0에 작성.
+;1001이라면 1.001, 1100라면 1.10이라고 표시되도록.
+;여기서 사용한 변수는 RESETDATA나 LOADDATA로 청소되므로 로컬 변수를 사용하지 않아도 됨.
+LOCAL:0 = GAMEBASE_VERSION / 1000
+LOCAL:1 = GAMEBASE_VERSION % 1000 / 10
+LOCAL:2 = GAMEBASE_VERSION % 10
+LOCALS:0 = {LOCAL:0}.%TOSTR(LOCAL:1,"00")%
+SIF LOCAL:2 != 0
+    LOCALS:0 = %LOCALS:0%{LOCAL:2}
+
+;타이틀 표시.
+DRAWLINE 
+
+ALIGNMENT CENTER
+PRINTFORML %GAMEBASE_TITLE%
+PRINTFORML v%LOCALS:0%
+PRINTFORML 통합자: %GAMEBASE_AUTHOR%
+PRINTFORML (%GAMEBASE_YEAR%)
+PRINTL 
+PRINTFORML %GAMEBASE_INFO%
+PRINTFORML 「노예를 괴롭혀주세요…… 노예를 아껴주세요」
+ALIGNMENT LEFT
+
+DRAWLINE 
+
+;선택지 표시. _Rename.csv에서 지정된 값을 읽는 것은 불가능하므로 여기서 지정할 필요가 있음.
+$TITLE_SELECT
+PRINTL [0] 힘세고 강한 시작
+PRINTL [1] 불러오기
+$TITLE_INPUT
+INPUT
+IF RESULT == 0
+    RESETDATA
+    ;ADDDEFCHARA는 eramaker의 동작을 재현하기 위해서 존재하는 전용의 함수입니다
+    ;다른 장면에서는 ADDCHARA, ADDSPCHARA 등을 사용하는 것을 추천합니다
+    IF FLAG:999 == 1
+    FLAG:999 = 0
+    ENDIF
+    ;아웃페이지, 타이틀에서의 동방조교전 조회시 95,96,97등의 케릭터검색 기능을 사용못하게 하는 테스트 변수입니다.
+    ADDDEFCHARA
+    BEGIN FIRST
+    RETURN
+ELSEIF RESULT == 1
+    CALL LOADGAME_EX
+    GOTO TITLE_SELECT
+    ;LOADGAME_EX에서 LOAD를 실행하지 않고 돌아왔을 경우, 다시 한 번 도로 선택함.
+ELSE
+    REUSELASTLINE 무효값입니다.
+    GOTO TITLE_INPUT
+ENDIF
+
+;SYSTEM_TITLE 내에서 RETURN하면 다음에 실행할 행이 없어져, 에러가 남.
+;반드시 BEGIN 명령이나 LOADGAME을 실행할 것.

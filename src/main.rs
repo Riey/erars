@@ -1,13 +1,17 @@
 // const FONT: &[u8] = include_bytes!("../res/D2Coding-Ver1.3.2-20180524.ttc");
 
-fn main() {
-    let program = erars::compiler::compile("PRINTFORML MONEY:123 = %MONEY:123%").unwrap();
+fn main() -> anyhow::Result<()> {
+    let erbs = glob::glob_with("ERB/**/*.ERB", glob::MatchOptions {
+        case_sensitive: false,
+        require_literal_leading_dot: true,
+        require_literal_separator: true,
+    }).unwrap();
 
-    dbg!(&program);
+    for erb in erbs {
+        let program = erars::compiler::compile(&std::fs::read_to_string(erb?)?)?;
 
-    let mut vm = erars::vm::TerminalVm::new();
-
-    for line in program.iter() {
-        vm.run(line).unwrap();
+        dbg!(&program);
     }
+
+    Ok(())
 }
