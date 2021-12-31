@@ -2,7 +2,10 @@
 
 // global variables
 
-gvar_0d = { ^"CHARANUM" | ^"LINECOUNT" | ^"GAMEBASE_VERSION" }
+gvar_0d = {
+    ^"CHARANUM" | ^"LINECOUNT"
+    | ^"GAMEBASE_VERSION" | ^"GAMEBASE_TITLE" | ^"GAMEBASE_AUTHOR" | ^"GAMEBASE_YEAR" | ^"GAMEBASE_INFO"
+}
 gvar_1d = { ^"MONEY" | ^"TIME" | ^"RAND" | ^"LOCALS" | ^"LOCAL" }
 gvar_2d = { ^"DA" | ^"DB" | ^"DC" }
 gvar_3d = { ^"TA" | ^"TB" | ^"TC" }
@@ -98,13 +101,19 @@ call_com = { ^"CALL" ~ ident ~ expr? }
 addchara_com = { ^"ADDCHARA" ~ comma_seq }
 delchara_com = { ^"DELCHARA" ~ comma_seq }
 swapchara_com = { ^"SWAPCHARA" ~ comma_pair }
+drawline_com = { ^"DRAWLINE" }
+alignment_com = { ^"ALIGNMENT" ~ alignment}
+	alignment = { (^"LEFT" | ^"CENTER" | ^"RIGHT") }
 
-excom = _{ printform_com | print_com | call_com | addchara_com | delchara_com | swapchara_com }
+excom = _{ printform_com | print_com | call_com | addchara_com | delchara_com | swapchara_com | drawline_com | alignment_com }
 
 // assign
 
 assign_line = { expr ~ "=" ~ expr }
-sif_line = { "SIF" ~ expr ~ NEWLINE ~ program_line }
+
+// control flow
+
+sif_line = { ^"SIF" ~ expr ~ NEWLINE ~ program_line }
 
 program_line = _{ excom | assign_line | sif_line }
 
