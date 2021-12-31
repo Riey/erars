@@ -1,0 +1,100 @@
+// variables
+
+// global variables
+
+gvar_0d = { ^"CHARANUM" | ^"LINECOUNT" }
+gvar_1d = { ^"MONEY" | ^"TIME" | ^"RAND" }
+gvar_2d = { ^"DA" | ^"DB" | ^"DC" }
+gvar_3d = { ^"TA" | ^"TB" | ^"TC" }
+
+// character variables
+
+cvar_0d = { ^"NO" | ^"NAME" | ^"NICKNAME" | ^"CALLNAME" }
+cvar_1d = { ^"CFLAG" }
+cvar_2d = { ^"CDFLAG" }
+
+// just name
+var = { gvar_0d | gvar_1d | gvar_2d | gvar_3d | cvar_0d | cvar_1d | cvar_2d }
+
+var_expr = {
+	gvar_0d |
+    gvar_1d ~ (":" ~ expr)? | gvar_2d ~ (":" ~ expr)? ~ (":" ~ expr)? | gvar_3d ~ (":" ~ expr)? ~ (":" ~ expr)? ~ (":" ~ expr)? |
+	cvar_0d ~ (":" ~ expr)? | cvar_1d ~ (":" ~ expr)? ~ (":" ~ expr)? | cvar_2d ~ (":" ~ expr)? ~ (":" ~ expr)? ~ (":" ~ expr)?
+}
+
+
+// ident
+
+ident = @{ first_ident_char ~ (first_ident_char | ASCII_DIGIT)* }
+first_ident_char = _{
+	"_" |
+	'a'..'z' | 'A'..'Z' |
+    // hanja
+    '\u{4E00}'..'\u{9FEA}' | '\u{3400}'..'\u{4DB5}' |
+    // hiragana
+    '\u{F900}'..'\u{FA6D}' | '\u{3041}'..'\u{3096}' | '\u{309D}'..'\u{309E}' |
+    // katakana
+    '\u{30A1}'..'\u{30FC}' |
+    // full width number
+    '\u{FF10}'..'\u{FF19}' |
+    // hangul
+    '\u{AC00}'..'\u{D7A3}'
+}
+
+// string
+
+string = _{ "\"" ~ string_inner ~ "\"" }
+string_inner = { string_char* }
+string_char = _{ !"\"" ~ ANY }
+
+// number
+
+num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
+    int = { ("+" | "-")? ~ ASCII_DIGIT+ }
+
+operation = _{ add | subtract | multiply | divide | power }
+    add      = { "+" }
+    subtract = { "-" }
+    multiply = { "*" }
+    divide   = { "/" }
+    power    = { "^" }
+
+// expression
+
+expr = { term ~ (operation ~ term)* }
+term = _{ string | num | var_expr | "(" ~ expr ~ ")" }
+comma_seq = _{ term ~ ("," ~ term)* }
+comma_pair = _{ term ~ "," ~ term }
+
+
+// commands
+
+print_flag = { ^"W" | ^"L" }
+print_text = { print_char* }
+	print_char = _{ !NEWLINE ~ ANY }
+print_form_text = { print_form_normal_text ~ (print_form_var_text ~ print_form_normal_text)* }
+	print_form_var_text = _{
+    	"%" ~ expr ~ "%" |
+    	"{" ~ expr ~ "}"
+    }
+	print_form_normal_text = @{ print_normal_char* }
+	print_normal_char = _{ !( "%" | "{" | "}" | NEWLINE) ~ ANY }
+print_com = { ^"PRINT" ~ print_flag? ~ print_text? }
+printform_com = { ^"PRINTFORM" ~ print_flag? ~ print_form_text? }
+
+call_com = { ^"CALL" ~ ident ~ expr? }
+addchara_com = { ^"ADDCHARA" ~ comma_seq }
+delchara_com = { ^"DELCHARA" ~ comma_seq }
+swapchara_com = { ^"SWAPCHARA" ~ comma_pair }
+
+excom = _{ printform_com | print_com | call_com | addchara_com | delchara_com | swapchara_com }
+
+program_line = _{ excom | NEWLINE }
+
+function_label = { "@" ~ ident }
+function = { function_label ~ (NEWLINE ~ program_line*)? }
+
+program = _{ SOI ~ function* ~ EOI }
+
+NEWLINE = _{ "\r\n" | "\n" }
+WHITESPACE = _{ " " | "\t" }
