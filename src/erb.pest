@@ -85,5 +85,4 @@ function = { function_label ~ (NEWLINE ~ program_line*)? }
 
 program = _{ SOI ~ function* ~ EOI }
 
-NEWLINE = _{ "\r\n" | "\n" }
 WHITESPACE = _{ " " | "\t" }

@@ -1,26 +1,9 @@
-use self::parser::{ErbParser, Rule, PREC_CLIMBER};
-use anyhow::{bail, Result};
+use self::parser::{Rule, PREC_CLIMBER};
+use anyhow::Result;
 use itertools::Itertools;
 use pest::{iterators::Pair, Parser};
 
-mod parser {
-    use once_cell::sync::Lazy;
-    use pest::prec_climber::{Assoc, Operator, PrecClimber};
-
-    #[derive(pest_derive::Parser)]
-    #[grammar = "erb.pest"]
-    pub struct ErbParser;
-
-    pub static PREC_CLIMBER: Lazy<PrecClimber<Rule>> = Lazy::new(|| {
-        use Assoc::*;
-        use Rule::*;
-        PrecClimber::new(vec![
-            Operator::new(add, Left) | Operator::new(subtract, Left),
-            Operator::new(multiply, Left) | Operator::new(divide, Left),
-            Operator::new(power, Right),
-        ])
-    });
-}
+mod parser;
 
 bitflags::bitflags! {
     pub struct PrintFlags: u32 {
