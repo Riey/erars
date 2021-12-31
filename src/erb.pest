@@ -2,8 +2,8 @@
 
 // global variables
 
-gvar_0d = { ^"CHARANUM" | ^"LINECOUNT" }
-gvar_1d = { ^"MONEY" | ^"TIME" | ^"RAND" }
+gvar_0d = { ^"CHARANUM" | ^"LINECOUNT" | ^"GAMEBASE_VERSION" }
+gvar_1d = { ^"MONEY" | ^"TIME" | ^"RAND" | ^"LOCAL" | ^"LOCALS" }
 gvar_2d = { ^"DA" | ^"DB" | ^"DC" }
 gvar_3d = { ^"TA" | ^"TB" | ^"TC" }
 
