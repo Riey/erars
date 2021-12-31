@@ -69,30 +69,25 @@ print_form_text = { print_form_normal_text ~ (print_form_var_text ~ print_form_n
 	print_normal_char = _{ !( "%" | "{" | "}" | NEWLINE) ~ ANY }
 print_com = { ^"PRINT" ~ print_flag? ~ print_text? }
 printform_com = { ^"PRINTFORM" ~ print_flag? ~ print_form_text? }
+reuselastline_com = { ^"REUSELASTLINE" ~ print_text? }
 
-call_com = { ^"CALL" ~ ident ~ expr? }
-addchara_com = { ^"ADDCHARA" ~ comma_seq }
-delchara_com = { ^"DELCHARA" ~ comma_seq }
-swapchara_com = { ^"SWAPCHARA" ~ comma_pair }
-drawline_com = { ^"DRAWLINE" }
-alignment_com = { ^"ALIGNMENT" ~ alignment}
-	alignment = { (^"LEFT" | ^"CENTER" | ^"RIGHT") }
-input_com = { ^"INPUT" }
-inputs_com = { ^"INPUTS" }
+other_com = { ident ~ expr* }
 
 // control flow
 
 sif_com = { ^"SIF" ~ expr ~ NEWLINE+ ~ program_line }
-if_com = { ^"IF" ~ expr ~ NEWLINE ~ (NEWLINE | program_line)* ~ (^"ELSEIF" ~ expr ~ NEWLINE ~ (NEWLINE | program_line)*)* ~ (^"ELSE" ~ NEWLINE ~ (NEWLINE | program_line)*)? ~ "ENDIF"}
-goto_com = { ^"GOTO" ~ ident }
-
+if_com = { if_part ~ elseif_part* ~ else_part? ~ ^"ENDIF" }
+    if_part = { ^"IF" ~ expr ~ NEWLINE ~ (!(^"ELSE" | ^"ENDIF") ~ (NEWLINE | program_line))* }
+    elseif_part = { ^"ELSEIF" ~ expr ~ NEWLINE ~ (!(^"ELSE" | ^"ENDIF") ~ (NEWLINE | program_line))* }
+    else_part = { ^"ELSE" ~ (!^"ENDIF" ~ (NEWLINE | program_line))* }
 goto_label = @{ "$" ~ ident }
 
 // assign
 
 assign_line = { expr ~ "=" ~ expr }
 
-program_line = _{ printform_com | print_com | call_com | addchara_com | delchara_com | swapchara_com | drawline_com | alignment_com | input_com | inputs_com | goto_com | goto_label | assign_line | sif_com | if_com }
+program_line = _{ printform_com | print_com | reuselastline_com | assign_line | goto_label | sif_com | if_com | other_com }
+
 
 function_label = { "@" ~ ident }
 function = { function_label ~ (program_line | NEWLINE)* }

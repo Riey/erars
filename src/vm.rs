@@ -114,10 +114,9 @@ impl TerminalVm {
             Expr::Num(i) => Ok(*i),
             Expr::VarExpr {
                 name,
-                is_chara,
                 args,
             } => {
-                let var = if *is_chara {
+                let var = if false {
                     self.var
                         .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
                         .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
@@ -142,10 +141,9 @@ impl TerminalVm {
             Expr::Str(s) => Ok(s.clone()),
             Expr::VarExpr {
                 name,
-                is_chara,
                 args,
             } => {
-                let var = if *is_chara {
+                let var = if false {
                     self.var
                         .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
                         .ok_or_else(|| anyhow!("Unknown variable name {}", name))?

@@ -27,7 +27,6 @@ pub enum Expr {
     Str(String),
     VarExpr {
         name: String,
-        is_chara: bool,
         args: Vec<Self>,
     },
     BinExpr(Box<Self>, BinOp, Box<Self>),
@@ -78,23 +77,11 @@ fn parse_expr(p: Pair<Rule>) -> Result<Expr> {
             Rule::var_expr => {
                 let mut pairs = p.into_inner();
                 let var = pairs.next().unwrap();
-                let is_chara =
-                    matches!(var.as_rule(), Rule::cvar_0d | Rule::cvar_1d | Rule::cvar_2d);
                 let mut args = pairs.map(parse_expr).collect::<Result<Vec<_>>>()?;
 
-                let expected_len = match var.as_rule() {
-                    Rule::gvar_0d => 0,
-                    Rule::cvar_0d | Rule::gvar_1d => 1,
-                    Rule::cvar_1d | Rule::gvar_2d => 2,
-                    Rule::cvar_2d | Rule::gvar_3d => 3,
-                    _ => unreachable!(),
-                };
-
-                args.resize(expected_len, Expr::Num(0));
 
                 Ok(Expr::VarExpr {
                     name: var.as_str().into(),
-                    is_chara,
                     args,
                 })
             }
@@ -148,12 +135,6 @@ fn parse_line(p: Pair<Rule>) -> Result<ProgramLine> {
             };
 
             ProgramLine::PrintCom { text, flags }
-        }
-        Rule::call_com => {
-            let func = pairs.next().unwrap().as_str().into();
-            let args = pairs.map(parse_expr).collect::<Result<_>>()?;
-
-            ProgramLine::Call { func, args }
         }
         _ => unreachable!("{:?}", rule),
     };
