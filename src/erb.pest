@@ -52,7 +52,6 @@ var_expr = { ident ~ (":" ~ term)* }
 expr = { binop_expr | method_expr | formstring_expr | term }
 term = _{ string | num | var_expr | "(" ~ expr ~ ")" }
 comma_seq = _{ term ~ ("," ~ term)* }
-comma_pair = _{ term ~ "," ~ term }
 
 
 // commands
@@ -67,11 +66,17 @@ print_form_text = { print_form_normal_text ~ (print_form_var_text ~ print_form_n
     }
 	print_form_normal_text = @{ print_normal_char* }
 	print_normal_char = _{ !( "%" | "{" | "}" | NEWLINE) ~ ANY }
+print_form_text_space = ${ print_form_normal_text_space ~ (print_form_var_text ~ print_form_normal_text_space)* }
+	print_form_normal_text_space = { print_normal_char_space* }
+	print_normal_char_space = _{ !( "%" | "{" | "}" | NEWLINE | " ") ~ ANY }
 print_com = { ^"PRINT" ~ print_flag? ~ print_text? }
 printform_com = { ^"PRINTFORM" ~ print_flag? ~ print_form_text? }
 reuselastline_com = { ^"REUSELASTLINE" ~ print_text? }
 
-other_com = { ident ~ expr* }
+call_com = { ^"CALL" ~ ident ~ comma_seq }
+callform_com = { callform_header ~ print_form_text_space ~ comma_seq? }
+	callform_header = { ^"TRY"? ~ ("CALL" | "JUMP" | "GOTO") ~ "FORM" }
+other_com = { ident ~ comma_seq }
 
 // control flow
 
@@ -86,7 +91,7 @@ goto_label = @{ "$" ~ ident }
 
 assign_line = { expr ~ "=" ~ expr }
 
-program_line = _{ printform_com | print_com | reuselastline_com | assign_line | goto_label | sif_com | if_com | other_com }
+program_line = _{ printform_com | print_com | reuselastline_com | call_com | callform_com | assign_line | goto_label | sif_com | if_com | other_com }
 
 
 function_label = { "@" ~ ident }
