@@ -104,18 +104,22 @@ swapchara_com = { ^"SWAPCHARA" ~ comma_pair }
 drawline_com = { ^"DRAWLINE" }
 alignment_com = { ^"ALIGNMENT" ~ alignment}
 	alignment = { (^"LEFT" | ^"CENTER" | ^"RIGHT") }
+input_com = { ^"INPUT" }
+inputs_com = { ^"INPUTS" }
 
-excom = _{ printform_com | print_com | call_com | addchara_com | delchara_com | swapchara_com | drawline_com | alignment_com }
+// control flow
+
+sif_com = { ^"SIF" ~ expr ~ NEWLINE+ ~ program_line }
+if_com = { ^"IF" ~ expr ~ NEWLINE ~ (NEWLINE | program_line)* ~ (^"ELSEIF" ~ expr ~ NEWLINE ~ (NEWLINE | program_line)*)* ~ (^"ELSE" ~ NEWLINE ~ (NEWLINE | program_line)*)? ~ "ENDIF"}
+goto_com = { ^"GOTO" ~ ident }
+
+goto_label = @{ "$" ~ ident }
 
 // assign
 
 assign_line = { expr ~ "=" ~ expr }
 
-// control flow
-
-sif_line = { ^"SIF" ~ expr ~ NEWLINE ~ program_line }
-
-program_line = _{ excom | assign_line | sif_line }
+program_line = _{ printform_com | print_com | call_com | addchara_com | delchara_com | swapchara_com | drawline_com | alignment_com | input_com | inputs_com | goto_com | goto_label | assign_line | sif_com | if_com }
 
 function_label = { "@" ~ ident }
 function = { function_label ~ (program_line | NEWLINE)* }
