@@ -1,23 +1,30 @@
 use anyhow::{anyhow, bail, Result};
 use either::Either;
 
-use crate::compiler::{Expr, PrintFlags, ProgramLine};
+use crate::compiler::{Expr, PrintFlags, ProgramLine, VarExpr};
 use hashbrown::HashMap;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[serde(default)]
 pub struct VariableInfo {
-    #[serde(default)]
     is_chara: bool,
-    #[serde(default)]
     is_str: bool,
-    #[serde(default)]
+    #[serde(skip)]
+    is_special: bool,
     default_int: i64,
-    #[serde(default)]
     size: Vec<usize>,
 }
 
 impl VariableInfo {
+    pub const SPECIAL: Self = Self {
+        is_chara: false,
+        is_str: false,
+        default_int: 0,
+        size: Vec::new(),
+        is_special: true,
+    };
+
     pub fn arg_len(&self) -> usize {
         self.size.len() + self.is_chara as usize
     }
@@ -113,15 +120,18 @@ pub struct VariableStorage {
 
 impl VariableStorage {
     pub fn new(infos: &HashMap<String, VariableInfo>) -> Self {
-        let variables = infos.iter().map(|(name, info)| {
-            let var = if info.is_chara {
-                Either::Right(Vec::new())
-            } else {
-                Either::Left(Variable::new(info))
-            };
+        let variables = infos
+            .iter()
+            .map(|(name, info)| {
+                let var = if info.is_chara {
+                    Either::Right(Vec::new())
+                } else {
+                    Either::Left(Variable::new(info))
+                };
 
-            (name.clone(), (info.clone(), var))
-        }).collect();
+                (name.clone(), (info.clone(), var))
+            })
+            .collect();
 
         Self {
             character_len: 0,
@@ -168,10 +178,7 @@ impl TerminalVm {
     pub fn eval_int(&self, expr: &Expr) -> Result<i64> {
         match expr {
             Expr::Num(i) => Ok(*i),
-            Expr::VarExpr {
-                name,
-                args,
-            } => {
+            Expr::VarExpr(VarExpr { name, args }) => {
                 let var = if false {
                     self.var
                         .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
@@ -195,10 +202,7 @@ impl TerminalVm {
     pub fn eval_str(&self, expr: &Expr) -> Result<String> {
         match expr {
             Expr::Str(s) => Ok(s.clone()),
-            Expr::VarExpr {
-                name,
-                args,
-            } => {
+            Expr::VarExpr(VarExpr { name, args }) => {
                 let var = if false {
                     self.var
                         .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
@@ -237,6 +241,7 @@ impl TerminalVm {
             ProgramLine::Call { func, args } => {
                 println!("CALL {}", func);
             }
+            _ => todo!(),
         }
 
         Ok(())

@@ -25,10 +25,18 @@ pub enum BinOp {
 }
 
 #[derive(Clone, Debug)]
+pub struct VarExpr {
+    pub name: String,
+    pub args: Vec<Expr>,
+}
+
+#[derive(Clone, Debug)]
 pub enum Expr {
     Num(i64),
     Str(String),
-    VarExpr { name: String, args: Vec<Self> },
+    FormText(PrintFormText),
+    Method { name: String, args: Vec<Self> },
+    VarExpr(VarExpr),
     BinExpr(Box<Self>, BinOp, Box<Self>),
 }
 
@@ -66,41 +74,74 @@ pub enum ProgramLine {
         func: String,
         args: Vec<Expr>,
     },
+    Assign {
+        var: VarExpr,
+        expr: Expr,
+    },
+}
+
+fn parse_var_expr(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<VarExpr> {
+    let mut pairs = p.into_inner();
+    let var = pairs.next().unwrap();
+    let info = infos
+        .get(var.as_str())
+        .ok_or_else(|| anyhow!("Unknown variable {}", var.as_str()))?;
+    let mut args = pairs
+        .map(|p| parse_expr(p, infos))
+        .collect::<Result<Vec<_>>>()?;
+    args.resize(info.arg_len(), Expr::Num(0));
+    Ok(VarExpr {
+        name: var.as_str().into(),
+        args,
+    })
 }
 
 fn parse_expr(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Expr> {
-    PREC_CLIMBER.climb(
-        p.into_inner(),
-        |p| match p.as_rule() {
-            Rule::string_inner => Ok(Expr::Str(p.as_str().into())),
-            Rule::num => Ok(Expr::Num(p.as_str().parse()?)),
-            Rule::var_expr => {
-                let mut pairs = p.into_inner();
-                let var = pairs.next().unwrap();
-                let info = infos
-                    .get(var.as_str())
-                    .ok_or_else(|| anyhow!("Unknown variable {}", var.as_str()))?;
-                let mut args = pairs
-                    .map(|p| parse_expr(p, infos))
-                    .collect::<Result<Vec<_>>>()?;
-                args.resize(info.arg_len(), Expr::Num(0));
+    match p.as_rule() {
+        Rule::binop_expr => PREC_CLIMBER.climb(
+            p.into_inner(),
+            |p| parse_expr(p, infos),
+            |lhs, op, rhs| match op.as_rule() {
+                Rule::add => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Add, Box::new(rhs?))),
+                Rule::sub => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Sub, Box::new(rhs?))),
+                Rule::div => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Div, Box::new(rhs?))),
+                Rule::mul => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Mul, Box::new(rhs?))),
+                Rule::rem => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Rem, Box::new(rhs?))),
+                _ => todo!(),
+            },
+        ),
+        Rule::string => Ok(Expr::Str(p.into_inner().next().unwrap().as_str().into())),
+        Rule::string_inner => Ok(Expr::Str(p.as_str().into())),
+        Rule::num => Ok(Expr::Num(p.as_str().parse()?)),
+        Rule::var_expr => parse_var_expr(p, infos).map(Expr::VarExpr),
+        Rule::method_expr => {
+            let mut pairs = p.into_inner();
+            let name = pairs.next().unwrap().as_str().into();
+            let args = pairs.map(|p| parse_expr(p, infos)).collect::<Result<_>>()?;
+            Ok(Expr::Method { name, args })
+        }
+        Rule::formstring_expr => {
+            let formtext = parse_formtext(p.into_inner().next().unwrap(), infos)?;
+            Ok(Expr::FormText(formtext))
+        }
+        _ => unreachable!("{:?}", p),
+    }
+}
 
-                Ok(Expr::VarExpr {
-                    name: var.as_str().into(),
-                    args,
-                })
-            }
-            _ => unreachable!(),
-        },
-        |lhs, op, rhs| match op.as_rule() {
-            Rule::add => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Add, Box::new(rhs?))),
-            Rule::sub => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Sub, Box::new(rhs?))),
-            Rule::div => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Div, Box::new(rhs?))),
-            Rule::mul => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Mul, Box::new(rhs?))),
-            Rule::rem => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Rem, Box::new(rhs?))),
-            _ => todo!(),
-        },
-    )
+fn parse_formtext(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<PrintFormText> {
+    let mut pairs = p.into_inner();
+    let first = pairs.next().unwrap().as_str().into();
+
+    let pairs = pairs
+        .tuples()
+        .map(|(expr, text)| {
+            let expr = parse_expr(expr, infos)?;
+            let text = text.as_str().into();
+            Ok((expr, text))
+        })
+        .collect::<Result<_>>()?;
+
+    Ok(PrintFormText { first, pairs })
 }
 
 fn parse_line(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<ProgramLine> {
@@ -124,22 +165,19 @@ fn parse_line(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Pr
             let text = if text.as_rule() == Rule::print_text {
                 text.as_str().into()
             } else {
-                let mut pairs = text.into_inner();
-                let first = pairs.next().unwrap().as_str().into();
-
-                let pairs = pairs
-                    .tuples()
-                    .map(|(expr, text)| {
-                        let expr = parse_expr(expr, infos)?;
-                        let text = text.as_str().into();
-                        Ok((expr, text))
-                    })
-                    .collect::<Result<_>>()?;
-
-                PrintFormText { first, pairs }
+                parse_formtext(text, infos)?
             };
 
             ProgramLine::PrintCom { text, flags }
+        }
+        Rule::assign_line => {
+            let var = pairs.next().unwrap();
+            let rhs = pairs.next().unwrap();
+
+            ProgramLine::Assign {
+                var: parse_var_expr(var, infos)?,
+                expr: parse_expr(rhs, infos)?,
+            }
         }
         _ => unreachable!("{:?}", rule),
     };
