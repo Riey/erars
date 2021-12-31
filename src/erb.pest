@@ -35,8 +35,7 @@ string_char = _{ !"\"" ~ ANY }
 
 // number
 
-num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
-    int = { ("+" | "-")? ~ ASCII_DIGIT+ }
+num = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
 
 operation = _{ add | subtract | multiply | divide | power }
     add      = { "+" }
