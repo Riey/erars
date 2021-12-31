@@ -25,20 +25,9 @@ var_expr = {
 
 // ident
 
-ident = @{ first_ident_char ~ (first_ident_char | ASCII_DIGIT)* }
+ident = @{ first_ident_char ~ (first_ident_char | NUMBER)* }
 first_ident_char = _{
-	"_" |
-	'a'..'z' | 'A'..'Z' |
-    // hanja
-    '\u{4E00}'..'\u{9FEA}' | '\u{3400}'..'\u{4DB5}' |
-    // hiragana
-    '\u{F900}'..'\u{FA6D}' | '\u{3041}'..'\u{3096}' | '\u{309D}'..'\u{309E}' |
-    // katakana
-    '\u{30A1}'..'\u{30FC}' |
-    // full width number
-    '\u{FF10}'..'\u{FF19}' |
-    // hangul
-    '\u{AC00}'..'\u{D7A3}'
+	"_" | LETTER
 }
 
 // string
