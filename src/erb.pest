@@ -49,7 +49,7 @@ binop_expr = { term ~ (binop ~ term)+ }
 method_expr = { ident ~ "(" ~ comma_seq ~ ")" }
 var_expr = { ident ~ (":" ~ term)* }
 
-expr = { binop_expr | method_expr | formstring_expr | term }
+expr = _{ binop_expr | method_expr | formstring_expr | term }
 term = _{ string | num | var_expr | "(" ~ expr ~ ")" }
 comma_seq = _{ term ~ ("," ~ term)* }
 
@@ -89,7 +89,7 @@ goto_label = @{ "$" ~ ident }
 
 // assign
 
-assign_line = { expr ~ "=" ~ expr }
+assign_line = { var_expr ~ "=" ~ expr }
 
 program_line = _{ printform_com | print_com | reuselastline_com | call_com | callform_com | assign_line | goto_label | sif_com | if_com | other_com }
 
