@@ -74,7 +74,11 @@ swapchara_com = { ^"SWAPCHARA" ~ comma_pair }
 
 excom = _{ printform_com | print_com | call_com | addchara_com | delchara_com | swapchara_com }
 
-program_line = _{ excom | NEWLINE }
+// assign
+
+assign_line = { expr ~ "=" ~ expr }
+
+program_line = _{ excom | assign_line | NEWLINE }
 
 function_label = { "@" ~ ident }
 function = { function_label ~ program_line* }
