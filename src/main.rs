@@ -1,6 +1,8 @@
 // const FONT: &[u8] = include_bytes!("../res/D2Coding-Ver1.3.2-20180524.ttc");
 
 fn main() -> anyhow::Result<()> {
+    let infos = serde_yaml::from_str(include_str!("./variable.yaml"))?;
+
     let erbs = glob::glob_with(
         "ERB/**/*.ERB",
         glob::MatchOptions {
@@ -12,7 +14,7 @@ fn main() -> anyhow::Result<()> {
     .unwrap();
 
     for erb in erbs {
-        let program = erars::compiler::compile(&std::fs::read_to_string(erb?)?)?;
+        let program = erars::compiler::compile(&std::fs::read_to_string(erb?)?, &infos)?;
 
         dbg!(&program);
     }

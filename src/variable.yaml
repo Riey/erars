@@ -1,0 +1,12 @@
+DAY:
+  # is_chara: false
+  # is_str: false
+  size: [1000]
+
+MONEY:
+  size: [1000]
+
+LOCAL:
+  size: [1000]
+LOCALS:
+  size: [100]

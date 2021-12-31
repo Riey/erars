@@ -1,5 +1,8 @@
+use crate::vm::VariableInfo;
+
 use self::parser::{Rule, PREC_CLIMBER};
-use anyhow::Result;
+use ahash::AHashMap;
+use anyhow::{Result, anyhow};
 use itertools::Itertools;
 use pest::{iterators::Pair, Parser};
 
@@ -68,7 +71,7 @@ pub enum ProgramLine {
     },
 }
 
-fn parse_expr(p: Pair<Rule>) -> Result<Expr> {
+fn parse_expr(p: Pair<Rule>, infos: &AHashMap<String, VariableInfo>) -> Result<Expr> {
     PREC_CLIMBER.climb(
         p.into_inner(),
         |p| match p.as_rule() {
@@ -77,8 +80,9 @@ fn parse_expr(p: Pair<Rule>) -> Result<Expr> {
             Rule::var_expr => {
                 let mut pairs = p.into_inner();
                 let var = pairs.next().unwrap();
-                let mut args = pairs.map(parse_expr).collect::<Result<Vec<_>>>()?;
-
+                let info = infos.get(var.as_str()).ok_or_else(|| anyhow!("Unknown variable {}", var.as_str()))?;
+                let mut args = pairs.map(|p| parse_expr(p, infos)).collect::<Result<Vec<_>>>()?;
+                args.resize(info.arg_len(), Expr::Num(0));
 
                 Ok(Expr::VarExpr {
                     name: var.as_str().into(),
@@ -98,7 +102,7 @@ fn parse_expr(p: Pair<Rule>) -> Result<Expr> {
     )
 }
 
-fn parse_line(p: Pair<Rule>) -> Result<ProgramLine> {
+fn parse_line(p: Pair<Rule>, infos: &AHashMap<String, VariableInfo>) -> Result<ProgramLine> {
     let rule = p.as_rule();
     let mut pairs = p.into_inner();
 
@@ -125,7 +129,7 @@ fn parse_line(p: Pair<Rule>) -> Result<ProgramLine> {
                 let pairs = pairs
                     .tuples()
                     .map(|(expr, text)| {
-                        let expr = parse_expr(expr)?;
+                        let expr = parse_expr(expr, infos)?;
                         let text = text.as_str().into();
                         Ok((expr, text))
                     })
@@ -142,14 +146,14 @@ fn parse_line(p: Pair<Rule>) -> Result<ProgramLine> {
     Ok(line)
 }
 
-pub fn compile(s: &str) -> Result<Vec<ProgramLine>> {
+pub fn compile(s: &str, infos: &AHashMap<String, VariableInfo>) -> Result<Vec<ProgramLine>> {
     let r = self::parser::ErbParser::parse(self::parser::Rule::program, s).unwrap();
 
     r.map_while(|p| {
         if p.as_rule() == Rule::EOI {
             None
         } else {
-            Some(parse_line(p))
+            Some(parse_line(p, infos))
         }
     })
     .collect()

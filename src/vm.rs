@@ -1,7 +1,27 @@
 use anyhow::{anyhow, bail, Result};
+use either::Either;
 
 use crate::compiler::{Expr, PrintFlags, ProgramLine};
 use ahash::AHashMap;
+use serde::{Serialize, Deserialize};
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VariableInfo {
+    #[serde(default)]
+    is_chara: bool,
+    #[serde(default)]
+    is_str: bool,
+    #[serde(default)]
+    default_int: i64,
+    #[serde(default)]
+    size: Vec<usize>,
+}
+
+impl VariableInfo {
+    pub fn arg_len(&self) -> usize {
+        self.size.len() + self.is_chara as usize
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum Variable {
@@ -16,6 +36,20 @@ pub enum Variable {
 }
 
 impl Variable {
+    pub fn new(info: &VariableInfo) -> Self {
+        match (info.is_str, info.size.as_slice()) {
+            (false, []) => Self::Int0D(info.default_int),
+            (false, [a]) => Self::Int1D(vec![info.default_int; *a]),
+            (false, [a, b]) => Self::Int2D(vec![vec![info.default_int; *a]; *b]),
+            (false, [a, b, c]) => Self::Int3D(vec![vec![vec![info.default_int; *a]; *b]; *c]),
+            (true, []) => Self::Str0D(String::new()),
+            (true, [a]) => Self::Str1D(vec![String::new(); *a]),
+            (true, [a, b]) => Self::Str2D(vec![vec![String::new(); *a]; *b]),
+            (true, [a, b, c]) => Self::Str3D(vec![vec![vec![String::new(); *a]; *b]; *c]),
+            _ => panic!("size length can't be greater than 3"),
+        }
+    }
+
     pub fn get_int(&self, mut args: impl Iterator<Item = Result<usize>>) -> Result<&i64> {
         macro_rules! a {
             () => {
@@ -73,28 +107,50 @@ impl Variable {
 }
 
 pub struct VariableStorage {
-    global_var: AHashMap<String, Variable>,
-    character_var: AHashMap<String, Vec<Variable>>,
+    character_len: usize,
+    variables: AHashMap<String, (VariableInfo, Either<Variable, Vec<Variable>>)>,
 }
 
 impl VariableStorage {
-    pub fn new() -> Self {
-        let mut global_var = AHashMap::new();
-        let character_var = AHashMap::new();
+    pub fn new(infos: &AHashMap<String, VariableInfo>) -> Self {
+        let variables = infos.iter().map(|(name, info)| {
+            let var = if info.is_chara {
+                Either::Right(Vec::new())
+            } else {
+                Either::Left(Variable::new(info))
+            };
 
-        global_var.insert("MONEY".into(), Variable::Int1D(vec![0; 1000]));
+            (name.clone(), (info.clone(), var))
+        }).collect();
 
         Self {
-            global_var,
-            character_var,
+            character_len: 0,
+            variables,
+        }
+    }
+
+    pub fn add_chara(&mut self) {
+        self.character_len += 1;
+        for (_, (info, var)) in self.variables.iter_mut() {
+            if let Either::Right(cvar) = var {
+                cvar.push(Variable::new(info));
+            }
         }
     }
 
     pub fn get_global(&self, name: &str) -> Option<&Variable> {
-        self.global_var.get(name)
+        if let Either::Left(ref gvar) = self.variables.get(name)?.1 {
+            Some(gvar)
+        } else {
+            None
+        }
     }
     pub fn get_chara(&self, name: &str, no: usize) -> Option<&Variable> {
-        self.character_var.get(name)?.get(no)
+        if let Either::Right(ref cvar) = self.variables.get(name)?.1 {
+            cvar.get(no)
+        } else {
+            None
+        }
     }
 }
 
@@ -103,9 +159,9 @@ pub struct TerminalVm {
 }
 
 impl TerminalVm {
-    pub fn new() -> Self {
+    pub fn new(infos: &AHashMap<String, VariableInfo>) -> Self {
         Self {
-            var: VariableStorage::new(),
+            var: VariableStorage::new(infos),
         }
     }
 
