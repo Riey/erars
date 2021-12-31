@@ -3,7 +3,7 @@
 // global variables
 
 gvar_0d = { ^"CHARANUM" | ^"LINECOUNT" | ^"GAMEBASE_VERSION" }
-gvar_1d = { ^"MONEY" | ^"TIME" | ^"RAND" | ^"LOCAL" | ^"LOCALS" }
+gvar_1d = { ^"MONEY" | ^"TIME" | ^"RAND" | ^"LOCALS" | ^"LOCAL" }
 gvar_2d = { ^"DA" | ^"DB" | ^"DC" }
 gvar_3d = { ^"TA" | ^"TB" | ^"TC" }
 
@@ -29,9 +29,13 @@ ident = @{ (XID_START | "_") ~ (XID_CONTINUE | "_")* }
 
 // string
 
-string = _{ "\"" ~ string_inner ~ "\"" }
-string_inner = { string_char* }
-string_char = _{ !"\"" ~ ANY }
+string = ${ "\"" ~ string_inner ~ "\"" }
+string_inner = @{ char* }
+char = {
+    !("\"" | "\\") ~ ANY
+    | "\\" ~ ("\"" | "\\" | "/" | "b" | "f" | "n" | "r" | "t")
+    | "\\" ~ ("u" ~ ASCII_HEX_DIGIT{4})
+}
 
 // number
 
@@ -65,7 +69,11 @@ binop = _{
 
 // expression
 
-expr = { term ~ (binop ~ term)* }
+formstring_expr = { &("{" | "%") ~ print_form_text }
+binop_expr = { term ~ (binop ~ term)* }
+method_expr = { ident ~ "(" ~ comma_seq ~ ")" }
+
+expr = { binop_expr | method_expr | formstring_expr }
 term = _{ string | num | var_expr | "(" ~ expr ~ ")" }
 comma_seq = _{ term ~ ("," ~ term)* }
 comma_pair = _{ term ~ "," ~ term }
