@@ -4,7 +4,10 @@ use self::parser::{ErbParser, Rule, PREC_CLIMBER};
 use anyhow::{anyhow, Result};
 use hashbrown::HashMap;
 use itertools::Itertools;
-use pest::{iterators::Pair, Parser};
+use pest::{
+    iterators::{Pair, Pairs},
+    Parser,
+};
 
 mod parser;
 
@@ -22,6 +25,13 @@ pub enum BinOp {
     Mul,
     Div,
     Rem,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum Alignment {
+    Left,
+    Center,
+    Right,
 }
 
 #[derive(Clone, Debug)]
@@ -66,12 +76,34 @@ impl<'a> From<&'a str> for PrintFormText {
 
 #[derive(Clone, Debug)]
 pub enum ProgramLine {
+    Nop,
+    Begin(String),
+    Goto(String),
+    GotoLabel(String),
+    Sif {
+        cond: Expr,
+        body: Box<Self>,
+    },
+    If {
+        cond: Expr,
+        body: Vec<Self>,
+        else_ifs: Vec<(Expr, Vec<Self>)>,
+        else_body: Vec<Self>,
+    },
     PrintCom {
         flags: PrintFlags,
         text: PrintFormText,
     },
+    ReuseLastLine(String),
     Call {
         func: String,
+        args: Vec<Expr>,
+    },
+    Alignment {
+        alignment: Alignment,
+    },
+    Command {
+        command: String,
         args: Vec<Expr>,
     },
     Assign {
@@ -86,9 +118,7 @@ fn parse_var_expr(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Resul
     let info = infos
         .get(var.as_str())
         .ok_or_else(|| anyhow!("Unknown variable {}", var.as_str()))?;
-    let mut args = pairs
-        .map(|p| parse_expr(p, infos))
-        .collect::<Result<Vec<_>>>()?;
+    let mut args = parse_args(pairs, infos)?;
     args.resize(info.arg_len(), Expr::Num(0));
     Ok(VarExpr {
         name: var.as_str().into(),
@@ -117,7 +147,7 @@ fn parse_expr(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Ex
         Rule::method_expr => {
             let mut pairs = p.into_inner();
             let name = pairs.next().unwrap().as_str().into();
-            let args = pairs.map(|p| parse_expr(p, infos)).collect::<Result<_>>()?;
+            let args = parse_args(pairs, infos)?;
             Ok(Expr::Method { name, args })
         }
         Rule::formstring_expr => {
@@ -144,11 +174,72 @@ fn parse_formtext(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Resul
     Ok(PrintFormText { first, pairs })
 }
 
+fn parse_if_block(
+    mut pairs: Pairs<Rule>,
+    infos: &HashMap<String, VariableInfo>,
+) -> Result<(Expr, Vec<ProgramLine>)> {
+    let cond = parse_expr(pairs.next().unwrap(), infos)?;
+    let body = parse_block(pairs, infos)?;
+
+    Ok((cond, body))
+}
+
+fn parse_block(
+    pairs: Pairs<Rule>,
+    infos: &HashMap<String, VariableInfo>,
+) -> Result<Vec<ProgramLine>> {
+    pairs.map(|p| parse_line(p, infos)).collect::<Result<_>>()
+}
+
+fn parse_args(pairs: Pairs<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Vec<Expr>> {
+    pairs.map(|p| parse_expr(p, infos)).collect::<Result<_>>()
+}
+
 fn parse_line(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<ProgramLine> {
     let rule = p.as_rule();
     let mut pairs = p.into_inner();
 
-    let line = match dbg!(rule) {
+    let line = match rule {
+        Rule::begin_com => ProgramLine::Begin(pairs.next().unwrap().as_str().into()),
+        Rule::sif_com => {
+            let cond = parse_expr(pairs.next().unwrap(), infos)?;
+            let body = parse_line(pairs.next().unwrap(), infos)?;
+
+            ProgramLine::Sif {
+                cond,
+                body: Box::new(body),
+            }
+        }
+        Rule::if_com => {
+            let if_part = pairs.next().unwrap();
+
+            let (cond, body) = parse_if_block(if_part.into_inner(), infos)?;
+
+            let mut else_ifs = Vec::new();
+            let mut else_body = Vec::new();
+
+            for p in pairs {
+                match p.as_rule() {
+                    Rule::elseif_part => {
+                        else_ifs.push(parse_if_block(p.into_inner(), infos)?);
+                    }
+                    Rule::else_part => {
+                        else_body = p
+                            .into_inner()
+                            .map(|p| parse_line(p, infos))
+                            .collect::<Result<_>>()?;
+                    }
+                    _ => unreachable!(),
+                }
+            }
+
+            ProgramLine::If {
+                cond,
+                body,
+                else_ifs,
+                else_body,
+            }
+        }
         Rule::print_com | Rule::printform_com => {
             let mut flags = PrintFlags::empty();
 
@@ -170,6 +261,9 @@ fn parse_line(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Pr
 
             ProgramLine::PrintCom { text, flags }
         }
+        Rule::reuselastline_com => {
+            ProgramLine::ReuseLastLine(pairs.next().unwrap().as_str().into())
+        }
         Rule::assign_line => {
             let var = pairs.next().unwrap();
             let rhs = pairs.next().unwrap();
@@ -177,6 +271,35 @@ fn parse_line(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Pr
             ProgramLine::Assign {
                 var: parse_var_expr(var, infos)?,
                 expr: parse_expr(rhs, infos)?,
+            }
+        }
+        Rule::alignment_com => {
+            let alignment = pairs.next().unwrap().as_str();
+
+            let alignment = match alignment {
+                "LEFT" => Alignment::Left,
+                "CENTER" => Alignment::Center,
+                "RIGHT" => Alignment::Right,
+                _ => unreachable!(),
+            };
+
+            ProgramLine::Alignment { alignment }
+        }
+        Rule::call_com => {
+            let name = pairs.next().unwrap().as_str().into();
+            let args = parse_args(pairs, infos)?;
+
+            ProgramLine::Call { func: name, args }
+        }
+        Rule::goto_com => ProgramLine::Goto(pairs.next().unwrap().as_str().into()),
+        Rule::goto_label => ProgramLine::GotoLabel(pairs.next().unwrap().as_str().into()),
+        Rule::other_com => {
+            let name = pairs.next().unwrap().as_str();
+            let args = pairs.map(|p| parse_expr(p, infos)).collect::<Result<_>>()?;
+
+            ProgramLine::Command {
+                command: name.into(),
+                args,
             }
         }
         _ => unreachable!("{:?}", rule),

@@ -72,8 +72,11 @@ print_form_text_space = ${ print_form_normal_text_space ~ (print_form_var_text ~
 print_com = { ^"PRINT" ~ print_flag? ~ print_text? }
 printform_com = { ^"PRINTFORM" ~ print_flag? ~ print_form_text? }
 reuselastline_com = { ^"REUSELASTLINE" ~ print_text? }
+alignment_com = { ^"ALIGNMENT" ~ alignment }
+    alignment = { ^"LEFT" | ^"CENTER" | ^"RIGHT" }
 
-call_com = { ^"CALL" ~ ident ~ comma_seq }
+begin_com = { ^"BEGIN" ~ ident }
+call_com = { ^"CALL" ~ ident ~ comma_seq? }
 callform_com = { callform_header ~ print_form_text_space ~ comma_seq? }
 	callform_header = { ^"TRY"? ~ ("CALL" | "JUMP" | "GOTO") ~ "FORM" }
 other_com = { ident ~ comma_seq? }
@@ -85,13 +88,14 @@ if_com = { if_part ~ elseif_part* ~ else_part? ~ ^"ENDIF" }
     if_part = { ^"IF" ~ expr ~ NEWLINE ~ (!(^"ELSE" | ^"ENDIF") ~ (NEWLINE | program_line))* }
     elseif_part = { ^"ELSEIF" ~ expr ~ NEWLINE ~ (!(^"ELSE" | ^"ENDIF") ~ (NEWLINE | program_line))* }
     else_part = { ^"ELSE" ~ (!^"ENDIF" ~ (NEWLINE | program_line))* }
-goto_label = @{ "$" ~ ident }
+goto_label = ${ "$" ~ ident }
+goto_com = { ^"GOTO" ~ ident }
 
 // assign
 
 assign_line = { var_expr ~ "=" ~ expr }
 
-program_line = _{ printform_com | print_com | reuselastline_com | call_com | callform_com | assign_line | goto_label | sif_com | if_com | other_com }
+program_line = _{ printform_com | print_com | reuselastline_com | alignment_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
 
 
 function_label = { "@" ~ ident }

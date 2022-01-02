@@ -5,6 +5,10 @@ DAY:
 
 MONEY:
   size: [1000]
+RESULT:
+  size: [1000]
+FLAG:
+  size: [10000]
 
 LOCAL:
   size: [1000]

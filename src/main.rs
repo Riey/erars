@@ -12,6 +12,7 @@ fn main() -> anyhow::Result<()> {
     infos.insert("GAMEBASE_AUTHOR".into(), VariableInfo::SPECIAL);
     infos.insert("GAMEBASE_YEAR".into(), VariableInfo::SPECIAL);
     infos.insert("GAMEBASE_INFO".into(), VariableInfo::SPECIAL);
+    infos.insert("GAMEBASE_TITLE".into(), VariableInfo::SPECIAL);
 
     let erbs = glob::glob_with(
         "ERB/**/*.ERB",

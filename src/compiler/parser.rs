@@ -19,7 +19,12 @@ mod tests {
     use super::{ErbParser, Rule};
     use pest::Parser;
 
-    macro_rules! make_same_case {
+    #[test]
+    fn call() {
+        ErbParser::parse(Rule::call_com, "CALL ident").unwrap();
+    }
+
+    macro_rules! make_ident_same_case {
         ($t:expr) => {
             let pair = ErbParser::parse(Rule::ident, $t).unwrap().next().unwrap();
             k9::assert_equal!(pair.as_str(), $t);
@@ -28,18 +33,18 @@ mod tests {
 
     #[test]
     fn ident() {
-        make_same_case!("adf1rvdsad_312");
+        make_ident_same_case!("adf1rvdsad_312");
     }
 
     #[test]
     fn underscore() {
-        make_same_case!("_adf1rvdsad_312");
-        make_same_case!("___");
+        make_ident_same_case!("_adf1rvdsad_312");
+        make_ident_same_case!("___");
     }
 
     #[test]
     fn hangul_ident() {
-        make_same_case!("함수이름");
-        make_same_case!("가나다");
+        make_ident_same_case!("함수이름");
+        make_ident_same_case!("가나다");
     }
 }
