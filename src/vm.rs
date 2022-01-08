@@ -1,7 +1,7 @@
 use anyhow::{anyhow, bail, Result};
 use either::Either;
+use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
 
-use crate::compiler::{Expr, PrintFlags, ProgramLine, VarExpr};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
@@ -10,24 +10,42 @@ use serde::{Deserialize, Serialize};
 pub struct VariableInfo {
     is_chara: bool,
     is_str: bool,
-    #[serde(skip)]
-    is_special: bool,
+    builtin: Option<BulitinVariable>,
     default_int: i64,
     size: Vec<usize>,
 }
 
 impl VariableInfo {
-    pub const SPECIAL: Self = Self {
-        is_chara: false,
-        is_str: false,
-        default_int: 0,
-        size: Vec::new(),
-        is_special: true,
-    };
-
     pub fn arg_len(&self) -> usize {
         self.size.len() + self.is_chara as usize
     }
+}
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    EnumIter,
+    EnumString,
+    Serialize,
+    Deserialize,
+)]
+pub enum BulitinVariable {
+    #[strum(to_string = "GAMEBASE_AUTHOR")]
+    GamebaseAuthor,
+    #[strum(to_string = "GAMEBASE_TITLE")]
+    GamebaseTitle,
+    #[strum(to_string = "GAMEBASE_YEAR")]
+    GamebaseYear,
+    #[strum(to_string = "GAMEBASE_INFO")]
+    GamebaseInfo,
+    #[strum(to_string = "GAMEBASE_VERSION")]
+    GamebaseVersion,
 }
 
 #[derive(Clone, Debug)]
@@ -40,6 +58,7 @@ pub enum Variable {
     Str1D(Vec<String>),
     Str2D(Vec<Vec<String>>),
     Str3D(Vec<Vec<Vec<String>>>),
+    Builtin(BulitinVariable),
 }
 
 impl Variable {
@@ -57,27 +76,33 @@ impl Variable {
         }
     }
 
-    pub fn get_int(&self, mut args: impl Iterator<Item = Result<usize>>) -> Result<&i64> {
+    pub fn get_int(&self, mut args: impl Iterator<Item = Result<usize>>) -> Result<i64> {
         macro_rules! a {
             () => {
                 args.next().unwrap()?
             };
         }
         match self {
-            Variable::Int0D(s) => Ok(s),
-            Variable::Int1D(s) => s.get(a!()).ok_or_else(|| anyhow!("Index out of range")),
+            Variable::Int0D(s) => Ok(*s),
+            Variable::Int1D(s) => s
+                .get(a!())
+                .ok_or_else(|| anyhow!("Index out of range"))
+                .map(Clone::clone),
             Variable::Int2D(s) => s
                 .get(a!())
                 .unwrap()
                 .get(a!())
-                .ok_or_else(|| anyhow!("Index out of range")),
+                .ok_or_else(|| anyhow!("Index out of range"))
+                .map(Clone::clone),
             Variable::Int3D(s) => s
                 .get(a!())
                 .unwrap()
                 .get(a!())
                 .unwrap()
                 .get(a!())
-                .ok_or_else(|| anyhow!("Index out of range")),
+                .ok_or_else(|| anyhow!("Index out of range"))
+                .map(Clone::clone),
+            Variable::Builtin(BulitinVariable::GamebaseYear) => Ok(2022),
             _ => bail!("Variable is Str type"),
         }
     }
@@ -108,7 +133,7 @@ impl Variable {
                 .get(a!())
                 .ok_or_else(|| anyhow!("Index out of range"))
                 .map(Clone::clone),
-            _ => self.get_int(args).map(ToString::to_string),
+            _ => self.get_int(args).map(|i| i.to_string()),
         }
     }
 }
@@ -175,75 +200,74 @@ impl TerminalVm {
         }
     }
 
-    pub fn eval_int(&self, expr: &Expr) -> Result<i64> {
-        match expr {
-            Expr::Num(i) => Ok(*i),
-            Expr::VarExpr(VarExpr { name, args }) => {
-                let var = if false {
-                    self.var
-                        .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
-                        .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
-                } else {
-                    self.var
-                        .get_global(name)
-                        .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
-                };
+    // pub fn eval_int(&self, expr: &Expr) -> Result<i64> {
+    //     match expr {
+    //         Expr::Num(i) => Ok(*i),
+    //         Expr::VarExpr(VarExpr { name, args }) => {
+    //             let var = if false {
+    //                 self.var
+    //                     .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
+    //                     .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
+    //             } else {
+    //                 self.var
+    //                     .get_global(name)
+    //                     .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
+    //             };
 
-                var.get_int(
-                    args.iter()
-                        .map(|e| self.eval_int(e).and_then(|i| Ok(i.try_into()?))),
-                )
-                .map(Clone::clone)
-            }
-            _ => bail!("Invalid expr"),
-        }
-    }
+    //             var.get_int(
+    //                 args.iter()
+    //                     .map(|e| self.eval_int(e).and_then(|i| Ok(i.try_into()?))),
+    //             )
+    //         }
+    //         _ => bail!("Invalid expr"),
+    //     }
+    // }
 
-    pub fn eval_str(&self, expr: &Expr) -> Result<String> {
-        match expr {
-            Expr::Str(s) => Ok(s.clone()),
-            Expr::VarExpr(VarExpr { name, args }) => {
-                let var = if false {
-                    self.var
-                        .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
-                        .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
-                } else {
-                    self.var
-                        .get_global(name)
-                        .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
-                };
+    // pub fn eval_str(&self, expr: &Expr) -> Result<String> {
+    //     match expr {
+    //         Expr::Str(s) => Ok(s.clone()),
+    //         Expr::VarExpr(VarExpr { name, args }) => {
+    //             let var = if false {
+    //                 self.var
+    //                     .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
+    //                     .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
+    //             } else {
+    //                 self.var
+    //                     .get_global(name)
+    //                     .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
+    //             };
 
-                var.get_str(
-                    args.iter()
-                        .map(|e| self.eval_int(e).and_then(|i| Ok(i.try_into()?))),
-                )
-            }
-            _ => bail!("Invalid expr"),
-        }
-    }
+    //             var.get_str(
+    //                 args.iter()
+    //                     .map(|e| self.eval_int(e).and_then(|i| Ok(i.try_into()?))),
+    //             )
+    //         }
+    //         _ => bail!("Invalid expr"),
+    //     }
+    // }
 
-    pub fn run(&mut self, line: &ProgramLine) -> Result<()> {
-        match line {
-            ProgramLine::PrintCom { flags, text } => {
-                print!("{}", text.first);
+    // pub fn run(&mut self, line: &ProgramLine) -> Result<()> {
+    //     match line {
+    //         ProgramLine::PrintCom { flags, text } => {
+    //             print!("{}", text.first);
 
-                for (expr, text) in text.pairs.iter() {
-                    print!("{}", self.eval_str(expr)?);
-                    print!("{}", text);
-                }
+    //             for (expr, text) in text.pairs.iter() {
+    //                 print!("{}", self.eval_str(expr)?);
+    //                 print!("{}", text);
+    //             }
 
-                if flags.contains(PrintFlags::NEWLINE) {
-                    println!("");
-                }
+    //             if flags.contains(PrintFlags::NEWLINE) {
+    //                 println!("");
+    //             }
 
-                if flags.contains(PrintFlags::WAIT) {}
-            }
-            ProgramLine::Call { func, args } => {
-                println!("CALL {}", func);
-            }
-            _ => todo!(),
-        }
+    //             if flags.contains(PrintFlags::WAIT) {}
+    //         }
+    //         ProgramLine::Call { func, args } => {
+    //             println!("CALL {}({:?})", func, args);
+    //         }
+    //         _ => todo!(),
+    //     }
 
-        Ok(())
-    }
+    //     Ok(())
+    // }
 }

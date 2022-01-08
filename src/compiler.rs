@@ -1,331 +1,350 @@
-use crate::vm::VariableInfo;
+use crate::{
+    instruction::Instruction,
+    operator::BinaryOperator,
+    vm::{BulitinVariable, VariableInfo},
+};
 
 use self::parser::{ErbParser, Rule, PREC_CLIMBER};
 use anyhow::{anyhow, Result};
+use arrayvec::ArrayVec;
 use hashbrown::HashMap;
 use itertools::Itertools;
 use pest::{
     iterators::{Pair, Pairs},
     Parser,
 };
+use serde::{Deserialize, Serialize};
 
 mod parser;
 
 bitflags::bitflags! {
+    #[derive(Serialize, Deserialize)]
     pub struct PrintFlags: u32 {
         const NEWLINE = 0x1;
         const WAIT = 0x2;
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum BinOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-}
-
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Alignment {
     Left,
     Center,
     Right,
 }
 
-#[derive(Clone, Debug)]
-pub struct VarExpr {
-    pub name: String,
-    pub args: Vec<Expr>,
+struct Compiler {
+    label: HashMap<String, u32>,
+    out: Vec<Instruction>,
 }
 
-#[derive(Clone, Debug)]
-pub enum Expr {
-    Num(i64),
-    Str(String),
-    FormText(PrintFormText),
-    Method { name: String, args: Vec<Self> },
-    VarExpr(VarExpr),
-    BinExpr(Box<Self>, BinOp, Box<Self>),
-}
-
-#[derive(Clone, Debug)]
-pub struct PrintFormText {
-    pub first: String,
-    pub pairs: Vec<(Expr, String)>,
-}
-
-impl From<String> for PrintFormText {
-    fn from(s: String) -> Self {
+impl Compiler {
+    pub fn new() -> Self {
         Self {
-            first: s,
-            pairs: Vec::new(),
+            label: HashMap::new(),
+            out: Vec::new(),
         }
     }
-}
 
-impl<'a> From<&'a str> for PrintFormText {
-    fn from(s: &'a str) -> Self {
-        Self {
-            first: s.into(),
-            pairs: Vec::new(),
-        }
+    fn get_var(&mut self, p: Pair<Rule>) -> Result<()> {
+        let mut pairs = p.into_inner();
+        let var = pairs.next().unwrap().as_str();
+        self.push_args(pairs)?;
+        self.push_str(var)?;
+
+        Ok(())
     }
-}
 
-#[derive(Clone, Debug)]
-pub enum ProgramLine {
-    Nop,
-    Begin(String),
-    Goto(String),
-    GotoLabel(String),
-    Sif {
-        cond: Expr,
-        body: Box<Self>,
-    },
-    If {
-        cond: Expr,
-        body: Vec<Self>,
-        else_ifs: Vec<(Expr, Vec<Self>)>,
-        else_body: Vec<Self>,
-    },
-    PrintCom {
-        flags: PrintFlags,
-        text: PrintFormText,
-    },
-    ReuseLastLine(String),
-    Call {
-        func: String,
-        args: Vec<Expr>,
-    },
-    Alignment {
-        alignment: Alignment,
-    },
-    Command {
-        command: String,
-        args: Vec<Expr>,
-    },
-    Assign {
-        var: VarExpr,
-        expr: Expr,
-    },
-}
+    fn store_var(&mut self, p: Pair<Rule>) -> Result<()> {
+        self.get_var(p)?;
+        self.out.push(Instruction::StoreVar);
 
-fn parse_var_expr(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<VarExpr> {
-    let mut pairs = p.into_inner();
-    let var = pairs.next().unwrap();
-    let info = infos
-        .get(var.as_str())
-        .ok_or_else(|| anyhow!("Unknown variable {}", var.as_str()))?;
-    let mut args = parse_args(pairs, infos)?;
-    args.resize(info.arg_len(), Expr::Num(0));
-    Ok(VarExpr {
-        name: var.as_str().into(),
-        args,
-    })
-}
-
-fn parse_expr(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Expr> {
-    match p.as_rule() {
-        Rule::binop_expr => PREC_CLIMBER.climb(
-            p.into_inner(),
-            |p| parse_expr(p, infos),
-            |lhs, op, rhs| match op.as_rule() {
-                Rule::add => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Add, Box::new(rhs?))),
-                Rule::sub => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Sub, Box::new(rhs?))),
-                Rule::div => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Div, Box::new(rhs?))),
-                Rule::mul => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Mul, Box::new(rhs?))),
-                Rule::rem => Ok(Expr::BinExpr(Box::new(lhs?), BinOp::Rem, Box::new(rhs?))),
-                _ => todo!(),
-            },
-        ),
-        Rule::string => Ok(Expr::Str(p.into_inner().next().unwrap().as_str().into())),
-        Rule::string_inner => Ok(Expr::Str(p.as_str().into())),
-        Rule::num => Ok(Expr::Num(p.as_str().parse()?)),
-        Rule::var_expr => parse_var_expr(p, infos).map(Expr::VarExpr),
-        Rule::method_expr => {
-            let mut pairs = p.into_inner();
-            let name = pairs.next().unwrap().as_str().into();
-            let args = parse_args(pairs, infos)?;
-            Ok(Expr::Method { name, args })
-        }
-        Rule::formstring_expr => {
-            let formtext = parse_formtext(p.into_inner().next().unwrap(), infos)?;
-            Ok(Expr::FormText(formtext))
-        }
-        _ => unreachable!("{:?}", p),
+        Ok(())
     }
-}
 
-fn parse_formtext(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<PrintFormText> {
-    let mut pairs = p.into_inner();
-    let first = pairs.next().unwrap().as_str().into();
+    fn push_var(&mut self, p: Pair<Rule>) -> Result<()> {
+        self.get_var(p)?;
+        self.out.push(Instruction::LoadVar);
 
-    let pairs = pairs
-        .tuples()
-        .map(|(expr, text)| {
-            let expr = parse_expr(expr, infos)?;
-            let text = text.as_str().into();
-            Ok((expr, text))
-        })
-        .collect::<Result<_>>()?;
+        Ok(())
+    }
 
-    Ok(PrintFormText { first, pairs })
-}
+    fn push_int(&mut self, i: i64) -> Result<()> {
+        self.out.push(Instruction::LoadInt(i));
+        Ok(())
+    }
 
-fn parse_if_block(
-    mut pairs: Pairs<Rule>,
-    infos: &HashMap<String, VariableInfo>,
-) -> Result<(Expr, Vec<ProgramLine>)> {
-    let cond = parse_expr(pairs.next().unwrap(), infos)?;
-    let body = parse_block(pairs, infos)?;
+    fn push_str(&mut self, s: impl Into<String>) -> Result<()> {
+        self.out.push(Instruction::LoadStr(s.into()));
+        Ok(())
+    }
 
-    Ok((cond, body))
-}
+    fn push_expr(&mut self, p: Pair<Rule>) -> Result<()> {
+        match p.as_rule() {
+            Rule::binop_expr => {
+                let f = PREC_CLIMBER.climb(
+                    p.into_inner(),
+                    |p| {
+                        Box::new(move |this: &mut Compiler| this.push_expr(p))
+                            as Box<dyn FnOnce(&mut Compiler) -> Result<()>>
+                    },
+                    |lhs, op, rhs| {
+                        Box::new(move |this: &mut Compiler| {
+                            rhs(this)?;
+                            lhs(this)?;
 
-fn parse_block(
-    pairs: Pairs<Rule>,
-    infos: &HashMap<String, VariableInfo>,
-) -> Result<Vec<ProgramLine>> {
-    pairs.map(|p| parse_line(p, infos)).collect::<Result<_>>()
-}
+                            let op = match op.as_rule() {
+                                Rule::add => BinaryOperator::Add,
+                                Rule::sub => BinaryOperator::Sub,
+                                Rule::mul => BinaryOperator::Mul,
+                                Rule::div => BinaryOperator::Div,
+                                Rule::rem => BinaryOperator::Rem,
+                                _ => todo!(),
+                            };
 
-fn parse_args(pairs: Pairs<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<Vec<Expr>> {
-    pairs.map(|p| parse_expr(p, infos)).collect::<Result<_>>()
-}
+                            this.out.push(Instruction::BinaryOperator(op));
 
-fn parse_line(p: Pair<Rule>, infos: &HashMap<String, VariableInfo>) -> Result<ProgramLine> {
-    let rule = p.as_rule();
-    let mut pairs = p.into_inner();
+                            Ok(())
+                        })
+                    },
+                );
 
-    let line = match rule {
-        Rule::begin_com => ProgramLine::Begin(pairs.next().unwrap().as_str().into()),
-        Rule::sif_com => {
-            let cond = parse_expr(pairs.next().unwrap(), infos)?;
-            let body = parse_line(pairs.next().unwrap(), infos)?;
+                f(self)?;
 
-            ProgramLine::Sif {
-                cond,
-                body: Box::new(body),
+                Ok(())
             }
+            Rule::string => self.push_str(p.into_inner().next().unwrap().as_str()),
+            Rule::string_inner => self.push_str(p.as_str()),
+            Rule::num => self.push_int(p.as_str().parse()?),
+            Rule::var_expr => self.push_var(p),
+            Rule::method_expr => {
+                let mut pairs = p.into_inner();
+                let name = pairs.next().unwrap().as_str();
+                self.push_args(pairs)?;
+                self.push_str(name)?;
+                self.out.push(Instruction::CallMethod);
+                Ok(())
+            }
+            Rule::formstring_expr => self.push_formtext(p),
+            _ => unreachable!("{:?}", p),
         }
-        Rule::if_com => {
-            let if_part = pairs.next().unwrap();
+    }
 
-            let (cond, body) = parse_if_block(if_part.into_inner(), infos)?;
+    fn push_list_begin(&mut self) {
+        self.out.push(Instruction::ListBegin);
+    }
 
-            let mut else_ifs = Vec::new();
-            let mut else_body = Vec::new();
+    fn push_list_end(&mut self) {
+        self.out.push(Instruction::ListEnd);
+    }
 
-            for p in pairs {
-                match p.as_rule() {
-                    Rule::elseif_part => {
-                        else_ifs.push(parse_if_block(p.into_inner(), infos)?);
+    fn push_args(&mut self, pairs: Pairs<Rule>) -> Result<()> {
+        self.push_list_begin();
+
+        for p in pairs {
+            self.push_expr(p)?;
+        }
+
+        self.push_list_end();
+
+        Ok(())
+    }
+
+    fn push_formtext(&mut self, mut p: Pair<Rule>) -> Result<()> {
+        if p.as_rule() == Rule::formstring_expr {
+            p = p.into_inner().next().unwrap();
+        }
+
+        let mut pairs = p.into_inner();
+
+        self.push_list_begin();
+
+        self.push_str(pairs.next().unwrap().as_str())?;
+
+        for (expr, text) in pairs.tuples() {
+            self.push_expr(expr)?;
+            self.push_str(text.as_str())?;
+        }
+
+        self.push_list_end();
+
+        self.out.push(Instruction::ConcatString);
+
+        Ok(())
+    }
+
+    fn mark(&mut self) -> u32 {
+        let ret = self.current_no();
+        self.out.push(Instruction::Nop);
+        ret
+    }
+
+    fn current_no(&self) -> u32 {
+        self.out.len() as u32
+    }
+
+    fn insert(&mut self, mark: u32, inst: Instruction) -> Result<()> {
+        *self
+            .out
+            .get_mut(mark as usize)
+            .ok_or_else(|| anyhow!("Invalid mark {}", mark))? = inst;
+        Ok(())
+    }
+
+    fn push_block(&mut self, pairs: Pairs<Rule>) -> Result<()> {
+        for p in pairs {
+            self.push_line(p)?;
+        }
+
+        Ok(())
+    }
+
+    fn push_if(&mut self, p: Pair<Rule>) -> Result<()> {
+        let mut pairs = p.into_inner();
+
+        // cond
+        self.push_expr(pairs.next().unwrap())?;
+        let begin = self.mark();
+
+        // body
+        self.push_block(pairs)?;
+        self.insert(begin, Instruction::GotoIfNot(self.current_no()))?;
+
+        Ok(())
+    }
+
+    fn push_line(&mut self, p: Pair<Rule>) -> Result<()> {
+        let rule = p.as_rule();
+        let mut pairs = p.into_inner();
+
+        match rule {
+            Rule::begin_com => {
+                let begin = pairs.next().unwrap().as_str().parse()?;
+                self.out.push(Instruction::Begin(begin));
+            }
+            Rule::sif_com => {
+                self.push_expr(pairs.next().unwrap())?;
+                let begin = self.mark();
+                self.push_block(pairs)?;
+                self.insert(begin, Instruction::GotoIfNot(self.current_no()))?;
+            }
+            Rule::if_com => {
+                let mut end_stack = ArrayVec::<u32, 24>::new();
+
+                self.push_if(pairs.next().unwrap())?;
+                end_stack.push(self.mark());
+
+                for p in pairs {
+                    match p.as_rule() {
+                        Rule::elseif_part => {
+                            self.push_if(p)?;
+                            end_stack.push(self.mark());
+                        }
+                        Rule::else_part => {
+                            self.push_block(p.into_inner())?;
+                        }
+                        _ => unreachable!(),
                     }
-                    Rule::else_part => {
-                        else_body = p
-                            .into_inner()
-                            .map(|p| parse_line(p, infos))
-                            .collect::<Result<_>>()?;
-                    }
-                    _ => unreachable!(),
+                }
+
+                for end in end_stack {
+                    self.insert(end, Instruction::Goto(self.current_no()))?;
                 }
             }
+            Rule::print_com | Rule::printform_com => {
+                let mut flags = PrintFlags::empty();
 
-            ProgramLine::If {
-                cond,
-                body,
-                else_ifs,
-                else_body,
+                if pairs.peek().unwrap().as_rule() == Rule::print_flag {
+                    flags = match pairs.next().unwrap().as_str() {
+                        "l" | "L" => PrintFlags::NEWLINE,
+                        "w" | "W" => PrintFlags::NEWLINE | PrintFlags::WAIT,
+                        _ => unreachable!(),
+                    };
+                }
+
+                let text = pairs.next().unwrap();
+
+                if text.as_rule() == Rule::print_text {
+                    self.push_str(text.as_str())?;
+                } else {
+                    self.push_formtext(text)?;
+                };
+
+                self.out.push(Instruction::Print(flags));
             }
-        }
-        Rule::print_com | Rule::printform_com => {
-            let mut flags = PrintFlags::empty();
+            Rule::reuselastline_com => {
+                self.push_str(pairs.next().unwrap().as_str())?;
+                self.out.push(Instruction::ReuseLastLine);
+            }
+            Rule::assign_line => {
+                let var = pairs.next().unwrap();
+                let rhs = pairs.next().unwrap();
 
-            if pairs.peek().unwrap().as_rule() == Rule::print_flag {
-                flags = match pairs.next().unwrap().as_str() {
-                    "l" | "L" => PrintFlags::NEWLINE,
-                    "w" | "W" => PrintFlags::NEWLINE | PrintFlags::WAIT,
+                self.push_expr(rhs)?;
+                self.store_var(var)?;
+            }
+            Rule::alignment_com => {
+                let alignment = pairs.next().unwrap().as_str();
+
+                let alignment = match alignment {
+                    "LEFT" => Alignment::Left,
+                    "CENTER" => Alignment::Center,
+                    "RIGHT" => Alignment::Right,
                     _ => unreachable!(),
                 };
+
+                self.out.push(Instruction::SetAlignment(alignment));
             }
+            Rule::call_com => {
+                let name = pairs.next().unwrap().as_str();
+                self.push_args(pairs)?;
+                self.push_str(name)?;
 
-            let text = pairs.next().unwrap();
-
-            let text = if text.as_rule() == Rule::print_text {
-                text.as_str().into()
-            } else {
-                parse_formtext(text, infos)?
-            };
-
-            ProgramLine::PrintCom { text, flags }
-        }
-        Rule::reuselastline_com => {
-            ProgramLine::ReuseLastLine(pairs.next().unwrap().as_str().into())
-        }
-        Rule::assign_line => {
-            let var = pairs.next().unwrap();
-            let rhs = pairs.next().unwrap();
-
-            ProgramLine::Assign {
-                var: parse_var_expr(var, infos)?,
-                expr: parse_expr(rhs, infos)?,
+                self.out.push(Instruction::Call);
             }
-        }
-        Rule::alignment_com => {
-            let alignment = pairs.next().unwrap().as_str();
-
-            let alignment = match alignment {
-                "LEFT" => Alignment::Left,
-                "CENTER" => Alignment::Center,
-                "RIGHT" => Alignment::Right,
-                _ => unreachable!(),
-            };
-
-            ProgramLine::Alignment { alignment }
-        }
-        Rule::call_com => {
-            let name = pairs.next().unwrap().as_str().into();
-            let args = parse_args(pairs, infos)?;
-
-            ProgramLine::Call { func: name, args }
-        }
-        Rule::goto_com => ProgramLine::Goto(pairs.next().unwrap().as_str().into()),
-        Rule::goto_label => ProgramLine::GotoLabel(pairs.next().unwrap().as_str().into()),
-        Rule::other_com => {
-            let name = pairs.next().unwrap().as_str();
-            let args = pairs.map(|p| parse_expr(p, infos)).collect::<Result<_>>()?;
-
-            ProgramLine::Command {
-                command: name.into(),
-                args,
+            Rule::goto_com => {
+                let mark = self
+                    .label
+                    .get(pairs.next().unwrap().as_str())
+                    .ok_or_else(|| {
+                        anyhow!("Unknown goto label ${}", pairs.next().unwrap().as_str())
+                    })?;
+                self.out.push(Instruction::Goto(*mark));
             }
-        }
-        _ => unreachable!("{:?}", rule),
-    };
+            Rule::goto_label => {
+                let mark = self.mark();
+                self.label
+                    .insert(pairs.next().unwrap().as_str().into(), mark);
+            }
+            Rule::other_com => {
+                // TODO
+                // let name = pairs.next().unwrap().as_str();
+                // let args = pairs.map(|p| parse_expr(p, infos)).collect::<Result<_>>()?;
 
-    Ok(line)
+                // ProgramLine::Command {
+                //     command: name.into(),
+                //     args,
+                // }
+            }
+            _ => unreachable!("{:?}", rule),
+        };
+
+        Ok(())
+    }
 }
 
-fn parse_function(
-    p: Pair<Rule>,
-    infos: &HashMap<String, VariableInfo>,
-) -> Result<(String, Vec<ProgramLine>)> {
+fn parse_function(p: Pair<Rule>) -> Result<(String, Vec<Instruction>)> {
     let mut pairs = p.into_inner();
 
     let label = pairs.next().unwrap().as_str().to_string();
 
-    Ok((
-        label,
-        pairs.map(|p| parse_line(p, infos)).collect::<Result<_>>()?,
-    ))
+    let mut compiler = Compiler::new();
+
+    compiler.push_block(pairs)?;
+
+    Ok((label, compiler.out))
 }
 
-pub fn compile(
-    s: &str,
-    infos: &HashMap<String, VariableInfo>,
-) -> Result<Vec<(String, Vec<ProgramLine>)>> {
+pub fn compile(s: &str) -> Result<Vec<(String, Vec<Instruction>)>> {
     let r = ErbParser::parse(Rule::program, s).unwrap();
 
     r.map_while(|p| {
@@ -333,7 +352,7 @@ pub fn compile(
             None
         } else {
             debug_assert_eq!(p.as_rule(), Rule::function);
-            Some(parse_function(p, infos))
+            Some(parse_function(p))
         }
     })
     .collect()
