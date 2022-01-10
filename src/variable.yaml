@@ -15,4 +15,5 @@ FLAG:
 LOCAL:
   size: [1000]
 LOCALS:
+  is_str: true
   size: [100]

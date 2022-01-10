@@ -9,6 +9,7 @@ use strum::{Display, EnumIter, EnumString};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
+use crate::compiler::PrintFlags;
 use crate::instruction::{BeginType, Instruction};
 use crate::operator::BinaryOperator;
 use crate::value::Value;
@@ -325,7 +326,7 @@ impl TerminalVm {
                 let name = ctx.pop_str()?;
 
                 if name.parse::<BulitinVariable>().is_ok() {
-                    return bail!("Can't edit builtin variable");
+                    bail!("Can't edit builtin variable");
                 } else {
                     let mut args = ctx.take_arg_list()?.into_iter();
                     let value = ctx.pop();
@@ -386,11 +387,39 @@ impl TerminalVm {
 
                 ctx.push(value);
             }
-            Instruction::Print(flags) => {}
+            Instruction::Print(flags) => {
+                if flags.contains(PrintFlags::NEWLINE) {
+                    println!("{}", ctx.pop_str()?);
+                } else {
+                    print!("{}", ctx.pop_str()?);
+                }
+            }
+            Instruction::ConcatString => {
+                let args = ctx.take_list();
+                let ret = args.into_iter().fold(String::new(), |s, l| {
+                    s + &l.try_into_str().unwrap_or_default()
+                });
+                ctx.push(ret);
+            }
             Instruction::CallMethod => {
                 let name = ctx.pop_str()?;
-                let args = ctx.take_list();
-                panic!("{}, {:?}", name, args);
+                let mut args = ctx.take_list().into_iter();
+
+                match name.as_str() {
+                    "TOSTR" => {
+                        let value = args.next().unwrap().try_into_int()?;
+                        let format = args.next();
+
+                        let ret = if let Some(_format) = format {
+                            format!("{00}", value)
+                        } else {
+                            value.to_string()
+                        };
+
+                        ctx.push(ret);
+                    }
+                    _ => bail!("Unknown method {}", name),
+                }
             }
             Instruction::Exit => return Ok(Some(Workflow::Exit)),
             Instruction::BinaryOperator(BinaryOperator::Rem) => {
@@ -412,7 +441,8 @@ impl TerminalVm {
                     *cursor = *no as usize;
                 }
             }
-            _ => todo!("{:?}", inst),
+            Instruction::SetAlignment(_) => {}
+            _ => bail!("{:?}", inst),
         }
 
         Ok(None)
@@ -426,10 +456,14 @@ impl TerminalVm {
         loop {
             if let Some(inst) = body.get(cursor) {
                 cursor += 1;
-                match self.run_instruction(inst, &mut cursor, ctx)? {
-                    None => {}
-                    Some(Workflow::Exit) => return Ok(Workflow::Exit),
-                    Some(Workflow::Return) => break,
+                match self.run_instruction(inst, &mut cursor, ctx) {
+                    Ok(None) => {}
+                    Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
+                    Ok(Some(Workflow::Return)) => break,
+                    Err(err) => {
+                        eprintln!("Error occured in {}@{} ({:?})", name, cursor, inst);
+                        return Err(err);
+                    }
                 }
             } else {
                 break;

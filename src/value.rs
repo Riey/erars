@@ -8,6 +8,14 @@ pub enum Value {
 }
 
 impl Value {
+    pub fn try_into_int(self) -> Result<i64> {
+        self.try_into()
+    }
+
+    pub fn try_into_str(self) -> Result<String> {
+        self.try_into()
+    }
+
     pub fn as_bool(&self) -> bool {
         match self {
             Value::Int(0) => false,
