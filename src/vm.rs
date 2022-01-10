@@ -1,8 +1,11 @@
+use maplit::btreemap;
 use std::iter;
 use std::ops::Range;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
+use eframe::epi::{App, Frame};
+use egui::{CtxRef, FontData, FontDefinitions, FontFamily};
 use either::Either;
 use strum::{Display, EnumIter, EnumString};
 
@@ -58,7 +61,7 @@ pub enum BulitinVariable {
 }
 
 #[derive(Clone, Debug)]
-pub enum Variable {
+enum Variable {
     Int0D(i64),
     Int1D(Vec<i64>),
     Int2D(Vec<Vec<i64>>),
@@ -163,7 +166,7 @@ impl Variable {
     }
 }
 
-pub struct VariableStorage {
+struct VariableStorage {
     character_len: usize,
     variables: HashMap<String, (VariableInfo, Either<Variable, Vec<Variable>>)>,
 }
@@ -229,8 +232,9 @@ enum Workflow {
     Exit,
 }
 
-pub struct VmContext {
+struct VmContext {
     var: VariableStorage,
+    begin: Option<BeginType>,
     stack: Vec<Value>,
     list_stack: Vec<Range<usize>>,
     list_begin_stack: Vec<usize>,
@@ -240,6 +244,7 @@ impl VmContext {
     pub fn new(infos: &HashMap<String, VariableInfo>) -> Self {
         Self {
             var: VariableStorage::new(infos),
+            begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             list_begin_stack: Vec::with_capacity(16),
             list_stack: Vec::with_capacity(32),
@@ -286,7 +291,86 @@ impl VmContext {
     }
 }
 
-pub struct TerminalVm {
+const FONT: &[u8] = include_bytes!("../res/D2Coding-Ver1.3.2-20180524.ttc");
+
+pub struct EraApp {
+    vm: TerminalVm,
+    console: EraConsole,
+    ctx: VmContext,
+}
+
+impl EraApp {
+    pub fn new(
+        functions: HashMap<String, Vec<Instruction>>,
+        infos: &HashMap<String, VariableInfo>,
+    ) -> Self {
+        Self {
+            console: EraConsole::default(),
+            vm: TerminalVm::new(functions),
+            ctx: VmContext::new(infos),
+        }
+    }
+}
+
+impl App for EraApp {
+    fn setup(&mut self, ctx: &CtxRef, _frame: &Frame, _storage: Option<&dyn eframe::epi::Storage>) {
+        ctx.set_fonts(FontDefinitions {
+            font_data: btreemap! {
+                "default".into() => FontData::from_static(FONT),
+            },
+            fonts_for_family: btreemap! {
+                FontFamily::Monospace => vec!["default".into()],
+                FontFamily::Proportional => vec!["default".into()],
+            },
+            ..Default::default()
+        })
+    }
+
+    fn name(&self) -> &str {
+        "erars"
+    }
+
+    fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
+        if let Some(begin) = self.ctx.begin.take() {
+            self.vm
+                .begin(begin, &mut self.console, &mut self.ctx)
+                .unwrap();
+        }
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            for line in self.console.lines.iter() {
+                ui.vertical(|ui| {
+                    for part in line.iter() {
+                        ui.horizontal(|ui| {
+                            ui.label(part);
+                        });
+                    }
+                });
+            }
+        });
+    }
+}
+
+#[derive(Default)]
+struct EraConsole {
+    lines: Vec<Vec<String>>,
+    last_line: Vec<String>,
+}
+
+impl EraConsole {
+    pub fn print(&mut self, s: String) {
+        self.last_line.push(s);
+    }
+    pub fn new_line(&mut self) {
+        self.lines.push(std::mem::take(&mut self.last_line));
+    }
+    pub fn print_line(&mut self, s: String) {
+        self.print(s);
+        self.new_line();
+    }
+}
+
+struct TerminalVm {
     functions: HashMap<String, Vec<Instruction>>,
 }
 
@@ -306,6 +390,7 @@ impl TerminalVm {
         &self,
         inst: &Instruction,
         cursor: &mut usize,
+        console: &mut EraConsole,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
         match inst {
@@ -388,11 +473,16 @@ impl TerminalVm {
                 ctx.push(value);
             }
             Instruction::Print(flags) => {
+                console.print(ctx.pop_str()?);
                 if flags.contains(PrintFlags::NEWLINE) {
-                    println!("{}", ctx.pop_str()?);
-                } else {
-                    print!("{}", ctx.pop_str()?);
+                    console.new_line();
                 }
+
+                // TODO: PRINTW
+            }
+            Instruction::Begin(b) => {
+                ctx.begin = Some(*b);
+                return Ok(Some(Workflow::Exit));
             }
             Instruction::ConcatString => {
                 let args = ctx.take_list();
@@ -448,7 +538,7 @@ impl TerminalVm {
         Ok(None)
     }
 
-    fn call(&self, name: &str, ctx: &mut VmContext) -> Result<Workflow> {
+    fn call(&self, name: &str, console: &mut EraConsole, ctx: &mut VmContext) -> Result<Workflow> {
         let body = self.try_get_func(name)?;
 
         let mut cursor = 0;
@@ -456,7 +546,7 @@ impl TerminalVm {
         loop {
             if let Some(inst) = body.get(cursor) {
                 cursor += 1;
-                match self.run_instruction(inst, &mut cursor, ctx) {
+                match self.run_instruction(inst, &mut cursor, console, ctx) {
                     Ok(None) => {}
                     Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
                     Ok(Some(Workflow::Return)) => break,
@@ -473,10 +563,15 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    pub fn begin(&self, ty: BeginType, ctx: &mut VmContext) -> Result<()> {
+    pub fn begin(
+        &self,
+        ty: BeginType,
+        console: &mut EraConsole,
+        ctx: &mut VmContext,
+    ) -> Result<()> {
         match ty {
             BeginType::Title => {
-                self.call("SYSTEM_TITLE", ctx)?;
+                self.call("SYSTEM_TITLE", console, ctx)?;
                 Ok(())
             }
             BeginType::First => todo!(),

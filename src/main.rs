@@ -1,8 +1,7 @@
-// const FONT: &[u8] = include_bytes!("../res/D2Coding-Ver1.3.2-20180524.ttc");
-
+use eframe::NativeOptions;
 use erars::{
-    instruction::{BeginType, Instruction},
-    vm::{TerminalVm, VariableInfo, VmContext},
+    instruction::Instruction,
+    vm::{EraApp, VariableInfo},
 };
 use hashbrown::HashMap;
 use rayon::prelude::*;
@@ -32,10 +31,12 @@ fn main() -> anyhow::Result<()> {
 
     std::fs::write("dump.txt", format!("{:#?}", functions))?;
 
-    let vm = TerminalVm::new(functions);
-    let mut ctx = VmContext::new(&infos);
+    let app = EraApp::new(functions, &infos);
 
-    vm.begin(BeginType::Title, &mut ctx)?;
-
-    Ok(())
+    eframe::run_native(
+        Box::new(app),
+        NativeOptions {
+            ..Default::default()
+        },
+    );
 }

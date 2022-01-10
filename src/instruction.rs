@@ -5,7 +5,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, EnumString)]
 pub enum BeginType {
     #[strum(to_string = "TITLE")]
     Title,
