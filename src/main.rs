@@ -1,12 +1,15 @@
 // const FONT: &[u8] = include_bytes!("../res/D2Coding-Ver1.3.2-20180524.ttc");
 
-use erars::{instruction::Instruction, vm::VariableInfo};
+use erars::{
+    instruction::{BeginType, Instruction},
+    vm::{TerminalVm, VariableInfo, VmContext},
+};
 use hashbrown::HashMap;
 use rayon::prelude::*;
 
 fn main() -> anyhow::Result<()> {
-    // let infos: HashMap<String, VariableInfo> =
-    //     serde_yaml::from_str(include_str!("./variable.yaml"))?;
+    let infos: HashMap<String, VariableInfo> =
+        serde_yaml::from_str(include_str!("./variable.yaml"))?;
 
     let erbs = glob::glob_with(
         "ERB/**/*.ERB",
@@ -27,7 +30,12 @@ fn main() -> anyhow::Result<()> {
         })
         .collect();
 
-    dbg!(functions);
+    std::fs::write("dump.txt", format!("{:#?}", functions))?;
+
+    let vm = TerminalVm::new(functions);
+    let mut ctx = VmContext::new(&infos);
+
+    vm.begin(BeginType::Title, &mut ctx)?;
 
     Ok(())
 }

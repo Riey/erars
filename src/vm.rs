@@ -1,9 +1,17 @@
+use std::iter;
+use std::ops::Range;
+
 use anyhow::{anyhow, bail, Result};
+use arrayvec::ArrayVec;
 use either::Either;
-use strum::{Display, EnumIter, EnumString, IntoEnumIterator};
+use strum::{Display, EnumIter, EnumString};
 
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
+
+use crate::instruction::{BeginType, Instruction};
+use crate::operator::BinaryOperator;
+use crate::value::Value;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -58,7 +66,6 @@ pub enum Variable {
     Str1D(Vec<String>),
     Str2D(Vec<Vec<String>>),
     Str3D(Vec<Vec<Vec<String>>>),
-    Builtin(BulitinVariable),
 }
 
 impl Variable {
@@ -76,64 +83,81 @@ impl Variable {
         }
     }
 
-    pub fn get_int(&self, mut args: impl Iterator<Item = Result<usize>>) -> Result<i64> {
+    pub fn set(&mut self, args: impl Iterator<Item = usize>, value: Value) -> Result<()> {
+        match self {
+            Variable::Int0D(..)
+            | Variable::Int1D(..)
+            | Variable::Int2D(..)
+            | Variable::Int3D(..) => *self.get_int(args)? = value.try_into()?,
+            Variable::Str0D(..)
+            | Variable::Str1D(..)
+            | Variable::Str2D(..)
+            | Variable::Str3D(..) => *self.get_str(args)? = value.try_into()?,
+        }
+
+        Ok(())
+    }
+
+    pub fn get(&mut self, args: impl Iterator<Item = usize>) -> Result<Value> {
+        match self {
+            Variable::Int0D(..)
+            | Variable::Int1D(..)
+            | Variable::Int2D(..)
+            | Variable::Int3D(..) => self.get_int(args).map(Value::from),
+            Variable::Str0D(..)
+            | Variable::Str1D(..)
+            | Variable::Str2D(..)
+            | Variable::Str3D(..) => self.get_str(args).map(Value::from),
+        }
+    }
+
+    pub fn get_int(&mut self, mut args: impl Iterator<Item = usize>) -> Result<&mut i64> {
         macro_rules! a {
             () => {
-                args.next().unwrap()?
+                args.next().unwrap_or(0)
             };
         }
         match self {
-            Variable::Int0D(s) => Ok(*s),
-            Variable::Int1D(s) => s
-                .get(a!())
-                .ok_or_else(|| anyhow!("Index out of range"))
-                .map(Clone::clone),
+            Variable::Int0D(s) => Ok(s),
+            Variable::Int1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
             Variable::Int2D(s) => s
-                .get(a!())
+                .get_mut(a!())
                 .unwrap()
-                .get(a!())
-                .ok_or_else(|| anyhow!("Index out of range"))
-                .map(Clone::clone),
+                .get_mut(a!())
+                .ok_or_else(|| anyhow!("Index out of range")),
             Variable::Int3D(s) => s
-                .get(a!())
+                .get_mut(a!())
                 .unwrap()
-                .get(a!())
+                .get_mut(a!())
                 .unwrap()
-                .get(a!())
-                .ok_or_else(|| anyhow!("Index out of range"))
-                .map(Clone::clone),
-            Variable::Builtin(BulitinVariable::GamebaseYear) => Ok(2022),
+                .get_mut(a!())
+                .ok_or_else(|| anyhow!("Index out of range")),
             _ => bail!("Variable is Str type"),
         }
     }
 
-    pub fn get_str(&self, mut args: impl Iterator<Item = Result<usize>>) -> Result<String> {
+    pub fn get_str(&mut self, mut args: impl Iterator<Item = usize>) -> Result<&mut String> {
         macro_rules! a {
             () => {
-                args.next().unwrap()?
+                args.next().unwrap_or(0)
             };
         }
         match self {
-            Variable::Str0D(s) => Ok(s.clone()),
-            Variable::Str1D(s) => s
-                .get(a!())
-                .ok_or_else(|| anyhow!("Index out of range"))
-                .map(Clone::clone),
+            Variable::Str0D(s) => Ok(s),
+            Variable::Str1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
             Variable::Str2D(s) => s
-                .get(a!())
+                .get_mut(a!())
                 .unwrap()
-                .get(a!())
-                .ok_or_else(|| anyhow!("Index out of range"))
-                .map(Clone::clone),
+                .get_mut(a!())
+                .ok_or_else(|| anyhow!("Index out of range")),
             Variable::Str3D(s) => s
-                .get(a!())
+                .get_mut(a!())
                 .unwrap()
-                .get(a!())
+                .get_mut(a!())
                 .unwrap()
-                .get(a!())
-                .ok_or_else(|| anyhow!("Index out of range"))
-                .map(Clone::clone),
-            _ => self.get_int(args).map(|i| i.to_string()),
+                .get_mut(a!())
+                .ok_or_else(|| anyhow!("Index out of range")),
+            _ => bail!("Variable is Int type"),
         }
     }
 }
@@ -164,6 +188,15 @@ impl VariableStorage {
         }
     }
 
+    fn get_var(
+        &mut self,
+        name: &str,
+    ) -> Result<&mut (VariableInfo, Either<Variable, Vec<Variable>>)> {
+        self.variables
+            .get_mut(name)
+            .ok_or_else(|| anyhow!("Variable {} is not exists", name))
+    }
+
     pub fn add_chara(&mut self) {
         self.character_len += 1;
         for (_, (info, var)) in self.variables.iter_mut() {
@@ -173,101 +206,225 @@ impl VariableStorage {
         }
     }
 
-    pub fn get_global(&self, name: &str) -> Option<&Variable> {
-        if let Either::Left(ref gvar) = self.variables.get(name)?.1 {
+    pub fn get_global(&mut self, name: &str) -> Option<&mut Variable> {
+        if let Either::Left(ref mut gvar) = self.variables.get_mut(name)?.1 {
             Some(gvar)
         } else {
             None
         }
     }
-    pub fn get_chara(&self, name: &str, no: usize) -> Option<&Variable> {
-        if let Either::Right(ref cvar) = self.variables.get(name)?.1 {
-            cvar.get(no)
+    pub fn get_chara(&mut self, name: &str, no: usize) -> Option<&mut Variable> {
+        if let Either::Right(ref mut cvar) = self.variables.get_mut(name)?.1 {
+            cvar.get_mut(no)
         } else {
             None
         }
     }
 }
 
-pub struct TerminalVm {
-    var: VariableStorage,
+#[derive(Display, Debug, Clone, Copy)]
+enum Workflow {
+    Return,
+    Exit,
 }
 
-impl TerminalVm {
+pub struct VmContext {
+    var: VariableStorage,
+    stack: Vec<Value>,
+    list_stack: Vec<Range<usize>>,
+    list_begin_stack: Vec<usize>,
+}
+
+impl VmContext {
     pub fn new(infos: &HashMap<String, VariableInfo>) -> Self {
         Self {
             var: VariableStorage::new(infos),
+            stack: Vec::with_capacity(1024),
+            list_begin_stack: Vec::with_capacity(16),
+            list_stack: Vec::with_capacity(32),
         }
     }
 
-    // pub fn eval_int(&self, expr: &Expr) -> Result<i64> {
-    //     match expr {
-    //         Expr::Num(i) => Ok(*i),
-    //         Expr::VarExpr(VarExpr { name, args }) => {
-    //             let var = if false {
-    //                 self.var
-    //                     .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
-    //                     .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
-    //             } else {
-    //                 self.var
-    //                     .get_global(name)
-    //                     .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
-    //             };
+    fn set_list_begin(&mut self) {
+        self.list_begin_stack.push(self.stack.len());
+    }
 
-    //             var.get_int(
-    //                 args.iter()
-    //                     .map(|e| self.eval_int(e).and_then(|i| Ok(i.try_into()?))),
-    //             )
-    //         }
-    //         _ => bail!("Invalid expr"),
-    //     }
-    // }
+    fn set_list_end(&mut self) {
+        self.list_stack
+            .push(self.list_begin_stack.pop().unwrap()..self.stack.len());
+    }
 
-    // pub fn eval_str(&self, expr: &Expr) -> Result<String> {
-    //     match expr {
-    //         Expr::Str(s) => Ok(s.clone()),
-    //         Expr::VarExpr(VarExpr { name, args }) => {
-    //             let var = if false {
-    //                 self.var
-    //                     .get_chara(name, self.eval_int(args.last().unwrap())?.try_into()?)
-    //                     .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
-    //             } else {
-    //                 self.var
-    //                     .get_global(name)
-    //                     .ok_or_else(|| anyhow!("Unknown variable name {}", name))?
-    //             };
+    fn take_arg_list(&mut self) -> Result<ArrayVec<usize, 4>> {
+        self.stack
+            .drain(self.list_stack.pop().unwrap())
+            .map(usize::try_from)
+            .collect()
+    }
 
-    //             var.get_str(
-    //                 args.iter()
-    //                     .map(|e| self.eval_int(e).and_then(|i| Ok(i.try_into()?))),
-    //             )
-    //         }
-    //         _ => bail!("Invalid expr"),
-    //     }
-    // }
+    fn take_list(&mut self) -> ArrayVec<Value, 8> {
+        self.stack.drain(self.list_stack.pop().unwrap()).collect()
+    }
 
-    // pub fn run(&mut self, line: &ProgramLine) -> Result<()> {
-    //     match line {
-    //         ProgramLine::PrintCom { flags, text } => {
-    //             print!("{}", text.first);
+    fn push(&mut self, value: impl Into<Value>) {
+        self.stack.push(value.into());
+    }
 
-    //             for (expr, text) in text.pairs.iter() {
-    //                 print!("{}", self.eval_str(expr)?);
-    //                 print!("{}", text);
-    //             }
+    fn pop(&mut self) -> Value {
+        // if this failed, it must be compiler error
+        self.stack
+            .pop()
+            .unwrap_or_else(|| unreachable!("Unknown compiler error"))
+    }
 
-    //             if flags.contains(PrintFlags::NEWLINE) {
-    //                 println!("");
-    //             }
+    fn pop_str(&mut self) -> Result<String> {
+        self.pop().try_into()
+    }
 
-    //             if flags.contains(PrintFlags::WAIT) {}
-    //         }
-    //         ProgramLine::Call { func, args } => {
-    //             println!("CALL {}({:?})", func, args);
-    //         }
-    //         _ => todo!(),
-    //     }
+    fn pop_int(&mut self) -> Result<i64> {
+        self.pop().try_into()
+    }
+}
 
-    //     Ok(())
-    // }
+pub struct TerminalVm {
+    functions: HashMap<String, Vec<Instruction>>,
+}
+
+impl TerminalVm {
+    pub fn new(functions: HashMap<String, Vec<Instruction>>) -> Self {
+        Self { functions }
+    }
+
+    fn try_get_func(&self, name: &str) -> Result<&[Instruction]> {
+        self.functions
+            .get(name)
+            .ok_or_else(|| anyhow!("Function {} is not exists", name))
+            .map(|b| b.as_slice())
+    }
+
+    fn run_instruction(&self, inst: &Instruction, ctx: &mut VmContext) -> Result<Option<Workflow>> {
+        match inst {
+            Instruction::LoadInt(n) => ctx.push(*n),
+            Instruction::LoadStr(s) => ctx.push(s),
+            Instruction::Nop => {}
+            Instruction::ListBegin => ctx.set_list_begin(),
+            Instruction::ListEnd => ctx.set_list_end(),
+            Instruction::StoreVar => {
+                let target = ctx
+                    .var
+                    .get_global("TARGET")
+                    .unwrap()
+                    .get_int(iter::empty())?
+                    .clone()
+                    .try_into()?;
+
+                let name = ctx.pop_str()?;
+
+                let value = if name.parse::<BulitinVariable>().is_ok() {
+                    return bail!("Can't edit builtin variable");
+                } else {
+                    let mut args = ctx.take_arg_list()?.into_iter();
+                    let value = ctx.pop();
+
+                    let (info, var) = ctx.var.get_var(&name)?;
+
+                    match var {
+                        Either::Left(gvar) => {
+                            gvar.set(args, value)?;
+                        }
+                        Either::Right(cvar) => {
+                            let no = if args.len() < info.arg_len() {
+                                target
+                            } else {
+                                args.next().unwrap()
+                            };
+                            cvar[no].set(args, value)?
+                        }
+                    }
+                };
+            }
+            Instruction::LoadVar => {
+                let target = ctx
+                    .var
+                    .get_global("TARGET")
+                    .unwrap()
+                    .get_int(iter::empty())?
+                    .clone()
+                    .try_into()?;
+
+                let name = ctx.pop_str()?;
+
+                let value = if let Ok(builtin) = name.parse() {
+                    match builtin {
+                        BulitinVariable::GamebaseAuthor => "Empty".into(),
+                        BulitinVariable::GamebaseYear => 2022i64.into(),
+                        BulitinVariable::GamebaseTitle => "Title".into(),
+                        BulitinVariable::GamebaseVersion => 1000.into(),
+                        BulitinVariable::GamebaseInfo => "Info".into(),
+                    }
+                } else {
+                    let mut args = ctx.take_arg_list()?.into_iter();
+
+                    let (info, var) = ctx.var.get_var(&name)?;
+
+                    match var {
+                        Either::Left(gvar) => gvar.get(args)?,
+                        Either::Right(cvar) => {
+                            let no = if args.len() < info.arg_len() {
+                                target
+                            } else {
+                                args.next().unwrap()
+                            };
+                            cvar[no].get(args)?
+                        }
+                    }
+                };
+
+                ctx.push(value);
+            }
+            Instruction::Print(flags) => {}
+            Instruction::CallMethod => {
+                let name = ctx.pop_str()?;
+                let args = ctx.take_list();
+                panic!("{}, {:?}", name, args);
+            }
+            Instruction::Exit => return Ok(Some(Workflow::Exit)),
+            Instruction::BinaryOperator(BinaryOperator::Rem) => {
+                let rhs = ctx.pop_int()?;
+                let lhs = ctx.pop_int()?;
+                ctx.push(lhs % rhs);
+            }
+            Instruction::BinaryOperator(BinaryOperator::Div) => {
+                let rhs = ctx.pop_int()?;
+                let lhs = ctx.pop_int()?;
+                ctx.push(lhs / rhs);
+            }
+            _ => todo!("{:?}", inst),
+        }
+
+        Ok(None)
+    }
+
+    fn call(&self, name: &str, ctx: &mut VmContext) -> Result<Workflow> {
+        let body = self.try_get_func(name)?;
+
+        for inst in body.iter() {
+            match self.run_instruction(inst, ctx)? {
+                None => {}
+                Some(Workflow::Exit) => return Ok(Workflow::Exit),
+                Some(Workflow::Return) => break,
+            }
+        }
+
+        Ok(Workflow::Return)
+    }
+
+    pub fn begin(&self, ty: BeginType, ctx: &mut VmContext) -> Result<()> {
+        match ty {
+            BeginType::Title => {
+                self.call("SYSTEM_TITLE", ctx)?;
+                Ok(())
+            }
+            BeginType::First => todo!(),
+        }
+    }
 }

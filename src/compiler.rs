@@ -89,8 +89,8 @@ impl Compiler {
                     },
                     |lhs, op, rhs| {
                         Box::new(move |this: &mut Compiler| {
-                            rhs(this)?;
                             lhs(this)?;
+                            rhs(this)?;
 
                             let op = match op.as_rule() {
                                 Rule::add => BinaryOperator::Add,
@@ -335,7 +335,12 @@ impl Compiler {
 fn parse_function(p: Pair<Rule>) -> Result<(String, Vec<Instruction>)> {
     let mut pairs = p.into_inner();
 
-    let label = pairs.next().unwrap().as_str().to_string();
+    let label = pairs
+        .next()
+        .unwrap()
+        .as_str()
+        .trim_start_matches('@')
+        .to_string();
 
     let mut compiler = Compiler::new();
 

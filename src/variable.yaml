@@ -3,6 +3,8 @@ DAY:
   # is_str: false
   size: [1000]
 
+TARGET:
+  size: [1000]
 MONEY:
   size: [1000]
 RESULT:

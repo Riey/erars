@@ -7,14 +7,10 @@ use strum::EnumString;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, EnumString)]
 pub enum BeginType {
+    #[strum(to_string = "TITLE")]
+    Title,
     #[strum(to_string = "FIRST")]
     First,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum Value {
-    Int(i64),
-    String(String),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
