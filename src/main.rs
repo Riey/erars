@@ -1,4 +1,3 @@
-use eframe::NativeOptions;
 use erars::{
     instruction::Instruction,
     vm::{EraApp, VariableInfo},
@@ -7,6 +6,8 @@ use hashbrown::HashMap;
 use rayon::prelude::*;
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let infos: HashMap<String, VariableInfo> =
         serde_yaml::from_str(include_str!("./variable.yaml"))?;
 
@@ -31,12 +32,9 @@ fn main() -> anyhow::Result<()> {
 
     std::fs::write("dump.txt", format!("{:#?}", functions))?;
 
-    let app = EraApp::new(functions, &infos);
+    let mut app = EraApp::new(functions, &infos);
 
-    eframe::run_native(
-        Box::new(app),
-        NativeOptions {
-            ..Default::default()
-        },
-    );
+    app.run()?;
+
+    Ok(())
 }

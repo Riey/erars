@@ -1,12 +1,18 @@
 use maplit::btreemap;
+use qni_core_rs::c_api::{qni_console_new, ConsoleArcCtx};
+use qni_core_rs::protos::qni_api::{
+    ConsolePrintData, InputRequest, ProgramCommand, ProgramRequest, TextAlign,
+};
 use std::iter;
 use std::ops::Range;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use eframe::epi::{App, Frame};
-use egui::{Color32, CtxRef, FontData, FontDefinitions, FontFamily};
 use either::Either;
+use qni_connector_ws_rs::{start_connector, WebSocketServer};
+use qni_core_rs::prelude::*;
 use strum::{Display, EnumIter, EnumString};
 
 use hashbrown::HashMap;
@@ -291,12 +297,10 @@ impl VmContext {
     }
 }
 
-const FONT: &[u8] = include_bytes!("../res/D2Coding-Ver1.3.2-20180524.ttc");
-
 pub struct EraApp {
     vm: TerminalVm,
-    console: EraConsole,
     ctx: VmContext,
+    qni_ctx: Arc<ConsoleContext>,
 }
 
 impl EraApp {
@@ -305,94 +309,37 @@ impl EraApp {
         infos: &HashMap<String, VariableInfo>,
     ) -> Self {
         Self {
-            console: EraConsole::default(),
             vm: TerminalVm::new(functions),
             ctx: VmContext::new(infos),
+            qni_ctx: Arc::new(ConsoleContext::new()),
         }
     }
-}
 
-impl App for EraApp {
-    fn setup(&mut self, ctx: &CtxRef, _frame: &Frame, _storage: Option<&dyn eframe::epi::Storage>) {
-        ctx.set_fonts(FontDefinitions {
-            font_data: btreemap! {
-                "default".into() => FontData::from_static(FONT),
-            },
-            fonts_for_family: btreemap! {
-                FontFamily::Monospace => vec!["default".into()],
-                FontFamily::Proportional => vec!["default".into()],
-            },
-            ..Default::default()
+    pub fn run(&mut self) -> Result<()> {
+        let mut com = ProgramCommand::new();
+        com.mut_UPDATE_SETTING().set_BACK_COLOR(0xFF000000);
+        self.qni_ctx.append_command(com);
+
+        let mut com = ProgramCommand::new();
+        com.mut_UPDATE_SETTING().set_TEXT_COLOR(0xFFFFFFFF);
+        self.qni_ctx.append_command(com);
+
+        let mut com = ProgramCommand::new();
+        com.mut_UPDATE_SETTING().set_HIGHLIGHT_COLOR(0xFFFFFF00);
+        self.qni_ctx.append_command(com);
+
+        let qni_ctx = self.qni_ctx.clone();
+        let handle = std::thread::spawn(move || {
+            qni_connector_ws_rs::start_connector(&qni_ctx, "127.0.0.1:4434").unwrap();
         });
 
-        let mut style = (*ctx.style()).clone();
-        style.visuals.override_text_color = Some(Color32::WHITE);
-        ctx.set_style(style);
-    }
-
-    fn name(&self) -> &str {
-        "erars"
-    }
-
-    fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
-        if let Some(begin) = self.ctx.begin.take() {
-            self.vm
-                .begin(begin, &mut self.console, &mut self.ctx)
-                .unwrap();
+        while let Some(begin) = self.ctx.begin.take() {
+            self.vm.begin(begin, &self.qni_ctx, &mut self.ctx)?;
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            for line in self.console.lines.iter() {
-                ui.vertical(|ui| match line.align {
-                    Alignment::Left => {
-                        for part in line.parts.iter() {
-                            ui.horizontal(|ui| {
-                                ui.label(part);
-                            });
-                        }
-                    }
-                    Alignment::Center => {
-                        for part in line.parts.iter() {
-                            ui.vertical_centered(|ui| {
-                                ui.label(part);
-                            });
-                        }
-                    }
-                    Alignment::Right => todo!(),
-                });
-            }
-        });
-    }
-}
+        handle.join().unwrap();
 
-#[derive(Default)]
-struct EraConsole {
-    lines: Vec<ConsoleLine>,
-    last_line: ConsoleLine,
-}
-
-#[derive(Default)]
-struct ConsoleLine {
-    parts: Vec<String>,
-    align: Alignment,
-}
-
-impl EraConsole {
-    pub fn print(&mut self, s: String) {
-        self.last_line.parts.push(s);
-    }
-    pub fn new_line(&mut self) {
-        let prev_line = std::mem::take(&mut self.last_line);
-        let prev_align = prev_line.align;
-        self.lines.push(prev_line);
-        self.last_line.align = prev_align;
-    }
-    pub fn set_align(&mut self, align: Alignment) {
-        self.last_line.align = align;
-    }
-    pub fn print_line(&mut self, s: String) {
-        self.print(s);
-        self.new_line();
+        Ok(())
     }
 }
 
@@ -416,7 +363,7 @@ impl TerminalVm {
         &self,
         inst: &Instruction,
         cursor: &mut usize,
-        console: &mut EraConsole,
+        qni_ctx: &Arc<ConsoleContext>,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
         match inst {
@@ -499,12 +446,23 @@ impl TerminalVm {
                 ctx.push(value);
             }
             Instruction::Print(flags) => {
-                console.print(ctx.pop_str()?);
-                if flags.contains(PrintFlags::NEWLINE) {
-                    console.new_line();
-                }
+                let mut com = ProgramCommand::new();
+                let mut data = ConsolePrintData::new();
+                let str = ctx.pop_str()?;
 
-                // TODO: PRINTW
+                if flags.contains(PrintFlags::NEWLINE) {
+                    data.set_PRINT_LINE(str);
+                } else {
+                    data.set_PRINT(str);
+                }
+                com.set_PRINT(data);
+                qni_ctx.append_command(com);
+
+                if flags.contains(PrintFlags::WAIT) {
+                    let mut req = ProgramRequest::new();
+                    req.mut_INPUT().mut_ANYKEY();
+                    qni_ctx.wait_console(req)?;
+                }
             }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
@@ -557,14 +515,28 @@ impl TerminalVm {
                     *cursor = *no as usize;
                 }
             }
-            Instruction::SetAlignment(_) => {}
+            Instruction::SetAlignment(a) => {
+                let mut com = ProgramCommand::new();
+                let a = match a {
+                    Alignment::Left => TextAlign::LEFT,
+                    Alignment::Center => TextAlign::CENTER,
+                    Alignment::Right => TextAlign::RIGHT,
+                };
+                com.mut_UPDATE_SETTING().set_TEXT_ALIGN(a);
+                qni_ctx.append_command(com);
+            }
             _ => bail!("{:?}", inst),
         }
 
         Ok(None)
     }
 
-    fn call(&self, name: &str, console: &mut EraConsole, ctx: &mut VmContext) -> Result<Workflow> {
+    fn call(
+        &self,
+        name: &str,
+        qni_ctx: &Arc<ConsoleContext>,
+        ctx: &mut VmContext,
+    ) -> Result<Workflow> {
         let body = self.try_get_func(name)?;
 
         let mut cursor = 0;
@@ -572,7 +544,7 @@ impl TerminalVm {
         loop {
             if let Some(inst) = body.get(cursor) {
                 cursor += 1;
-                match self.run_instruction(inst, &mut cursor, console, ctx) {
+                match self.run_instruction(inst, &mut cursor, qni_ctx, ctx) {
                     Ok(None) => {}
                     Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
                     Ok(Some(Workflow::Return)) => break,
@@ -592,12 +564,12 @@ impl TerminalVm {
     pub fn begin(
         &self,
         ty: BeginType,
-        console: &mut EraConsole,
+        qni_ctx: &Arc<ConsoleContext>,
         ctx: &mut VmContext,
     ) -> Result<()> {
         match ty {
             BeginType::Title => {
-                self.call("SYSTEM_TITLE", console, ctx)?;
+                self.call("SYSTEM_TITLE", qni_ctx, ctx)?;
                 Ok(())
             }
             BeginType::First => todo!(),
