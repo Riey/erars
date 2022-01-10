@@ -5,14 +5,14 @@ use std::ops::Range;
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use eframe::epi::{App, Frame};
-use egui::{CtxRef, FontData, FontDefinitions, FontFamily};
+use egui::{Color32, CtxRef, FontData, FontDefinitions, FontFamily};
 use either::Either;
 use strum::{Display, EnumIter, EnumString};
 
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::compiler::PrintFlags;
+use crate::compiler::{Alignment, PrintFlags};
 use crate::instruction::{BeginType, Instruction};
 use crate::operator::BinaryOperator;
 use crate::value::Value;
@@ -323,7 +323,11 @@ impl App for EraApp {
                 FontFamily::Proportional => vec!["default".into()],
             },
             ..Default::default()
-        })
+        });
+
+        let mut style = (*ctx.style()).clone();
+        style.visuals.override_text_color = Some(Color32::WHITE);
+        ctx.set_style(style);
     }
 
     fn name(&self) -> &str {
@@ -339,12 +343,22 @@ impl App for EraApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             for line in self.console.lines.iter() {
-                ui.vertical(|ui| {
-                    for part in line.iter() {
-                        ui.horizontal(|ui| {
-                            ui.label(part);
-                        });
+                ui.vertical(|ui| match line.align {
+                    Alignment::Left => {
+                        for part in line.parts.iter() {
+                            ui.horizontal(|ui| {
+                                ui.label(part);
+                            });
+                        }
                     }
+                    Alignment::Center => {
+                        for part in line.parts.iter() {
+                            ui.vertical_centered(|ui| {
+                                ui.label(part);
+                            });
+                        }
+                    }
+                    Alignment::Right => todo!(),
                 });
             }
         });
@@ -353,16 +367,28 @@ impl App for EraApp {
 
 #[derive(Default)]
 struct EraConsole {
-    lines: Vec<Vec<String>>,
-    last_line: Vec<String>,
+    lines: Vec<ConsoleLine>,
+    last_line: ConsoleLine,
+}
+
+#[derive(Default)]
+struct ConsoleLine {
+    parts: Vec<String>,
+    align: Alignment,
 }
 
 impl EraConsole {
     pub fn print(&mut self, s: String) {
-        self.last_line.push(s);
+        self.last_line.parts.push(s);
     }
     pub fn new_line(&mut self) {
-        self.lines.push(std::mem::take(&mut self.last_line));
+        let prev_line = std::mem::take(&mut self.last_line);
+        let prev_align = prev_line.align;
+        self.lines.push(prev_line);
+        self.last_line.align = prev_align;
+    }
+    pub fn set_align(&mut self, align: Alignment) {
+        self.last_line.align = align;
     }
     pub fn print_line(&mut self, s: String) {
         self.print(s);

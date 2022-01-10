@@ -25,11 +25,17 @@ bitflags::bitflags! {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Alignment {
     Left,
     Center,
     Right,
+}
+
+impl Default for Alignment {
+    fn default() -> Self {
+        Self::Left
+    }
 }
 
 struct Compiler {
