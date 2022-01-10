@@ -301,7 +301,12 @@ impl TerminalVm {
             .map(|b| b.as_slice())
     }
 
-    fn run_instruction(&self, inst: &Instruction, ctx: &mut VmContext) -> Result<Option<Workflow>> {
+    fn run_instruction(
+        &self,
+        inst: &Instruction,
+        cursor: &mut usize,
+        ctx: &mut VmContext,
+    ) -> Result<Option<Workflow>> {
         match inst {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
@@ -319,7 +324,7 @@ impl TerminalVm {
 
                 let name = ctx.pop_str()?;
 
-                let value = if name.parse::<BulitinVariable>().is_ok() {
+                if name.parse::<BulitinVariable>().is_ok() {
                     return bail!("Can't edit builtin variable");
                 } else {
                     let mut args = ctx.take_arg_list()?.into_iter();
@@ -398,6 +403,15 @@ impl TerminalVm {
                 let lhs = ctx.pop_int()?;
                 ctx.push(lhs / rhs);
             }
+            Instruction::Goto(no) => {
+                *cursor = *no as usize;
+            }
+            Instruction::GotoIfNot(no) => {
+                let cond = ctx.pop().as_bool();
+                if !cond {
+                    *cursor = *no as usize;
+                }
+            }
             _ => todo!("{:?}", inst),
         }
 
@@ -407,11 +421,18 @@ impl TerminalVm {
     fn call(&self, name: &str, ctx: &mut VmContext) -> Result<Workflow> {
         let body = self.try_get_func(name)?;
 
-        for inst in body.iter() {
-            match self.run_instruction(inst, ctx)? {
-                None => {}
-                Some(Workflow::Exit) => return Ok(Workflow::Exit),
-                Some(Workflow::Return) => break,
+        let mut cursor = 0;
+
+        loop {
+            if let Some(inst) = body.get(cursor) {
+                cursor += 1;
+                match self.run_instruction(inst, &mut cursor, ctx)? {
+                    None => {}
+                    Some(Workflow::Exit) => return Ok(Workflow::Exit),
+                    Some(Workflow::Return) => break,
+                }
+            } else {
+                break;
             }
         }
 

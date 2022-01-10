@@ -7,6 +7,16 @@ pub enum Value {
     String(String),
 }
 
+impl Value {
+    pub fn as_bool(&self) -> bool {
+        match self {
+            Value::Int(0) => false,
+            Value::String(s) if s.is_empty() => false,
+            _ => true,
+        }
+    }
+}
+
 impl TryFrom<Value> for String {
     type Error = Error;
 
