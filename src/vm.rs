@@ -1,3 +1,5 @@
+mod button_parser;
+
 use maplit::btreemap;
 use std::iter;
 use std::ops::Range;
@@ -343,23 +345,23 @@ impl App for EraApp {
 
         egui::CentralPanel::default().show(ctx, |ui| {
             for line in self.console.lines.iter() {
-                ui.vertical(|ui| match line.align {
+                match line.align {
                     Alignment::Left => {
-                        for part in line.parts.iter() {
-                            ui.horizontal(|ui| {
-                                ui.label(part);
-                            });
-                        }
+                        ui.horizontal(|ui| {
+                            for part in line.parts.iter() {
+                                part.display(ui);
+                            }
+                        });
                     }
                     Alignment::Center => {
-                        for part in line.parts.iter() {
-                            ui.vertical_centered(|ui| {
-                                ui.label(part);
-                            });
-                        }
+                        ui.vertical_centered(|ui| {
+                            for part in line.parts.iter() {
+                                part.display(ui);
+                            }
+                        });
                     }
                     Alignment::Right => todo!(),
-                });
+                }
             }
         });
     }
@@ -373,13 +375,52 @@ struct EraConsole {
 
 #[derive(Default)]
 struct ConsoleLine {
-    parts: Vec<String>,
+    parts: Vec<ConsoleLinePart>,
     align: Alignment,
 }
 
+enum ConsoleLinePart {
+    Normal(String),
+    Button(Value, String),
+}
+
+impl ConsoleLinePart {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ConsoleLinePart::Normal(s) | ConsoleLinePart::Button(_, s) => s,
+        }
+    }
+
+    pub fn try_button(&self) -> Option<&Value> {
+        match self {
+            ConsoleLinePart::Button(value, _) => Some(value),
+            _ => None,
+        }
+    }
+
+    pub fn display(&self, ui: &mut egui::Ui) {
+        match self {
+            ConsoleLinePart::Normal(s) => {
+                ui.label(s);
+            }
+            ConsoleLinePart::Button(value, text) => {
+                ui.colored_label(Color32::LIGHT_YELLOW, text);
+            }
+        }
+    }
+}
+
 impl EraConsole {
+    pub fn print_button(&mut self, value: Value, s: String) {
+        self.last_line.parts.push(ConsoleLinePart::Button(value, s));
+    }
+
+    pub fn print_plain_text(&mut self, s: String) {
+        self.last_line.parts.push(ConsoleLinePart::Normal(s));
+    }
+
     pub fn print(&mut self, s: String) {
-        self.last_line.parts.push(s);
+        button_parser::parse_button(s, &mut self.last_line.parts);
     }
     pub fn new_line(&mut self) {
         let prev_line = std::mem::take(&mut self.last_line);
@@ -557,7 +598,9 @@ impl TerminalVm {
                     *cursor = *no as usize;
                 }
             }
-            Instruction::SetAlignment(_) => {}
+            Instruction::SetAlignment(align) => {
+                console.set_align(*align);
+            }
             _ => bail!("{:?}", inst),
         }
 

@@ -668,6 +668,7 @@ dependencies = [
  "hashbrown",
  "itertools",
  "k9",
+ "log",
  "maplit",
  "once_cell",
  "pest",
