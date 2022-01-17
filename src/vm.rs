@@ -478,6 +478,7 @@ impl TerminalVm {
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
+        eprintln!("Run {:?}", inst);
         match inst {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
@@ -597,7 +598,6 @@ impl TerminalVm {
                     _ => bail!("Unknown method {}", name),
                 }
             }
-            Instruction::Exit => return Ok(Some(Workflow::Exit)),
             Instruction::BinaryOperator(BinaryOperator::Rem) => {
                 let rhs = ctx.pop_int()?;
                 let lhs = ctx.pop_int()?;
@@ -639,6 +639,10 @@ impl TerminalVm {
                                     .set(iter::empty(), ret)?;
                             }
                         }
+                    }
+                    "QUIT" => {
+                        chan.send_msg(ConsoleMessage::Exit);
+                        return Ok(Some(Workflow::Exit));
                     }
                     _ => {
                         bail!("{}({:?})", name, args)
@@ -691,12 +695,12 @@ impl TerminalVm {
             self.begin(begin, chan, ctx)?;
         }
 
-        chan.send_msg(ConsoleMessage::Exit);
         Ok(())
     }
 }
 
-enum ConsoleMessage {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConsoleMessage {
     Print(String),
     NewLine,
     DrawLine,
@@ -706,14 +710,16 @@ enum ConsoleMessage {
     Exit,
 }
 
-enum InputRequest {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum InputRequest {
     Anykey,
     EnterKey,
     Int,
     Str,
 }
 
-enum ConsoleResult {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ConsoleResult {
     Quit,
     Value(Value),
 }
@@ -729,6 +735,14 @@ impl ConsoleChannel {
             console: bounded(256),
             ret: bounded(8),
         }
+    }
+
+    pub fn take_all_msg(self) -> Vec<ConsoleMessage> {
+        let mut ret = Vec::new();
+        while let Ok(msg) = self.console.1.try_recv() {
+            ret.push(msg);
+        }
+        ret
     }
 
     fn send_msg(&self, msg: ConsoleMessage) {

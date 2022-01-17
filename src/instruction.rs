@@ -16,7 +16,6 @@ pub enum BeginType {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Instruction {
     Nop,
-    Exit,
     Pop,
     Duplicate,
     ListBegin,
