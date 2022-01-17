@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use eframe::NativeOptions;
 use erars::{
-    instruction::{BeginType, Instruction},
-    vm::{ConsoleChannel, EraApp, TerminalVm, VariableInfo, VmContext},
+    instruction::Instruction,
+    ui::{ConsoleChannel, EraApp},
+    vm::{TerminalVm, VariableInfo, VmContext},
 };
 use hashbrown::HashMap;
 use rayon::prelude::*;

@@ -1,5 +1,6 @@
 use erars::compiler::compile;
 use erars::instruction::Instruction;
+use erars::ui::{ConsoleChannel, ConsoleMessage};
 use erars::vm::*;
 
 #[test]

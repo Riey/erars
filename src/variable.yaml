@@ -1,6 +1,7 @@
 DAY:
   # is_chara: false
   # is_str: false
+  # is_global: false
   size: [1000]
 
 TARGET:
@@ -17,3 +18,12 @@ LOCAL:
 LOCALS:
   is_str: true
   size: [100]
+
+# GLOBAL:
+#   is_global: true
+#   size: [1000]
+
+# GLOBALS:
+#   is_global: true
+#   is_str: true
+#   size: [1000]
