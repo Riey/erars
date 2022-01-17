@@ -8,6 +8,9 @@ pub enum Value {
 }
 
 impl Value {
+    pub const ZERO: Value = Value::Int(0);
+    pub const ONE: Value = Value::Int(1);
+
     pub fn try_into_int(self) -> Result<i64> {
         self.try_into()
     }

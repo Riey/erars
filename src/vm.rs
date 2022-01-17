@@ -1,8 +1,11 @@
 mod button_parser;
 
+use crossbeam_channel::{bounded, Receiver, Sender};
 use maplit::btreemap;
 use std::iter;
 use std::ops::Range;
+use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -234,7 +237,7 @@ enum Workflow {
     Exit,
 }
 
-struct VmContext {
+pub struct VmContext {
     var: VariableStorage,
     begin: Option<BeginType>,
     stack: Vec<Value>,
@@ -296,20 +299,17 @@ impl VmContext {
 const FONT: &[u8] = include_bytes!("../res/D2Coding-Ver1.3.2-20180524.ttc");
 
 pub struct EraApp {
-    vm: TerminalVm,
     console: EraConsole,
-    ctx: VmContext,
+    req: Option<InputRequest>,
+    chan: Arc<ConsoleChannel>,
 }
 
 impl EraApp {
-    pub fn new(
-        functions: HashMap<String, Vec<Instruction>>,
-        infos: &HashMap<String, VariableInfo>,
-    ) -> Self {
+    pub fn new(chan: Arc<ConsoleChannel>) -> Self {
         Self {
             console: EraConsole::default(),
-            vm: TerminalVm::new(functions),
-            ctx: VmContext::new(infos),
+            req: None,
+            chan,
         }
     }
 }
@@ -337,26 +337,42 @@ impl App for EraApp {
     }
 
     fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
-        if let Some(begin) = self.ctx.begin.take() {
-            self.vm
-                .begin(begin, &mut self.console, &mut self.ctx)
-                .unwrap();
+        if self.req.is_none() {
+            while let Some(msg) = self.chan.recv_msg() {
+                match msg {
+                    ConsoleMessage::Input(req) => self.req = Some(req),
+                    ConsoleMessage::NewLine => self.console.new_line(),
+                    ConsoleMessage::Print(s) => self.console.print(s),
+                    ConsoleMessage::Alignment(align) => self.console.set_align(align),
+                    ConsoleMessage::PrintButton(value, s) => self.console.print_button(value, s),
+                }
+            }
         }
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            let mut ret = |value: &Value| match (&self.req, value) {
+                (Some(InputRequest::Anykey), _)
+                | (Some(InputRequest::EnterKey), _)
+                | (Some(InputRequest::Int), Value::Int(_))
+                | (Some(InputRequest::Str), Value::String(_)) => {
+                    self.req = None;
+                    self.chan.send_ret(ConsoleResult::Value(value.clone()));
+                }
+                _ => {}
+            };
             for line in self.console.lines.iter() {
                 match line.align {
                     Alignment::Left => {
                         ui.horizontal(|ui| {
                             for part in line.parts.iter() {
-                                part.display(ui);
+                                part.display(ui, &mut ret);
                             }
                         });
                     }
                     Alignment::Center => {
                         ui.vertical_centered(|ui| {
                             for part in line.parts.iter() {
-                                part.display(ui);
+                                part.display(ui, &mut ret);
                             }
                         });
                     }
@@ -398,13 +414,15 @@ impl ConsoleLinePart {
         }
     }
 
-    pub fn display(&self, ui: &mut egui::Ui) {
+    pub fn display(&self, ui: &mut egui::Ui, ret: impl FnOnce(&Value)) {
         match self {
             ConsoleLinePart::Normal(s) => {
                 ui.label(s);
             }
             ConsoleLinePart::Button(value, text) => {
-                ui.colored_label(Color32::LIGHT_YELLOW, text);
+                if ui.small_button(text).clicked() {
+                    ret(value);
+                }
             }
         }
     }
@@ -431,13 +449,9 @@ impl EraConsole {
     pub fn set_align(&mut self, align: Alignment) {
         self.last_line.align = align;
     }
-    pub fn print_line(&mut self, s: String) {
-        self.print(s);
-        self.new_line();
-    }
 }
 
-struct TerminalVm {
+pub struct TerminalVm {
     functions: HashMap<String, Vec<Instruction>>,
 }
 
@@ -457,7 +471,7 @@ impl TerminalVm {
         &self,
         inst: &Instruction,
         cursor: &mut usize,
-        console: &mut EraConsole,
+        chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
         match inst {
@@ -540,9 +554,9 @@ impl TerminalVm {
                 ctx.push(value);
             }
             Instruction::Print(flags) => {
-                console.print(ctx.pop_str()?);
+                chan.send_msg(ConsoleMessage::Print(ctx.pop_str()?));
                 if flags.contains(PrintFlags::NEWLINE) {
-                    console.new_line();
+                    chan.send_msg(ConsoleMessage::NewLine);
                 }
 
                 // TODO: PRINTW
@@ -599,7 +613,7 @@ impl TerminalVm {
                 }
             }
             Instruction::SetAlignment(align) => {
-                console.set_align(*align);
+                chan.send_msg(ConsoleMessage::Alignment(*align));
             }
             _ => bail!("{:?}", inst),
         }
@@ -607,7 +621,7 @@ impl TerminalVm {
         Ok(None)
     }
 
-    fn call(&self, name: &str, console: &mut EraConsole, ctx: &mut VmContext) -> Result<Workflow> {
+    fn call(&self, name: &str, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<Workflow> {
         let body = self.try_get_func(name)?;
 
         let mut cursor = 0;
@@ -615,7 +629,7 @@ impl TerminalVm {
         loop {
             if let Some(inst) = body.get(cursor) {
                 cursor += 1;
-                match self.run_instruction(inst, &mut cursor, console, ctx) {
+                match self.run_instruction(inst, &mut cursor, chan, ctx) {
                     Ok(None) => {}
                     Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
                     Ok(Some(Workflow::Return)) => break,
@@ -632,18 +646,63 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    pub fn begin(
-        &self,
-        ty: BeginType,
-        console: &mut EraConsole,
-        ctx: &mut VmContext,
-    ) -> Result<()> {
+    pub fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         match ty {
             BeginType::Title => {
-                self.call("SYSTEM_TITLE", console, ctx)?;
+                self.call("SYSTEM_TITLE", chan, ctx)?;
                 Ok(())
             }
             BeginType::First => todo!(),
         }
+    }
+}
+
+enum ConsoleMessage {
+    Print(String),
+    NewLine,
+    PrintButton(Value, String),
+    Alignment(Alignment),
+    Input(InputRequest),
+}
+
+enum InputRequest {
+    Anykey,
+    EnterKey,
+    Int,
+    Str,
+}
+
+enum ConsoleResult {
+    Quit,
+    Value(Value),
+}
+
+pub struct ConsoleChannel {
+    console: (Sender<ConsoleMessage>, Receiver<ConsoleMessage>),
+    ret: (Sender<ConsoleResult>, Receiver<ConsoleResult>),
+}
+
+impl ConsoleChannel {
+    pub fn new() -> Self {
+        Self {
+            console: bounded(256),
+            ret: bounded(8),
+        }
+    }
+
+    fn send_msg(&self, msg: ConsoleMessage) {
+        self.console.0.send(msg).unwrap();
+    }
+
+    fn recv_msg(&self) -> Option<ConsoleMessage> {
+        self.console.1.recv_timeout(Duration::from_millis(50)).ok()
+    }
+
+    fn send_ret(&self, ret: ConsoleResult) {
+        self.ret.0.send(ret).unwrap()
+    }
+
+    fn recv_ret(&self) -> ConsoleResult {
+        self.ret.1.recv().unwrap()
     }
 }
