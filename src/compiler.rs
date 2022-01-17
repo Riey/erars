@@ -322,14 +322,11 @@ impl Compiler {
                     .insert(pairs.next().unwrap().as_str().into(), mark);
             }
             Rule::other_com => {
-                // TODO
-                // let name = pairs.next().unwrap().as_str();
-                // let args = pairs.map(|p| parse_expr(p, infos)).collect::<Result<_>>()?;
+                let name = pairs.next().unwrap().as_str();
+                self.push_args(pairs)?;
+                self.push_str(name)?;
 
-                // ProgramLine::Command {
-                //     command: name.into(),
-                //     args,
-                // }
+                self.out.push(Instruction::Command);
             }
             _ => unreachable!("{:?}", rule),
         };

@@ -40,7 +40,9 @@ fn main() {
 
         let mut ctx = VmContext::new(&infos);
         let vm = TerminalVm::new(functions);
-        vm.begin(BeginType::Title, &inner_chan, &mut ctx).unwrap();
+        vm.start(&inner_chan, &mut ctx).unwrap();
+
+        println!("Program Terminated");
     });
 
     let app = EraApp::new(chan);

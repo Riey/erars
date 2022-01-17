@@ -168,6 +168,12 @@
             "LOCALS",
         ),
         StoreVar,
+        ListBegin,
+        ListEnd,
+        LoadStr(
+            "DRAWLINE",
+        ),
+        Command,
         SetAlignment(
             Center,
         ),
@@ -282,6 +288,12 @@
         SetAlignment(
             Left,
         ),
+        ListBegin,
+        ListEnd,
+        LoadStr(
+            "DRAWLINE",
+        ),
+        Command,
         Nop,
         LoadStr(
             "[0] 힘세고 강한 시작",
@@ -299,12 +311,24 @@
         ListBegin,
         ListEnd,
         LoadStr(
+            "INPUT",
+        ),
+        Command,
+        ListBegin,
+        ListEnd,
+        LoadStr(
             "RESULT",
         ),
         LoadVar,
         GotoIfNot(
-            173,
+            197,
         ),
+        ListBegin,
+        ListEnd,
+        LoadStr(
+            "RESETDATA",
+        ),
+        Command,
         ListBegin,
         LoadInt(
             999,
@@ -315,7 +339,7 @@
         ),
         LoadVar,
         GotoIfNot(
-            171,
+            187,
         ),
         LoadInt(
             0,
@@ -330,13 +354,25 @@
         ),
         StoreVar,
         Goto(
-            172,
+            188,
         ),
+        ListBegin,
+        ListEnd,
+        LoadStr(
+            "ADDDEFCHARA",
+        ),
+        Command,
         Begin(
             First,
         ),
+        ListBegin,
+        ListEnd,
+        LoadStr(
+            "RETURN",
+        ),
+        Command,
         Goto(
-            188,
+            212,
         ),
         ListBegin,
         ListEnd,
@@ -345,7 +381,7 @@
         ),
         LoadVar,
         GotoIfNot(
-            184,
+            208,
         ),
         ListBegin,
         ListEnd,
@@ -354,17 +390,17 @@
         ),
         Call,
         Goto(
-            148,
+            156,
         ),
         Goto(
-            188,
+            212,
         ),
         LoadStr(
             "무효값입니다.",
         ),
         ReuseLastLine,
         Goto(
-            153,
+            161,
         ),
     ],
 }

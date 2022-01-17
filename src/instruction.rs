@@ -31,6 +31,7 @@ pub enum Instruction {
     Print(PrintFlags),
     ReuseLastLine,
     ConcatString,
+    Command,
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
     TernaryOperator(TernaryOperator),

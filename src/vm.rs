@@ -340,9 +340,14 @@ impl App for EraApp {
         if self.req.is_none() {
             while let Some(msg) = self.chan.recv_msg() {
                 match msg {
+                    ConsoleMessage::Exit => {
+                        frame.quit();
+                        return;
+                    }
                     ConsoleMessage::Input(req) => self.req = Some(req),
                     ConsoleMessage::NewLine => self.console.new_line(),
                     ConsoleMessage::Print(s) => self.console.print(s),
+                    ConsoleMessage::DrawLine => self.console.draw_line(),
                     ConsoleMessage::Alignment(align) => self.console.set_align(align),
                     ConsoleMessage::PrintButton(value, s) => self.console.print_button(value, s),
                 }
@@ -397,26 +402,20 @@ struct ConsoleLine {
 
 enum ConsoleLinePart {
     Normal(String),
+    Line,
     Button(Value, String),
 }
 
 impl ConsoleLinePart {
-    pub fn as_str(&self) -> &str {
-        match self {
-            ConsoleLinePart::Normal(s) | ConsoleLinePart::Button(_, s) => s,
-        }
-    }
-
-    pub fn try_button(&self) -> Option<&Value> {
-        match self {
-            ConsoleLinePart::Button(value, _) => Some(value),
-            _ => None,
-        }
-    }
-
     pub fn display(&self, ui: &mut egui::Ui, ret: impl FnOnce(&Value)) {
         match self {
             ConsoleLinePart::Normal(s) => {
+                ui.label(s);
+            }
+            ConsoleLinePart::Line => {
+                let width = ui.available_width();
+                let char_width = ui.fonts().glyph_width(egui::TextStyle::Monospace, '=');
+                let s = "=".repeat((width / char_width) as usize);
                 ui.label(s);
             }
             ConsoleLinePart::Button(value, text) => {
@@ -449,6 +448,8 @@ impl EraConsole {
     pub fn set_align(&mut self, align: Alignment) {
         self.last_line.align = align;
     }
+
+    pub fn draw_line(&mut self) {}
 }
 
 pub struct TerminalVm {
@@ -563,6 +564,7 @@ impl TerminalVm {
             }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
+                chan.send_msg(ConsoleMessage::Exit);
                 return Ok(Some(Workflow::Exit));
             }
             Instruction::ConcatString => {
@@ -615,6 +617,31 @@ impl TerminalVm {
             Instruction::SetAlignment(align) => {
                 chan.send_msg(ConsoleMessage::Alignment(*align));
             }
+            Instruction::Command => {
+                let name = ctx.pop_str()?;
+                let args = ctx.take_list();
+
+                match name.as_str() {
+                    "DRAWLINE" => {
+                        chan.send_msg(ConsoleMessage::DrawLine);
+                    }
+                    "INPUT" => {
+                        chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
+                        match chan.recv_ret() {
+                            ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
+                            ConsoleResult::Value(ret) => {
+                                ctx.var
+                                    .get_global("RESULT")
+                                    .unwrap()
+                                    .set(iter::empty(), ret)?;
+                            }
+                        }
+                    }
+                    _ => {
+                        bail!("{}({:?})", name, args)
+                    }
+                }
+            }
             _ => bail!("{:?}", inst),
         }
 
@@ -646,7 +673,7 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    pub fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
+    fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         match ty {
             BeginType::Title => {
                 self.call("SYSTEM_TITLE", chan, ctx)?;
@@ -655,14 +682,25 @@ impl TerminalVm {
             BeginType::First => todo!(),
         }
     }
+
+    pub fn start(&self, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
+        while let Some(begin) = ctx.begin.take() {
+            self.begin(begin, chan, ctx)?;
+        }
+
+        chan.send_msg(ConsoleMessage::Exit);
+        Ok(())
+    }
 }
 
 enum ConsoleMessage {
     Print(String),
     NewLine,
+    DrawLine,
     PrintButton(Value, String),
     Alignment(Alignment),
     Input(InputRequest),
+    Exit,
 }
 
 enum InputRequest {
