@@ -350,6 +350,7 @@ impl App for EraApp {
                     ConsoleMessage::DrawLine => self.console.draw_line(),
                     ConsoleMessage::Alignment(align) => self.console.set_align(align),
                     ConsoleMessage::PrintButton(value, s) => self.console.print_button(value, s),
+                    ConsoleMessage::ReuseLastLine(s) => self.console.reuse_last_line(s),
                 }
             }
         }
@@ -365,7 +366,12 @@ impl App for EraApp {
                 }
                 _ => {}
             };
-            for line in self.console.lines.iter() {
+            for line in self
+                .console
+                .lines
+                .iter()
+                .chain(iter::once(&self.console.last_line))
+            {
                 match line.align {
                     Alignment::Left => {
                         ui.horizontal(|ui| {
@@ -398,6 +404,7 @@ struct EraConsole {
 struct ConsoleLine {
     parts: Vec<ConsoleLinePart>,
     align: Alignment,
+    reuse: bool,
 }
 
 enum ConsoleLinePart {
@@ -437,6 +444,7 @@ impl EraConsole {
     }
 
     pub fn print(&mut self, s: String) {
+        dbg!(&s);
         button_parser::parse_button(s, &mut self.last_line.parts);
     }
     pub fn new_line(&mut self) {
@@ -452,6 +460,17 @@ impl EraConsole {
     pub fn draw_line(&mut self) {
         self.last_line.parts.push(ConsoleLinePart::Line);
         self.new_line();
+    }
+
+    pub fn reuse_last_line(&mut self, s: String) {
+        if !self.last_line.reuse {
+            self.new_line();
+            self.print(s);
+            self.last_line.reuse = true;
+        } else {
+            self.last_line.parts.clear();
+            self.print(s);
+        }
     }
 }
 
@@ -557,6 +576,9 @@ impl TerminalVm {
                 };
 
                 ctx.push(value);
+            }
+            Instruction::ReuseLastLine => {
+                chan.send_msg(ConsoleMessage::ReuseLastLine(ctx.pop_str()?));
             }
             Instruction::Print(flags) => {
                 chan.send_msg(ConsoleMessage::Print(ctx.pop_str()?));
@@ -705,6 +727,7 @@ pub enum ConsoleMessage {
     NewLine,
     DrawLine,
     PrintButton(Value, String),
+    ReuseLastLine(String),
     Alignment(Alignment),
     Input(InputRequest),
     Exit,
