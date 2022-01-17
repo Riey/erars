@@ -449,7 +449,10 @@ impl EraConsole {
         self.last_line.align = align;
     }
 
-    pub fn draw_line(&mut self) {}
+    pub fn draw_line(&mut self) {
+        self.last_line.parts.push(ConsoleLinePart::Line);
+        self.new_line();
+    }
 }
 
 pub struct TerminalVm {
