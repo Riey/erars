@@ -321,7 +321,7 @@
         ),
         LoadVar,
         GotoIfNot(
-            197,
+            198,
         ),
         ListBegin,
         ListEnd,
@@ -339,7 +339,7 @@
         ),
         LoadVar,
         GotoIfNot(
-            187,
+            188,
         ),
         LoadInt(
             0,
@@ -381,7 +381,7 @@
         ),
         LoadVar,
         GotoIfNot(
-            208,
+            209,
         ),
         ListBegin,
         ListEnd,

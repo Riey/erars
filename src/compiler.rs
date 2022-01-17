@@ -213,7 +213,7 @@ impl Compiler {
 
         // body
         self.push_block(pairs)?;
-        self.insert(begin, Instruction::GotoIfNot(self.current_no()))?;
+        self.insert(begin, Instruction::GotoIfNot(self.current_no() + 1))?;
 
         Ok(())
     }
