@@ -9,6 +9,7 @@ pub static PREC_CLIMBER: Lazy<PrecClimber<Rule>> = Lazy::new(|| {
     use Assoc::*;
     use Rule::*;
     PrecClimber::new(vec![
+        Operator::new(eq, Left) | Operator::new(ne, Left),
         Operator::new(add, Left) | Operator::new(sub, Left),
         Operator::new(mul, Left) | Operator::new(div, Left) | Operator::new(rem, Right),
     ])

@@ -126,8 +126,14 @@
             "LOCAL",
         ),
         LoadVar,
+        LoadInt(
+            0,
+        ),
+        BinaryOperator(
+            NotEqual,
+        ),
         GotoIfNot(
-            88,
+            90,
         ),
         ListBegin,
         LoadStr(
@@ -320,8 +326,14 @@
             "RESULT",
         ),
         LoadVar,
+        LoadInt(
+            0,
+        ),
+        BinaryOperator(
+            Equal,
+        ),
         GotoIfNot(
-            198,
+            204,
         ),
         ListBegin,
         ListEnd,
@@ -338,8 +350,14 @@
             "FLAG",
         ),
         LoadVar,
+        LoadInt(
+            1,
+        ),
+        BinaryOperator(
+            Equal,
+        ),
         GotoIfNot(
-            188,
+            194,
         ),
         LoadInt(
             0,
@@ -354,7 +372,7 @@
         ),
         StoreVar,
         Goto(
-            188,
+            194,
         ),
         ListBegin,
         ListEnd,
@@ -372,7 +390,7 @@
         ),
         Command,
         Goto(
-            212,
+            220,
         ),
         ListBegin,
         ListEnd,
@@ -380,8 +398,14 @@
             "RESULT",
         ),
         LoadVar,
+        LoadInt(
+            1,
+        ),
+        BinaryOperator(
+            Equal,
+        ),
         GotoIfNot(
-            209,
+            217,
         ),
         ListBegin,
         ListEnd,
@@ -390,17 +414,17 @@
         ),
         Call,
         Goto(
-            156,
+            158,
         ),
         Goto(
-            212,
+            220,
         ),
         LoadStr(
             "무효값입니다.",
         ),
         ReuseLastLine,
         Goto(
-            161,
+            163,
         ),
     ],
 }

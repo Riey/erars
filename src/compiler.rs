@@ -85,36 +85,41 @@ impl Compiler {
     }
 
     fn push_expr(&mut self, p: Pair<Rule>) -> Result<()> {
+        use std::cell::UnsafeCell;
+
         match p.as_rule() {
             Rule::binop_expr => {
-                let f = PREC_CLIMBER.climb(
+                let s = UnsafeCell::new(self);
+
+                PREC_CLIMBER.climb(
                     p.into_inner(),
-                    |p| {
-                        Box::new(move |this: &mut Compiler| this.push_expr(p))
-                            as Box<dyn FnOnce(&mut Compiler) -> Result<()>>
-                    },
+                    |p| unsafe { s.get().as_mut().unwrap_unchecked().push_expr(p) },
                     |lhs, op, rhs| {
-                        Box::new(move |this: &mut Compiler| {
-                            lhs(this)?;
-                            rhs(this)?;
+                        lhs?;
+                        rhs?;
 
-                            let op = match op.as_rule() {
-                                Rule::add => BinaryOperator::Add,
-                                Rule::sub => BinaryOperator::Sub,
-                                Rule::mul => BinaryOperator::Mul,
-                                Rule::div => BinaryOperator::Div,
-                                Rule::rem => BinaryOperator::Rem,
-                                _ => todo!(),
-                            };
+                        let op = match op.as_rule() {
+                            Rule::add => BinaryOperator::Add,
+                            Rule::sub => BinaryOperator::Sub,
+                            Rule::mul => BinaryOperator::Mul,
+                            Rule::div => BinaryOperator::Div,
+                            Rule::rem => BinaryOperator::Rem,
+                            Rule::eq => BinaryOperator::Equal,
+                            Rule::ne => BinaryOperator::NotEqual,
+                            _ => todo!(),
+                        };
 
-                            this.out.push(Instruction::BinaryOperator(op));
+                        unsafe {
+                            s.get()
+                                .as_mut()
+                                .unwrap_unchecked()
+                                .out
+                                .push(Instruction::BinaryOperator(op))
+                        };
 
-                            Ok(())
-                        })
+                        Ok(())
                     },
-                );
-
-                f(self)?;
+                )?;
 
                 Ok(())
             }

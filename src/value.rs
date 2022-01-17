@@ -19,6 +19,13 @@ impl Value {
         self.try_into()
     }
 
+    pub fn into_str(self) -> String {
+        match self {
+            Value::Int(i) => i.to_string(),
+            Value::String(s) => s,
+        }
+    }
+
     pub fn as_bool(&self) -> bool {
         match self {
             Value::Int(0) => false,

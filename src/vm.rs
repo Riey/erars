@@ -595,9 +595,26 @@ impl TerminalVm {
             }
             Instruction::ConcatString => {
                 let args = ctx.take_list();
-                let ret = args.into_iter().fold(String::new(), |s, l| {
-                    s + &l.try_into_str().unwrap_or_default()
-                });
+                let ret = args
+                    .into_iter()
+                    .fold(String::new(), |s, l| s + &l.into_str());
+                ctx.push(ret);
+            }
+            Instruction::BinaryOperator(op) => {
+                let rhs = ctx.pop();
+                let lhs = ctx.pop();
+
+                let ret = match op {
+                    BinaryOperator::Add => match lhs {
+                        Value::Int(i) => Value::Int(i + rhs.try_into_int()?),
+                        Value::String(s) => Value::String(s + &rhs.into_str()),
+                    },
+                    BinaryOperator::Sub => Value::Int(lhs.try_into_int()? - rhs.try_into_int()?),
+                    BinaryOperator::Equal => Value::Int(i64::from(lhs == rhs)),
+                    BinaryOperator::NotEqual => Value::Int(i64::from(lhs != rhs)),
+                    _ => todo!("{:?}", op),
+                };
+
                 ctx.push(ret);
             }
             Instruction::CallMethod => {
