@@ -2,12 +2,11 @@ use std::sync::Arc;
 
 use eframe::NativeOptions;
 use erars::{
-    instruction::Instruction,
+    function::FunctionDic,
     ui::{ConsoleChannel, EraApp},
     vm::{TerminalVm, VariableInfo, VmContext},
 };
 use hashbrown::HashMap;
-use rayon::prelude::*;
 
 fn main() {
     let chan = Arc::new(ConsoleChannel::new());
@@ -28,19 +27,23 @@ fn main() {
         )
         .unwrap();
 
-        let functions: HashMap<String, Vec<Instruction>> = erbs
-            .par_bridge()
-            .flat_map(|erb| {
-                erb.map_err(anyhow::Error::from)
-                    .and_then(|erb| erars::compiler::compile(&std::fs::read_to_string(erb)?))
-                    .unwrap()
-            })
-            .collect();
+        let mut function_dic = FunctionDic::new();
 
-        std::fs::write("dump.txt", format!("{:#?}", functions)).unwrap();
+        for erb in erbs {
+            erb.map_err(anyhow::Error::from)
+                .and_then(|erb| {
+                    erars::compiler::compile(
+                        std::fs::read_to_string(erb).unwrap().trim_start_matches("\u{feff}"),
+                        &mut function_dic,
+                    )
+                })
+                .unwrap()
+        }
+
+        std::fs::write("dump.txt", format!("{:#?}", function_dic)).unwrap();
 
         let mut ctx = VmContext::new(&infos);
-        let vm = TerminalVm::new(functions);
+        let vm = TerminalVm::new(function_dic);
         vm.start(&inner_chan, &mut ctx).unwrap();
 
         println!("Program Terminated");

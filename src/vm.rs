@@ -10,6 +10,8 @@ use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::compiler::PrintFlags;
+use crate::event::{Event, EventType};
+use crate::function::FunctionDic;
 use crate::instruction::{BeginType, Instruction};
 use crate::operator::BinaryOperator;
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
@@ -190,6 +192,14 @@ impl VariableStorage {
         }
     }
 
+    pub fn target(&mut self) -> Result<usize> {
+        Ok((*self
+            .get_global("TARGET")
+            .ok_or_else(|| anyhow!("TARGET variable is not exists"))?
+            .get_int(iter::empty())?)
+        .try_into()?)
+    }
+
     fn get_var(
         &mut self,
         name: &str,
@@ -199,13 +209,23 @@ impl VariableStorage {
             .ok_or_else(|| anyhow!("Variable {} is not exists", name))
     }
 
+    pub fn reset_data(&mut self) {
+        self.character_len = 0;
+        self.variables
+            .values_mut()
+            .for_each(|(info, var)| match var {
+                Either::Left(v) => *v = Variable::new(info),
+                Either::Right(cvar) => cvar.clear(),
+            });
+    }
+
     pub fn add_chara(&mut self) {
         self.character_len += 1;
-        for (_, (info, var)) in self.variables.iter_mut() {
+        self.variables.values_mut().for_each(|(info, var)| {
             if let Either::Right(cvar) = var {
                 cvar.push(Variable::new(info));
             }
-        }
+        });
     }
 
     pub fn get_global(&mut self, name: &str) -> Option<&mut Variable> {
@@ -290,19 +310,12 @@ impl VmContext {
 }
 
 pub struct TerminalVm {
-    functions: HashMap<String, Vec<Instruction>>,
+    dic: FunctionDic,
 }
 
 impl TerminalVm {
-    pub fn new(functions: HashMap<String, Vec<Instruction>>) -> Self {
-        Self { functions }
-    }
-
-    fn try_get_func(&self, name: &str) -> Result<&[Instruction]> {
-        self.functions
-            .get(name)
-            .ok_or_else(|| anyhow!("Function {} is not exists", name))
-            .map(|b| b.as_slice())
+    pub fn new(function_dic: FunctionDic) -> Self {
+        Self { dic: function_dic }
     }
 
     fn run_instruction(
@@ -320,13 +333,7 @@ impl TerminalVm {
             Instruction::ListBegin => ctx.set_list_begin(),
             Instruction::ListEnd => ctx.set_list_end(),
             Instruction::StoreVar => {
-                let target = ctx
-                    .var
-                    .get_global("TARGET")
-                    .unwrap()
-                    .get_int(iter::empty())?
-                    .clone()
-                    .try_into()?;
+                let target = ctx.var.target()?;
 
                 let name = ctx.pop_str()?;
 
@@ -354,13 +361,7 @@ impl TerminalVm {
                 };
             }
             Instruction::LoadVar => {
-                let target = ctx
-                    .var
-                    .get_global("TARGET")
-                    .unwrap()
-                    .get_int(iter::empty())?
-                    .clone()
-                    .try_into()?;
+                let target = ctx.var.target()?;
 
                 let name = ctx.pop_str()?;
 
@@ -491,6 +492,12 @@ impl TerminalVm {
                         chan.send_msg(ConsoleMessage::Exit);
                         return Ok(Some(Workflow::Exit));
                     }
+                    "ADDDEFCHARA" => {
+                        ctx.var.add_chara();
+                    }
+                    "RESETDATA" => {
+                        ctx.var.reset_data();
+                    }
                     _ => {
                         bail!("{}({:?})", name, args)
                     }
@@ -502,29 +509,40 @@ impl TerminalVm {
         Ok(None)
     }
 
-    fn call(&self, name: &str, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<Workflow> {
-        let body = self.try_get_func(name)?;
-
+    fn run_body(
+        &self,
+        body: &[Instruction],
+        chan: &ConsoleChannel,
+        ctx: &mut VmContext,
+    ) -> Result<Workflow> {
         let mut cursor = 0;
 
-        loop {
-            if let Some(inst) = body.get(cursor) {
-                cursor += 1;
-                match self.run_instruction(inst, &mut cursor, chan, ctx) {
-                    Ok(None) => {}
-                    Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
-                    Ok(Some(Workflow::Return)) => break,
-                    Err(err) => {
-                        eprintln!("Error occured in {}@{} ({:?})", name, cursor, inst);
-                        return Err(err);
-                    }
+        while let Some(inst) = body.get(cursor) {
+            cursor += 1;
+            match self.run_instruction(inst, &mut cursor, chan, ctx) {
+                Ok(None) => {}
+                Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
+                Ok(Some(Workflow::Return)) => break,
+                Err(err) => {
+                    return Err(err);
                 }
-            } else {
-                break;
             }
         }
 
         Ok(Workflow::Return)
+    }
+
+    fn call(&self, name: &str, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<Workflow> {
+        let body = self.dic.get_func(name)?;
+        self.run_body(body, chan, ctx)
+    }
+
+    fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
+        self.dic.get_event(ty).run(|body| {
+            self.run_body(body, chan, ctx)?;
+
+            Ok(())
+        })
     }
 
     fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
@@ -533,7 +551,10 @@ impl TerminalVm {
                 self.call("SYSTEM_TITLE", chan, ctx)?;
                 Ok(())
             }
-            BeginType::First => todo!(),
+            BeginType::First => {
+                self.call_event(EventType::First, chan, ctx)?;
+                Ok(())
+            }
         }
     }
 

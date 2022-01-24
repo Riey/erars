@@ -1,11 +1,12 @@
 use crate::{
+    event::{Event, EventFlags, EventType},
+    function::FunctionDic,
     instruction::Instruction,
     operator::BinaryOperator,
-    vm::{BulitinVariable, VariableInfo},
 };
 
 use self::parser::{ErbParser, Rule, PREC_CLIMBER};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use hashbrown::HashMap;
 use itertools::Itertools;
@@ -340,33 +341,49 @@ impl Compiler {
     }
 }
 
-fn parse_function(p: Pair<Rule>) -> Result<(String, Vec<Instruction>)> {
+fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
     let mut pairs = p.into_inner();
 
-    let label = pairs
-        .next()
-        .unwrap()
-        .as_str()
-        .trim_start_matches('@')
-        .to_string();
+    let label = pairs.next().unwrap().as_str().trim_start_matches('@');
+    let header = pairs.next().unwrap().into_inner();
+
+    let mut flags = EventFlags::None;
+
+    for info in header {
+        match info.as_rule() {
+            Rule::function_event_info => match info.as_str() {
+                "PRI" => flags = EventFlags::Pre,
+                "LATER" => flags = EventFlags::Later,
+                "SINGLE" => flags = EventFlags::Single,
+                _ => bail!("Unknown event info {}", info.as_str()),
+            },
+            _ => todo!("Other header"),
+        }
+    }
 
     let mut compiler = Compiler::new();
 
     compiler.push_block(pairs)?;
 
-    Ok((label, compiler.out))
+    match label.parse::<EventType>() {
+        Ok(ty) => dic.insert_event(Event { flags, ty }, compiler.out),
+        _ => dic.insert_func(label.into(), compiler.out),
+    };
+
+    Ok(())
 }
 
-pub fn compile(s: &str) -> Result<Vec<(String, Vec<Instruction>)>> {
-    let r = ErbParser::parse(Rule::program, s).unwrap();
+pub fn compile(s: &str, dic: &mut FunctionDic) -> Result<()> {
+    let r = ErbParser::parse(Rule::program, s)?;
 
-    r.map_while(|p| {
+    for p in r {
         if p.as_rule() == Rule::EOI {
-            None
+            break;
         } else {
             debug_assert_eq!(p.as_rule(), Rule::function);
-            Some(parse_function(p))
+            parse_function(p, dic)?;
         }
-    })
-    .collect()
+    }
+
+    Ok(())
 }

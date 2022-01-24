@@ -1,0 +1,1138 @@
+﻿;≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
+;게임 개시용의 처리
+;≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
+;=============================================================================
+;「처음부터」 선택시의 처리
+;=============================================================================
+;｢CALL EVENT_NEXTDAY_T｣｢CALL EVENTCHECK_M｣을 추가
+@EVENTFIRST
+;주차 · 날짜
+FLAG:6 = 1
+DAY = 1
+CALL CALENDAR_INIT
+
+;조교 대상 · 조수 설정
+TARGET = -1
+ASSI = -1
+
+;초기 금액
+;조작함으로써 처음부터 보유하고 잇는 금액을 변경시킬 수 있습니다.
+MONEY = 5000
+;목표 금액
+;조작함으로써 목표 금액의 액수를 변경할 수 있습니다.
+MONEY:100 = 1000000
+;초기 수용 가능 인원수
+FLAG:91 = 1
+FLAG:92 = 10
+
+;SHOP 아이템 · 보유 아이템 표시
+FLAG:21 = 3
+
+;임신계 플래그
+;FLAG:600은 임신부터 출산까지의 날짜(표준은 20일)
+FLAG:600 = 20
+;FLAG:601은 독립할 때까지의 날짜표준은 20日) 추가로, 태생 · 난생 공통이므로 주의할 것.
+FLAG:601 = 20
+;FLAG:602는 켜져 있으면 질내 사정으로 즉각 임신(Debug용)
+FLAG:602 = 0
+
+;버전을 기억
+;FLAG:999 = GAMEBASE_VERSION
+
+;게임 모드 선택
+CALL SELECT_GAMEMODE
+;난이도 선택
+CALL SELECT_DIFFICULTY
+
+;EASY 모드
+IF FLAG:3 == 1
+    ABL:MASTER:12 = MAX(ABL:MASTER:12, 3)
+    ITEM:50 = (NOITEM == 0) ? 1 # 0
+    ITEM:75 = (NOITEM == 0) ? 1 # 0
+    TALENT:MASTER:55 = 1
+    TALENT:MASTER:91 = 1
+ENDIF
+;대사의 표시 빈도, 여기서 초기값을 넣어두지 않으면, 거동이 이상해짐
+FLAG:11 = 2
+;사정부위 선택
+FLAG:18 = 0
+FLAG:19 = 9
+;처음에 추가 기능 전부 해방시키는 게 가능
+CALL START_CONFIGURATION
+;강력 아이템 봉인 설정
+SIF FLAG:3 >= 3
+    FLAG:13 |= 2
+;주인의 캐릭터 카드 취득
+LOCAL = NO:MASTER + 100
+;주인이 범용 캐릭터가 아니며 카드를 가지고 있지 않은가, 범용 캐릭터인가
+SIF (ITEM:LOCAL == 0 && (LOCAL < 250 || LOCAL > 500)) || (LOCAL >= 250 && LOCAL < 500)
+    ITEM:LOCAL += 1
+
+
+;주인 캐릭터의 ID 설정
+CFLAG:MASTER:3109 = 1
+FLAG:998 = CHARANUM + 1
+;주인의 취기 게이지 설정
+CALL CALC_GAUGE8, MASTER, 0
+;주인의 칭호가 없을 경우, 신사나 숙녀의 칭호를 부여
+STRLENS NICKNAME:MASTER
+SIF RESULT == 0 && TALENT:MASTER:998 == 0
+    NICKNAME:MASTER = \@(TALENT:MASTER:120) ? 신사 # 숙녀\@
+
+;'노모어글레이즈' 모드를 쓸지 말지 설정
+CALL SELECT_MODE_NOMOREGLAZE_TORIKOMODE
+
+;eratohoYM 모드 및 EXTRA 모드면 프롤로그를 표시할지 묻는다
+IF FLAG:4 == 0
+    CALL PROLOGUE_SELECT_YM
+ELSEIF FLAG:4 == 2
+    CALL PROLOGUE_SELECT_EXTRA
+ENDIF
+
+FLAG:996 = -1
+
+;주인공의 이름을 지을 수 있다. 단, 주인공 번호는 0번(아나타) 여야함. (캐릭터 선택등을 했다면 불가하단 소리)
+SIF NO:MASTER == 0
+CALL CHANGE_NAME_ANATA_TORIKOMODE
+
+BEGIN SHOP
+
+;--------------------------------------------------
+;게임 모드 선택
+;--------------------------------------------------
+@SELECT_GAMEMODE
+FLAG:4 = 0
+DRAWLINE
+PRINTL ★★ 모드를 선택해 주세요 ★★
+PRINTL 
+DRAWLINE
+PRINTL [0] eratohoYM
+PRINTL [1] ABNORMAL
+PRINTL [6] PROSTITUTE
+;이하 부록 모드
+PRINTL [9] EXTRA  
+PRINTL [100] HELP   (각 게임 모드의 간단한 설명)
+$INPUT_LOOP_GAMEMODE
+INPUT
+IF RESULT == 0
+    PRINTW “eratohoYM” 모드를 선택했습니다.
+ELSEIF RESULT == 1
+    PRINTW “ABNORMAL” 모드를 선택했습니다.
+    FLAG:4 = 1
+    PRINTL 누구로 시작하시겠습니까?
+    PRINTL [0] 「당신」으로 시작한다
+    PRINTL [1] 동방 프로젝트 캐릭터 중에 선택한다
+    $INPUT_LOOP_ABNORMAL
+    INPUT
+    IF RESULT == 0
+        CALL SET_MASTER_SEX
+    ELSEIF RESULT == 1
+        CALL START_CHARA_SELECT
+        ;CALL MASTER_FUTA_SET
+        ;CALL MASTER_SAD_SET
+    ELSE
+        GOTO INPUT_LOOP_ABNORMAL
+    ENDIF
+ELSEIF RESULT == 6
+    PRINTW “PROSTITUTE” 모드를 선택했습니다.
+    ITEM:90 = 1
+    FLAG:13 = 1024
+    FLAG:4 = 4
+    MONEY += 200
+ELSEIF RESULT == 9
+    PRINTW “EXTRA” 모드를 선택했습니다.
+    FLAG:4 = 2
+    FLAG:5 |= 1
+    CALL START_CHARA_SELECT
+    MONEY += 19000
+ELSEIF RESULT == 100
+    DRAWLINE
+    PRINTL eratohoYM ：보통 플레이를 할 사람 지향. 기한 있음
+    PRINTL PROSTITUTE：창관을 운영해나가는 모드입니다. 기한 있음
+    PRINTL ABNORMAL　：여주인이나 쇼타로 해보고 싶은 사람 지향. 기한 있음
+    PRINTL EXTRA 　　：백합과 장미의 세계로 어서 오십시오. 기한 없음
+    DRAWLINE
+    WAIT
+    DRAWLINE
+    DRAWLINE
+    DRAWLINE
+    RESTART
+ELSE
+    GOTO INPUT_LOOP_GAMEMODE
+ENDIF
+
+;--------------------------------------------------
+;난이도 선택
+;--------------------------------------------------
+@SELECT_DIFFICULTY
+DRAWLINE
+PRINTL ★★ 난이도를 선택하세요 ★★
+PRINTL 
+DRAWLINE
+IF FLAG:4 == 0 || FLAG:4 == 1
+    PRINTL [1] EASY    (120일 기한, 목표 금액 100만원)
+    PRINTL [2] NORMAL   (90일 기한, 목표 금액 100만원)
+    PRINTL [3] HARD     (99일 기한, 목표 금액 100만원)
+    PRINTL [4] LUNATIC  (90일 기한, 목표 금액 100만원)
+    PRINTL [5] PHANTASM (60일 기한, 목표 금액 100만원)
+ELSEIF FLAG:4 == 4
+    MONEY:100 = 2000000
+    PRINTFORML [1] EASY    (140일 기한, 목표 금액 %SHOW_YEN(MONEY:100)%)
+    PRINTFORML [2] NORMAL  (100일 기한, 목표 금액 %SHOW_YEN(MONEY:100)%)
+    PRINTFORML [3] HARD     (99일 기한, 목표 금액 %SHOW_YEN(MONEY:100)%)
+    PRINTFORML [4] LUNATIC  (90일 기한, 목표 금액 %SHOW_YEN(MONEY:100)%)
+    MONEY:100 = 1000000
+    PRINTFORML [5] PHANTASM (60일 기한, 목표 금액 %SHOW_YEN(MONEY:100)%)
+    MONEY:100 = 2000000
+ELSE
+    PRINTL [1] EASY
+    PRINTL [2] NORMAL
+    PRINTL [3] HARD
+    PRINTL [4] LUNATIC
+    PRINTL [5] PHANTASM
+ENDIF
+PRINTL [100] HELP   (각 난이도의 설명)
+$INPUT_LOOP_DIFFICULTY
+INPUT
+IF RESULT == 100
+    DRAWLINE
+    PRINTL EASY     ：초심자 or 연습하고 싶은 사람 지향
+    PRINTL NORMAL   ：보통 플레이를 할 사람 지향
+    PRINTL HARD     ：다소 어려운 플레이라도 OK인 사람 지향
+    PRINTL LUNATIC  ：꽤나 마조스런 플레이어 지향
+    PRINTL PHANTASM ：초특급의 마조 플레이어 지향
+    DRAWLINE
+    WAIT
+    DRAWLINE
+    DRAWLINE
+    DRAWLINE
+    RESTART
+ELSEIF RESULT == 1
+    PRINTW 난이도 : “EASY”를 선택했습니다.
+ELSEIF RESULT == 2
+    PRINTW 난이도 : “NORMAL”을 선택했습니다.
+ELSEIF RESULT == 3
+    PRINTW 난이도 : “HARD”를 선택했습니다.
+    MONEY += 1500
+ELSEIF RESULT == 4
+    PRINTW 난이도 : “LUNATIC”을 선택했습니다.
+    MONEY += 3000
+    ;초기 스테이터스：마조
+    TALENT:MASTER:82 = 1
+ELSEIF RESULT == 5
+    SIF FLAG:4 == 4
+        MONEY:100 = 1000000
+    PRINTW 난이도 : “PHANTASM”을 선택했습니다.
+    MONEY += 1000
+    ;주인의 기교를 강제로 1로 만든다
+    ABL:MASTER:12 = 1
+    ;초기 스테이터스：왕Ｍ
+    TALENT:MASTER:178 = 1
+ELSE
+    GOTO INPUT_LOOP_DIFFICULTY
+ENDIF
+FLAG:3 = RESULT
+
+;=============================================================================
+;EXTRA 모드 관련의 처리
+;=============================================================================
+;-------------------------------------------------
+;플레이어 캐릭터 선택 처리
+;-------------------------------------------------
+;REVERSALモードの時とそうでない時とで若干挙動は違う
+;IRCキャラは選択できない
+@START_CHARA_SELECT
+VARSET LOCAL, 0
+;選択可能なプレイヤーキャラの設定
+CALL CHECK_START_CHARA, 500
+LOCAL:2 = RESULT
+
+;ページをめくったときなどはここから
+$PRINT_LIST
+DRAWLINE
+PRINTFORML ★★ 플레이어를 변경할 수 있습니다 ★★
+PRINTFORML 캐릭터를 선택하십시오. ＜page.{LOCAL:1+1}＞
+DRAWLINE
+LOCAL:3 = 0
+FOR COUNT, 100, 500
+    ;ITEMSALES:n(選択可否)が0の場合は除外
+    SIF ITEMSALES:COUNT == 0
+        CONTINUE
+    ;どこからどこまでを陳列するか
+    LOCAL:3 += 1
+    IF LOCAL:3 <= (LOCAL:1 + 1) * 30 && LOCAL:3 > LOCAL:1 * 30
+        ;REVERSALモードで専用逆口上が存在している
+        SIF GET_LIST(COUNT) == 1
+            FONTITALIC
+        PRINTFORMLC [{COUNT}] %ITEMNAME:COUNT%
+        FONTREGULAR
+    ENDIF
+NEXT
+PRINTL 
+DRAWLINE
+PRINTFORMLC \@(LOCAL:1 <= 0) ? %" " * 16% # [1001] 앞페이지\@
+PRINTFORMLC [1000] 돌아가기
+PRINTFORMLC \@(LOCAL:1 >= LOCAL:2) ? %" " * 16% # [1009] 다음페이지\@
+$INPUT_LOOP
+INPUT
+;変更しないを選んだ場合は"あなた"でここで終わり
+IF RESULT == 1000
+    LOCAL = 0
+ELSEIF RESULT == 1001 && LOCAL:1 > 0
+    LOCAL:1 -= 1
+    GOTO PRINT_LIST
+ELSEIF RESULT == 1009 && LOCAL:1 < LOCAL:2
+    LOCAL:1 += 1
+    GOTO PRINT_LIST
+ELSEIF RESULT < 100 || RESULT > 600 || ITEMSALES:RESULT == 0
+    REUSELASTLINE  
+    CLEARLINE 1
+    GOTO INPUT_LOOP
+ELSE
+    LOCAL = RESULT - 100
+ENDIF
+
+;ID(LOCAL)番のキャラをマスターにする
+ADDCHARA LOCAL
+DELCHARA 0
+MASTER = 0
+
+;汎用キャラの場合はランダム素質付加処理に飛ぶ
+IF NO:MASTER >= 150 && NO:MASTER < 200
+    CALL CHARA_RANDOM_STATE_M
+;それ以外の場合, キャラカードを取得
+ELSE
+    ITEM:(LOCAL+100) = 1
+ENDIF
+
+PRINTFORMW 플레이어를 「%NAME:MASTER%」%조사만처리(NAME:MASTER,"로")% 정했다.
+IF NO:MASTER == 0 && FLAG:4 == 1
+    CALL SET_MASTER_SEX
+ENDIF
+;아이템 · 노예 진열 플래그의 삭제
+VARSET ITEMSALES, 0
+RETURN 0
+
+;-------------------------------------------------
+;선택 가능 캐릭터 판별 처리
+;-------------------------------------------------
+;現在EXTRAモード, REVERSALモードに対応している他, 将来的にINFINITYモードにも対応させる予定
+;ARGの値によって見る範囲を限定させることが可能(アイテム番号に対応).基本は500か600
+;なお, 100以下の数字を入れるとエラーになる
+@CHECK_START_CHARA, ARG
+;アイテム・奴隷陳列フラグの削除
+VARSET ITEMSALES, 0
+VARSET LOCAL, 0
+CALLF CLEAR_LIST
+;選択可能キャラの判別(ITEMSALES:COUNTに1が代入されていると選択可能)
+;REVERSALモード限定でフラグに1が入っている場合, キャラが斜体で表示される
+FOR COUNT, 100, ARG
+    ;存在しないキャラは除外
+    SIF ITEMPRICE:COUNT == 0
+        CONTINUE
+    ;あなたと子供も除外
+    SIF COUNT == 100 || COUNT == 248 || COUNT == 249 || COUNT == 500
+        CONTINUE
+
+    ITEMSALES:COUNT = 1
+    LOCAL:2 += 1
+    SIF (LOCAL:2%30) == 1 && LOCAL:2 > 30
+        LOCAL:1 += 1
+NEXT
+RETURN LOCAL:1
+
+;=============================================================================
+;「당신」 설정 관련
+;=============================================================================
+;ゲーム開始時や引き継ぎで設定変更を選択したときはここであなたの性別を決定する処理を実行
+;南無三って入力すれば身体強化魔法により[ふたなり]で開始可能(デバッグモード以外の時は選択肢非表示)
+@SET_MASTER_SEX
+PRINTL 너의 성별은?
+PRINTLC [0] ♂
+PRINTLC [1] ♀
+SIF TALENT:MASTER:998
+    PRINTLC [763] 후타나리
+PRINTL 
+$INPUT_LOOP_5
+INPUT
+IF RESULT == 0
+    TALENT:MASTER:0 = 0
+    TALENT:MASTER:1 = 0
+    TALENT:MASTER:110 = 0
+    TALENT:MASTER:111 = 0
+    TALENT:MASTER:112 = 0
+    TALENT:MASTER:113 = 0
+    TALENT:MASTER:120 = 1
+    TALENT:MASTER:121 = 0
+    ABL:MASTER:22 = 0
+    ABL:MASTER:32 = 0
+    EXP:MASTER:0 = 0
+    EXP:MASTER:12 = 0
+    MAXBASE:MASTER:2 = CALC_GAUGE2_COMMON(MASTER)
+    PRINTW 성별：♂로 시작합니다.
+ELSEIF RESULT == 1
+    TALENT:MASTER:1 = 0
+    TALENT:MASTER:120 = 0
+    TALENT:MASTER:121 = 0
+    MAXBASE:MASTER:2 = 0
+    PRINTW 성별：♀로 시작합니다.
+ELSEIF RESULT == 763
+    TALENT:MASTER:1 = 0
+    TALENT:MASTER:120 = 0
+    TALENT:MASTER:121 = 1
+    MAXBASE:MASTER:2 = CALC_GAUGE2_COMMON(MASTER)
+    PRINTW [후타나리]로 시작합니다.
+ELSE
+    GOTO INPUT_LOOP_5
+ENDIF
+;そこまで影響はないがイメージ的に初期の体力・気力を変更.単なるイメージってことで
+MAXBASE:MASTER:0 = (TALENT:MASTER:120) ? 2500 # 1800
+MAXBASE:MASTER:1 = (TALENT:MASTER:120) ? 2000 # 1500
+;全快処理
+BASE:MASTER:0 = MAXBASE:MASTER:0
+BASE:MASTER:1 = MAXBASE:MASTER:1
+;体型設定
+TALENT:MASTER:127 = 0
+TALENT:MASTER:128 = 0
+TALENT:MASTER:129 = 0
+PRINTL 
+PRINTL 당신의 체형은?
+PRINTL [0] 어디까지나 보통…이려나?
+PRINTFORML [1] \@(TALENT:MASTER:120) ? 쇼타는 대환영해!! # 이 로리콘놈들!!\@
+PRINTL [2] 미니멈! 미니멈!
+PRINTL [3] 《Giant Growth》 기동!
+$INPUT_LOOP_6
+INPUT
+IF RESULT == 1
+    TALENT:MASTER:128 = 1
+ELSEIF RESULT == 2
+    TALENT:MASTER:127 = 1
+ELSEIF RESULT == 3
+    TALENT:MASTER:129 = 1
+ELSEIF RESULT != 0
+    GOTO INPUT_LOOP_6
+ENDIF
+PRINTL 
+PRINTFORML %NAME:MASTER%의 성벽은?
+PRINTL [0] 남자든 여자든 모두 다 상대할 수 있습니다.
+IF TALENT:MASTER:120
+    PRINTL [1] 환상향의 소녀들을 조교하고 싶을 정도의 흥미는 있습니다.
+    PRINTL [2] 사내놈 따위가 만지면 경기가…!
+    PRINTL [3] 실은 저, 여성 알레르기예요!
+ELSE
+    PRINTL [1] 혈안이 되었다느니 그런 정도는 아니지만 약간 신경은 쓰입니다.
+    PRINTL [2] 환상향에 남자 따위 필요 없어! …라고 진짜로 그렇게 생각하고 있습니다.
+    PRINTL [3] 여자 따위 나 하나면 충분!!
+ENDIF
+$INPUT_LOOP_7
+INPUT
+IF RESULT == 0
+    TALENT:MASTER:83 = 1
+ELSEIF RESULT == 1
+    TALENT:MASTER:83 = 0
+    IF TALENT:MASTER:120
+        TALENT:MASTER:38 = 0
+    ELSE
+        TALENT:MASTER:37 = 0
+    ENDIF
+ELSEIF RESULT == 2
+    TALENT:MASTER:83 = 0
+    TALENT:MASTER:37 = 1
+ELSEIF RESULT == 3
+    TALENT:MASTER:83 = 0
+    TALENT:MASTER:38 = 1
+ELSE
+    GOTO INPUT_LOOP_7
+ENDIF
+SIF TALENT:MASTER:120
+    RETURN 0
+PRINTL 
+PRINTL 경험은 있어?
+PRINTL [0] 파릇파릇한 숫처녀입니다.
+PRINTL [1] 비처녀인데 뭐 어때서?
+$INPUT_LOOP_8
+INPUT
+IF RESULT == 0
+    TALENT:MASTER:0 = 1
+    EXP:MASTER:0 = 0
+ELSEIF RESULT == 1
+    TALENT:MASTER:0 = 0
+    EXP:MASTER:0 += RAND:3
+ELSE
+    GOTO INPUT_LOOP_8
+ENDIF
+TALENT:MASTER:110 = 0
+TALENT:MASTER:111 = 0
+TALENT:MASTER:112 = 0
+TALENT:MASTER:113 = 0
+PRINTL 
+PRINTL 가슴 크기는 어느 정도?
+PRINTL [0] 빈유
+PRINTL [1] 보통유
+PRINTL [2] 거유
+$INPUT_LOOP_9
+INPUT
+IF RESULT == 0
+    TALENT:MASTER:111 = 1
+ELSEIF RESULT == 2
+    TALENT:MASTER:112 = 1
+ELSEIF RESULT != 1
+    GOTO INPUT_LOOP_9
+ENDIF
+
+;=============================================================================
+;역 조교 설정 관련
+;=============================================================================
+@MASTER_TALENT_SET
+;역조교용의 구문을 유용하기 때문
+TARGET = MASTER
+
+PRINTL 
+PRINTFORML %NAME:TARGET%의 성별을 가르쳐 주세요.
+PRINTL [0] ♂
+PRINTL [1] ♀
+$INPUT_LOOP_0
+INPUT
+IF RESULT == 0
+    TALENT:0 = 0
+    TALENT:110 = 0
+    TALENT:111 = 0
+    TALENT:112 = 0
+    TALENT:113 = 0
+    TALENT:120 = 1
+    TALENT:121 = 0
+    ABL:22 = 0
+    EXP:0 = 0
+    EXP:12 = 0
+    MAXBASE:2 = 10000
+ELSEIF RESULT == 1
+    TALENT:120 = 0
+    TALENT:121 = 0
+    MAXBASE:2 = 0
+ELSE
+    GOTO INPUT_LOOP_0
+ENDIF
+;[女嫌い]対応が面倒だったので本体からお借りしました
+PRINTL 
+PRINTFORML %NAME:MASTER%의 성벽은?
+PRINTL [0] 남자든 여자든 모두 다 상대할 수 있습니다.
+IF TALENT:MASTER:120
+    PRINTL [1] 환상향의 소녀들을 조교하고 싶을 정도의 흥미는 있습니다.
+    PRINTL [2] 사내놈 따위가 만지면 경기가…!
+    PRINTL [3] 실은 저, 여성 알레르기예요!
+ELSE
+    PRINTL [1] 혈안이 되었다느니 그런 정도는 아니지만 약간 신경은 쓰입니다.
+    PRINTL [2] 환상향에 남자 따위 필요 없어! …라고 진짜로 그렇게 생각하고 있습니다.
+    PRINTL [3] 여자 따위 나 하나면 충분!!
+ENDIF
+PRINTL [4] 남자나 여자나 너무 대하기가 힘들어서요.
+$INPUT_LOOP_1
+INPUT
+IF RESULT == 0
+    TALENT:MASTER:83 = 1
+ELSEIF RESULT == 1
+    TALENT:MASTER:83 = 0
+    IF TALENT:MASTER:120
+        TALENT:MASTER:38 = 0
+    ELSE
+        TALENT:MASTER:37 = 0
+    ENDIF
+ELSEIF RESULT == 2
+    TALENT:MASTER:83 = 0
+    TALENT:MASTER:37 = 1
+ELSEIF RESULT == 3
+    TALENT:MASTER:83 = 0
+    TALENT:MASTER:38 = 1
+ELSEIF RESULT == 4
+    TALENT:MASTER:83 = 0
+    TALENT:MASTER:37 = 1
+    TALENT:MASTER:38 = 1
+ELSE
+    GOTO INPUT_LOOP_1
+ENDIF
+
+SIF TALENT:120
+    GOTO TALENT_SET_COMMON
+
+PRINTL 처녀입니까?
+PRINTL [0] 예.
+PRINTL [1] 실은 아닙니다.
+PRINTL [2] 경험이 풍부하죠.
+$INPUT_LOOP_2
+INPUT
+IF RESULT == 0
+    TALENT:MASTER:0 = 1
+    EXP:MASTER:0 = 0
+ELSEIF RESULT == 1
+    TALENT:MASTER:0 = 0
+    SIF EXP:MASTER:0 == 0
+        EXP:MASTER:0 += RAND:2 + 1
+ELSEIF RESULT == 2
+    TALENT:MASTER:0 = 0
+    SIF EXP:MASTER:0 == 0
+        EXP:MASTER:0 += RAND:91 + 30
+ELSE
+    GOTO INPUT_LOOP_2
+ENDIF
+
+TALENT:MASTER:110 = 0
+TALENT:MASTER:111 = 0
+TALENT:MASTER:112 = 0
+TALENT:MASTER:113 = 0
+PRINTL 가슴 크기는?
+PRINTL [0] 자신할만 해.
+PRINTL [1] 보통이려나.
+PRINTL [2] …………….
+$INPUT_LOOP_3
+INPUT
+IF RESULT == 0
+    TALENT:MASTER:112 = 1
+ELSEIF RESULT == 2
+    TALENT:MASTER:111 = 1
+ELSEIF RESULT != 1
+    GOTO INPUT_LOOP_3
+ENDIF
+$TALENT_SET_COMMON
+
+;체형
+TALENT:MASTER:127 = 0
+TALENT:MASTER:128 = 0
+TALENT:MASTER:129 = 0
+PRINTL 체형은……
+PRINTL [0] 보통이야.
+PRINTL [1] 코딱지만하다고 하지 맛―!
+PRINTL [2] 미니멈! 미니멈!
+PRINTL [4] ＼뭐 이래 커!／
+$INPUT_LOOP_4
+INPUT
+IF RESULT == 1
+    TALENT:MASTER:128 = 1
+ELSEIF RESULT == 2
+    TALENT:MASTER:127 = 1
+ELSEIF RESULT == 3
+    TALENT:MASTER:129 = 1
+ELSEIF RESULT != 0
+    GOTO INPUT_LOOP_4
+ENDIF
+
+;기력/체력
+PRINTL 인도어파? 아웃도어파?
+PRINTL [0] 얽매이지 않음
+PRINTL [1] 인도어파
+PRINTL [2] 아웃도어파
+$INPUT_LOOP_5
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_5
+;かなり適当な数値
+;[オトコ]は体力高め, 女の子は気力多め, どの組み合わせも他のそれより体力/気力が同時に下回らない
+;[オトコ]は被調教上不利だから, 多めにした方が良いかも
+IF RESULT == 0
+    MAXBASE:MASTER:0 = (TALENT:MASTER:120) ? 2200 # 1500
+    MAXBASE:MASTER:1 = (TALENT:MASTER:120) ? 1500 # 1800
+ELSEIF RESULT == 1
+    MAXBASE:MASTER:0 = (TALENT:MASTER:120) ? 1600 # 1000
+    MAXBASE:MASTER:1 = (TALENT:MASTER:120) ? 1600 # 2500
+ELSEIF RESULT == 2
+    MAXBASE:MASTER:0 = (TALENT:MASTER:120) ? 2500 # 2300
+    MAXBASE:MASTER:1 = (TALENT:MASTER:120) ? 1200 # 1400
+ENDIF
+BASE:MASTER:0 = MAXBASE:MASTER:0
+BASE:MASTER:1 = MAXBASE:MASTER:1
+
+;趣味的素質付加をスキップするかどうか
+PRINTL 다소 질문이 길어질 것 같은데, 하실래요?
+PRINTL [0] 어서 오쇼
+PRINTL [1] 그만둘래
+$INPUT_LOOP_6
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_6
+SIF RESULT == 1
+    GOTO TALENT_SET_EX
+
+;섭쟁이
+PRINTL 모르는 사람이 말을 걸어오면……
+PRINTL [0] 대답해준다
+PRINTL [1] 일단 도망친다
+$INPUT_LOOP_7
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_7
+TALENT:10 = RESULT
+
+;반항적과 츤데레
+PRINTL 츤데레예요?
+PRINTL [0] 그렇진 않다.
+PRINTL [1] 데레 따위 안 해.
+PRINTFORML [2] \@(TALENT:MASTER:120) ? 뭐, 뭐 말도 안 되는 소릴! # 나, 나는 뭔가 외교적으로 해결될 거리가 있다고 생각해!\@!
+$INPUT_LOOP_8
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_8
+TALENT:11 = RESULT != 0
+TALENT:18 = (RESULT & 2) == 2
+
+;솔직함
+SIF TALENT:11
+    GOTO JUMP_1
+PRINTL 그럼, 솔직하다는 거지?
+PRINTL [0] 너무 단락적이지, 그 해석은.
+PRINTL [1] 네.
+$INPUT_LOOP_9
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_9
+TALENT:13 = RESULT
+$JUMP_1
+
+;꿋꿋함
+;PRINTL 꺾이지 않는 마음은……
+;PRINTL [0] 병사가 회수해갔답니다
+;PRINTL [1] 이 마음 속에
+PRINTL 어떤 일에도 굴하지 않아?
+PRINTL [0] 사실 잘 꺾여.
+PRINTL [1] 그렇게 살아갈 생각.
+$INPUT_LOOP_10
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_10
+TALENT:12 = RESULT
+
+;얌전함
+PRINTL 얌전하다는 얘기 듣나?
+PRINTL [0] 별로 그렇게는.
+PRINTL [1] 자주 들어.
+$INPUT_LOOP_11
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_11
+TALENT:14 = RESULT
+
+;건방짐
+PRINTL 건방진 면은?
+PRINTL [0] 별로 없어.
+PRINTL [1] 자주 듣지.
+$INPUT_LOOP_11_2
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_11_2
+TALENT:15 = RESULT
+
+;자제심
+PRINTL 자신을 스스로 제어 가능해?
+PRINTL [0] 그런 걸 어떻게 해.
+PRINTL [1] 할 수 있지.
+$INPUT_LOOP_11_3
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_11_3
+TALENT:20 = RESULT
+
+;감정결여
+PRINTL 감정 표현은……
+PRINTL [0] 어렵지 않게.
+PRINTL [1] 잘 전하지 못해.
+$INPUT_LOOP_11_4
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_11_4
+TALENT:22 = RESULT
+
+;プライド高い/低い
+PRINTL 자신의 프라이드는……
+PRINTL [0] 그럭저럭.
+PRINTL [1] 프라이드가 중요해.
+PRINTL [2] 개나 줘버려라.
+$INPUT_LOOP_12
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_12
+TALENT:16 = RESULT & 1
+TALENT:17 = (RESULT & 2) == 2
+
+;保守的と好奇心と無関心
+PRINTL 완전히 새로운 거에 대해선……
+PRINTL [0] 뭐 의욕이 생기면.
+PRINTL [1] 뭐든 손대고 본다.
+PRINTL [2] 손대지 않는다.
+PRINTL [3] 아무려면 어떠냐.
+$INPUT_LOOP_13
+INPUT
+IF RESULT == 1
+    TALENT:23 = 1
+ELSEIF RESULT == 2
+    TALENT:24 = 1
+ELSEIF RESULT == 3
+    TALENT:21 = 1
+ELSEIF RESULT != 0
+    GOTO INPUT_LOOP_13
+ENDIF
+
+;楽観的と悲観的
+PRINTL 연애 영화를 보고 있으면……
+PRINTL [0] 전개가 신경 쓰여.
+PRINTL [1] 해피 엔딩이겠지.
+PRINTL [2] 어차피 배드 엔딩이야.
+$INPUT_LOOP_13_2
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_13_2
+TALENT:25 = RESULT & 1
+TALENT:26 = (RESULT & 2) == 2
+
+;一線越えない
+PRINTL 남과의 관계는……
+PRINTL [0] 신경 쓰지 않는다.
+PRINTL [1] 거리를 두고 산다.
+$INPUT_LOOP_14
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_14
+TALENT:27 = RESULT
+
+;目立ちたがり
+PRINTL 남의 눈에 띄는 건……
+PRINTL [0] 아예 싫지는 않아.
+PRINTL [1] ○○쨩― 나 보고 있어―?
+$INPUT_LOOP_15
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_15
+TALENT:28 = RESULT
+
+;貞操観念と貞操無頓着
+PRINTL 야한 일은……
+PRINTL [0] 누구든 상관없이 해대는 건 문제.
+PRINTL [1] 결혼 첫날밤에.
+PRINTL [2] 하고 싶을 때 해야지.
+$INPUT_LOOP_16
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_16
+TALENT:30 = RESULT & 1
+TALENT:31 = (RESULT & 2) == 2
+
+;抑圧と解放
+PRINTL 자신의 마음엔……
+PRINTL [0] 편하다 느낄 정도.
+PRINTL [1] 숨겨둔다.
+PRINTL [2] 울타리도 없어.
+$INPUT_LOOP_17
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_17
+TALENT:32 = RESULT & 1
+TALENT:33 = (RESULT & 2) == 2
+
+;抵抗
+PRINTL 포기하는 건……
+PRINTL [0] 중요하지.
+PRINTL [1] 나빠.
+$INPUT_LOOP_18
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_18
+TALENT:34 = RESULT
+
+;恥じらいと恥薄い
+PRINTL 남들 앞에서 벗거나 그런 건……
+PRINTL [0] 아예 못할 건 없지.
+PRINTL [1] 부끄러워서 무리.
+PRINTL [2] 괜찮아.
+$INPUT_LOOP_19
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_19
+TALENT:35 = RESULT & 1
+TALENT:36 = (RESULT & 2) == 2
+
+;痛みに弱い/強い
+PRINTL 아픈 건……
+PRINTL [0] 좋아하진 않아.
+PRINTL [1] 아픈 건 참아주세요.
+PRINTL [2] 익숙합니다.
+$INPUT_LOOP_20
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_20
+TALENT:40 = RESULT & 1
+TALENT:41 = (RESULT & 2) == 2
+
+;濡れやすい/にくい
+PRINTL 젖기 쉬워?
+PRINTL [0] 남들만큼이라고 봐.
+PRINTL [1] 그런 것 같아.
+PRINTL [2] 오히려 반대려나.
+$INPUT_LOOP_21
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_21
+TALENT:42 = RESULT & 1
+TALENT:43 = (RESULT & 2) == 2
+
+;習得早い/遅い
+PRINTL 기억력은……
+PRINTL [0] 보통인 것 같아.
+PRINTL [1] 좋아.
+PRINTL [2] 얼라리오? 오늘이 며칠이었냐?
+$INPUT_LOOP_22
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_22
+TALENT:50 = RESULT & 1
+TALENT:51 = (RESULT & 2) == 2
+
+;汚臭鈍感/敏感
+PRINTL 방 청소는……
+PRINTL [0] 적당히
+PRINTL [1] 땡땡이
+PRINTL [2] 자주자주
+$INPUT_LOOP_23
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_23
+TALENT:61 = RESULT & 1
+TALENT:62 = (RESULT & 2) == 2
+
+;快感に素直/の否定
+PRINTL 기분 좋은 거에 대해선……
+PRINTL [0] 좋지도 나쁘지도 않아.
+PRINTL [1] 좋은 게지.
+PRINTL [2] 야한 건 안 된다고 생각합니다!
+$INPUT_LOOP_24
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_24
+TALENT:70 = RESULT & 1
+TALENT:71 = (RESULT & 2) == 2
+
+;自慰しやすい
+PRINTL 스스로 하는 건……
+PRINTL [0] 남들만큼은 뭐.
+PRINTL [1] 좀 잦을……지도.
+$INPUT_LOOP_25
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_25
+TALENT:60 = RESULT
+IF RESULT == 1
+    EXP:MASTER:10 += RAND:11 + 30
+ELSE
+    EXP:MASTER:10 += RAND:10 + 1
+ENDIF
+
+;中毒しやすい
+PRINTL 무언가에 푹 빠져 버리면……
+PRINTL [0] 그래도 나름 절도는 지켜.
+PRINTL [1] 그만둘 수 없어, 멈출 수 없어.
+$INPUT_LOOP_26
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_26
+TALENT:84 = RESULT
+
+;倒錯的
+PRINTL 자기에 대해선 흥미 없어?
+PRINTL [0] 그렇진 않아.
+PRINTL [1] 물론.
+$INPUT_LOOP_27
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_27
+TALENT:80 = RESULT
+
+$TALENT_SET_EX
+;ゲームバランスにかかわる素質をスキップするか
+PRINTL 남은 질문은 잘못 대답하면 난이도 팍 무너지는데…….
+PRINTL [0] 그냥 팍팍 혀.
+PRINTL [1] 그만둘란다.
+$INPUT_LOOP_31
+INPUT
+IF RESULT == 1
+    GOTO TALENT_SET_END
+ELSEIF RESULT != 0
+    PRINTL 올바른 값을 입력해 주세요.
+    GOTO INPUT_LOOP_31
+ENDIF
+
+;サド/小悪魔/マゾ
+PRINTL 괴롭히는 건……
+PRINTL [0] 나쁜 짓이죠.
+PRINTL [1] 아주 좋아해요.
+PRINTL [2] 오히려 누가 괴롭혀줬음 좋겠어요.
+$INPUT_LOOP_28
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_28
+SIF RESULT == 1
+    CALL TALENT_SET_S
+TALENT:82 = (RESULT & 2) == 2
+
+;幼稚
+PRINTL 어린애같은 성격?
+PRINTL [0] 설마요.
+PRINTL [1] 우뉴?
+$INPUT_LOOP_29
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_29
+;TALENT:93 = RESULT & 1
+TALENT:131 = RESULT & 1
+
+;回復早い/遅い
+PRINTL 자신의 체력에 대해서……
+PRINTL [0] 평균적.
+PRINTL [1] 건강한 편인 것 같아.
+PRINTL [2] 쿨럭쿨럭 천식이.
+$INPUT_LOOP_30
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_30
+TALENT:137 = RESULT & 1
+TALENT:138 = (RESULT & 2) == 2
+
+;c/v/a/b鈍感/敏感はどうしようか
+
+$TALENT_SET_END
+
+
+;多分問題ないと思うけど, 念のためターゲットを初期化
+TARGET = -1
+
+RETURN 1
+
+@TALENT_SET_M
+;[オトコ]用両刀と男嫌い
+PRINTFORML 바이로 살 수 있어?
+PRINTL [0] 기둘려, 뭔 소리여.
+PRINTL [1] 남자든 여자든 다 와라.
+PRINTL [2] 무리! 절대 무리!
+$INPUT_LOOP_1
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2
+    GOTO INPUT_LOOP_1
+TALENT:83 = RESULT & 1
+TALENT:37 = (RESULT & 2) == 2
+
+@TALENT_SET_F
+;女の子用両刀
+PRINTFORML 그러면 여자애가 좋다는 얘기야?
+PRINTL [0] 꼭 그렇단 얘긴…….
+PRINTL [1] 그럼요.
+$INPUT_LOOP_1
+INPUT
+SIF RESULT != 0 && RESULT != 1
+    GOTO INPUT_LOOP_1
+TALENT:83 = RESULT & 1
+
+@TALENT_SET_S
+;サド/小悪魔
+PRINTFORML 겁을 주고, 아프게 하는 것과
+PRINTFORML 뜨거운 물로다가, 귀여운 비명소리를 듣는 거
+PRINTFORML 어느쪽이 더 좋아?
+PRINTL [0] 다시 할랍니다.
+PRINTL [1] 아프게 하는 거지.
+PRINTL [2] 비명 듣고 싶다.
+PRINTL [3] 양쪽! 양쪽 다!
+$INPUT_LOOP_1
+INPUT
+SIF RESULT != 0 && RESULT != 1 && RESULT != 2 && RESULT != 3
+    GOTO INPUT_LOOP_1
+TALENT:81 = RESULT & 1
+TALENT:93 = (RESULT & 2) == 2
+
+@MASTER_FUTA_SET
+SIF EXIST_PENIS(MASTER)
+    RETURN 0
+
+PRINTL 
+PRINTFORML 처음부터 %조사처리(CALLNAME:MASTER,"를")% 후타나리화시킬 수 있습니다. 어떻게 할까요?
+PRINTL [0] 후타나리화한다.
+PRINTL [1] 그런 짓 안 해.
+
+$INPUT_LOOP3
+INPUT
+
+IF RESULT == 0
+    PRINTFORMW %조사처리(CALLNAME:MASTER,"를")% 후타나리로 만들었습니다.
+    TALENT:MASTER:121 = 1
+    MAXBASE:MASTER:2 = 10000
+ELSEIF RESULT != 1
+    PRINTFORML 올바른 값을 입력해 주세요.
+    GOTO INPUT_LOOP3
+ENDIF
+
+@MASTER_SAD_SET
+SIF TALENT:MASTER:81
+    RETURN 0
+
+PRINTL 
+PRINTFORML 처음부터 %조사처리(CALLNAME:MASTER,"를")% 새디스트로 만들 수 있습니다. 어떻게 할까요?
+PRINTL [0] 새디스트로 만든다.
+PRINTL [1] 그런 짓 안 한다.
+
+$INPUT_LOOP4
+INPUT
+
+IF RESULT == 0
+    PRINTFORMW %조사처리(CALLNAME:MASTER,"를")% 새디스트로 만들었습니다.
+    TALENT:MASTER:81 = 1
+ELSEIF RESULT != 1
+    PRINTFORML 올바른 값을 입력해 주세요.
+    GOTO INPUT_LOOP4
+ENDIF
+
+;逆調教用あなた加入処理を間借り
+@RV_CHARA0
+ADDCHARA 0
+MASTER = 1
+CALL MASTER_TALENT_SET
+MASTER = 0
+TARGET = 1
+CFLAG:3109 = 2
+
+;=============================================================================
+;アホモード：DEADorALIVE用
+;=============================================================================
+;時間経過のとき, 1/256の確率で落ちるアホなゲームモード……の残骸.と言うよりZANGUY
+;何かに使えないかと踏んでとりあえず残すことに
+;なお, 動作・表示テストの意味も兼ねて東方調教典のネタばれＱ＆Ａにおいて, 
+;[999]を入力すると見れるように
+;@EVENTSHOP
+;#PRI
+;SIF RAND:256 == 0
+;    CALL END_SHOP
+
+@END_SHOP
+REPEAT 25
+    DRAWLINE
+REND
+WAIT
+PRINTL 
+PRINTL A problem has been detected and eratohoYM has been shut down to prevent damage
+PRINTL from your Emuera.
+PRINTL The problem seems to be caused by the following file: eratohoYM.exe.exe
+PRINTL 
+PRINTL If this is the first time you have seen this Stop error screen,
+PRINTL restart your masturbation. If this screen appears again, follow
+PRINTL these steps.
+PRINTL 
+PRINTL Check to make sure your clothes are properly taken off.
+PRINTL If you have a tie, wear it. Make sure that it is clean.
+PRINTL 
+PRINTL If problems continue, remove your tie and clean it, or buy a new one.
+PRINTL If you need to use kenjya Mode to calm down, find any "OKAZU" from your room,
+PRINTL and look until you are satisfied.
+PRINTL 
+PRINTL Nutrient information:
+PRINTL 
+PRINTL *** Stock: 0xeratohoYM (0xABNORMAL,0xREVERSAL,0x0YOU-SAY,0x00XEXTRA)
+PRINTL 
+PRINTL 
+PRINTL *** UFUFU.SYS - ADRESS GENTLEMAN base at UFUFU, DateStamp BC.65000
+PRINTL 
+PRINTW  
+DRAWLINE
+PRINTW 함정읻!
+;QUIT

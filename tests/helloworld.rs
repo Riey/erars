@@ -1,49 +1,60 @@
 use erars::compiler::compile;
-use erars::instruction::Instruction;
+use erars::function::FunctionDic;
 use erars::ui::{ConsoleChannel, ConsoleMessage};
 use erars::vm::*;
 
 #[test]
+fn comment() {
+    let code = r#";≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
+;게임 개시용의 처리
+;≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡≡
+;=============================================================================
+;「처음부터」 선택시의 처리
+;=============================================================================
+;｢CALL EVENT_NEXTDAY_T｣｢CALL EVENTCHECK_M｣을 추가
+@EVENTFIRST"#;
+
+    let mut dic = FunctionDic::new();
+    compile(code, &mut dic).unwrap();
+}
+
+#[test]
 fn sub() {
     let code = "@SYSTEM_TITLE\nPRINTFORML 1 - 2 = {1 - 2}";
-    let inst = compile(code).unwrap();
+    let mut dic = FunctionDic::new();
+    compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        &inst,
+        dic.get_func("SYSTEM_TITLE").unwrap(),
         r#"
 [
-    (
-        "SYSTEM_TITLE",
-        [
-            ListBegin,
-            LoadStr(
-                "1 - 2 = ",
-            ),
-            LoadInt(
-                1,
-            ),
-            LoadInt(
-                2,
-            ),
-            BinaryOperator(
-                Sub,
-            ),
-            LoadStr(
-                "",
-            ),
-            ListEnd,
-            ConcatString,
-            Print(
-                NEWLINE,
-            ),
-        ],
+    ListBegin,
+    LoadStr(
+        "1 - 2 = ",
+    ),
+    LoadInt(
+        1,
+    ),
+    LoadInt(
+        2,
+    ),
+    BinaryOperator(
+        Sub,
+    ),
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
     ),
 ]
 "#
     );
 
     k9::snapshot!(
-        run_test(inst),
+        run_test(dic),
         r#"
 [
     Print(
@@ -58,44 +69,40 @@ fn sub() {
 #[test]
 fn add() {
     let code = "@SYSTEM_TITLE\nPRINTFORML 1 + 1 = {1 + 1}";
-    let inst = compile(code).unwrap();
+    let mut dic = FunctionDic::new();
+    compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        &inst,
+        dic.get_func("SYSTEM_TITLE").unwrap(),
         r#"
 [
-    (
-        "SYSTEM_TITLE",
-        [
-            ListBegin,
-            LoadStr(
-                "1 + 1 = ",
-            ),
-            LoadInt(
-                1,
-            ),
-            LoadInt(
-                1,
-            ),
-            BinaryOperator(
-                Add,
-            ),
-            LoadStr(
-                "",
-            ),
-            ListEnd,
-            ConcatString,
-            Print(
-                NEWLINE,
-            ),
-        ],
+    ListBegin,
+    LoadStr(
+        "1 + 1 = ",
+    ),
+    LoadInt(
+        1,
+    ),
+    LoadInt(
+        1,
+    ),
+    BinaryOperator(
+        Add,
+    ),
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
     ),
 ]
 "#
     );
 
     k9::snapshot!(
-        run_test(inst),
+        run_test(dic),
         r#"
 [
     Print(
@@ -110,44 +117,40 @@ fn add() {
 #[test]
 fn compare() {
     let code = "@SYSTEM_TITLE\nPRINTFORML {0 == 0}";
-    let inst = compile(code).unwrap();
+    let mut dic = FunctionDic::new();
+    compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        &inst,
+        dic.get_func("SYSTEM_TITLE").unwrap(),
         r#"
 [
-    (
-        "SYSTEM_TITLE",
-        [
-            ListBegin,
-            LoadStr(
-                "",
-            ),
-            LoadInt(
-                0,
-            ),
-            LoadInt(
-                0,
-            ),
-            BinaryOperator(
-                Equal,
-            ),
-            LoadStr(
-                "",
-            ),
-            ListEnd,
-            ConcatString,
-            Print(
-                NEWLINE,
-            ),
-        ],
+    ListBegin,
+    LoadStr(
+        "",
+    ),
+    LoadInt(
+        0,
+    ),
+    LoadInt(
+        0,
+    ),
+    BinaryOperator(
+        Equal,
+    ),
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
     ),
 ]
 "#
     );
 
     k9::snapshot!(
-        run_test(inst),
+        run_test(dic),
         r#"
 [
     Print(
@@ -162,50 +165,46 @@ fn compare() {
 #[test]
 fn if_false() {
     let code = "@SYSTEM_TITLE\nIF 0\nPRINTL TRUE\nELSE\nPRINTL FALSE\nENDIF\nQUIT";
-    let inst = compile(code).unwrap();
+    let mut dic = FunctionDic::new();
+    compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        &inst,
+        dic.get_func("SYSTEM_TITLE").unwrap(),
         r#"
 [
-    (
-        "SYSTEM_TITLE",
-        [
-            LoadInt(
-                0,
-            ),
-            GotoIfNot(
-                5,
-            ),
-            LoadStr(
-                "TRUE",
-            ),
-            Print(
-                NEWLINE,
-            ),
-            Goto(
-                7,
-            ),
-            LoadStr(
-                "FALSE",
-            ),
-            Print(
-                NEWLINE,
-            ),
-            ListBegin,
-            ListEnd,
-            LoadStr(
-                "QUIT",
-            ),
-            Command,
-        ],
+    LoadInt(
+        0,
     ),
+    GotoIfNot(
+        5,
+    ),
+    LoadStr(
+        "TRUE",
+    ),
+    Print(
+        NEWLINE,
+    ),
+    Goto(
+        7,
+    ),
+    LoadStr(
+        "FALSE",
+    ),
+    Print(
+        NEWLINE,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "QUIT",
+    ),
+    Command,
 ]
 "#
     );
 
     k9::snapshot!(
-        run_test(inst),
+        run_test(dic),
         r#"
 [
     Print(
@@ -221,36 +220,31 @@ fn if_false() {
 #[test]
 fn helloworld() {
     let code = "@SYSTEM_TITLE\nPRINTL Hello, world!\nQUIT";
-
-    let inst = compile(code).unwrap();
+    let mut dic = FunctionDic::new();
+    compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        &inst,
+        dic.get_func("SYSTEM_TITLE").unwrap(),
         r#"
 [
-    (
-        "SYSTEM_TITLE",
-        [
-            LoadStr(
-                "Hello, world!",
-            ),
-            Print(
-                NEWLINE,
-            ),
-            ListBegin,
-            ListEnd,
-            LoadStr(
-                "QUIT",
-            ),
-            Command,
-        ],
+    LoadStr(
+        "Hello, world!",
     ),
+    Print(
+        NEWLINE,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "QUIT",
+    ),
+    Command,
 ]
 "#
     );
 
     k9::snapshot!(
-        run_test(inst),
+        run_test(dic),
         r#"
 [
     Print(
@@ -263,9 +257,9 @@ fn helloworld() {
     );
 }
 
-fn run_test(inst: Vec<(String, Vec<Instruction>)>) -> Vec<ConsoleMessage> {
+fn run_test(dic: FunctionDic) -> Vec<ConsoleMessage> {
     let mut ctx = VmContext::new(&Default::default());
-    let vm = TerminalVm::new(inst.into_iter().collect());
+    let vm = TerminalVm::new(dic);
     let chan = ConsoleChannel::new();
 
     vm.start(&chan, &mut ctx).unwrap();

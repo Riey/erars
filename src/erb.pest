@@ -98,10 +98,13 @@ assign_line = { var_expr ~ "=" ~ expr }
 program_line = _{ printform_com | print_com | reuselastline_com | alignment_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
 
 
-function_label = { "@" ~ ident }
-function = { function_label ~ (program_line | NEWLINE)* }
+function_label = ${ "@" ~ ident }
+function_header = ${ (NEWLINE+ ~ "#" ~ function_info)* }
+function_info = _{ function_event_info }
+function_event_info = { "PRI" | "SINGLE" | "LATER" } 
+function = { function_label ~ function_header ~ (program_line | NEWLINE)* }
 
 program = _{ SOI ~ (function | NEWLINE)* ~ EOI }
 
 WHITESPACE = _{ " " | "\t" }
-COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+COMMENT = _{ (";" | ";") ~ (!NEWLINE ~ ANY)* ~ NEWLINE }

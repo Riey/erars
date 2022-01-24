@@ -6,6 +6,8 @@ DAY:
 
 TARGET:
   size: [1000]
+ASSI:
+  size: [1000]
 MONEY:
   size: [1000]
 RESULT:
