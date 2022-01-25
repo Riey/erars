@@ -20,12 +20,63 @@ fn comment() {
 
 #[test]
 fn conditional() {
-    let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 1 = %1 == 1 ? \"TRUE\" # \"FALSE\"%";
+    let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 0 = %(1 == 1) ? \"TRUE\" # \"FALSE\"%";
     let mut dic = FunctionDic::new();
 
     compile(code, &mut dic).unwrap();
 
-    k9::snapshot!(dic.get_func("SYSTEM_TITLE").unwrap());
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap(),
+        r#"
+[
+    ListBegin,
+    LoadStr(
+        "1 == 0 = ",
+    ),
+    LoadInt(
+        1,
+    ),
+    LoadInt(
+        1,
+    ),
+    BinaryOperator(
+        Equal,
+    ),
+    GotoIfNot(
+        8,
+    ),
+    LoadStr(
+        "TRUE",
+    ),
+    Goto(
+        9,
+    ),
+    LoadStr(
+        "FALSE",
+    ),
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "1 == 0 = TRUE",
+    ),
+    NewLine,
+]
+"#
+    );
 }
 
 #[test]

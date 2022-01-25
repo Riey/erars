@@ -136,6 +136,20 @@ impl Compiler {
                 self.out.push(Instruction::CallMethod);
                 Ok(())
             }
+            Rule::conditionalop_expr => {
+                let mut pairs = p.into_inner();
+                let cond = pairs.next().unwrap();
+                let if_true = pairs.next().unwrap();
+                let or_false = pairs.next().unwrap();
+                self.push_expr(cond)?;
+                let begin = self.mark();
+                self.push_expr(if_true)?;
+                let true_end = self.mark();
+                self.insert(begin, Instruction::GotoIfNot(true_end + 1))?;
+                self.push_expr(or_false)?;
+                self.insert(true_end, Instruction::Goto(self.current_no()))?;
+                Ok(())
+            }
             Rule::formstring_expr => self.push_formtext(p),
             _ => unreachable!("{:?}", p),
         }

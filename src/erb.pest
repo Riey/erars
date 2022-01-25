@@ -46,10 +46,11 @@ binop = _{
 
 formstring_expr = { &("{" | "%") ~ print_form_text }
 binop_expr = { term ~ (binop ~ term)+ }
+conditionalop_expr = { term ~ "?" ~ term ~ "#" ~ term }
 method_expr = { ident ~ "(" ~ comma_seq ~ ")" }
 var_expr = { ident ~ (":" ~ term)* }
 
-expr = _{ binop_expr | method_expr | formstring_expr | term }
+expr = _{ binop_expr | conditionalop_expr | method_expr | formstring_expr | term }
 term = _{ string | num | var_expr | "(" ~ expr ~ ")" }
 comma_seq = _{ term ~ ("," ~ term)* }
 

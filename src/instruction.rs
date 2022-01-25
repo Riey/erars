@@ -33,7 +33,6 @@ pub enum Instruction {
     Command,
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
-    TernaryOperator(TernaryOperator),
     SetAlignment(Alignment),
     Goto(u32),
     GotoIfNot(u32),
