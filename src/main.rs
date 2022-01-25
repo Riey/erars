@@ -33,7 +33,9 @@ fn main() {
             erb.map_err(anyhow::Error::from)
                 .and_then(|erb| {
                     erars::compiler::compile(
-                        std::fs::read_to_string(erb).unwrap().trim_start_matches("\u{feff}"),
+                        std::fs::read_to_string(erb)
+                            .unwrap()
+                            .trim_start_matches("\u{feff}"),
                         &mut function_dic,
                     )
                 })

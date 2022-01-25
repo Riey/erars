@@ -19,6 +19,16 @@ fn comment() {
 }
 
 #[test]
+fn conditional() {
+    let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 1 = %1 == 1 ? \"TRUE\" # \"FALSE\"%";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(dic.get_func("SYSTEM_TITLE").unwrap());
+}
+
+#[test]
 fn sub() {
     let code = "@SYSTEM_TITLE\nPRINTFORML 1 - 2 = {1 - 2}";
     let mut dic = FunctionDic::new();
