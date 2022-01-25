@@ -77,8 +77,8 @@ alignment_com = { ^"ALIGNMENT" ~ alignment }
     alignment = { ^"LEFT" | ^"CENTER" | ^"RIGHT" }
 
 begin_com = { ^"BEGIN" ~ ident }
-call_com = { ^"CALL" ~ ident ~ comma_seq? }
-callform_com = { callform_header ~ print_form_text_space ~ comma_seq? }
+call_com = { ^"CALL" ~ ident ~ ("," ~ comma_seq)? }
+callform_com = { callform_header ~ print_form_text_space ~ ("," ~ comma_seq)? }
 	callform_header = { ^"TRY"? ~ ("CALL" | "JUMP" | "GOTO") ~ "FORM" }
 other_com = { ident ~ comma_seq? }
 
