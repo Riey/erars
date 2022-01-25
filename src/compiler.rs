@@ -99,23 +99,12 @@ impl Compiler {
                         lhs?;
                         rhs?;
 
-                        let op = match op.as_rule() {
-                            Rule::add => BinaryOperator::Add,
-                            Rule::sub => BinaryOperator::Sub,
-                            Rule::mul => BinaryOperator::Mul,
-                            Rule::div => BinaryOperator::Div,
-                            Rule::rem => BinaryOperator::Rem,
-                            Rule::eq => BinaryOperator::Equal,
-                            Rule::ne => BinaryOperator::NotEqual,
-                            _ => todo!(),
-                        };
-
                         unsafe {
                             s.get()
                                 .as_mut()
                                 .unwrap_unchecked()
                                 .out
-                                .push(Instruction::BinaryOperator(op))
+                                .push(Instruction::BinaryOperator(to_binop(op)?))
                         };
 
                         Ok(())
@@ -303,9 +292,18 @@ impl Compiler {
             }
             Rule::assign_line => {
                 let var = pairs.next().unwrap();
-                let rhs = pairs.next().unwrap();
+                let mut rhs = pairs.next().unwrap();
 
-                self.push_expr(rhs)?;
+                if rhs.as_rule() == Rule::assign_addop {
+                    let op = rhs.into_inner().next().unwrap();
+                    rhs = pairs.next().unwrap();
+                    self.push_expr(var.clone())?;
+                    self.push_expr(rhs)?;
+                    self.out.push(Instruction::BinaryOperator(to_binop(op)?));
+                } else {
+                    self.push_expr(rhs)?;
+                }
+
                 self.store_var(var)?;
             }
             Rule::alignment_com => {
@@ -400,4 +398,17 @@ pub fn compile(s: &str, dic: &mut FunctionDic) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn to_binop(op: Pair<Rule>) -> Result<BinaryOperator> {
+    Ok(match op.as_rule() {
+        Rule::add => BinaryOperator::Add,
+        Rule::sub => BinaryOperator::Sub,
+        Rule::mul => BinaryOperator::Mul,
+        Rule::div => BinaryOperator::Div,
+        Rule::rem => BinaryOperator::Rem,
+        Rule::eq => BinaryOperator::Equal,
+        Rule::ne => BinaryOperator::NotEqual,
+        _ => bail!("Invalid op pair {:?}", op),
+    })
 }

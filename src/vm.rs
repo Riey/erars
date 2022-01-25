@@ -235,6 +235,8 @@ impl VariableStorage {
             None
         }
     }
+
+    #[allow(unused)]
     pub fn get_chara(&mut self, name: &str, no: usize) -> Option<&mut Variable> {
         if let Either::Right(ref mut cvar) = self.variables.get_mut(name)?.1 {
             cvar.get_mut(no)
@@ -304,6 +306,7 @@ impl VmContext {
         self.pop().try_into()
     }
 
+    #[allow(unused)]
     fn pop_int(&mut self) -> Result<i64> {
         self.pop().try_into()
     }

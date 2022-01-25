@@ -94,7 +94,8 @@ goto_com = { ^"GOTO" ~ ident }
 
 // assign
 
-assign_line = { var_expr ~ "=" ~ expr }
+assign_line = { var_expr ~ assign_addop? ~ "=" ~ expr }
+    assign_addop = { add | sub | mul | div | rem | bitor | bitand | bitxor }
 
 program_line = _{ printform_com | print_com | reuselastline_com | alignment_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
 

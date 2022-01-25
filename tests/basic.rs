@@ -19,6 +19,79 @@ fn comment() {
 }
 
 #[test]
+fn add_assign() {
+    let code = "@SYSTEM_TITLE\nLOCAL = 3\nLOCAL += 4\nPRINTFORML LOCAL = {LOCAL}";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap(),
+        r#"
+[
+    LoadInt(
+        3,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL",
+    ),
+    StoreVar,
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL",
+    ),
+    LoadVar,
+    LoadInt(
+        4,
+    ),
+    BinaryOperator(
+        Add,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL",
+    ),
+    StoreVar,
+    ListBegin,
+    LoadStr(
+        "LOCAL = ",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL",
+    ),
+    LoadVar,
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "LOCAL = 7",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
 fn conditional() {
     let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 0 = %(1 == 1) ? \"TRUE\" # \"FALSE\"%";
     let mut dic = FunctionDic::new();
@@ -319,7 +392,8 @@ fn helloworld() {
 }
 
 fn run_test(dic: FunctionDic) -> Vec<ConsoleMessage> {
-    let mut ctx = VmContext::new(&Default::default());
+    let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
+    let mut ctx = VmContext::new(&infos);
     let vm = TerminalVm::new(dic);
     let chan = ConsoleChannel::new();
 
