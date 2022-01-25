@@ -18,7 +18,7 @@ num = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
 
 binop = _{
     add | sub | mul | div | rem | shl | shr
-    | bitxor | bitand | bitor | xor | and | or
+    | xor | and | or | bitxor | bitand | bitor
     | le | lt | ge | gt | eq | ne
 }
     add         = { "+" }
