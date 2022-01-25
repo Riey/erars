@@ -92,6 +92,73 @@ fn add_assign() {
 }
 
 #[test]
+fn form_conditional() {
+    let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 1 = \\@ (1 == 1) ? TRUE # FALSE \\@";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap(),
+        r#"
+[
+    ListBegin,
+    LoadStr(
+        "1 == 1 = ",
+    ),
+    LoadInt(
+        1,
+    ),
+    LoadInt(
+        1,
+    ),
+    BinaryOperator(
+        Equal,
+    ),
+    GotoIfNot(
+        11,
+    ),
+    ListBegin,
+    LoadStr(
+        "TRUE ",
+    ),
+    ListEnd,
+    ConcatString,
+    Goto(
+        15,
+    ),
+    ListBegin,
+    LoadStr(
+        "FALSE ",
+    ),
+    ListEnd,
+    ConcatString,
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "1 == 1 = TRUE ",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
 fn conditional() {
     let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 0 = %(1 == 1) ? \"TRUE\" # \"FALSE\"%";
     let mut dic = FunctionDic::new();

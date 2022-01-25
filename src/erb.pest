@@ -44,7 +44,7 @@ binop = _{
 
 // expression
 
-formstring_expr = { &("{" | "%") ~ print_form_text }
+formstring_expr = { &("{" | "%" | "\\@") ~ print_form_text }
 binop_expr = { term ~ (binop ~ term)+ }
 conditionalop_expr = { term ~ "?" ~ term ~ "#" ~ term }
 method_expr = { ident ~ "(" ~ comma_seq ~ ")" }
@@ -60,13 +60,20 @@ comma_seq = _{ term ~ ("," ~ term)* }
 print_flag = { ^"W" | ^"L" }
 print_text = { print_char* }
 	print_char = _{ !NEWLINE ~ ANY }
-print_form_text = { print_form_normal_text ~ (print_form_var_text ~ print_form_normal_text)* }
+print_form_text = { print_form_normal_text ~ ((print_form_var_text | print_form_cond_text) ~ print_form_normal_text)* }
 	print_form_var_text = _{
     	"%" ~ expr ~ "%" |
     	"{" ~ expr ~ "}"
     }
+    print_form_cond_text = {
+        "\\@" ~ term ~ "?" ~ print_form_cond_inner_text_first ~ "#" ~ print_form_cond_inner_text_second ~ "\\@"
+    }
+    print_form_cond_inner_text_first = { print_form_normal_text_sharp ~ (print_form_var_text ~ print_form_normal_text_sharp)* }
+    print_form_cond_inner_text_second = { print_form_normal_text ~ (print_form_var_text ~ print_form_normal_text)* }
+    print_form_normal_text_sharp = @{ print_normal_char_sharp* }
+	print_normal_char_sharp = _{ !( "%" | "{" | "}" | "\\@" | "#" | NEWLINE) ~ ANY }
 	print_form_normal_text = @{ print_normal_char* }
-	print_normal_char = _{ !( "%" | "{" | "}" | NEWLINE) ~ ANY }
+	print_normal_char = _{ !( "%" | "{" | "}" | "\\@" | NEWLINE) ~ ANY }
 print_form_text_space = ${ print_form_normal_text_space ~ (print_form_var_text ~ print_form_normal_text_space)* }
 	print_form_normal_text_space = { print_normal_char_space* }
 	print_normal_char_space = _{ !( "%" | "{" | "}" | NEWLINE | " ") ~ ANY }

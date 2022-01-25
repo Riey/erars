@@ -125,7 +125,7 @@ impl Compiler {
                 self.out.push(Instruction::CallMethod);
                 Ok(())
             }
-            Rule::conditionalop_expr => {
+            Rule::conditionalop_expr | Rule::print_form_cond_text => {
                 let mut pairs = p.into_inner();
                 let cond = pairs.next().unwrap();
                 let if_true = pairs.next().unwrap();
@@ -139,7 +139,9 @@ impl Compiler {
                 self.insert(true_end, Instruction::Goto(self.current_no()))?;
                 Ok(())
             }
-            Rule::formstring_expr => self.push_formtext(p),
+            Rule::print_form_cond_inner_text_first
+            | Rule::print_form_cond_inner_text_second
+            | Rule::formstring_expr => self.push_formtext(p),
             _ => unreachable!("{:?}", p),
         }
     }
