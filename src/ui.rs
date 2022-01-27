@@ -152,9 +152,9 @@ impl EraConsole {
         self.last_line.parts.push(ConsoleLinePart::Button(value, s));
     }
 
-    pub fn print_plain_text(&mut self, s: String) {
-        self.last_line.parts.push(ConsoleLinePart::Normal(s));
-    }
+    // pub fn print_plain_text(&mut self, s: String) {
+    //     self.last_line.parts.push(ConsoleLinePart::Normal(s));
+    // }
 
     pub fn print(&mut self, s: String) {
         button_parser::parse_button(s, &mut self.last_line.parts);

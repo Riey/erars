@@ -10,7 +10,7 @@ use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::compiler::PrintFlags;
-use crate::event::{Event, EventType};
+use crate::event::EventType;
 use crate::function::FunctionDic;
 use crate::instruction::{BeginType, Instruction};
 use crate::operator::BinaryOperator;

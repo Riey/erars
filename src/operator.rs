@@ -68,23 +68,3 @@ impl BinaryOperator {
         }
     }
 }
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub enum TernaryOperator {
-    /// ? :
-    Conditional,
-}
-
-impl TernaryOperator {
-    pub fn first_name(self) -> &'static str {
-        match self {
-            TernaryOperator::Conditional => "?",
-        }
-    }
-
-    pub fn second_name(self) -> &'static str {
-        match self {
-            TernaryOperator::Conditional => ":",
-        }
-    }
-}

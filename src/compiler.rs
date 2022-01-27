@@ -23,6 +23,8 @@ bitflags::bitflags! {
     pub struct PrintFlags: u32 {
         const NEWLINE = 0x1;
         const WAIT = 0x2;
+        const LEFT_ALIGN = 0x4;
+        const RIGHT_ALIGN = 0x8;
     }
 }
 
@@ -53,10 +55,16 @@ impl Compiler {
     }
 
     fn get_var(&mut self, p: Pair<Rule>) -> Result<()> {
-        let mut pairs = p.into_inner();
-        let var = pairs.next().unwrap().as_str();
-        self.push_args(pairs)?;
-        self.push_str(var)?;
+        if p.as_rule() == Rule::ident {
+            self.push_list_begin();
+            self.push_list_end();
+            self.push_str(p.as_str())?;
+        } else {
+            let mut pairs = p.into_inner();
+            let var = pairs.next().unwrap().as_str();
+            self.push_args(pairs)?;
+            self.push_str(var)?;
+        }
 
         Ok(())
     }
@@ -116,7 +124,7 @@ impl Compiler {
             Rule::string => self.push_str(p.into_inner().next().unwrap().as_str()),
             Rule::string_inner => self.push_str(p.as_str()),
             Rule::num => self.push_int(p.as_str().parse()?),
-            Rule::var_expr => self.push_var(p),
+            Rule::var_expr | Rule::ident => self.push_var(p),
             Rule::method_expr => {
                 let mut pairs = p.into_inner();
                 let name = pairs.next().unwrap().as_str();
@@ -125,6 +133,11 @@ impl Compiler {
                 self.out.push(Instruction::CallMethod);
                 Ok(())
             }
+            // Rule::print_expr | Rule::print_term => {
+            //     // These rules should be slient but there is no slient non-atomic rule in pest
+            //     // so we have to unwrap inner expr
+            //     self.push_expr(p.into_inner().next().unwrap())
+            // }
             Rule::conditionalop_expr | Rule::print_form_cond_text => {
                 let mut pairs = p.into_inner();
                 let cond = pairs.next().unwrap();
@@ -268,15 +281,7 @@ impl Compiler {
                 }
             }
             Rule::print_com | Rule::printform_com => {
-                let mut flags = PrintFlags::empty();
-
-                if pairs.peek().unwrap().as_rule() == Rule::print_flag {
-                    flags = match pairs.next().unwrap().as_str() {
-                        "l" | "L" => PrintFlags::NEWLINE,
-                        "w" | "W" => PrintFlags::NEWLINE | PrintFlags::WAIT,
-                        _ => unreachable!(),
-                    };
-                }
+                let flags = parse_print_attributes(pairs.next().unwrap());
 
                 let text = pairs.next().unwrap();
 
@@ -353,6 +358,26 @@ impl Compiler {
 
         Ok(())
     }
+}
+
+fn parse_print_attributes(p: Pair<Rule>) -> PrintFlags {
+    let mut ret = PrintFlags::empty();
+
+    debug_assert_eq!(p.as_rule(), Rule::print_attributes);
+
+    for p in p.into_inner() {
+        let flag = match p.as_str() {
+            "l" | "L" => PrintFlags::NEWLINE,
+            "w" | "W" => PrintFlags::NEWLINE | PrintFlags::WAIT,
+            "c" | "C" => PrintFlags::RIGHT_ALIGN,
+            "lc" | "LC" => PrintFlags::LEFT_ALIGN,
+            _ => unreachable!(),
+        };
+
+        ret.insert(flag);
+    }
+
+    ret
 }
 
 fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {

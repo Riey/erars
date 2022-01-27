@@ -1,6 +1,6 @@
 use crate::{
     compiler::{Alignment, PrintFlags},
-    operator::{BinaryOperator, TernaryOperator, UnaryOperator},
+    operator::{BinaryOperator, UnaryOperator},
 };
 use serde::{Deserialize, Serialize};
 use strum::EnumString;

@@ -48,25 +48,27 @@ formstring_expr = { &("{" | "%" | "\\@") ~ print_form_text }
 binop_expr = { term ~ (binop ~ term)+ }
 conditionalop_expr = { term ~ "?" ~ term ~ "#" ~ term }
 method_expr = { ident ~ "(" ~ comma_seq ~ ")" }
-var_expr = { ident ~ (":" ~ term)* }
+var_expr = { ident ~ (":" ~ term)+ }
 
-expr = _{ binop_expr | conditionalop_expr | method_expr | formstring_expr | term }
-term = _{ string | num | var_expr | "(" ~ expr ~ ")" }
-comma_seq = _{ term ~ ("," ~ term)* }
+expr = _{ binop_expr | conditionalop_expr | term }
+term = _{ string | formstring_expr | num | method_expr | var_expr | ident | "(" ~ expr ~ ")" }
+comma_seq = _{ expr ~ ("," ~ expr)* }
 
 
 // commands
 
-print_flag = { ^"W" | ^"L" }
+print_attributes = ${ print_flag? ~ print_align_flag? }
+print_flag = ${ ^"W" | ^"L" }
+print_align_flag = ${ ^"LC" | ^"C" }
 print_text = { print_char* }
 	print_char = _{ !NEWLINE ~ ANY }
-print_form_text = { print_form_normal_text ~ ((print_form_var_text | print_form_cond_text) ~ print_form_normal_text)* }
-	print_form_var_text = _{
+print_form_text = !{ print_form_normal_text ~ ((print_form_var_text | print_form_cond_text) ~ print_form_normal_text)* }
+	print_form_var_text = {
     	"%" ~ expr ~ "%" |
     	"{" ~ expr ~ "}"
     }
     print_form_cond_text = {
-        "\\@" ~ term ~ "?" ~ print_form_cond_inner_text_first ~ "#" ~ print_form_cond_inner_text_second ~ "\\@"
+        "\\@" ~ term ~ "?" ~ print_form_cond_inner_text_first ~ "#" ~ print_form_text ~ "\\@"
     }
     print_form_cond_inner_text_first = { print_form_normal_text_sharp ~ (print_form_var_text ~ print_form_normal_text_sharp)* }
     print_form_cond_inner_text_second = { print_form_normal_text ~ (print_form_var_text ~ print_form_normal_text)* }
@@ -74,11 +76,11 @@ print_form_text = { print_form_normal_text ~ ((print_form_var_text | print_form_
 	print_normal_char_sharp = _{ !( "%" | "{" | "}" | "\\@" | "#" | NEWLINE) ~ ANY }
 	print_form_normal_text = @{ print_normal_char* }
 	print_normal_char = _{ !( "%" | "{" | "}" | "\\@" | NEWLINE) ~ ANY }
-print_form_text_space = ${ print_form_normal_text_space ~ (print_form_var_text ~ print_form_normal_text_space)* }
+print_form_text_space = !{ print_form_normal_text_space ~ (print_form_var_text ~ print_form_normal_text_space)* }
 	print_form_normal_text_space = { print_normal_char_space* }
 	print_normal_char_space = _{ !( "%" | "{" | "}" | NEWLINE | " ") ~ ANY }
-print_com = { ^"PRINT" ~ print_flag? ~ print_text? }
-printform_com = { ^"PRINTFORM" ~ print_flag? ~ print_form_text? }
+print_com = ${ ^"PRINT" ~ print_attributes ~ (" " ~ print_text)? }
+printform_com = ${ ^"PRINTFORM" ~ print_attributes ~ (" " ~ print_form_text)? }
 reuselastline_com = { ^"REUSELASTLINE" ~ print_text? }
 alignment_com = { ^"ALIGNMENT" ~ alignment }
     alignment = { ^"LEFT" | ^"CENTER" | ^"RIGHT" }
@@ -101,7 +103,7 @@ goto_com = { ^"GOTO" ~ ident }
 
 // assign
 
-assign_line = { var_expr ~ assign_addop? ~ "=" ~ expr }
+assign_line = { (var_expr | ident) ~ assign_addop? ~ "=" ~ expr }
     assign_addop = { add | sub | mul | div | rem | bitor | bitand | bitxor }
 
 program_line = _{ printform_com | print_com | reuselastline_com | alignment_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
@@ -116,4 +118,4 @@ function = { function_label ~ function_header ~ (program_line | NEWLINE)* }
 program = _{ SOI ~ (function | NEWLINE)* ~ EOI }
 
 WHITESPACE = _{ " " | "\t" }
-COMMENT = _{ (";" | ";") ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
