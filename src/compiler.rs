@@ -102,7 +102,7 @@ impl Compiler {
 
                 PREC_CLIMBER.climb(
                     p.into_inner(),
-                    |p| unsafe { s.get().as_mut().unwrap_unchecked().push_expr(p) },
+                    |p| unsafe { s.get().as_mut().unwrap().push_expr(p) },
                     |lhs, op, rhs| {
                         lhs?;
                         rhs?;
@@ -110,7 +110,7 @@ impl Compiler {
                         unsafe {
                             s.get()
                                 .as_mut()
-                                .unwrap_unchecked()
+                                .unwrap()
                                 .out
                                 .push(Instruction::BinaryOperator(to_binop(op)?))
                         };
