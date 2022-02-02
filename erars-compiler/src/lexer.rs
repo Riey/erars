@@ -2,7 +2,7 @@ use source_span::{DefaultMetrics, Position, Span};
 
 use crate::{LexicalError, LexicalResult, PrintFlags, Source, Token};
 
-type Spanned = (Position, Token, Position);
+type Spanned = ((Position, Position), Token, (Position, Position));
 
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
@@ -17,14 +17,14 @@ enum LexerStatus {
 pub struct Lexer<'s> {
     text: &'s str,
     status: Option<LexerStatus>,
-    position: Position,
+    span: Span,
 }
 
 impl<'s> Lexer<'s> {
     pub fn new(text: &'s str) -> Self {
         Self {
             text,
-            position: Position::default(),
+            span: Span::default(),
             status: None,
         }
     }
@@ -56,13 +56,15 @@ impl<'s> Lexer<'s> {
                         .text
                         .split_at(self.text.len() - bytes.as_slice().len() - 1)
                         .1;
+                    self.span.clear();
                     return;
                 }
             }
 
-            self.position.shift(*b as char, &METRICS);
+            self.span.push(*b as char, &METRICS);
         }
 
+        self.span.clear();
         self.text = self
             .text
             .split_at(self.text.len() - bytes.as_slice().len())
@@ -70,13 +72,21 @@ impl<'s> Lexer<'s> {
     }
 
     fn shift_position_char(&mut self, ch: char) {
-        self.position.shift(ch, &METRICS);
+        self.span.push(ch, &METRICS);
     }
 
     fn shift_position(&mut self, s: &str) {
         for c in s.chars() {
-            self.position.shift(c, &METRICS);
+            self.span.push(c, &METRICS);
         }
+    }
+
+    fn spanned(&self, token: Token) -> Spanned {
+        (
+            (self.span.start(), self.span.last()),
+            token,
+            (self.span.last(), self.span.end()),
+        )
     }
 
     fn consume(&mut self, s: &str) {
@@ -103,16 +113,6 @@ impl<'s> Lexer<'s> {
         ret
     }
 
-    fn get_span(&mut self, start: Position) -> Span {
-        let end = if let Some(ch) = self.text.chars().next() {
-            self.position.next(ch, &METRICS)
-        } else {
-            self.position.next_line()
-        };
-
-        start.to(self.position, end)
-    }
-
     fn try_get_ident(&mut self) -> Option<&'s str> {
         let ident = self.get_ident();
 
@@ -134,15 +134,14 @@ impl<'s> Lexer<'s> {
     }
 
     fn try_read_symbol(&mut self) -> Option<LexicalResult<Spanned>> {
-        let start = self.position;
         let symbol = self.try_get_symbol()?;
 
         let token = match symbol {
             "+" => Token::Plus,
-            _ => return Some(Err(LexicalError::InvalidSymbol(self.get_span(start)))),
+            _ => return Some(Err(LexicalError::InvalidSymbol(self.span))),
         };
 
-        Some(Ok((start, token, self.position)))
+        Some(Ok(self.spanned(token)))
     }
 
     fn try_get_char(&mut self, prefix: char) -> bool {
@@ -218,29 +217,26 @@ impl<'s> Lexer<'s> {
     }
 
     fn try_read_keyword(&mut self) -> Option<Spanned> {
-        let start = self.position;
-
         if self.try_read_prefix("PRINTFORM") {
             let flags = self.read_print_flags();
-            let end = self.position;
+            let ret = self.spanned(Token::PrintForm(flags));
             self.skip_blank();
 
             self.status = Some(LexerStatus::PrintForm);
-            Some((start, Token::PrintForm(flags), end))
+            Some(ret)
         } else if self.try_read_prefix("PRINT") {
             let flags = self.read_print_flags();
-            let end = self.position;
+            let ret = self.spanned(Token::Print(flags));
             self.skip_blank();
 
             self.status = Some(LexerStatus::Print);
-            Some((start, Token::Print(flags), end))
+            Some(ret)
         } else {
             None
         }
     }
 
     fn try_read_number(&mut self) -> Option<LexicalResult<Spanned>> {
-        let start = self.position;
         let mut chars = self.text.chars();
 
         let (mut ret, minus) = match chars.next() {
@@ -268,7 +264,7 @@ impl<'s> Lexer<'s> {
                 }
                 Some(ch) => {
                     if is_ident_char(ch) {
-                        return Some(Err(LexicalError::InvalidNumber(self.get_span(start))));
+                        return Some(Err(LexicalError::InvalidNumber(self.span)));
                     }
 
                     self.text = self
@@ -284,11 +280,11 @@ impl<'s> Lexer<'s> {
             }
         }
 
-        Some(Ok((
-            start,
-            Token::IntLit(if minus { -ret } else { ret }),
-            self.position,
-        )))
+        Some(Ok(self.spanned(Token::IntLit(if minus {
+            -ret
+        } else {
+            ret
+        }))))
     }
 
     fn next_token(&mut self) -> Option<LexicalResult<Spanned>> {
@@ -310,21 +306,20 @@ impl<'s> Iterator for Lexer<'s> {
     type Item = LexicalResult<Spanned>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        eprintln!("{} [{:?}]", self.text, self.status);
+        self.span.clear();
+
+        eprintln!("{} [{:?} @ {}]", self.text, self.status, self.span);
 
         if let Some(status) = self.status {
             match status {
                 LexerStatus::Print => {
-                    let start = self.position;
                     let text = self.read_until_newline();
                     self.status = None;
-                    Some(Ok((start, Token::StringLit(text.into()), self.position)))
+                    Some(Ok(self.spanned(Token::StringLit(text.into()))))
                 }
                 LexerStatus::PrintForm => {
-                    let start = self.position;
                     let text = self.read_normal_text();
-
-                    Some(Ok((start, Token::StringLit(text.into()), self.position)))
+                    Some(Ok(self.spanned(Token::StringLit(text.into()))))
                 }
                 LexerStatus::PrintFormStrExpr => {
                     if self.try_get_char('%') {

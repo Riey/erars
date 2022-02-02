@@ -1,3 +1,23 @@
+use crate::{Stmt, LexicalError, Token, PrintFlags};
+use source_span::{Position, Span};
+
 grammar;
 
-pub program = {};
+pub Program: Vec<Stmt> = {
+    <lines: ProgramLine*> => lines,
+};
+
+ProgramLine: Stmt = {
+    <flags:PRINT> <text:string> => Stmt::Print(flags, text),
+};
+
+extern {
+    type Location = (Position, Position);
+    type Error = LexicalError;
+
+    enum Token {
+        PRINT => Token::Print(<PrintFlags>),
+        string => Token::StringLit(<String>),
+        int => Token::IntLit(<i64>),
+    }
+}

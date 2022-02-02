@@ -4,9 +4,13 @@ mod lexer;
 mod location;
 mod parser;
 mod token;
-// lalrpop_util::lalrpop_mod!(grammar);
+
+use lalrpop_util::lalrpop_mod;
+
+lalrpop_mod!(grammar);
 
 pub use crate::{
+    ast::Stmt,
     error::{LexicalError, LexicalResult},
     lexer::Lexer,
     location::{Source, SourceLocation, SourceLocationMessage},
