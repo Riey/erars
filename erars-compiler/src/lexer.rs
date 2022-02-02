@@ -261,37 +261,35 @@ mod tests {
     use super::*;
     use crate::PrintFlags;
 
-    #[test]
-    fn hello_world() {
-        let source = "PRINTL Hello, world!\n";
+    fn do_test(source: &str, expected: &[Token]) {
         let tokens = Lexer::new(source)
             .map(|r| r.map(|s| s.1))
             .collect::<LexicalResult<Vec<Token>>>()
             .unwrap();
+        k9::assert_equal!(tokens, expected);
+    }
 
-        k9::assert_equal!(
-            tokens,
-            [
-                Token::Print(PrintFlags::NEWLINE),
-                Token::StringLit("Hello, world!".into())
-            ]
-        );
+    #[test]
+    fn hello_world() {
+        do_test("PRINTL Hello, world!", &[
+            Token::Print(PrintFlags::NEWLINE),
+            Token::StringLit("Hello, world!".into())
+        ]);
+        do_test("PRINTL Hello, world!\n", &[
+            Token::Print(PrintFlags::NEWLINE),
+            Token::StringLit("Hello, world!".into())
+        ]);
     }
 
     #[test]
     fn hello_world_form() {
-        let source = "PRINTFORML Hello, world!\n";
-        let tokens = Lexer::new(source)
-            .map(|r| r.map(|s| s.1))
-            .collect::<LexicalResult<Vec<Token>>>()
-            .unwrap();
-
-        k9::assert_equal!(
-            tokens,
-            [
-                Token::PrintForm(PrintFlags::NEWLINE),
-                Token::StringLit("Hello, world!".into())
-            ]
-        );
+        do_test("PRINTFORML Hello, world!", &[
+            Token::PrintForm(PrintFlags::NEWLINE),
+            Token::StringLit("Hello, world!".into())
+        ]);
+        do_test("PRINTFORML Hello, world!\n", &[
+            Token::PrintForm(PrintFlags::NEWLINE),
+            Token::StringLit("Hello, world!".into())
+        ]);
     }
 }
