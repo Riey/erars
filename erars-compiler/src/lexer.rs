@@ -6,10 +6,18 @@ type Spanned = (Position, Token, Position);
 
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LexerStatus {
+    Print,
+    PrintForm,
+    PrintFormIntExpr,
+    PrintFormStrExpr,
+}
+
 pub struct Lexer<'s> {
     text: &'s str,
+    status: Option<LexerStatus>,
     position: Position,
-    next_buffer: Option<Spanned>,
 }
 
 impl<'s> Lexer<'s> {
@@ -17,7 +25,7 @@ impl<'s> Lexer<'s> {
         Self {
             text,
             position: Position::default(),
-            next_buffer: None,
+            status: None,
         }
     }
 
@@ -35,7 +43,7 @@ impl<'s> Lexer<'s> {
         while let Some(b) = bytes.next() {
             match b {
                 b' ' | b'\t' | b'\r' | b'\n' => {}
-                b'#' => {
+                b';' => {
                     let slice = bytes.as_slice();
                     let pos = memchr::memchr(b'\n', slice).unwrap_or(slice.len());
                     // let comment =
@@ -130,23 +138,71 @@ impl<'s> Lexer<'s> {
         ret
     }
 
-    fn try_read_keyword(&mut self) -> Option<Token> {
-        // if self.try_read_prefix("PRINTFORM") {
-        //     let flags
-        // }
+    fn read_normal_text(&mut self) -> &'s str {
+        let mut chars = self.text.chars();
 
-        if self.try_read_prefix("PRINT") {
+        let ret = loop {
+            if let Some(ch) = chars.next() {
+                match ch {
+                    '%' => {
+                        self.status = Some(LexerStatus::PrintFormStrExpr);
+                        break self.text.split_at(self.text.len() - chars.as_str().len()).0;
+                    }
+                    '{' => {
+                        self.status = Some(LexerStatus::PrintFormIntExpr);
+                        break self.text.split_at(self.text.len() - chars.as_str().len()).0;
+                    }
+                    // TODO \@
+                    '\n' => {
+                        self.status = None;
+                        break self
+                            .text
+                            .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1))
+                            .0;
+                    }
+                    _ => {}
+                }
+            } else {
+                self.status = None;
+                break self.text;
+            }
+        };
+
+        self.consume(ret);
+
+        ret.trim_end_matches('\n')
+    }
+
+    fn try_read_keyword(&mut self) -> Option<Spanned> {
+        let start = self.position;
+
+        if self.try_read_prefix("PRINTFORM") {
             let flags = self.read_print_flags();
-            let print_end = self.position;
+            let end = self.position;
             self.skip_blank();
-            let text_start = self.position;
-            let text = self.read_until_newline();
-            self.next_buffer = Some((text_start, Token::StringLit(text.into()), self.position));
-            self.position = print_end;
-            Some(Token::Print(flags))
+
+            self.status = Some(LexerStatus::PrintForm);
+            Some((start, Token::PrintForm(flags), end))
+        } else if self.try_read_prefix("PRINT") {
+            let flags = self.read_print_flags();
+            let end = self.position;
+            self.skip_blank();
+
+            self.status = Some(LexerStatus::Print);
+            Some((start, Token::Print(flags), end))
         } else {
             None
         }
+    }
+
+    fn next_token(&mut self) -> Option<LexicalResult<Spanned>> {
+        self.skip_ws();
+
+        if let Some(span) = self.try_read_keyword() {
+            return Some(Ok(span));
+        }
+
+        None
     }
 }
 
@@ -154,30 +210,46 @@ impl<'s> Iterator for Lexer<'s> {
     type Item = LexicalResult<Spanned>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.skip_ws();
+        println!("Next {:?} {} {}", self.status, self.text, self.position);
+        if let Some(status) = self.status {
+            match status {
+                LexerStatus::Print => {
+                    let start = self.position;
+                    let text = self.read_until_newline();
+                    self.status = None;
+                    Some(Ok((start, Token::StringLit(text.into()), self.position)))
+                }
+                LexerStatus::PrintForm => {
+                    let start = self.position;
+                    let text = self.read_normal_text();
 
-        let start = self.position;
-
-        if let Some(next) = self.next_buffer.take() {
-            self.position = next.2;
-            return Some(Ok(next));
+                    Some(Ok((start, Token::StringLit(text.into()), self.position)))
+                }
+                LexerStatus::PrintFormStrExpr => {
+                    if self.try_read_char('%') {
+                        self.status = Some(LexerStatus::PrintForm);
+                        self.next()
+                    } else {
+                        self.next_token()
+                    }
+                }
+                LexerStatus::PrintFormIntExpr => {
+                    if self.try_read_char('}') {
+                        self.status = Some(LexerStatus::PrintForm);
+                        self.next()
+                    } else {
+                        self.next_token()
+                    }
+                }
+            }
+        } else {
+            self.next_token()
         }
-
-        if let Some(keyword) = self.try_read_keyword() {
-            return Some(Ok((start, keyword, self.position)));
-        }
-
-        None
     }
 }
 
 fn is_ident_char(c: char) -> bool {
-    match c {
-        '_' | '0'..='9' | 'a'..='z' | 'A'..='Z' | 'ㄱ'..='ㅎ' | 'ㅏ'..='ㅣ' | '가'..='힣' => {
-            true
-        }
-        _ => false,
-    }
+    matches!(c, '_' | '0'..='9' | 'a'..='z' | 'A'..='Z' | 'ㄱ'..='ㅎ' | 'ㅏ'..='ㅣ' | '가'..='힣')
 }
 
 fn is_not_ident_char(c: char) -> bool {
@@ -191,7 +263,7 @@ mod tests {
 
     #[test]
     fn hello_world() {
-        let source = "PRINTL Hello, world!";
+        let source = "PRINTL Hello, world!\n";
         let tokens = Lexer::new(source)
             .map(|r| r.map(|s| s.1))
             .collect::<LexicalResult<Vec<Token>>>()
@@ -201,6 +273,23 @@ mod tests {
             tokens,
             [
                 Token::Print(PrintFlags::NEWLINE),
+                Token::StringLit("Hello, world!".into())
+            ]
+        );
+    }
+
+    #[test]
+    fn hello_world_form() {
+        let source = "PRINTFORML Hello, world!\n";
+        let tokens = Lexer::new(source)
+            .map(|r| r.map(|s| s.1))
+            .collect::<LexicalResult<Vec<Token>>>()
+            .unwrap();
+
+        k9::assert_equal!(
+            tokens,
+            [
+                Token::PrintForm(PrintFlags::NEWLINE),
                 Token::StringLit("Hello, world!".into())
             ]
         );

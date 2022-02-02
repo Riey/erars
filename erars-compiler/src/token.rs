@@ -14,6 +14,7 @@ pub enum Token {
     Plus,
     Minus,
     Equal,
+    Percent,
     Exclamation,
     Question,
 
