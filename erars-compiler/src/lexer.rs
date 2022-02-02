@@ -141,42 +141,37 @@ impl<'s> Lexer<'s> {
     fn read_normal_text(&mut self) -> &'s str {
         let mut chars = self.text.chars();
 
-        let ret = loop {
+        loop {
             if let Some(ch) = chars.next() {
+                self.shift_position_char(ch);
                 match ch {
                     '%' => {
                         self.status = Some(LexerStatus::PrintFormStrExpr);
-                        break self
-                            .text
-                            .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1))
-                            .0;
+                        break;
                     }
                     '{' => {
                         self.status = Some(LexerStatus::PrintFormIntExpr);
-                        break self
-                            .text
-                            .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1))
-                            .0;
+                        break;
                     }
                     // TODO \@
                     '\n' => {
                         self.status = None;
-                        break self
-                            .text
-                            .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1))
-                            .0;
+                        break;
                     }
                     _ => {}
                 }
             } else {
+                let ret = self.text;
+                self.text = "";
                 self.status = None;
-                break self.text;
+                return ret;
             }
-        };
+        }
 
-        self.consume(ret);
-
-        ret.trim_end_matches('\n')
+        let (mut ret, left) = self.text.split_at(self.text.len() - chars.as_str().len());
+        ret = &ret[..ret.len() - 1];
+        self.text = left;
+        ret
     }
 
     fn try_read_keyword(&mut self) -> Option<Spanned> {
@@ -272,6 +267,8 @@ impl<'s> Iterator for Lexer<'s> {
     type Item = LexicalResult<Spanned>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        eprintln!("{} [{:?}]", self.text, self.status);
+
         if let Some(status) = self.status {
             match status {
                 LexerStatus::Print => {
