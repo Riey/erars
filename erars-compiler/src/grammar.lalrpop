@@ -1,4 +1,4 @@
-use crate::{Stmt, LexicalError, Token, PrintFlags};
+use crate::{Expr, Stmt, LexicalError, Token, PrintFlags, BinaryOperator};
 use source_span::{Position, Span};
 
 grammar;
@@ -9,6 +9,26 @@ pub Program: Vec<Stmt> = {
 
 ProgramLine: Stmt = {
     <flags:PRINT> <text:string> => Stmt::Print(flags, text),
+    <flags:PRINTFORM> <text:string> <parts:PrintFormPart*> => Stmt::PrintForm(flags, text, parts),
+};
+
+PrintFormPart: (Expr, String) = {
+    <expr:Expr> <text:string> => (expr, text),
+}
+
+Expr: Expr = {
+    #[precedence(level = "0")]
+    <int> => Expr::IntLit(<>),
+    <string> => Expr::StringLit(<>),
+    "(" <Expr> ")",
+
+    #[precedence(level = "1")] #[assoc(side = "left")]
+    <lhs:Expr> "*" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Mul, Box::new(rhs)),
+    <lhs:Expr> "/" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Div, Box::new(rhs)),
+
+    #[precedence(level = "2")] #[assoc(side = "left")]
+    <lhs:Expr> "+" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Add, Box::new(rhs)),
+    <lhs:Expr> "-" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Sub, Box::new(rhs)),
 };
 
 extern {
@@ -17,6 +37,13 @@ extern {
 
     enum Token {
         PRINT => Token::Print(<PrintFlags>),
+        PRINTFORM => Token::PrintForm(<PrintFlags>),
+        "+" => Token::Plus,
+        "*" => Token::Star,
+        "-" => Token::Minus,
+        "/" => Token::Slash,
+        "(" => Token::OpenParan,
+        ")" => Token::CloseParan,
         string => Token::StringLit(<String>),
         int => Token::IntLit(<i64>),
     }
