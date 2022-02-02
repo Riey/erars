@@ -6,33 +6,6 @@ type Spanned = (Position, Token, Position);
 
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
-macro_rules! define_symbol {
-    (
-        $self:expr,
-        {
-            $first_op:expr => $first_token:expr,
-            $(
-                $op:expr => $token:expr,
-            )*
-        }
-    ) => {
-        {
-            let start = $self.position;
-            if $self.try_read_prefix($first_op) {
-                Some(Ok((start, $first_token, $self.position)))
-            }
-            $(
-                else if $self.try_read_prefix($op) {
-                    Some(Ok((start, $token, $self.position)))
-                }
-            )*
-            else {
-                None
-            }
-        }
-    };
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LexerStatus {
     Print,
@@ -111,7 +84,7 @@ impl<'s> Lexer<'s> {
         self.text = &self.text[s.len()..];
     }
 
-    fn read_ident(&mut self) -> &'s str {
+    fn get_ident(&mut self) -> &'s str {
         let pos = self.text.find(is_not_ident_char).unwrap_or(self.text.len());
         let (ret, text) = self.text.split_at(pos);
         self.shift_position(ret);
@@ -119,8 +92,29 @@ impl<'s> Lexer<'s> {
         ret
     }
 
-    fn try_read_ident(&mut self) -> Option<&'s str> {
-        let ident = self.read_ident();
+    fn get_symbol(&mut self) -> &'s str {
+        let pos = self
+            .text
+            .find(is_not_symbol_char)
+            .unwrap_or(self.text.len());
+        let (ret, text) = self.text.split_at(pos);
+        self.shift_position(ret);
+        self.text = text;
+        ret
+    }
+
+    fn get_span(&mut self, start: Position) -> Span {
+        let end = if let Some(ch) = self.text.chars().next() {
+            self.position.next(ch, &METRICS)
+        } else {
+            self.position.next_line()
+        };
+
+        start.to(self.position, end)
+    }
+
+    fn try_get_ident(&mut self) -> Option<&'s str> {
+        let ident = self.get_ident();
 
         if ident.is_empty() {
             None
@@ -129,7 +123,29 @@ impl<'s> Lexer<'s> {
         }
     }
 
-    fn try_read_char(&mut self, prefix: char) -> bool {
+    fn try_get_symbol(&mut self) -> Option<&'s str> {
+        let symbol = self.get_symbol();
+
+        if symbol.is_empty() {
+            None
+        } else {
+            Some(symbol)
+        }
+    }
+
+    fn try_read_symbol(&mut self) -> Option<LexicalResult<Spanned>> {
+        let start = self.position;
+        let symbol = self.try_get_symbol()?;
+
+        let token = match symbol {
+            "+" => Token::Plus,
+            _ => return Some(Err(LexicalError::InvalidSymbol(self.get_span(start)))),
+        };
+
+        Some(Ok((start, token, self.position)))
+    }
+
+    fn try_get_char(&mut self, prefix: char) -> bool {
         if let Some(text) = self.text.strip_prefix(prefix) {
             self.shift_position_char(prefix);
             self.text = text;
@@ -140,7 +156,7 @@ impl<'s> Lexer<'s> {
     }
 
     fn skip_blank(&mut self) {
-        self.try_read_char(' ');
+        self.try_get_char(' ');
     }
 
     fn try_read_prefix(&mut self, prefix: &str) -> bool {
@@ -156,9 +172,9 @@ impl<'s> Lexer<'s> {
     fn read_print_flags(&mut self) -> PrintFlags {
         let mut ret = PrintFlags::empty();
 
-        if self.try_read_char('L') {
+        if self.try_get_char('L') {
             ret.insert(PrintFlags::NEWLINE);
-        } else if self.try_read_char('W') {
+        } else if self.try_get_char('W') {
             ret.insert(PrintFlags::WAIT | PrintFlags::NEWLINE);
         }
 
@@ -252,9 +268,7 @@ impl<'s> Lexer<'s> {
                 }
                 Some(ch) => {
                     if is_ident_char(ch) {
-                        return Some(Err(LexicalError::InvalidNumber(
-                            start.to(start, self.position),
-                        )));
+                        return Some(Err(LexicalError::InvalidNumber(self.get_span(start))));
                     }
 
                     self.text = self
@@ -275,26 +289,6 @@ impl<'s> Lexer<'s> {
             Token::IntLit(if minus { -ret } else { ret }),
             self.position,
         )))
-    }
-
-    fn try_read_symbol(&mut self) -> Option<LexicalResult<Spanned>> {
-        define_symbol!(self, {
-            "+" => Token::Plus,
-            "-" => Token::Minus,
-            "/" => Token::Slash,
-            "*" => Token::Star,
-            "==" => Token::Equal,
-            "!=" => Token::NotEqual,
-            "=" => Token::Assign,
-            "!" => Token::Exclamation,
-            "?" => Token::Question,
-            "@" => Token::At,
-            "#" => Token::Sharp,
-            "(" => Token::OpenParan,
-            ")" => Token::CloseParan,
-            "{" => Token::OpenBrace,
-            "}" => Token::CloseBrace,
-        })
     }
 
     fn next_token(&mut self) -> Option<LexicalResult<Spanned>> {
@@ -333,7 +327,7 @@ impl<'s> Iterator for Lexer<'s> {
                     Some(Ok((start, Token::StringLit(text.into()), self.position)))
                 }
                 LexerStatus::PrintFormStrExpr => {
-                    if self.try_read_char('%') {
+                    if self.try_get_char('%') {
                         self.status = Some(LexerStatus::PrintForm);
                         self.next()
                     } else {
@@ -341,7 +335,7 @@ impl<'s> Iterator for Lexer<'s> {
                     }
                 }
                 LexerStatus::PrintFormIntExpr => {
-                    if self.try_read_char('}') {
+                    if self.try_get_char('}') {
                         self.status = Some(LexerStatus::PrintForm);
                         self.next()
                     } else {
@@ -361,6 +355,17 @@ fn is_ident_char(c: char) -> bool {
 
 fn is_not_ident_char(c: char) -> bool {
     !is_ident_char(c)
+}
+
+fn is_symbol_char(c: char) -> bool {
+    matches!(
+        c,
+        '!' | '@' | '#' | '$' | '%' | '^' | '&' | '*' | '(' | ')' | '+' | '-' | '=' | ',' | '.'
+    )
+}
+
+fn is_not_symbol_char(c: char) -> bool {
+    !is_symbol_char(c)
 }
 
 #[cfg(test)]
@@ -415,6 +420,12 @@ mod tests {
     #[test]
     fn int_lit() {
         do_test("123 -123", &[Token::IntLit(123), Token::IntLit(-123)]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn invalid_symbol() {
+        do_test("123 +-+ 123", &[]);
     }
 
     #[test]
