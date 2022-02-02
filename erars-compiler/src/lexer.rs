@@ -1,4 +1,4 @@
-use source_span::{DefaultMetrics, Position};
+use source_span::{DefaultMetrics, Position, Span};
 
 use crate::{LexicalError, LexicalResult, PrintFlags, Source, Token};
 
@@ -146,11 +146,17 @@ impl<'s> Lexer<'s> {
                 match ch {
                     '%' => {
                         self.status = Some(LexerStatus::PrintFormStrExpr);
-                        break self.text.split_at(self.text.len() - chars.as_str().len()).0;
+                        break self
+                            .text
+                            .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1))
+                            .0;
                     }
                     '{' => {
                         self.status = Some(LexerStatus::PrintFormIntExpr);
-                        break self.text.split_at(self.text.len() - chars.as_str().len()).0;
+                        break self
+                            .text
+                            .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1))
+                            .0;
                     }
                     // TODO \@
                     '\n' => {
@@ -195,10 +201,66 @@ impl<'s> Lexer<'s> {
         }
     }
 
+    fn try_read_number(&mut self) -> Option<LexicalResult<Spanned>> {
+        let start = self.position;
+        let mut chars = self.text.chars();
+
+        let (mut ret, minus) = match chars.next() {
+            Some(n @ '0'..='9') => {
+                self.shift_position_char(n);
+                ((n as u32 - '0' as u32) as i64, false)
+            }
+            Some('-') => {
+                if let Some(n @ '0'..='9') = chars.next() {
+                    self.shift_position_char('-');
+                    self.shift_position_char(n);
+                    ((n as u32 - '0' as u32) as i64, true)
+                } else {
+                    return None;
+                }
+            }
+            _ => return None,
+        };
+
+        loop {
+            match chars.next() {
+                Some(n @ '0'..='9') => {
+                    self.shift_position_char(n);
+                    ret = ret * 10 + (n as u32 - '0' as u32) as i64;
+                }
+                Some(ch) => {
+                    if is_ident_char(ch) {
+                        return Some(Err(LexicalError::InvalidNumber(
+                            start.to(start, self.position),
+                        )));
+                    }
+
+                    self.text = self
+                        .text
+                        .split_at(self.text.len() - chars.as_str().len() - 1)
+                        .1;
+                    break;
+                }
+                None => {
+                    self.text = "";
+                    break;
+                }
+            }
+        }
+
+        Some(Ok((
+            start,
+            Token::IntLit(if minus { -ret } else { ret }),
+            self.position,
+        )))
+    }
+
     fn next_token(&mut self) -> Option<LexicalResult<Spanned>> {
         self.skip_ws();
 
-        if let Some(span) = self.try_read_keyword() {
+        if let Some(span) = self.try_read_number() {
+            return Some(span);
+        } else if let Some(span) = self.try_read_keyword() {
             return Some(Ok(span));
         }
 
@@ -210,7 +272,6 @@ impl<'s> Iterator for Lexer<'s> {
     type Item = LexicalResult<Spanned>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        println!("Next {:?} {} {}", self.status, self.text, self.position);
         if let Some(status) = self.status {
             match status {
                 LexerStatus::Print => {
@@ -271,25 +332,57 @@ mod tests {
 
     #[test]
     fn hello_world() {
-        do_test("PRINTL Hello, world!", &[
-            Token::Print(PrintFlags::NEWLINE),
-            Token::StringLit("Hello, world!".into())
-        ]);
-        do_test("PRINTL Hello, world!\n", &[
-            Token::Print(PrintFlags::NEWLINE),
-            Token::StringLit("Hello, world!".into())
-        ]);
+        do_test(
+            "PRINTL Hello, world!",
+            &[
+                Token::Print(PrintFlags::NEWLINE),
+                Token::StringLit("Hello, world!".into()),
+            ],
+        );
+        do_test(
+            "PRINTL Hello, world!\n",
+            &[
+                Token::Print(PrintFlags::NEWLINE),
+                Token::StringLit("Hello, world!".into()),
+            ],
+        );
     }
 
     #[test]
     fn hello_world_form() {
-        do_test("PRINTFORML Hello, world!", &[
-            Token::PrintForm(PrintFlags::NEWLINE),
-            Token::StringLit("Hello, world!".into())
-        ]);
-        do_test("PRINTFORML Hello, world!\n", &[
-            Token::PrintForm(PrintFlags::NEWLINE),
-            Token::StringLit("Hello, world!".into())
-        ]);
+        do_test(
+            "PRINTFORML Hello, world!",
+            &[
+                Token::PrintForm(PrintFlags::NEWLINE),
+                Token::StringLit("Hello, world!".into()),
+            ],
+        );
+        do_test(
+            "PRINTFORML Hello, world!\n",
+            &[
+                Token::PrintForm(PrintFlags::NEWLINE),
+                Token::StringLit("Hello, world!".into()),
+            ],
+        );
+    }
+
+    #[test]
+    fn int_lit() {
+        do_test("123 -123", &[Token::IntLit(123), Token::IntLit(-123)]);
+    }
+
+    #[test]
+    fn form_simple() {
+        do_test(
+            "PRINTFORML 1 + 1 = {1 + 1}",
+            &[
+                Token::PrintForm(PrintFlags::NEWLINE),
+                Token::StringLit("1 + 1 = ".into()),
+                Token::IntLit(1),
+                Token::Plus,
+                Token::IntLit(1),
+                Token::StringLit("".into()),
+            ],
+        );
     }
 }
