@@ -6,6 +6,33 @@ type Spanned = (Position, Token, Position);
 
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
+macro_rules! define_symbol {
+    (
+        $self:expr,
+        {
+            $first_op:expr => $first_token:expr,
+            $(
+                $op:expr => $token:expr,
+            )*
+        }
+    ) => {
+        {
+            let start = $self.position;
+            if $self.try_read_prefix($first_op) {
+                Some(Ok((start, $first_token, $self.position)))
+            }
+            $(
+                else if $self.try_read_prefix($op) {
+                    Some(Ok((start, $token, $self.position)))
+                }
+            )*
+            else {
+                None
+            }
+        }
+    };
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LexerStatus {
     Print,
@@ -250,6 +277,26 @@ impl<'s> Lexer<'s> {
         )))
     }
 
+    fn try_read_symbol(&mut self) -> Option<LexicalResult<Spanned>> {
+        define_symbol!(self, {
+            "+" => Token::Plus,
+            "-" => Token::Minus,
+            "/" => Token::Slash,
+            "*" => Token::Star,
+            "==" => Token::Equal,
+            "!=" => Token::NotEqual,
+            "=" => Token::Assign,
+            "!" => Token::Exclamation,
+            "?" => Token::Question,
+            "@" => Token::At,
+            "#" => Token::Sharp,
+            "(" => Token::OpenParan,
+            ")" => Token::CloseParan,
+            "{" => Token::OpenBrace,
+            "}" => Token::CloseBrace,
+        })
+    }
+
     fn next_token(&mut self) -> Option<LexicalResult<Spanned>> {
         self.skip_ws();
 
@@ -257,6 +304,8 @@ impl<'s> Lexer<'s> {
             return Some(span);
         } else if let Some(span) = self.try_read_keyword() {
             return Some(Ok(span));
+        } else if let Some(symbol) = self.try_read_symbol() {
+            return Some(symbol);
         }
 
         None
