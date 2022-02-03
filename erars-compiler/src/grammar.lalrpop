@@ -51,12 +51,10 @@ pub Expr: Expr = {
     #[precedence(level = "0")]
     <int> => Expr::IntLit(<>),
     <string> => Expr::StringLit(<>),
+    <ident> => Expr::Var(<>, vec![]),
     "(" <ExprReset> ")",
 
     #[precedence(level = "1")] #[assoc(side = "none")]
-    <ident> => Expr::Var(<>, vec![]),
-
-    #[precedence(level = "2")] #[assoc(side = "none")]
     <name:ident> <args:(":" <Expr>)+> => Expr::Var(name, args),
 
     #[precedence(level = "10")] #[assoc(side = "all")]
