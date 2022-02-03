@@ -1,4 +1,4 @@
-use crate::{Stmt, Function};
+use crate::{Function, Stmt};
 
 pub fn parse_function(s: &str) -> Function {
     let lexer = crate::Lexer::new(s);
@@ -17,7 +17,25 @@ mod tests {
     #[test]
     fn parse_simple_function() {
         k9::snapshot!(
-            parse_function("@SYSTEM_TITLE\n#PRI\nPRINTL Hello, world!\n")
+            parse_function("@SYSTEM_TITLE\n#PRI\nPRINTL Hello, world!\n"),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "SYSTEM_TITLE",
+        infos: [
+            EventFlag(
+                Pre,
+            ),
+        ],
+    },
+    body: [
+        Print(
+            NEWLINE,
+            "Hello, world!",
+        ),
+    ],
+}
+"#
         );
     }
 

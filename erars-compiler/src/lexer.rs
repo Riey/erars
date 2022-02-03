@@ -300,14 +300,16 @@ impl<'s> Lexer<'s> {
         self.skip_ws();
 
         if let Some(span) = self.try_read_number() {
-            return Some(span);
+            Some(span)
         } else if let Some(span) = self.try_read_keyword() {
-            return Some(Ok(span));
+            Some(Ok(span))
         } else if let Some(symbol) = self.try_read_symbol() {
-            return Some(symbol);
+            Some(symbol)
+        } else if let Some(ident) = self.try_get_ident() {
+            Some(Ok(self.spanned(Token::Ident(ident.into()))))
+        } else {
+            None
         }
-
-        None
     }
 }
 
