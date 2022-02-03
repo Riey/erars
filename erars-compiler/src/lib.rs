@@ -11,7 +11,10 @@ mod token;
 
 use lalrpop_util::lalrpop_mod;
 
-lalrpop_mod!(grammar);
+lalrpop_mod!(
+    #[allow(unused)]
+    grammar
+);
 
 pub use crate::{
     ast::{Expr, Function, FunctionHeader, FunctionInfo, Stmt},

@@ -397,6 +397,7 @@ fn is_symbol_char(c: char) -> bool {
             | '.'
             | '/'
             | '?'
+            | ':'
     )
 }
 

@@ -42,11 +42,7 @@ pub Body: Vec<Stmt> = {
 
 pub ProgramLine: Stmt = {
     <flags:PRINT> <text:string> => Stmt::Print(flags, text),
-    <flags:PRINTFORM> <text:string> <parts:PrintFormPart*> => Stmt::PrintForm(flags, text, parts),
-}
-
-PrintFormPart: (Expr, String) = {
-    <expr:Expr> <text:string> => (expr, text),
+    <flags:PRINTFORM> <text:string> <parts:(<Expr> <string>)*> => Stmt::PrintForm(flags, text, parts),
 }
 
 ExprReset = <Expr>;
@@ -57,7 +53,13 @@ pub Expr: Expr = {
     <string> => Expr::StringLit(<>),
     "(" <ExprReset> ")",
 
-    #[precedence(level = "10")]
+    #[precedence(level = "1")] #[assoc(side = "none")]
+    <ident> => Expr::Var(<>, vec![]),
+
+    #[precedence(level = "2")] #[assoc(side = "none")]
+    <name:ident> <args:(":" <Expr>)+> => Expr::Var(name, args),
+
+    #[precedence(level = "10")] #[assoc(side = "all")]
     "!" <Expr> => Expr::UnaryopExpr(Box::new(<>), UnaryOperator::Not),
     "~" <Expr> => Expr::UnaryopExpr(Box::new(<>), UnaryOperator::BitNot),
 

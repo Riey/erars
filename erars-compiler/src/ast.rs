@@ -27,6 +27,7 @@ pub enum FunctionInfo {
 pub enum Expr {
     StringLit(String),
     IntLit(i64),
+    Var(String, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),
     BinopExpr(Box<Self>, BinaryOperator, Box<Self>),
     CondExpr(Box<Self>, Box<Self>, Box<Self>),

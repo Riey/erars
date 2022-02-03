@@ -25,6 +25,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn var_expr() {
+        k9::snapshot!(
+            parse_expr("COUNT:123"),
+            r#"
+Var(
+    "COUNT",
+    [
+        IntLit(
+            123,
+        ),
+    ],
+)
+"#
+        );
+    }
+
+    #[test]
+    fn var_empty_expr() {
+        k9::snapshot!(
+            parse_expr("COUNT"),
+            r#"
+Var(
+    "COUNT",
+    [],
+)
+"#
+        );
+    }
+
+    #[test]
+    fn var_var_expr() {
+        k9::snapshot!(
+            parse_expr("COUNT:A"),
+            r#"
+Var(
+    "COUNT",
+    [
+        Var(
+            "A",
+            [],
+        ),
+    ],
+)
+"#
+        );
+    }
+
+    #[test]
     fn paran_expr() {
         k9::snapshot!(
             parse_expr("1 + 2 ? 1 + 2 * 3 # (5+1) / 2"),
