@@ -1,9 +1,38 @@
-use crate::{Expr, Stmt, LexicalError, Token, PrintFlags, BinaryOperator};
+use crate::{Function, FunctionInfo, FunctionHeader, EventFlags, Expr, Stmt, LexicalError, Token, PrintFlags, BinaryOperator};
 use source_span::{Position, Span};
 
 grammar;
 
-pub Program: Vec<Stmt> = {
+pub Function: Function = {
+    <header:FunctionHeader> <body:Body> => {
+        Function {
+            header,
+            body,
+        }
+    },
+};
+
+FunctionHeader: FunctionHeader = {
+    "@" <name:ident> <infos: FunctionInfo*> => {
+        FunctionHeader {
+            name,
+            infos,
+        }
+    },
+};
+
+FunctionInfo: FunctionInfo = {
+    "#" <info:ident> => {
+        match info.as_str() {
+            "PRI" => FunctionInfo::EventFlag(EventFlags::Pre),
+            "LATER" => FunctionInfo::EventFlag(EventFlags::Later),
+            "SINGLE" => FunctionInfo::EventFlag(EventFlags::Single),
+            _ => unreachable!(),
+        }
+    },
+};
+
+pub Body: Vec<Stmt> = {
     <lines: ProgramLine*> => lines,
 };
 
@@ -44,6 +73,9 @@ extern {
         "/" => Token::Slash,
         "(" => Token::OpenParan,
         ")" => Token::CloseParan,
+        "@" => Token::At,
+        "#" => Token::Sharp,
+        ident => Token::Ident(<String>),
         string => Token::StringLit(<String>),
         int => Token::IntLit(<i64>),
     }

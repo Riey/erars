@@ -1,4 +1,4 @@
-use crate::{PrintFlags, BinaryOperator};
+use crate::{BinaryOperator, EventFlags, EventType, PrintFlags};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
@@ -6,6 +6,22 @@ pub enum Stmt {
     PrintForm(PrintFlags, String, Vec<(Expr, String)>),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Function {
+    pub header: FunctionHeader,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct FunctionHeader {
+    pub name: String,
+    pub infos: Vec<FunctionInfo>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FunctionInfo {
+    EventFlag(EventFlags),
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
