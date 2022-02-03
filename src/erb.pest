@@ -53,11 +53,11 @@ binop_expr = { term ~ (binop ~ term)+ }
 np_binop_expr = { term ~ (np_binop ~ term)+ }
 conditionalop_expr = { term ~ "?" ~ term ~ "#" ~ term }
 method_expr = { ident ~ "(" ~ comma_seq ~ ")" }
-var_expr = { ident ~ (":" ~ term)+ }
+var_expr = { ident ~ (":" ~ term)* }
 
 expr = _{ binop_expr | conditionalop_expr | term }
 np_expr = { np_binop_expr | conditionalop_expr | term }
-term = _{ string | formstring_expr | num | method_expr | var_expr | ident | "(" ~ expr ~ ")" }
+term = _{ string | formstring_expr | num | method_expr | var_expr | "(" ~ expr ~ ")" }
 comma_seq = _{ expr ~ ("," ~ expr)* }
 
 
@@ -109,13 +109,14 @@ goto_com = { ^"GOTO" ~ ident }
 
 // assign
 
-assign_line = { (var_expr | ident) ~ assign_addop? ~ "=" ~ expr }
+assign_line = { var_expr ~ assign_addop? ~ "=" ~ expr }
     assign_addop = { add | sub | mul | div | rem | bitor | bitand | bitxor }
 
 program_line = _{ printform_com | print_com | reuselastline_com | alignment_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
 
 
-function_label = ${ "@" ~ ident }
+function_label = ${ "@" ~ ident ~ function_args? }
+function_args = !{ &"," ~ ("," ~ var_expr)* | &"(" ~ ("(" ~ (var_expr ~ ","?)* ~ ")") }
 function_header = ${ (NEWLINE+ ~ "#" ~ function_info)* }
 function_info = _{ function_event_info }
 function_event_info = { "PRI" | "SINGLE" | "LATER" } 
@@ -124,4 +125,4 @@ function = { function_label ~ function_header ~ (program_line | NEWLINE)* }
 program = _{ SOI ~ (function | NEWLINE)* ~ EOI }
 
 WHITESPACE = _{ " " | "\t" }
-COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* ~ NEWLINE }
+COMMENT = _{ ";" ~ (!NEWLINE ~ ANY)* ~ NEWLINE? }
