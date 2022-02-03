@@ -20,9 +20,59 @@ mod tests {
     use super::*;
 
     #[test]
+    fn paran_expr() {
+        k9::snapshot!(
+            parse_expr("1 + 2 ? 1 + 2 * 3 # (5+1) / 2"),
+            "
+CondExpr(
+    BinopExpr(
+        IntLit(
+            1,
+        ),
+        Add,
+        IntLit(
+            2,
+        ),
+    ),
+    BinopExpr(
+        IntLit(
+            1,
+        ),
+        Add,
+        BinopExpr(
+            IntLit(
+                2,
+            ),
+            Mul,
+            IntLit(
+                3,
+            ),
+        ),
+    ),
+    BinopExpr(
+        BinopExpr(
+            IntLit(
+                5,
+            ),
+            Add,
+            IntLit(
+                1,
+            ),
+        ),
+        Div,
+        IntLit(
+            2,
+        ),
+    ),
+)
+"
+        );
+    }
+
+    #[test]
     fn cond_expr() {
         k9::snapshot!(
-            parse_expr("(1 ? 2 # 3)"),
+            parse_expr("1 ? 2 # 3"),
             "
 CondExpr(
     IntLit(
