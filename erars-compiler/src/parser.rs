@@ -1,8 +1,13 @@
-use crate::{Function, Stmt};
+use crate::{Expr, Function, Stmt};
 
 pub fn parse_function(s: &str) -> Function {
     let lexer = crate::Lexer::new(s);
     crate::grammar::FunctionParser::new().parse(lexer).unwrap()
+}
+
+pub fn parse_expr(s: &str) -> Expr {
+    let lexer = crate::Lexer::new(s);
+    crate::grammar::ExprParser::new().parse(lexer).unwrap()
 }
 
 pub fn parse_body(s: &str) -> Vec<Stmt> {
@@ -13,6 +18,26 @@ pub fn parse_body(s: &str) -> Vec<Stmt> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cond_expr() {
+        k9::snapshot!(
+            parse_expr("(1 ? 2 # 3)"),
+            "
+CondExpr(
+    IntLit(
+        1,
+    ),
+    IntLit(
+        2,
+    ),
+    IntLit(
+        3,
+    ),
+)
+"
+        );
+    }
 
     #[test]
     fn parse_simple_function() {

@@ -380,7 +380,7 @@ fn is_not_ident_char(c: char) -> bool {
 fn is_symbol_char(c: char) -> bool {
     matches!(
         c,
-        '!' | '@' | '#' | '$' | '%' | '^' | '&' | '*' | '(' | ')' | '+' | '-' | '=' | ',' | '.'
+        '!' | '@' | '#' | '$' | '%' | '^' | '&' | '*' | '(' | ')' | '{' | '}' | '+' | '-' | '=' | ',' | '.' | '?'
     )
 }
 
@@ -446,6 +446,20 @@ mod tests {
     #[should_panic]
     fn invalid_symbol() {
         do_test("123 +-+ 123", &[]);
+    }
+
+    #[test]
+    fn cond_expr() {
+        do_test(
+            "1 ? 2 # 3",
+            &[
+                Token::IntLit(1),
+                Token::Question,
+                Token::IntLit(2),
+                Token::Sharp,
+                Token::IntLit(3),
+            ],
+        );
     }
 
     #[test]
