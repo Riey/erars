@@ -138,6 +138,15 @@ impl<'s> Lexer<'s> {
 
         let token = match symbol {
             "+" => Token::Plus,
+            "-" => Token::Minus,
+            "*" => Token::Star,
+            "/" => Token::Slash,
+            "(" => Token::OpenParan,
+            ")" => Token::CloseParan,
+            "{" => Token::OpenBrace,
+            "}" => Token::CloseBrace,
+            "@" => Token::At,
+            "#" => Token::Sharp,
             _ => return Some(Err(LexicalError::InvalidSymbol(self.span))),
         };
 
