@@ -147,6 +147,37 @@ CondExpr(
     }
 
     #[test]
+    fn cond_printform() {
+        k9::snapshot!(
+            parse_body("PRINTFORML \\@ 1 ? asdf2 # 3fe \\@"),
+            r#"
+[
+    PrintForm(
+        NEWLINE,
+        "",
+        [
+            (
+                CondExpr(
+                    IntLit(
+                        1,
+                    ),
+                    StringLit(
+                        "asdf2",
+                    ),
+                    StringLit(
+                        "3fe",
+                    ),
+                ),
+                "",
+            ),
+        ],
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
     fn cond_expr() {
         k9::snapshot!(
             parse_expr("1 ? 2 # 3"),

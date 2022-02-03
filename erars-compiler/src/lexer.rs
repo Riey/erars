@@ -10,13 +10,26 @@ const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 enum LexerStatus {
     Print,
     PrintForm,
+    // \@ ~ ?
+    PrintFormCondExpr,
+    // #
+    PrintFormSharpExpr,
     PrintFormIntExpr,
     PrintFormStrExpr,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CondStatus {
+    // ? ~ #
+    PrintFormCondExpr1,
+    // # ~ \@
+    PrintFormCondExpr2,
 }
 
 pub struct Lexer<'s> {
     text: &'s str,
     status: Option<LexerStatus>,
+    cond_status: Option<CondStatus>,
     span: Span,
 }
 
@@ -26,6 +39,7 @@ impl<'s> Lexer<'s> {
             text,
             span: Span::default(),
             status: None,
+            cond_status: None,
         }
     }
 
@@ -205,6 +219,7 @@ impl<'s> Lexer<'s> {
 
     fn read_normal_text(&mut self) -> &'s str {
         let mut chars = self.text.chars();
+        let mut skip_count = 1;
 
         loop {
             if let Some(ch) = chars.next() {
@@ -218,7 +233,31 @@ impl<'s> Lexer<'s> {
                         self.status = Some(LexerStatus::PrintFormIntExpr);
                         break;
                     }
-                    // TODO \@
+                    '#' if self.cond_status == Some(CondStatus::PrintFormCondExpr1) => {
+                        self.status = Some(LexerStatus::PrintFormSharpExpr);
+                        self.cond_status = Some(CondStatus::PrintFormCondExpr2);
+                        break;
+                    }
+                    '\\' => {
+                        match chars.next() {
+                            Some('@') => {
+                                if self.cond_status == Some(CondStatus::PrintFormCondExpr2) {
+                                    self.cond_status = None;
+                                    skip_count = 3;
+                                } else {
+                                    self.status = Some(LexerStatus::PrintFormCondExpr);
+                                    self.cond_status = Some(CondStatus::PrintFormCondExpr1);
+                                    skip_count = 2;
+                                }
+                                self.shift_position_char('@');
+                                break;
+                            }
+                            // TODO other escapes
+                            Some(_) |
+                            // TODO return error
+                            None => break,
+                        }
+                    }
                     '\n' => {
                         self.status = None;
                         break;
@@ -233,9 +272,21 @@ impl<'s> Lexer<'s> {
             }
         }
 
-        let (mut ret, left) = self.text.split_at(self.text.len() - chars.as_str().len());
-        ret = &ret[..ret.len() - 1];
-        self.text = left;
+        let mut ret = if self.cond_status == Some(CondStatus::PrintFormCondExpr2) {
+            let (ret, left) = self
+                .text
+                .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1));
+            self.text = left;
+            self.skip_blank();
+            ret
+        } else {
+            let (ret, left) = self.text.split_at(self.text.len() - chars.as_str().len());
+            self.text = left;
+            ret
+        };
+
+        ret = &ret[..ret.len() - skip_count];
+
         ret
     }
 
@@ -333,13 +384,21 @@ impl<'s> Iterator for Lexer<'s> {
     fn next(&mut self) -> Option<Self::Item> {
         self.span.clear();
 
-        // eprintln!("{} [{:?} @ {}]", self.text, self.status, self.span);
+        eprintln!("{} [{:?} @ {}]", self.text, self.status, self.span);
+
         if let Some(status) = self.status {
             match status {
                 LexerStatus::Print => {
                     let text = self.read_until_newline();
                     self.status = None;
                     Some(Ok(self.spanned(Token::StringLit(text.into()))))
+                }
+                LexerStatus::PrintFormSharpExpr => {
+                    assert!(self.try_get_char('#'));
+                    let token = self.spanned(Token::Sharp);
+                    self.skip_blank();
+                    self.status = Some(LexerStatus::PrintForm);
+                    Some(Ok(token))
                 }
                 LexerStatus::PrintForm => {
                     let text = self.read_normal_text();
@@ -358,6 +417,18 @@ impl<'s> Iterator for Lexer<'s> {
                         self.status = Some(LexerStatus::PrintForm);
                         self.next()
                     } else {
+                        self.next_token()
+                    }
+                }
+                LexerStatus::PrintFormCondExpr => {
+                    self.skip_ws();
+                    if self.try_get_char('?') {
+                        self.skip_blank();
+                        self.status = Some(LexerStatus::PrintForm);
+                        self.cond_status = Some(CondStatus::PrintFormCondExpr1);
+                        Some(Ok(self.spanned(Token::Question)))
+                    } else {
+                        eprintln!("no ?");
                         self.next_token()
                     }
                 }
@@ -408,89 +479,179 @@ fn is_not_symbol_char(c: char) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::PrintFlags;
 
-    fn do_test(source: &str, expected: &[Token]) {
-        let tokens = Lexer::new(source)
+    fn tokens(source: &str) -> Vec<Token> {
+        Lexer::new(source)
             .map(|r| r.map(|s| s.1))
             .collect::<LexicalResult<Vec<Token>>>()
-            .unwrap();
-        k9::assert_equal!(tokens, expected);
+            .unwrap()
     }
 
     #[test]
     fn hello_world() {
-        do_test(
-            "PRINTL Hello, world!",
-            &[
-                Token::Print(PrintFlags::NEWLINE),
-                Token::StringLit("Hello, world!".into()),
-            ],
-        );
-        do_test(
-            "PRINTL Hello, world!\n",
-            &[
-                Token::Print(PrintFlags::NEWLINE),
-                Token::StringLit("Hello, world!".into()),
-            ],
+        k9::snapshot!(
+            tokens("PRINTL Hello, world!\n"),
+            r#"
+[
+    Print(
+        NEWLINE,
+    ),
+    StringLit(
+        "Hello, world!",
+    ),
+]
+"#
         );
     }
 
     #[test]
     fn hello_world_form() {
-        do_test(
-            "PRINTFORML Hello, world!",
-            &[
-                Token::PrintForm(PrintFlags::NEWLINE),
-                Token::StringLit("Hello, world!".into()),
-            ],
-        );
-        do_test(
-            "PRINTFORML Hello, world!\n",
-            &[
-                Token::PrintForm(PrintFlags::NEWLINE),
-                Token::StringLit("Hello, world!".into()),
-            ],
+        k9::snapshot!(
+            tokens("PRINTFORML Hello, world!\n"),
+            r#"
+[
+    PrintForm(
+        NEWLINE,
+    ),
+    StringLit(
+        "Hello, world!",
+    ),
+]
+"#
         );
     }
 
     #[test]
     fn int_lit() {
-        do_test("123 -123", &[Token::IntLit(123), Token::IntLit(-123)]);
+        k9::snapshot!(
+            tokens("123 -123"),
+            "
+[
+    IntLit(
+        123,
+    ),
+    IntLit(
+        -123,
+    ),
+]
+"
+        );
     }
 
     #[test]
     #[should_panic]
     fn invalid_symbol() {
-        do_test("123 +-+ 123", &[]);
+        k9::snapshot!(tokens("123 +-+ 123"));
     }
 
     #[test]
     fn cond_expr() {
-        do_test(
-            "1 ? 2 # 3",
-            &[
-                Token::IntLit(1),
-                Token::Question,
-                Token::IntLit(2),
-                Token::Sharp,
-                Token::IntLit(3),
-            ],
+        k9::snapshot!(
+            tokens("1 ? 2 # 3"),
+            "
+[
+    IntLit(
+        1,
+    ),
+    Question,
+    IntLit(
+        2,
+    ),
+    Sharp,
+    IntLit(
+        3,
+    ),
+]
+"
+        );
+    }
+
+    #[test]
+    fn form_cond2() {
+        k9::snapshot!(
+            tokens("PRINTFORML \\@ 1 ? asdf2 # 3fe \\@"),
+            r#"
+[
+    PrintForm(
+        NEWLINE,
+    ),
+    StringLit(
+        "",
+    ),
+    IntLit(
+        1,
+    ),
+    Question,
+    StringLit(
+        "asdf2",
+    ),
+    Sharp,
+    StringLit(
+        "3fe",
+    ),
+    StringLit(
+        "",
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
+    fn form_cond() {
+        k9::snapshot!(
+            tokens("PRINTFORML \\@ 1 ? ?? # !! \\@"),
+            r#"
+[
+    PrintForm(
+        NEWLINE,
+    ),
+    StringLit(
+        "",
+    ),
+    IntLit(
+        1,
+    ),
+    Question,
+    StringLit(
+        "??",
+    ),
+    Sharp,
+    StringLit(
+        "!!",
+    ),
+    StringLit(
+        "",
+    ),
+]
+"#
         );
     }
 
     #[test]
     fn form_simple() {
-        do_test(
-            "PRINTFORML 1 + 1 = {1 + 1}",
-            &[
-                Token::PrintForm(PrintFlags::NEWLINE),
-                Token::StringLit("1 + 1 = ".into()),
-                Token::IntLit(1),
-                Token::Plus,
-                Token::IntLit(1),
-                Token::StringLit("".into()),
-            ],
+        k9::snapshot!(
+            tokens("PRINTFORML 1 + 1 = {1 + 1}"),
+            r#"
+[
+    PrintForm(
+        NEWLINE,
+    ),
+    StringLit(
+        "1 + 1 = ",
+    ),
+    IntLit(
+        1,
+    ),
+    Plus,
+    IntLit(
+        1,
+    ),
+    StringLit(
+        "",
+    ),
+]
+"#
         );
     }
 }
