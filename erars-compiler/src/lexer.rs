@@ -540,7 +540,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn invalid_symbol() {
-        k9::snapshot!(tokens("123 +-+ 123"));
+        tokens("123 +-+ 123");
     }
 
     #[test]
