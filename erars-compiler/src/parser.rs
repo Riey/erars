@@ -73,6 +73,30 @@ Var(
     }
 
     #[test]
+    fn assign() {
+        k9::snapshot!(
+            parse_body("A:2 = 123"),
+            r#"
+[
+    Assign(
+        Var(
+            "A",
+            [
+                IntLit(
+                    2,
+                ),
+            ],
+        ),
+        IntLit(
+            123,
+        ),
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
     fn paran_expr() {
         k9::snapshot!(
             parse_expr("1 + 2 ? 1 + 2 * 3 # (5+1) / 2"),

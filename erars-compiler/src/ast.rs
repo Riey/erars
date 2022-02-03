@@ -4,6 +4,7 @@ use crate::{BinaryOperator, EventFlags, EventType, PrintFlags, UnaryOperator};
 pub enum Stmt {
     Print(PrintFlags, String),
     PrintForm(PrintFlags, String, Vec<(Expr, String)>),
+    Assign(Expr, Expr),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

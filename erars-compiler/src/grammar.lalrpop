@@ -37,12 +37,16 @@ FunctionInfo: FunctionInfo = {
 }
 
 pub Body: Vec<Stmt> = {
-    <lines: ProgramLine*> => lines,
+    <first:ProgramLine> <mut other:("\n"+ <ProgramLine>)*> => {
+        other.insert(0, first);
+        other
+    }
 }
 
 pub ProgramLine: Stmt = {
     <flags:PRINT> <text:string> => Stmt::Print(flags, text),
     <flags:PRINTFORM> <text:string> <parts:(<Expr> <string>)*> => Stmt::PrintForm(flags, text, parts),
+    <lhs:Expr> "=" <rhs:Expr> => Stmt::Assign(lhs, rhs),
 }
 
 ExprReset = <Expr>;
@@ -108,12 +112,16 @@ extern {
         "." => Token::Period,
         "@" => Token::At,
         "#" => Token::Sharp,
+        "=" => Token::Assign,
         "==" => Token::Equal,
         "!=" => Token::NotEqual,
         "<" => Token::Lt,
         "<=" => Token::Le,
         ">" => Token::Gt,
         ">=" => Token::Ge,
+
+        "\n" => Token::NewLine,
+
         ident => Token::Ident(<String>),
         string => Token::StringLit(<String>),
         int => Token::IntLit(<i64>),
