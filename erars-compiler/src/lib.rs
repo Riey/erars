@@ -22,7 +22,7 @@ pub use crate::{
     lexer::Lexer,
     location::{Source, SourceLocation, SourceLocationMessage},
     operator::{BinaryOperator, UnaryOperator},
-    parser::parse_body,
+    parser::{parse_body, parse_expr, parse_function, parse_program},
     token::{Alignment, PrintFlags, Token},
 };
 

@@ -1,5 +1,10 @@
 use crate::{Expr, Function, Stmt};
 
+pub fn parse_program(s: &str) -> Vec<Function> {
+    let lexer = crate::Lexer::new(s);
+    crate::grammar::ProgramParser::new().parse(lexer).unwrap()
+}
+
 pub fn parse_function(s: &str) -> Function {
     let lexer = crate::Lexer::new(s);
     crate::grammar::FunctionParser::new().parse(lexer).unwrap()

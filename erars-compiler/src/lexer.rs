@@ -333,8 +333,7 @@ impl<'s> Iterator for Lexer<'s> {
     fn next(&mut self) -> Option<Self::Item> {
         self.span.clear();
 
-        eprintln!("{} [{:?} @ {}]", self.text, self.status, self.span);
-
+        // eprintln!("{} [{:?} @ {}]", self.text, self.status, self.span);
         if let Some(status) = self.status {
             match status {
                 LexerStatus::Print => {
@@ -380,7 +379,24 @@ fn is_not_ident_char(c: char) -> bool {
 fn is_symbol_char(c: char) -> bool {
     matches!(
         c,
-        '!' | '@' | '#' | '$' | '%' | '^' | '&' | '*' | '(' | ')' | '{' | '}' | '+' | '-' | '=' | ',' | '.' | '/' | '?'
+        '!' | '@'
+            | '#'
+            | '$'
+            | '%'
+            | '^'
+            | '&'
+            | '*'
+            | '('
+            | ')'
+            | '{'
+            | '}'
+            | '+'
+            | '-'
+            | '='
+            | ','
+            | '.'
+            | '/'
+            | '?'
     )
 }
 
