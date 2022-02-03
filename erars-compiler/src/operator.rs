@@ -4,12 +4,15 @@ use serde::{Deserialize, Serialize};
 pub enum UnaryOperator {
     /// !
     Not,
+    /// ~
+    BitNot,
 }
 
 impl UnaryOperator {
     pub fn name(self) -> &'static str {
         match self {
             UnaryOperator::Not => "!",
+            UnaryOperator::BitNot => "~",
         }
     }
 }
@@ -38,13 +41,13 @@ pub enum BinaryOperator {
     /// !=
     NotEqual,
     /// <
-    Less,
+    Lt,
     /// <=
-    LessOrEqual,
+    Le,
     /// >
-    Greater,
+    Gt,
     /// >=
-    GreaterOrEqual,
+    Ge,
 }
 
 impl BinaryOperator {
@@ -61,10 +64,10 @@ impl BinaryOperator {
 
             BinaryOperator::Equal => "==",
             BinaryOperator::NotEqual => "!=",
-            BinaryOperator::Greater => ">",
-            BinaryOperator::GreaterOrEqual => ">=",
-            BinaryOperator::Less => "<",
-            BinaryOperator::LessOrEqual => "<=",
+            BinaryOperator::Gt => ">",
+            BinaryOperator::Ge => ">=",
+            BinaryOperator::Lt => "<",
+            BinaryOperator::Le => "<=",
         }
     }
 }

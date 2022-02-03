@@ -12,7 +12,7 @@ enum-map = "2.0.1"
 lalrpop-util = "0.19.7"
 memchr = "2.4.1"
 serde = { version = "1.0.136", features = ["derive"] }
-source-span = { version = "2.7.0", default-features = false }
+source-span = "2.7.0"
 strum = { version = "0.23.0", features = ["derive"] }
 thiserror = "1.0.30"
 utf8-decode = "1.0.1"

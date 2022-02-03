@@ -1,4 +1,4 @@
-use crate::{Function, FunctionInfo, FunctionHeader, EventFlags, Expr, Stmt, LexicalError, Token, PrintFlags, BinaryOperator};
+use crate::{Function, FunctionInfo, FunctionHeader, EventFlags, Expr, Stmt, LexicalError, Token, PrintFlags, BinaryOperator, UnaryOperator};
 use source_span::{Position, Span};
 
 grammar;
@@ -51,13 +51,28 @@ Expr: Expr = {
     <string> => Expr::StringLit(<>),
     "(" <Expr> ")",
 
-    #[precedence(level = "1")] #[assoc(side = "left")]
+    #[precedence(level = "10")]
+    "!" <Expr> => Expr::UnaryopExpr(Box::new(<>), UnaryOperator::Not),
+    "~" <Expr> => Expr::UnaryopExpr(Box::new(<>), UnaryOperator::BitNot),
+
+    #[precedence(level = "20")] #[assoc(side = "left")]
     <lhs:Expr> "*" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Mul, Box::new(rhs)),
     <lhs:Expr> "/" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Div, Box::new(rhs)),
+    <lhs:Expr> "%" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Rem, Box::new(rhs)),
 
-    #[precedence(level = "2")] #[assoc(side = "left")]
+    #[precedence(level = "21")] #[assoc(side = "left")]
     <lhs:Expr> "+" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Add, Box::new(rhs)),
     <lhs:Expr> "-" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Sub, Box::new(rhs)),
+
+    #[precedence(level = "30")] #[assoc(side = "left")]
+    <lhs:Expr> ">" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Gt, Box::new(rhs)),
+    <lhs:Expr> ">=" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Ge, Box::new(rhs)),
+    <lhs:Expr> "<" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Lt, Box::new(rhs)),
+    <lhs:Expr> "<=" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Le, Box::new(rhs)),
+
+    #[precedence(level = "31")] #[assoc(side = "left")]
+    <lhs:Expr> "==" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::Equal, Box::new(rhs)),
+    <lhs:Expr> "!=" <rhs:Expr> => Expr::BinopExpr(Box::new(lhs), BinaryOperator::NotEqual, Box::new(rhs)),
 };
 
 extern {
@@ -71,10 +86,25 @@ extern {
         "*" => Token::Star,
         "-" => Token::Minus,
         "/" => Token::Slash,
+        "%" => Token::Percent,
+        "!" => Token::Exclamation,
+        "~" => Token::Tilde,
+        "?" => Token::Question,
+        ":" => Token::Colon,
         "(" => Token::OpenParan,
         ")" => Token::CloseParan,
+        "{" => Token::OpenBrace,
+        "}" => Token::CloseBrace,
+        "," => Token::Comma,
+        "." => Token::Period,
         "@" => Token::At,
         "#" => Token::Sharp,
+        "==" => Token::Equal,
+        "!=" => Token::NotEqual,
+        "<" => Token::Lt,
+        "<=" => Token::Le,
+        ">" => Token::Gt,
+        ">=" => Token::Ge,
         ident => Token::Ident(<String>),
         string => Token::StringLit(<String>),
         int => Token::IntLit(<i64>),

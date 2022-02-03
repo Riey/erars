@@ -1,4 +1,4 @@
-use crate::{BinaryOperator, EventFlags, EventType, PrintFlags};
+use crate::{BinaryOperator, EventFlags, EventType, PrintFlags, UnaryOperator};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
@@ -27,5 +27,7 @@ pub enum FunctionInfo {
 pub enum Expr {
     StringLit(String),
     IntLit(i64),
+    UnaryopExpr(Box<Self>, UnaryOperator),
     BinopExpr(Box<Self>, BinaryOperator, Box<Self>),
+    CondExpr(Box<Self>, Box<Self>, Box<Self>),
 }
