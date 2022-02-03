@@ -384,7 +384,7 @@ impl<'s> Iterator for Lexer<'s> {
     fn next(&mut self) -> Option<Self::Item> {
         self.span.clear();
 
-        eprintln!("{} [{:?} @ {}]", self.text, self.status, self.span);
+        // eprintln!("{} [{:?} @ {}]", self.text, self.status, self.span);
 
         if let Some(status) = self.status {
             match status {
@@ -428,7 +428,6 @@ impl<'s> Iterator for Lexer<'s> {
                         self.cond_status = Some(CondStatus::PrintFormCondExpr1);
                         Some(Ok(self.spanned(Token::Question)))
                     } else {
-                        eprintln!("no ?");
                         self.next_token()
                     }
                 }
