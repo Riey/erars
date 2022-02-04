@@ -11,6 +11,8 @@ pub enum BeginType {
     Title,
     #[strum(to_string = "FIRST")]
     First,
+    #[strum(to_string = "SHOP")]
+    Shop,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -34,6 +36,8 @@ pub enum Instruction {
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
     SetAlignment(Alignment),
+    Mark(String),
+    GotoMark(String),
     Goto(u32),
     GotoIfNot(u32),
 }

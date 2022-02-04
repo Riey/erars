@@ -506,7 +506,7 @@ impl TerminalVm {
                     }
                 }
             }
-            _ => bail!("{:?}", inst),
+            _ => bail!("TODO: {:?}", inst),
         }
 
         Ok(None)
@@ -558,6 +558,7 @@ impl TerminalVm {
                 self.call_event(EventType::First, chan, ctx)?;
                 Ok(())
             }
+            BeginType::Shop => bail!("TODO: SHOP"),
         }
     }
 

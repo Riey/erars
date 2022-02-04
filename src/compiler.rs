@@ -8,7 +8,6 @@ use crate::{
 use self::parser::{ErbParser, Rule, PREC_CLIMBER};
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
-use hashbrown::HashMap;
 use itertools::Itertools;
 use pest::{
     iterators::{Pair, Pairs},
@@ -42,16 +41,12 @@ impl Default for Alignment {
 }
 
 struct Compiler {
-    label: HashMap<String, u32>,
     out: Vec<Instruction>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
-        Self {
-            label: HashMap::new(),
-            out: Vec::new(),
-        }
+        Self { out: Vec::new() }
     }
 
     fn get_var(&mut self, p: Pair<Rule>) -> Result<()> {
@@ -154,6 +149,7 @@ impl Compiler {
             }
             Rule::print_form_cond_inner_text_first
             | Rule::print_form_cond_inner_text_second
+            | Rule::print_form_text
             | Rule::formstring_expr => self.push_formtext(p),
             _ => unreachable!("{:?}", p),
         }
@@ -248,7 +244,10 @@ impl Compiler {
 
         match rule {
             Rule::begin_com => {
-                let begin = pairs.next().unwrap().as_str().parse()?;
+                let ty = pairs.next().unwrap().as_str();
+                let begin = ty
+                    .parse()
+                    .map_err(|_| anyhow!("Unknown begin type {}", ty))?;
                 self.out.push(Instruction::Begin(begin));
             }
             Rule::sif_com => {
@@ -333,18 +332,12 @@ impl Compiler {
                 self.out.push(Instruction::Call);
             }
             Rule::goto_com => {
-                let mark = self
-                    .label
-                    .get(pairs.next().unwrap().as_str())
-                    .ok_or_else(|| {
-                        anyhow!("Unknown goto label ${}", pairs.next().unwrap().as_str())
-                    })?;
-                self.out.push(Instruction::Goto(*mark));
+                let label = pairs.next().unwrap().as_str();
+                self.out.push(Instruction::GotoMark(label.into()));
             }
             Rule::goto_label => {
-                let mark = self.mark();
-                self.label
-                    .insert(pairs.next().unwrap().as_str().into(), mark);
+                self.out
+                    .push(Instruction::Mark(pairs.next().unwrap().as_str().into()));
             }
             Rule::other_com => {
                 let name = pairs.next().unwrap().as_str();
@@ -436,6 +429,15 @@ fn to_binop(op: Pair<Rule>) -> Result<BinaryOperator> {
         Rule::rem => BinaryOperator::Rem,
         Rule::eq => BinaryOperator::Equal,
         Rule::ne => BinaryOperator::NotEqual,
+        Rule::gt => BinaryOperator::Greater,
+        Rule::ge => BinaryOperator::GreaterOrEqual,
+        Rule::lt => BinaryOperator::Less,
+        Rule::le => BinaryOperator::LessOrEqual,
+        Rule::bitor => BinaryOperator::BitOr,
+        Rule::bitand => BinaryOperator::BitAnd,
+        Rule::or => BinaryOperator::Or,
+        Rule::and => BinaryOperator::And,
+        Rule::xor => BinaryOperator::Xor,
         _ => bail!("Invalid op pair {:?}", op),
     })
 }
