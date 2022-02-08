@@ -42,8 +42,6 @@ fn main() {
                 .unwrap()
         }
 
-        std::fs::write("dump.txt", format!("{:#?}", function_dic)).unwrap();
-
         let mut ctx = VmContext::new(&infos);
         let vm = TerminalVm::new(function_dic);
         vm.start(&inner_chan, &mut ctx).unwrap();

@@ -8,6 +8,7 @@ use crate::{
 use self::parser::{ErbParser, Rule, PREC_CLIMBER};
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
+use hashbrown::HashMap;
 use itertools::Itertools;
 use pest::{
     iterators::{Pair, Pairs},
@@ -42,11 +43,32 @@ impl Default for Alignment {
 
 struct Compiler {
     out: Vec<Instruction>,
+    marks: HashMap<String, u32>,
+    goto_marks: HashMap<String, Vec<u32>>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
-        Self { out: Vec::new() }
+        Self {
+            out: Vec::new(),
+            marks: HashMap::new(),
+            goto_marks: HashMap::new(),
+        }
+    }
+
+    pub fn finish(mut self) -> Result<Vec<Instruction>> {
+        for (label, marks) in self.goto_marks {
+            match self.marks.get(&label) {
+                Some(label_pos) => {
+                    for goto_pos in marks {
+                        self.out[goto_pos as usize] = Instruction::Goto(*label_pos);
+                    }
+                }
+                None => bail!("Unknown goto label ${}", label),
+            }
+        }
+
+        Ok(self.out)
     }
 
     fn get_var(&mut self, p: Pair<Rule>) -> Result<()> {
@@ -333,11 +355,14 @@ impl Compiler {
             }
             Rule::goto_com => {
                 let label = pairs.next().unwrap().as_str();
-                self.out.push(Instruction::GotoMark(label.into()));
+                let mark = self.mark();
+                self.goto_marks.entry(label.into()).or_default().push(mark);
+                self.out.push(Instruction::Nop);
             }
             Rule::goto_label => {
-                self.out
-                    .push(Instruction::Mark(pairs.next().unwrap().as_str().into()));
+                let mark = self.mark();
+                let label = pairs.next().unwrap().as_str();
+                self.marks.insert(label.into(), mark);
             }
             Rule::other_com => {
                 let name = pairs.next().unwrap().as_str();
@@ -397,9 +422,11 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
 
     compiler.push_block(pairs)?;
 
+    let body = compiler.finish()?;
+
     match label.parse::<EventType>() {
-        Ok(ty) => dic.insert_event(Event { flags, ty }, compiler.out),
-        _ => dic.insert_func(label.into(), compiler.out),
+        Ok(ty) => dic.insert_event(Event { flags, ty }, body),
+        _ => dic.insert_func(label.into(), body),
     };
 
     Ok(())

@@ -36,8 +36,6 @@ pub enum Instruction {
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
     SetAlignment(Alignment),
-    Mark(String),
-    GotoMark(String),
     Goto(u32),
     GotoIfNot(u32),
 }
