@@ -19,6 +19,122 @@ fn comment() {
 }
 
 #[test]
+fn method() {
+    let code = "@SYSTEM_TITLE\nPRINTFORML AAA(123, 456) = ({AAA(123, 456)})\n@AAA(ARG:1, ARG)\n#FUNCTION\nRETURNF ARG:1 + ARG + 123";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
+        r#"
+[
+    ListBegin,
+    LoadStr(
+        "AAA(123, 456) = (",
+    ),
+    ListBegin,
+    LoadInt(
+        123,
+    ),
+    LoadInt(
+        456,
+    ),
+    ListEnd,
+    LoadStr(
+        "AAA",
+    ),
+    Call,
+    LoadStr(
+        ")",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "AAA(123, 456) = (702)",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
+fn call_return() {
+    let code = "@SYSTEM_TITLE\nCALL AAA, 123\nPRINTFORML AAA(123) = ({RESULT}, {RESULTS})\n@AAA(ARG:1)\nRETURN ARG:1, \"456\"";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
+        r#"
+[
+    ListBegin,
+    LoadInt(
+        123,
+    ),
+    ListEnd,
+    LoadStr(
+        "AAA",
+    ),
+    Call,
+    ListBegin,
+    LoadStr(
+        "AAA(123) = (",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "RESULT",
+    ),
+    LoadVar,
+    LoadStr(
+        ", ",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "RESULTS",
+    ),
+    LoadVar,
+    LoadStr(
+        ")",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "AAA(123) = (123, 456)",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
 fn call() {
     let code = "@SYSTEM_TITLE\nA = 1\nLOCAL = 3\nCALL AAA, 123\n@AAA(ARG)\nPRINTFORML A, ARG, LOCAL = {A}, {ARG}, {LOCAL}";
     let mut dic = FunctionDic::new();

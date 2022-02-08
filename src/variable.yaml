@@ -12,6 +12,9 @@ MONEY:
   size: [1000]
 RESULT:
   size: [1000]
+RESULTS:
+  size: [1000]
+  is_str: true
 FLAG:
   size: [10000]
 

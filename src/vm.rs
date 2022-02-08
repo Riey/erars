@@ -456,10 +456,56 @@ impl TerminalVm {
 
                 // TODO: PRINTW
             }
+            Instruction::ReturnF => return Ok(Some(Workflow::Return)),
+            Instruction::Return => {
+                let values = ctx.take_list();
+
+                let mut result_idx = 0usize;
+                let mut results_idx = 0usize;
+
+                for value in values {
+                    match value {
+                        Value::Int(_) => {
+                            ctx.var
+                                .get_global("RESULT")
+                                .unwrap()
+                                .set(iter::once(result_idx), value)?;
+                            result_idx += 1;
+                        }
+                        Value::String(_) => {
+                            ctx.var
+                                .get_global("RESULTS")
+                                .unwrap()
+                                .set(iter::once(results_idx), value)?;
+                            results_idx += 1;
+                        }
+                    }
+                }
+
+                return Ok(Some(Workflow::Return));
+            }
             Instruction::Call => {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_list();
-                self.call(&func, &args, chan, ctx)?;
+
+                match func.as_str() {
+                    "TOSTR" => {
+                        let mut args = args.into_iter();
+                        let value = args.next().unwrap().try_into_int()?;
+                        let format = args.next();
+
+                        let ret = if let Some(_format) = format {
+                            format!("{00}", value)
+                        } else {
+                            value.to_string()
+                        };
+
+                        ctx.push(ret);
+                    }
+                    _ => {
+                        self.call(&func, &args, chan, ctx)?;
+                    }
+                }
             }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
@@ -492,26 +538,6 @@ impl TerminalVm {
                 };
 
                 ctx.push(ret);
-            }
-            Instruction::CallMethod => {
-                let name = ctx.pop_str()?;
-                let mut args = ctx.take_list().into_iter();
-
-                match name.as_str() {
-                    "TOSTR" => {
-                        let value = args.next().unwrap().try_into_int()?;
-                        let format = args.next();
-
-                        let ret = if let Some(_format) = format {
-                            format!("{00}", value)
-                        } else {
-                            value.to_string()
-                        };
-
-                        ctx.push(ret);
-                    }
-                    _ => bail!("Unknown method {}", name),
-                }
             }
             Instruction::Goto(no) => {
                 *cursor = *no as usize;

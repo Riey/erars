@@ -151,7 +151,7 @@ impl<'s> Compiler<'s> {
                 let name = pairs.next().unwrap().as_str();
                 self.push_args(pairs)?;
                 self.push_str(name)?;
-                self.out.push(Instruction::CallMethod);
+                self.out.push(Instruction::Call);
                 Ok(())
             }
             // Rule::print_expr | Rule::print_term => {
@@ -275,6 +275,18 @@ impl<'s> Compiler<'s> {
                     .parse()
                     .map_err(|_| anyhow!("Unknown begin type {}", ty))?;
                 self.out.push(Instruction::Begin(begin));
+            }
+            Rule::return_com => {
+                self.push_list_begin();
+                for expr in pairs {
+                    self.push_expr(expr)?;
+                }
+                self.push_list_end();
+                self.out.push(Instruction::Return);
+            }
+            Rule::returnf_com => {
+                self.push_expr(pairs.next().unwrap())?;
+                self.out.push(Instruction::ReturnF);
             }
             Rule::sif_com => {
                 self.push_expr(pairs.next().unwrap())?;
@@ -435,6 +447,7 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
                     .as_str()
                     .parse::<usize>()?;
             }
+            Rule::function_ignored_info => {}
             _ => todo!("Other header"),
         }
     }
