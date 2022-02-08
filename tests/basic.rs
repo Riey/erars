@@ -19,6 +19,64 @@ fn comment() {
 }
 
 #[test]
+fn goto() {
+    let code = "@SYSTEM_TITLE\nGOTO LABEL\nLOCAL = 3\n$LABEL\nPRINTFORML LOCAL = {LOCAL}";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap(),
+        r#"
+[
+    Goto(
+        6,
+    ),
+    LoadInt(
+        3,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL",
+    ),
+    StoreVar,
+    ListBegin,
+    LoadStr(
+        "LOCAL = ",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL",
+    ),
+    LoadVar,
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "LOCAL = 0",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
 fn add_assign() {
     let code = "@SYSTEM_TITLE\nLOCAL = 3\nLOCAL += 4\nPRINTFORML LOCAL = {LOCAL}";
     let mut dic = FunctionDic::new();
@@ -115,17 +173,8 @@ fn form_conditional() {
     BinaryOperator(
         Equal,
     ),
-    GotoIfNot(
-        11,
-    ),
-    ListBegin,
     LoadStr(
         "TRUE ",
-    ),
-    ListEnd,
-    ConcatString,
-    Goto(
-        15,
     ),
     ListBegin,
     LoadStr(
@@ -150,7 +199,7 @@ fn form_conditional() {
         r#"
 [
     Print(
-        "1 == 1 = TRUE ",
+        "1 == 1 = 1TRUE FALSE ",
     ),
     NewLine,
 ]

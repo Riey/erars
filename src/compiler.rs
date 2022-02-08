@@ -357,12 +357,10 @@ impl Compiler {
                 let label = pairs.next().unwrap().as_str();
                 let mark = self.mark();
                 self.goto_marks.entry(label.into()).or_default().push(mark);
-                self.out.push(Instruction::Nop);
             }
             Rule::goto_label => {
-                let mark = self.mark();
                 let label = pairs.next().unwrap().as_str();
-                self.marks.insert(label.into(), mark);
+                self.marks.insert(label.into(), self.current_no());
             }
             Rule::other_com => {
                 let name = pairs.next().unwrap().as_str();
