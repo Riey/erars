@@ -26,7 +26,7 @@ fn goto() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     Goto(
@@ -38,7 +38,7 @@ fn goto() {
     ListBegin,
     ListEnd,
     LoadStr(
-        "LOCAL",
+        "LOCAL@SYSTEM_TITLE",
     ),
     StoreVar,
     ListBegin,
@@ -48,7 +48,7 @@ fn goto() {
     ListBegin,
     ListEnd,
     LoadStr(
-        "LOCAL",
+        "LOCAL@SYSTEM_TITLE",
     ),
     LoadVar,
     LoadStr(
@@ -84,7 +84,7 @@ fn add_assign() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     LoadInt(
@@ -93,13 +93,13 @@ fn add_assign() {
     ListBegin,
     ListEnd,
     LoadStr(
-        "LOCAL",
+        "LOCAL@SYSTEM_TITLE",
     ),
     StoreVar,
     ListBegin,
     ListEnd,
     LoadStr(
-        "LOCAL",
+        "LOCAL@SYSTEM_TITLE",
     ),
     LoadVar,
     LoadInt(
@@ -111,7 +111,7 @@ fn add_assign() {
     ListBegin,
     ListEnd,
     LoadStr(
-        "LOCAL",
+        "LOCAL@SYSTEM_TITLE",
     ),
     StoreVar,
     ListBegin,
@@ -121,7 +121,7 @@ fn add_assign() {
     ListBegin,
     ListEnd,
     LoadStr(
-        "LOCAL",
+        "LOCAL@SYSTEM_TITLE",
     ),
     LoadVar,
     LoadStr(
@@ -157,7 +157,7 @@ fn form_conditional() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     ListBegin,
@@ -215,7 +215,7 @@ fn conditional() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     ListBegin,
@@ -275,7 +275,7 @@ fn sub() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     ListBegin,
@@ -323,7 +323,7 @@ fn add() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     ListBegin,
@@ -371,7 +371,7 @@ fn compare() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     ListBegin,
@@ -419,7 +419,7 @@ fn if_false() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     LoadInt(
@@ -474,7 +474,7 @@ fn helloworld() {
     compile(code, &mut dic).unwrap();
 
     k9::snapshot!(
-        dic.get_func("SYSTEM_TITLE").unwrap(),
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
         r#"
 [
     LoadStr(
