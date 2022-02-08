@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
+use clap::Parser;
 use eframe::NativeOptions;
 use erars::{
     function::FunctionDic,
@@ -8,7 +9,15 @@ use erars::{
 };
 use hashbrown::HashMap;
 
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    path: Option<PathBuf>,
+}
+
 fn main() {
+    let args = Args::parse();
+
     let chan = Arc::new(ConsoleChannel::new());
 
     let inner_chan = chan.clone();
@@ -18,7 +27,12 @@ fn main() {
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
         let erbs = glob::glob_with(
-            "ERB/**/*.ERB",
+            &format!(
+                "{}/ERB/**/*.ERB",
+                args.path
+                    .map(|p| p.display().to_string())
+                    .unwrap_or(".".into())
+            ),
             glob::MatchOptions {
                 case_sensitive: false,
                 require_literal_leading_dot: true,

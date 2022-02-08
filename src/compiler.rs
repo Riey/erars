@@ -1,6 +1,6 @@
 use crate::{
     event::{Event, EventFlags, EventType},
-    function::FunctionDic,
+    function::{FunctionBody, FunctionDic},
     instruction::Instruction,
     operator::BinaryOperator,
 };
@@ -41,15 +41,17 @@ impl Default for Alignment {
     }
 }
 
-struct Compiler {
+struct Compiler<'s> {
+    name: &'s str,
     out: Vec<Instruction>,
     marks: HashMap<String, u32>,
     goto_marks: HashMap<String, Vec<u32>>,
 }
 
-impl Compiler {
-    pub fn new() -> Self {
+impl<'s> Compiler<'s> {
+    pub fn new(name: &'s str) -> Self {
         Self {
+            name,
             out: Vec::new(),
             marks: HashMap::new(),
             goto_marks: HashMap::new(),
@@ -72,15 +74,14 @@ impl Compiler {
     }
 
     fn get_var(&mut self, p: Pair<Rule>) -> Result<()> {
-        if p.as_rule() == Rule::ident {
-            self.push_list_begin();
-            self.push_list_end();
-            self.push_str(p.as_str())?;
-        } else {
-            let mut pairs = p.into_inner();
-            let var = pairs.next().unwrap().as_str();
-            self.push_args(pairs)?;
-            self.push_str(var)?;
+        let mut pairs = p.into_inner();
+        let var = pairs.next().unwrap().as_str();
+
+        self.push_args(pairs)?;
+
+        match var {
+            "LOCAL" | "LOCALS" => self.push_str(format!("{}@{}", var, self.name))?,
+            _ => self.push_str(var)?,
         }
 
         Ok(())
@@ -141,7 +142,7 @@ impl Compiler {
             Rule::string => self.push_str(p.into_inner().next().unwrap().as_str()),
             Rule::string_inner => self.push_str(p.as_str()),
             Rule::num => self.push_int(p.as_str().parse()?),
-            Rule::var_expr | Rule::ident => self.push_var(p),
+            Rule::var_expr => self.push_var(p),
             Rule::method_expr => {
                 let mut pairs = p.into_inner();
                 let name = pairs.next().unwrap().as_str();
@@ -403,6 +404,8 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
     let header = pairs.next().unwrap().into_inner();
 
     let mut flags = EventFlags::None;
+    let mut local_size = 1000;
+    let mut locals_size = 1000;
 
     for info in header {
         match info.as_rule() {
@@ -412,15 +415,31 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
                 "SINGLE" => flags = EventFlags::Single,
                 _ => bail!("Unknown event info {}", info.as_str()),
             },
+            Rule::function_local_info => {
+                local_size = info
+                    .into_inner()
+                    .next()
+                    .unwrap()
+                    .as_str()
+                    .parse::<usize>()?;
+            }
+            Rule::function_locals_info => {
+                locals_size = info
+                    .into_inner()
+                    .next()
+                    .unwrap()
+                    .as_str()
+                    .parse::<usize>()?;
+            }
             _ => todo!("Other header"),
         }
     }
 
-    let mut compiler = Compiler::new();
+    let mut compiler = Compiler::new(label);
 
     compiler.push_block(pairs)?;
 
-    let body = compiler.finish()?;
+    let body = FunctionBody::new(local_size, locals_size, compiler.finish()?);
 
     match label.parse::<EventType>() {
         Ok(ty) => dic.insert_event(Event { flags, ty }, body),

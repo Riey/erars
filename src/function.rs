@@ -8,7 +8,34 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 
-type FunctionBody = Vec<Instruction>;
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FunctionBody {
+    local_size: usize,
+    locals_size: usize,
+    body: Vec<Instruction>,
+}
+
+impl FunctionBody {
+    pub fn new(local_size: usize, locals_size: usize, body: Vec<Instruction>) -> Self {
+        Self {
+            local_size,
+            locals_size,
+            body,
+        }
+    }
+
+    pub fn local_size(&self) -> usize {
+        self.local_size
+    }
+
+    pub fn locals_size(&self) -> usize {
+        self.locals_size
+    }
+
+    pub fn body(&self) -> &[Instruction] {
+        &self.body
+    }
+}
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EventCollection {
@@ -19,7 +46,7 @@ pub struct EventCollection {
 }
 
 impl EventCollection {
-    pub fn run(&self, mut f: impl FnMut(&[Instruction]) -> Result<()>) -> Result<()> {
+    pub fn run(&self, mut f: impl FnMut(&FunctionBody) -> Result<()>) -> Result<()> {
         if let Some(single) = self.single.as_ref() {
             f(single)?;
         } else {
@@ -72,10 +99,9 @@ impl FunctionDic {
         &self.event[ty]
     }
 
-    pub fn get_func(&self, name: &str) -> Result<&[Instruction]> {
+    pub fn get_func(&self, name: &str) -> Result<&FunctionBody> {
         self.normal
             .get(name)
-            .map(|b| &**b)
             .ok_or_else(|| anyhow!("Function {} is not exists", name))
     }
 }

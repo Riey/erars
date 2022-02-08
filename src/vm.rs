@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::compiler::PrintFlags;
 use crate::event::EventType;
-use crate::function::FunctionDic;
+use crate::function::{FunctionBody, FunctionDic};
 use crate::instruction::{BeginType, Instruction};
 use crate::operator::BinaryOperator;
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
@@ -22,7 +22,6 @@ use crate::value::Value;
 pub struct VariableInfo {
     is_chara: bool,
     is_str: bool,
-    builtin: Option<BulitinVariable>,
     default_int: i64,
     size: Vec<usize>,
 }
@@ -192,6 +191,33 @@ impl VariableStorage {
         }
     }
 
+    fn init_local(&mut self, name: &str, body: &FunctionBody) {
+        self.variables
+            .entry(format!("LOCAL@{}", name))
+            .or_insert_with(|| {
+                let local_info = VariableInfo {
+                    default_int: 0,
+                    size: vec![body.local_size()],
+                    is_str: false,
+                    is_chara: false,
+                };
+                let local = Variable::new(&local_info);
+                (local_info, Either::Left(local))
+            });
+        self.variables
+            .entry(format!("LOCALS@{}", name))
+            .or_insert_with(|| {
+                let locals_info = VariableInfo {
+                    default_int: 0,
+                    size: vec![body.locals_size()],
+                    is_str: true,
+                    is_chara: false,
+                };
+                let locals = Variable::new(&locals_info);
+                (locals_info, Either::Left(locals))
+            });
+    }
+
     pub fn target(&mut self) -> Result<usize> {
         Ok((*self
             .get_global("TARGET")
@@ -328,7 +354,6 @@ impl TerminalVm {
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        eprintln!("Run {:?}", inst);
         match inst {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
@@ -406,6 +431,10 @@ impl TerminalVm {
                 }
 
                 // TODO: PRINTW
+            }
+            Instruction::Call => {
+                let func = ctx.pop_str()?;
+                self.call(&func, chan, ctx)?;
             }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
@@ -514,13 +543,18 @@ impl TerminalVm {
 
     fn run_body(
         &self,
-        body: &[Instruction],
+        label: &str,
+        body: &FunctionBody,
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         let mut cursor = 0;
 
-        while let Some(inst) = body.get(cursor) {
+        ctx.var.init_local(label, body);
+
+        let insts = body.body();
+
+        while let Some(inst) = insts.get(cursor) {
             cursor += 1;
             match self.run_instruction(inst, &mut cursor, chan, ctx) {
                 Ok(None) => {}
@@ -537,12 +571,12 @@ impl TerminalVm {
 
     fn call(&self, name: &str, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<Workflow> {
         let body = self.dic.get_func(name)?;
-        self.run_body(body, chan, ctx)
+        self.run_body(name, body, chan, ctx)
     }
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         self.dic.get_event(ty).run(|body| {
-            self.run_body(body, chan, ctx)?;
+            self.run_body(ty.into(), body, chan, ctx)?;
 
             Ok(())
         })

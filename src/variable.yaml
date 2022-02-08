@@ -15,12 +15,6 @@ RESULT:
 FLAG:
   size: [10000]
 
-LOCAL:
-  size: [1000]
-LOCALS:
-  is_str: true
-  size: [100]
-
 # GLOBAL:
 #   is_global: true
 #   size: [1000]
