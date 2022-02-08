@@ -405,7 +405,7 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
 
     let mut flags = EventFlags::None;
     let mut local_size = 1000;
-    let mut locals_size = 1000;
+    let mut locals_size = 100;
 
     for info in header {
         match info.as_rule() {
