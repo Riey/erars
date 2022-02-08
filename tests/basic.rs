@@ -19,6 +19,105 @@ fn comment() {
 }
 
 #[test]
+fn call() {
+    let code = "@SYSTEM_TITLE\nA = 1\nLOCAL = 3\nCALL AAA, 123\n@AAA(ARG)\nPRINTFORML A, ARG, LOCAL = {A}, {ARG}, {LOCAL}";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
+        r#"
+[
+    LoadInt(
+        1,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "A",
+    ),
+    StoreVar,
+    LoadInt(
+        3,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    StoreVar,
+    ListBegin,
+    LoadInt(
+        123,
+    ),
+    ListEnd,
+    LoadStr(
+        "AAA",
+    ),
+    Call,
+]
+"#
+    );
+
+    k9::snapshot!(
+        dic.get_func("AAA").unwrap().body(),
+        r#"
+[
+    ListBegin,
+    LoadStr(
+        "A, ARG, LOCAL = ",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "A",
+    ),
+    LoadVar,
+    LoadStr(
+        ", ",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "ARG@AAA",
+    ),
+    LoadVar,
+    LoadStr(
+        ", ",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL@AAA",
+    ),
+    LoadVar,
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "A, ARG, LOCAL = 1, 123, 0",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
 fn goto() {
     let code = "@SYSTEM_TITLE\nGOTO LABEL\nLOCAL = 3\n$LABEL\nPRINTFORML LOCAL = {LOCAL}";
     let mut dic = FunctionDic::new();

@@ -80,7 +80,10 @@ impl<'s> Compiler<'s> {
         self.push_args(pairs)?;
 
         match var {
-            "LOCAL" | "LOCALS" => self.push_str(format!("{}@{}", var, self.name))?,
+            // local variables
+            "ARG" | "ARGS" | "LOCAL" | "LOCALS" => {
+                self.push_str(format!("{}@{}", var, self.name))?
+            }
             _ => self.push_str(var)?,
         }
 
@@ -400,7 +403,8 @@ fn parse_print_attributes(p: Pair<Rule>) -> PrintFlags {
 fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
     let mut pairs = p.into_inner();
 
-    let label = pairs.next().unwrap().as_str().trim_start_matches('@');
+    let mut label_pair = pairs.next().unwrap().into_inner();
+    let label = label_pair.next().unwrap().as_str();
     let header = pairs.next().unwrap().into_inner();
 
     let mut flags = EventFlags::None;
@@ -439,7 +443,26 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
 
     compiler.push_block(pairs)?;
 
-    let body = FunctionBody::new(local_size, locals_size, compiler.finish()?);
+    let mut body = FunctionBody::new(local_size, locals_size, compiler.finish()?);
+
+    if let Some(args) = label_pair.next().map(|p| p.into_inner()) {
+        for arg in args {
+            debug_assert_eq!(arg.as_rule(), Rule::var_expr);
+            let mut pairs = arg.into_inner();
+            let name = pairs.next().unwrap().as_str();
+
+            let name = if matches!(name, "LOCAL" | "LOCALS" | "ARG" | "ARGS") {
+                format!("{}@{}", name, label)
+            } else {
+                name.into()
+            };
+            let mut indices = ArrayVec::new();
+            for arg_pair in pairs {
+                indices.push(eval_pair(arg_pair)?);
+            }
+            body.push_arg(name, indices);
+        }
+    }
 
     match label.parse::<EventType>() {
         Ok(ty) => dic.insert_event(Event { flags, ty }, body),
@@ -447,6 +470,13 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
     };
 
     Ok(())
+}
+
+fn eval_pair(p: Pair<Rule>) -> Result<usize> {
+    match p.as_rule() {
+        Rule::num => p.as_str().parse().map_err(Into::into),
+        _ => bail!("Can't eval {} as number", p),
+    }
 }
 
 pub fn compile(s: &str, dic: &mut FunctionDic) -> Result<()> {

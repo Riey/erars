@@ -193,6 +193,30 @@ impl VariableStorage {
 
     fn init_local(&mut self, name: &str, body: &FunctionBody) {
         self.variables
+            .entry(format!("ARG@{}", name))
+            .or_insert_with(|| {
+                let arg_info = VariableInfo {
+                    default_int: 0,
+                    size: vec![1000],
+                    is_str: false,
+                    is_chara: false,
+                };
+                let arg = Variable::new(&arg_info);
+                (arg_info, Either::Left(arg))
+            });
+        self.variables
+            .entry(format!("ARGS@{}", name))
+            .or_insert_with(|| {
+                let args_info = VariableInfo {
+                    default_int: 0,
+                    size: vec![100],
+                    is_str: true,
+                    is_chara: false,
+                };
+                let args = Variable::new(&args_info);
+                (args_info, Either::Left(args))
+            });
+        self.variables
             .entry(format!("LOCAL@{}", name))
             .or_insert_with(|| {
                 let local_info = VariableInfo {
@@ -434,7 +458,8 @@ impl TerminalVm {
             }
             Instruction::Call => {
                 let func = ctx.pop_str()?;
-                self.call(&func, chan, ctx)?;
+                let args = ctx.take_list();
+                self.call(&func, &args, chan, ctx)?;
             }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
@@ -543,14 +568,11 @@ impl TerminalVm {
 
     fn run_body(
         &self,
-        label: &str,
         body: &FunctionBody,
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         let mut cursor = 0;
-
-        ctx.var.init_local(label, body);
 
         let insts = body.body();
 
@@ -569,14 +591,29 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    fn call(&self, name: &str, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<Workflow> {
-        let body = self.dic.get_func(name)?;
-        self.run_body(name, body, chan, ctx)
+    fn call(
+        &self,
+        label: &str,
+        args: &[Value],
+        chan: &ConsoleChannel,
+        ctx: &mut VmContext,
+    ) -> Result<Workflow> {
+        let body = self.dic.get_func(label)?;
+
+        ctx.var.init_local(label, body);
+
+        for ((arg_name, arg_indices), arg) in body.args().iter().zip(args) {
+            let var = ctx.var.get_global(arg_name).unwrap();
+            var.set(arg_indices.iter().copied(), arg.clone())?;
+        }
+
+        self.run_body(body, chan, ctx)
     }
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         self.dic.get_event(ty).run(|body| {
-            self.run_body(ty.into(), body, chan, ctx)?;
+            ctx.var.init_local(ty.into(), body);
+            self.run_body(body, chan, ctx)?;
 
             Ok(())
         })
@@ -585,7 +622,7 @@ impl TerminalVm {
     fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         match ty {
             BeginType::Title => {
-                self.call("SYSTEM_TITLE", chan, ctx)?;
+                self.call("SYSTEM_TITLE", &[], chan, ctx)?;
                 Ok(())
             }
             BeginType::First => {

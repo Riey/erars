@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use arrayvec::ArrayVec;
 use enum_map::EnumMap;
 use hashbrown::HashMap;
 
@@ -13,6 +14,7 @@ pub struct FunctionBody {
     local_size: usize,
     locals_size: usize,
     body: Vec<Instruction>,
+    args: Vec<(String, ArrayVec<usize, 4>)>,
 }
 
 impl FunctionBody {
@@ -21,7 +23,16 @@ impl FunctionBody {
             local_size,
             locals_size,
             body,
+            args: Vec::new(),
         }
+    }
+
+    pub fn push_arg(&mut self, name: impl Into<String>, indices: ArrayVec<usize, 4>) {
+        self.args.push((name.into(), indices));
+    }
+
+    pub fn args(&self) -> &[(String, ArrayVec<usize, 4>)] {
+        &self.args
     }
 
     pub fn local_size(&self) -> usize {

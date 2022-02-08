@@ -15,6 +15,9 @@ RESULT:
 FLAG:
   size: [10000]
 
+A:
+  size: [1000]
+
 # GLOBAL:
 #   is_global: true
 #   size: [1000]
