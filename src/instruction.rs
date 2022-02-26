@@ -2,8 +2,8 @@ use crate::{
     compiler::{Alignment, PrintFlags},
     operator::{BinaryOperator, UnaryOperator},
 };
-use serde::{Deserialize, Serialize};
 use ordered_float::NotNan;
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString, Display)]

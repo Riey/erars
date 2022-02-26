@@ -189,9 +189,7 @@ impl<'s> Compiler<'s> {
             | Rule::print_form_text
             | Rule::print_form_text_space
             | Rule::formstring_expr => self.push_formtext(p),
-            Rule::assign_fallback => {
-                self.push_str(p.as_str())
-            }
+            Rule::assign_fallback => self.push_str(p.as_str()),
             _ => unreachable!("{:?}", p),
         }
     }
@@ -488,6 +486,15 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
                     .unwrap()
                     .as_str()
                     .parse::<usize>()?;
+            }
+            // TODO: DIM, DIMS
+            Rule::function_dim_info => {
+                let ident = info.into_inner().next().unwrap().as_str();
+                eprintln!("DIM {}", ident);
+            }
+            Rule::function_dims_info => {
+                let ident = info.into_inner().next().unwrap().as_str();
+                eprintln!("DIMS {}", ident);
             }
             Rule::function_ignored_info => {}
             _ => todo!("Other header"),

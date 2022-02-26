@@ -126,12 +126,14 @@ program_line = _{ printform_com | print_com | customdrawline_com | reuselastline
 function_label = ${ "@" ~ ident ~ function_args? }
 function_args = !{ &"," ~ ("," ~ var_expr)* | &"(" ~ ("(" ~ var_expr ~ ("," ~ var_expr)* ~ ")") }
 function_header = ${ (NEWLINE+ ~ "#" ~ function_info)* }
-function_info = _{ function_event_info | function_local_info | function_locals_info | function_ignored_info }
+function_info = _{ function_event_info | function_local_info | function_locals_info | function_dims_info | function_dim_info | function_ignored_info }
 // not used
-function_ignored_info = !{ "FUNCTION" | "FUNCTIONS" }
-function_event_info = !{ "PRI" | "SINGLE" | "LATER" } 
-function_local_info = !{ "LOCALSIZE" ~ num }
-function_locals_info = !{ "LOCALSSIZE" ~ num }
+function_ignored_info = ${ "FUNCTION" ~ "S"? }
+function_dims_info = ${ "DIMS" ~ " "+ ~ ident }
+function_dim_info = ${ "DIM" ~ " "+ ~ ident }
+function_event_info = ${ "PRI" | "SINGLE" | "LATER" } 
+function_local_info = ${ "LOCALSIZE" ~ " "+ ~ num }
+function_locals_info = ${ "LOCALSSIZE" ~ " "+ ~ num }
 function = { function_label ~ function_header ~ (program_line | NEWLINE)* }
 
 program = _{ SOI ~ (function | NEWLINE)* ~ EOI }
