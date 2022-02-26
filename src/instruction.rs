@@ -4,9 +4,9 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use ordered_float::NotNan;
-use strum::EnumString;
+use strum::{Display, EnumString};
 
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString, Display)]
 pub enum BeginType {
     #[strum(to_string = "TITLE")]
     Title,
@@ -14,6 +14,10 @@ pub enum BeginType {
     First,
     #[strum(to_string = "SHOP")]
     Shop,
+    #[strum(to_string = "TURNEND")]
+    TurnEnd,
+    #[strum(to_string = "AFTERTRAIN")]
+    AfterTrain,
 }
 
 #[non_exhaustive]
@@ -34,6 +38,7 @@ pub enum Instruction {
     Call,
     Begin(BeginType),
     Print(PrintFlags),
+    AlignString,
     ReuseLastLine,
     ConcatString,
     Command,
