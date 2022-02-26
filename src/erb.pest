@@ -15,6 +15,7 @@ char = {
 // number
 
 num = @{ ("+" | "-")? ~ ASCII_DIGIT+ }
+float = @{ ("+" | "-")? ~ ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)? }
 
 np_binop = _{
     add | sub | mul | div | shl | shr
@@ -95,6 +96,7 @@ begin_com = { ^"BEGIN" ~ ident }
 call_com = { (^"CALLF" | ^"CALL") ~ ident ~ ("," ~ comma_seq)? }
 callform_com = { callform_header ~ print_form_text_space ~ ("," ~ comma_seq)? }
 	callform_header = { ^"TRY"? ~ ("CALL" | "JUMP" | "GOTO") ~ "FORM" }
+times_com = { ^"TIMES" ~ var_expr ~ "," ~ float }
 other_com = { ident ~ comma_seq? }
 
 // control flow
@@ -114,7 +116,7 @@ goto_com = { ^"GOTO" ~ ident }
 assign_line = { var_expr ~ assign_addop? ~ "=" ~ expr }
     assign_addop = { add | sub | mul | div | rem | bitor | bitand | bitxor }
 
-program_line = _{ printform_com | print_com | reuselastline_com | alignment_com | returnf_com | return_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
+program_line = _{ printform_com | print_com | reuselastline_com | times_com | alignment_com | returnf_com | return_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
 
 
 function_label = ${ "@" ~ ident ~ function_args? }

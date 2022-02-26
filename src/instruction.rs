@@ -3,6 +3,7 @@ use crate::{
     operator::{BinaryOperator, UnaryOperator},
 };
 use serde::{Deserialize, Serialize};
+use ordered_float::NotNan;
 use strum::EnumString;
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString)]
@@ -15,6 +16,7 @@ pub enum BeginType {
     Shop,
 }
 
+#[non_exhaustive]
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Instruction {
     Nop,
@@ -26,6 +28,7 @@ pub enum Instruction {
     LoadStr(String),
     LoadVar,
     StoreVar,
+    Times(NotNan<f32>),
     Return,
     ReturnF,
     Call,

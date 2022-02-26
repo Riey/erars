@@ -334,6 +334,22 @@ impl<'s> Compiler<'s> {
                 self.push_str(pairs.next().unwrap().as_str())?;
                 self.out.push(Instruction::ReuseLastLine);
             }
+            Rule::times_com => {
+                let var = pairs.next().unwrap();
+                let times = pairs.next().unwrap();
+
+                self.push_expr(var.clone())?;
+                self.out.push(Instruction::Times(
+                    ordered_float::NotNan::new(
+                        times
+                            .as_str()
+                            .parse()
+                            .map_err(|_| anyhow!("Literal is not float number"))?,
+                    )
+                    .unwrap(),
+                ));
+                self.store_var(var)?;
+            }
             Rule::assign_line => {
                 let var = pairs.next().unwrap();
                 let mut rhs = pairs.next().unwrap();

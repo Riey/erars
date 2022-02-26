@@ -19,6 +19,84 @@ fn comment() {
 }
 
 #[test]
+fn times() {
+    let code = "@SYSTEM_TITLE\nLOCAL=100\nTIMES LOCAL:0, 1.435\nPRINTFORML {LOCAL}\n";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
+        r#"
+[
+    LoadInt(
+        100,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    StoreVar,
+    ListBegin,
+    LoadInt(
+        0,
+    ),
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    LoadVar,
+    Times(
+        NotNan(
+            1.435,
+        ),
+    ),
+    ListBegin,
+    LoadInt(
+        0,
+    ),
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    StoreVar,
+    ListBegin,
+    LoadStr(
+        "",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    LoadVar,
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "143",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
 fn callf() {
     let code = "@SYSTEM_TITLE\nCALLF M, 123\n@M(ARG)\n#FUNCTION\nPRINTFORML {ARG}";
     let mut dic = FunctionDic::new();

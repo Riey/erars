@@ -519,6 +519,11 @@ impl TerminalVm {
                     .fold(String::new(), |s, l| s + &l.into_str());
                 ctx.push(ret);
             }
+            Instruction::Times(t) => {
+                let arg = ctx.pop_int()?;
+                let ret = (arg as f32 * t.into_inner()) as i64;
+                ctx.push(ret);
+            }
             Instruction::BinaryOperator(op) => {
                 let rhs = ctx.pop();
                 let lhs = ctx.pop();
