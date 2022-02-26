@@ -6,6 +6,7 @@ use hashbrown::HashMap;
 use crate::{
     event::{Event, EventFlags, EventType},
     instruction::Instruction,
+    value::Value,
 };
 use serde::{Deserialize, Serialize};
 
@@ -13,6 +14,7 @@ use serde::{Deserialize, Serialize};
 pub struct FunctionBody {
     local_size: usize,
     locals_size: usize,
+    default_arg: Option<Value>,
     body: Vec<Instruction>,
     args: Vec<(String, ArrayVec<usize, 4>)>,
 }
@@ -23,12 +25,17 @@ impl FunctionBody {
             local_size,
             locals_size,
             body,
+            default_arg: None,
             args: Vec::new(),
         }
     }
 
     pub fn push_arg(&mut self, name: impl Into<String>, indices: ArrayVec<usize, 4>) {
         self.args.push((name.into(), indices));
+    }
+
+    pub fn set_default_arg(&mut self, value: Value) {
+        self.default_arg = Some(value);
     }
 
     pub fn args(&self) -> &[(String, ArrayVec<usize, 4>)] {

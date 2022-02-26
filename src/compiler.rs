@@ -3,6 +3,7 @@ use crate::{
     function::{FunctionBody, FunctionDic},
     instruction::Instruction,
     operator::{BinaryOperator, UnaryOperator},
+    value::Value,
 };
 
 use self::parser::{ErbParser, Rule, PREC_CLIMBER};
@@ -527,18 +528,25 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
 
     if let Some(args) = label_pair.next().map(|p| p.into_inner()) {
         for arg in args {
-            debug_assert_eq!(arg.as_rule(), Rule::var_expr);
+            debug_assert_eq!(arg.as_rule(), Rule::function_arg);
             let mut pairs = arg.into_inner();
-            let name = pairs.next().unwrap().as_str();
+            let mut var_pairs = pairs.next().unwrap().into_inner();
+
+            if let Some(default_arg) = pairs.next() {
+                body.set_default_arg(eval_pair_to_value(default_arg)?);
+            }
+
+            let name = var_pairs.next().unwrap().as_str();
 
             let name = if matches!(name, "LOCAL" | "LOCALS" | "ARG" | "ARGS") {
                 format!("{}@{}", name, label)
             } else {
                 name.into()
             };
+
             let mut indices = ArrayVec::new();
-            for arg_pair in pairs {
-                indices.push(eval_pair(arg_pair)?);
+            for arg_pair in var_pairs {
+                indices.push(eval_pair_to_arg(arg_pair)?);
             }
             body.push_arg(name, indices);
         }
@@ -552,7 +560,19 @@ fn parse_function(p: Pair<Rule>, dic: &mut FunctionDic) -> Result<()> {
     Ok(())
 }
 
-fn eval_pair(p: Pair<Rule>) -> Result<usize> {
+fn eval_pair_to_value(p: Pair<Rule>) -> Result<Value> {
+    match p.as_rule() {
+        Rule::num => p
+            .as_str()
+            .parse::<i64>()
+            .map_err(Into::into)
+            .map(Value::Int),
+        Rule::string => Ok(p.into_inner().next().unwrap().as_str().into()),
+        _ => bail!("Can't eval {} as number", p),
+    }
+}
+
+fn eval_pair_to_arg(p: Pair<Rule>) -> Result<usize> {
     match p.as_rule() {
         Rule::num => p.as_str().parse().map_err(Into::into),
         _ => bail!("Can't eval {} as number", p),

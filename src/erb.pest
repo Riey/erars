@@ -128,7 +128,8 @@ program_line = _{ printform_com | print_com | customdrawline_com | reuselastline
 
 
 function_label = ${ "@" ~ ident ~ function_args? }
-function_args = !{ &"," ~ ("," ~ var_expr)* | &"(" ~ ("(" ~ var_expr ~ ("," ~ var_expr)* ~ ")") }
+function_args = !{ &"," ~ ("," ~ function_arg)* | &"(" ~ ("(" ~ function_arg ~ ("," ~ function_arg)* ~ ")") }
+    function_arg = { var_expr ~ ( "=" ~ expr )? }
 function_header = ${ (NEWLINE+ ~ "#" ~ function_info)* }
 function_info = _{ function_event_info | function_local_info | function_locals_info | function_dims_info | function_dim_info | function_ignored_info }
 // not used
