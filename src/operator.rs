@@ -1,21 +1,18 @@
 use serde::{Deserialize, Serialize};
-use strum::{Display, IntoStaticStr};
+use strum::{Display, EnumString, IntoStaticStr};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, Display, EnumString,
+)]
 pub enum UnaryOperator {
     /// !
+    #[strum(to_string = "!")]
     Not,
 }
 
-impl UnaryOperator {
-    pub fn name(self) -> &'static str {
-        match self {
-            UnaryOperator::Not => "!",
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, Display)]
+#[derive(
+    Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, Display, EnumString,
+)]
 pub enum BinaryOperator {
     /// +
     #[strum(to_string = "+")]

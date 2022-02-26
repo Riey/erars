@@ -19,6 +19,64 @@ fn comment() {
 }
 
 #[test]
+fn not() {
+    let code = "@SYSTEM_TITLE\nPRINTFORML !1 = `{!1}` !!3 = `{!!3}`\n";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
+        r#"
+[
+    ListBegin,
+    LoadStr(
+        "!1 = `",
+    ),
+    LoadInt(
+        1,
+    ),
+    UnaryOperator(
+        Not,
+    ),
+    LoadStr(
+        "` !!3 = `",
+    ),
+    LoadInt(
+        3,
+    ),
+    UnaryOperator(
+        Not,
+    ),
+    UnaryOperator(
+        Not,
+    ),
+    LoadStr(
+        "`",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "!1 = `0` !!3 = `1`",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
 fn times() {
     let code = "@SYSTEM_TITLE\nLOCAL=100\nTIMES LOCAL:0, 1.435\nPRINTFORML {LOCAL}\n";
     let mut dic = FunctionDic::new();

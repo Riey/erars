@@ -2,7 +2,7 @@ use crate::{
     event::{Event, EventFlags, EventType},
     function::{FunctionBody, FunctionDic},
     instruction::Instruction,
-    operator::BinaryOperator,
+    operator::{BinaryOperator, UnaryOperator},
 };
 
 use self::parser::{ErbParser, Rule, PREC_CLIMBER};
@@ -118,6 +118,12 @@ impl<'s> Compiler<'s> {
         use std::cell::UnsafeCell;
 
         match p.as_rule() {
+            Rule::unaryop_expr => {
+                let (op, term) = p.into_inner().next_tuple().unwrap();
+                self.push_expr(term)?;
+                self.out.push(Instruction::UnaryOperator(to_unaryop(op)?));
+                Ok(())
+            }
             Rule::binop_expr => {
                 let s = UnsafeCell::new(self);
 
@@ -554,6 +560,13 @@ pub fn compile(s: &str, dic: &mut FunctionDic) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn to_unaryop(op: Pair<Rule>) -> Result<UnaryOperator> {
+    Ok(match op.as_rule() {
+        Rule::not => UnaryOperator::Not,
+        _ => bail!("Invalid unary op pair {:?}", op),
+    })
 }
 
 fn to_binop(op: Pair<Rule>) -> Result<BinaryOperator> {

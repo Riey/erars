@@ -13,7 +13,7 @@ use crate::compiler::PrintFlags;
 use crate::event::EventType;
 use crate::function::{FunctionBody, FunctionDic};
 use crate::instruction::{BeginType, Instruction};
-use crate::operator::BinaryOperator;
+use crate::operator::{BinaryOperator, UnaryOperator};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 use crate::value::Value;
 
@@ -524,6 +524,12 @@ impl TerminalVm {
                 let ret = (arg as f32 * t.into_inner()) as i64;
                 ctx.push(ret);
             }
+            Instruction::UnaryOperator(op) => match op {
+                UnaryOperator::Not => {
+                    let operand = ctx.pop().as_bool();
+                    ctx.push(!operand);
+                }
+            },
             Instruction::BinaryOperator(op) => {
                 let rhs = ctx.pop();
                 let lhs = ctx.pop();
