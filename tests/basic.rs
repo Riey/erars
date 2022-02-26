@@ -19,6 +19,43 @@ fn comment() {
 }
 
 #[test]
+fn callf() {
+    let code = "@SYSTEM_TITLE\nCALLF M, 123\n@M(ARG)\n#FUNCTION\nPRINTFORML {ARG}";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
+        r#"
+[
+    ListBegin,
+    LoadInt(
+        123,
+    ),
+    ListEnd,
+    LoadStr(
+        "M",
+    ),
+    Call,
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "123",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
 fn method() {
     let code = "@SYSTEM_TITLE\nPRINTFORML AAA(123, 456) = ({AAA(123, 456)})\n@AAA(ARG:1, ARG)\n#FUNCTION\nRETURNF ARG:1 + ARG + 123";
     let mut dic = FunctionDic::new();
