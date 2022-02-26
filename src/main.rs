@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use std::{path::PathBuf, sync::Arc};
 
 use clap::Parser;
@@ -44,16 +45,15 @@ fn main() {
         let mut function_dic = FunctionDic::new();
 
         for erb in erbs {
-            erb.map_err(anyhow::Error::from)
-                .and_then(|erb| {
-                    erars::compiler::compile(
-                        std::fs::read_to_string(erb)
-                            .unwrap()
-                            .trim_start_matches("\u{feff}"),
-                        &mut function_dic,
-                    )
-                })
-                .unwrap()
+            let erb = erb.unwrap();
+            erars::compiler::compile(
+                std::fs::read_to_string(&erb)
+                    .unwrap()
+                    .trim_start_matches("\u{feff}"),
+                &mut function_dic,
+            )
+            .map_err(|e| anyhow!("Failed to compile[{}]: {}", erb.display(), e))
+            .unwrap();
         }
 
         let mut ctx = VmContext::new(&infos);

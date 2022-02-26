@@ -60,6 +60,7 @@ expr = _{ binop_expr | conditionalop_expr | term }
 np_expr = _{ np_binop_expr | conditionalop_expr | term }
 term = _{ string | formstring_expr | num | method_expr | var_expr | "(" ~ expr ~ ")" }
 comma_seq = _{ expr ~ ("," ~ expr)* }
+np_comma_seq = _{ np_expr ~ ("," ~ np_expr)* }
 
 
 // commands
@@ -70,9 +71,9 @@ print_align_flag = ${ ^"LC" | ^"C" }
 print_text = { print_char* }
 	print_char = _{ !NEWLINE ~ ANY }
 print_form_text = !{ print_form_normal_text ~ ((print_form_var_text | print_form_cond_text) ~ print_form_normal_text)* }
-	print_form_var_text = _{
-    	"%" ~ np_expr ~ "%" |
-    	"{" ~ expr ~ "}"
+	print_form_var_text = {
+    	"%" ~ np_comma_seq ~ "%" |
+    	"{" ~ comma_seq ~ "}"
     }
     print_form_cond_text = _{
         "\\@" ~ term ~ "?" ~ print_form_cond_inner_text_first ~ "#" ~ print_form_text ~ "\\@"
@@ -91,6 +92,8 @@ printform_com = ${ ^"PRINTFORM" ~ print_attributes ~ (" " ~ print_form_text)? }
 reuselastline_com = { ^"REUSELASTLINE" ~ print_text? }
 alignment_com = { ^"ALIGNMENT" ~ alignment }
     alignment = { ^"LEFT" | ^"CENTER" | ^"RIGHT" }
+customdrawline_com = { ^"CUSTOMDRAWLINE" ~ drawline_char }
+    drawline_char = { !NEWLINE ~ ANY }
 
 begin_com = { ^"BEGIN" ~ ident }
 call_com = { (^"CALLF" | ^"CALL") ~ ident ~ ("," ~ comma_seq)? }
@@ -113,10 +116,11 @@ goto_com = { ^"GOTO" ~ ident }
 
 // assign
 
-assign_line = { var_expr ~ assign_addop? ~ "=" ~ expr }
+assign_line = { var_expr ~ assign_addop? ~ "=" ~ (expr | assign_fallback) }
+    assign_fallback = { (!NEWLINE ~ ANY)* }
     assign_addop = { add | sub | mul | div | rem | bitor | bitand | bitxor }
 
-program_line = _{ printform_com | print_com | reuselastline_com | times_com | alignment_com | returnf_com | return_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
+program_line = _{ printform_com | print_com | customdrawline_com | reuselastline_com | times_com | alignment_com | returnf_com | return_com | call_com | callform_com | begin_com | assign_line | goto_label | goto_com | sif_com | if_com | other_com }
 
 
 function_label = ${ "@" ~ ident ~ function_args? }

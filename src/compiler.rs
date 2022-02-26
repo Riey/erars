@@ -159,6 +159,17 @@ impl<'s> Compiler<'s> {
             //     // so we have to unwrap inner expr
             //     self.push_expr(p.into_inner().next().unwrap())
             // }
+            Rule::print_form_var_text => {
+                let mut pairs = p.into_inner();
+                self.push_expr(pairs.next().unwrap())?;
+
+                if let Some(align) = pairs.next() {
+                    self.push_expr(align)?;
+                    self.out.push(Instruction::AlignString);
+                }
+
+                Ok(())
+            }
             Rule::conditionalop_expr | Rule::print_form_cond_text => {
                 let mut pairs = p.into_inner();
                 let cond = pairs.next().unwrap();
@@ -176,7 +187,11 @@ impl<'s> Compiler<'s> {
             Rule::print_form_cond_inner_text_first
             | Rule::print_form_cond_inner_text_second
             | Rule::print_form_text
+            | Rule::print_form_text_space
             | Rule::formstring_expr => self.push_formtext(p),
+            Rule::assign_fallback => {
+                self.push_str(p.as_str())
+            }
             _ => unreachable!("{:?}", p),
         }
     }
@@ -266,6 +281,7 @@ impl<'s> Compiler<'s> {
 
     fn push_line(&mut self, p: Pair<Rule>) -> Result<()> {
         let rule = p.as_rule();
+
         let mut pairs = p.into_inner();
 
         match rule {
@@ -400,6 +416,16 @@ impl<'s> Compiler<'s> {
                 self.push_str(name)?;
 
                 self.out.push(Instruction::Command);
+            }
+            Rule::customdrawline_com => {
+                self.push_str(pairs.next().unwrap().as_str())?;
+                self.push_str("CUSTOMDRAWLINE")?;
+                self.out.push(Instruction::Command);
+            }
+            Rule::callform_com => {
+                let _header = pairs.next().unwrap();
+                self.push_expr(pairs.next().unwrap())?;
+                self.out.push(Instruction::Call);
             }
             _ => unreachable!("{:?}", rule),
         };

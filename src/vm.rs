@@ -660,7 +660,7 @@ impl TerminalVm {
                 self.call_event(EventType::First, chan, ctx)?;
                 Ok(())
             }
-            BeginType::Shop => bail!("TODO: SHOP"),
+            _ => bail!("TODO: {}", ty),
         }
     }
 
