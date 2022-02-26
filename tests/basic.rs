@@ -606,6 +606,85 @@ fn form_conditional() {
 
 #[test]
 fn conditional() {
+    let code = "@SYSTEM_TITLE\nLOCAL=1\nLOCAL= LOCAL ? 2 # 3 \nPRINTFORML {LOCAL}";
+    let mut dic = FunctionDic::new();
+
+    compile(code, &mut dic).unwrap();
+
+    k9::snapshot!(
+        dic.get_func("SYSTEM_TITLE").unwrap().body(),
+        r#"
+[
+    LoadInt(
+        1,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    StoreVar,
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    LoadVar,
+    GotoIfNot(
+        12,
+    ),
+    LoadInt(
+        2,
+    ),
+    Goto(
+        13,
+    ),
+    LoadInt(
+        3,
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    StoreVar,
+    ListBegin,
+    LoadStr(
+        "",
+    ),
+    ListBegin,
+    ListEnd,
+    LoadStr(
+        "LOCAL@SYSTEM_TITLE",
+    ),
+    LoadVar,
+    LoadStr(
+        "",
+    ),
+    ListEnd,
+    ConcatString,
+    Print(
+        NEWLINE,
+    ),
+]
+"#
+    );
+
+    k9::snapshot!(
+        run_test(dic),
+        r#"
+[
+    Print(
+        "2",
+    ),
+    NewLine,
+]
+"#
+    );
+}
+
+#[test]
+fn print_conditional() {
     let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 0 = %(1 == 0) ? \"TRUE\" # \"FALSE\"%";
     let mut dic = FunctionDic::new();
 
@@ -629,23 +708,17 @@ fn conditional() {
         Equal,
     ),
     GotoIfNot(
-        11,
+        8,
     ),
-    ListBegin,
     LoadStr(
         "TRUE",
     ),
-    ListEnd,
-    ConcatString,
     Goto(
-        15,
+        9,
     ),
-    ListBegin,
     LoadStr(
         "FALSE",
     ),
-    ListEnd,
-    ConcatString,
     LoadStr(
         "",
     ),

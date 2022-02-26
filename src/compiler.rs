@@ -115,7 +115,7 @@ impl<'s> Compiler<'s> {
     }
 
     fn push_expr(&mut self, p: Pair<Rule>) -> Result<()> {
-        // eprintln!("{:?}", p.as_rule());
+        eprintln!("{:?}", p.as_rule());
 
         match p.as_rule() {
             Rule::unaryop_expr => {
@@ -186,10 +186,10 @@ impl<'s> Compiler<'s> {
 
                 self.push_expr(cond)?;
                 let begin = self.mark();
-                self.push_formtext(if_true, true)?;
+                self.push_expr(if_true)?;
                 let true_end = self.mark();
                 self.insert(begin, Instruction::GotoIfNot(true_end + 1))?;
-                self.push_formtext(or_false, true)?;
+                self.push_expr(or_false)?;
                 self.insert(true_end, Instruction::Goto(self.current_no()))?;
                 Ok(())
             }
