@@ -115,7 +115,7 @@ impl<'s> Compiler<'s> {
     }
 
     fn push_expr(&mut self, p: Pair<Rule>) -> Result<()> {
-        use std::cell::UnsafeCell;
+        // eprintln!("{:?}", p.as_rule());
 
         match p.as_rule() {
             Rule::unaryop_expr => {
@@ -125,6 +125,8 @@ impl<'s> Compiler<'s> {
                 Ok(())
             }
             Rule::binop_expr => {
+                use std::cell::UnsafeCell;
+
                 let s = UnsafeCell::new(self);
 
                 PREC_CLIMBER.climb(
@@ -181,20 +183,22 @@ impl<'s> Compiler<'s> {
                 let cond = pairs.next().unwrap();
                 let if_true = pairs.next().unwrap();
                 let or_false = pairs.next().unwrap();
+
                 self.push_expr(cond)?;
                 let begin = self.mark();
-                self.push_expr(if_true)?;
+                self.push_formtext(if_true, true)?;
                 let true_end = self.mark();
                 self.insert(begin, Instruction::GotoIfNot(true_end + 1))?;
-                self.push_expr(or_false)?;
+                self.push_formtext(or_false, true)?;
                 self.insert(true_end, Instruction::Goto(self.current_no()))?;
                 Ok(())
             }
-            Rule::print_form_cond_inner_text_first
-            | Rule::print_form_cond_inner_text_second
-            | Rule::print_form_text
-            | Rule::print_form_text_space
-            | Rule::formstring_expr => self.push_formtext(p),
+            Rule::print_form_cond_inner_text_first | Rule::print_form_cond_inner_text_second => {
+                self.push_formtext(p, true)
+            }
+            Rule::print_form_text | Rule::print_form_text_space | Rule::formstring_expr => {
+                self.push_formtext(p, false)
+            }
             Rule::assign_fallback => self.push_str(p.as_str()),
             _ => unreachable!("{:?}", p),
         }
@@ -220,7 +224,7 @@ impl<'s> Compiler<'s> {
         Ok(())
     }
 
-    fn push_formtext(&mut self, mut p: Pair<Rule>) -> Result<()> {
+    fn push_formtext(&mut self, mut p: Pair<Rule>, trim: bool) -> Result<()> {
         if p.as_rule() == Rule::formstring_expr {
             p = p.into_inner().next().unwrap();
         }
@@ -234,6 +238,14 @@ impl<'s> Compiler<'s> {
         for (expr, text) in pairs.tuples() {
             self.push_expr(expr)?;
             self.push_str(text.as_str())?;
+        }
+
+        if trim {
+            if let Some(Instruction::LoadStr(t)) = self.out.last_mut() {
+                *t = t.trim_end_matches(' ').into();
+            } else {
+                unreachable!()
+            }
         }
 
         self.push_list_end();
@@ -345,7 +357,7 @@ impl<'s> Compiler<'s> {
                 if text.as_rule() == Rule::print_text {
                     self.push_str(text.as_str())?;
                 } else {
-                    self.push_formtext(text)?;
+                    self.push_formtext(text, false)?;
                 };
 
                 self.out.push(Instruction::Print(flags));

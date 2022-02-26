@@ -79,7 +79,7 @@ print_form_text = !{ print_form_normal_text ~ ((print_form_var_text | print_form
     	"%" ~ np_comma_seq ~ "%" |
     	"{" ~ comma_seq ~ "}"
     }
-    print_form_cond_text = _{
+    print_form_cond_text = {
         "\\@" ~ term ~ "?" ~ print_form_cond_inner_text_first ~ "#" ~ print_form_text ~ "\\@"
     }
     print_form_cond_inner_text_first = { print_form_normal_text_sharp ~ (print_form_var_text ~ print_form_normal_text_sharp)* }

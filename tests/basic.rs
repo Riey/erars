@@ -561,12 +561,21 @@ fn form_conditional() {
     BinaryOperator(
         Equal,
     ),
-    LoadStr(
-        "TRUE ",
+    GotoIfNot(
+        11,
     ),
     ListBegin,
     LoadStr(
-        "FALSE ",
+        "TRUE",
+    ),
+    ListEnd,
+    ConcatString,
+    Goto(
+        15,
+    ),
+    ListBegin,
+    LoadStr(
+        "FALSE",
     ),
     ListEnd,
     ConcatString,
@@ -587,7 +596,7 @@ fn form_conditional() {
         r#"
 [
     Print(
-        "1 == 1 = 1TRUE FALSE ",
+        "1 == 1 = TRUE",
     ),
     NewLine,
 ]
@@ -597,7 +606,7 @@ fn form_conditional() {
 
 #[test]
 fn conditional() {
-    let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 0 = %(1 == 1) ? \"TRUE\" # \"FALSE\"%";
+    let code = "@SYSTEM_TITLE\nPRINTFORML 1 == 0 = %(1 == 0) ? \"TRUE\" # \"FALSE\"%";
     let mut dic = FunctionDic::new();
 
     compile(code, &mut dic).unwrap();
@@ -614,23 +623,29 @@ fn conditional() {
         1,
     ),
     LoadInt(
-        1,
+        0,
     ),
     BinaryOperator(
         Equal,
     ),
     GotoIfNot(
-        8,
+        11,
     ),
+    ListBegin,
     LoadStr(
         "TRUE",
     ),
+    ListEnd,
+    ConcatString,
     Goto(
-        9,
+        15,
     ),
+    ListBegin,
     LoadStr(
         "FALSE",
     ),
+    ListEnd,
+    ConcatString,
     LoadStr(
         "",
     ),
@@ -648,7 +663,7 @@ fn conditional() {
         r#"
 [
     Print(
-        "1 == 0 = TRUE",
+        "1 == 0 = FALSE",
     ),
     NewLine,
 ]
