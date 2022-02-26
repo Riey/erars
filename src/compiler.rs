@@ -115,7 +115,7 @@ impl<'s> Compiler<'s> {
     }
 
     fn push_expr(&mut self, p: Pair<Rule>) -> Result<()> {
-        eprintln!("{:?}", p.as_rule());
+        // eprintln!("{:?}", p.as_rule());
 
         match p.as_rule() {
             Rule::unaryop_expr => {
@@ -124,7 +124,7 @@ impl<'s> Compiler<'s> {
                 self.out.push(Instruction::UnaryOperator(to_unaryop(op)?));
                 Ok(())
             }
-            Rule::binop_expr => {
+            Rule::binop_expr | Rule::np_binop_expr => {
                 use std::cell::UnsafeCell;
 
                 let s = UnsafeCell::new(self);
