@@ -1,5 +1,4 @@
-use crate::{Expr, Function, ParserError, ParserResult, Stmt};
-use either::Either;
+use crate::{BinaryOperator, Expr, Function, ParserError, ParserResult, Stmt};
 use serde::{Deserialize, Serialize};
 use source_span::{DefaultMetrics, Position, Span};
 
@@ -23,28 +22,28 @@ pub enum Alignment {
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ParserStatus {
-    Print,
-    PrintForm,
+enum FormStatus {
     // \@ ~ ?
-    PrintFormCondExpr,
+    FormCondExpr,
     // #
-    PrintFormSharpExpr,
-    PrintFormIntExpr,
-    PrintFormStrExpr,
+    FormSharpExpr,
+    /// In this case, '%' can't be used as rem operator
+    FormIntExpr,
+    FormStrExpr,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CondStatus {
     // ? ~ #
-    PrintFormCondExpr1,
+    FormCondExpr1,
     // # ~ \@
-    PrintFormCondExpr2,
+    FormCondExpr2,
 }
 
+#[derive(Clone)]
 pub struct Parser<'s> {
     text: &'s str,
-    status: Option<ParserStatus>,
+    form_status: Option<FormStatus>,
     cond_status: Option<CondStatus>,
     span: Span,
 }
@@ -54,7 +53,7 @@ impl<'s> Parser<'s> {
         Self {
             text,
             span: Span::default(),
-            status: None,
+            form_status: None,
             cond_status: None,
         }
     }
@@ -216,27 +215,27 @@ impl<'s> Parser<'s> {
                 self.shift_position_char(ch);
                 match ch {
                     '%' => {
-                        self.status = Some(ParserStatus::PrintFormStrExpr);
+                        self.form_status = Some(FormStatus::FormStrExpr);
                         break;
                     }
                     '{' => {
-                        self.status = Some(ParserStatus::PrintFormIntExpr);
+                        self.form_status = Some(FormStatus::FormIntExpr);
                         break;
                     }
-                    '#' if self.cond_status == Some(CondStatus::PrintFormCondExpr1) => {
-                        self.status = Some(ParserStatus::PrintFormSharpExpr);
-                        self.cond_status = Some(CondStatus::PrintFormCondExpr2);
+                    '#' if self.cond_status == Some(CondStatus::FormCondExpr1) => {
+                        self.form_status = Some(FormStatus::FormSharpExpr);
+                        self.cond_status = Some(CondStatus::FormCondExpr2);
                         break;
                     }
                     '\\' => {
                         match chars.next() {
                             Some('@') => {
-                                if self.cond_status == Some(CondStatus::PrintFormCondExpr2) {
+                                if self.cond_status == Some(CondStatus::FormCondExpr2) {
                                     self.cond_status = None;
                                     skip_count = 3;
                                 } else {
-                                    self.status = Some(ParserStatus::PrintFormCondExpr);
-                                    self.cond_status = Some(CondStatus::PrintFormCondExpr1);
+                                    self.form_status = Some(FormStatus::FormCondExpr);
+                                    self.cond_status = Some(CondStatus::FormCondExpr1);
                                     skip_count = 2;
                                 }
                                 self.shift_position_char('@');
@@ -249,7 +248,7 @@ impl<'s> Parser<'s> {
                         }
                     }
                     '\n' => {
-                        self.status = None;
+                        self.form_status = None;
                         break;
                     }
                     _ => {}
@@ -257,12 +256,12 @@ impl<'s> Parser<'s> {
             } else {
                 let ret = self.text;
                 self.text = "";
-                self.status = None;
+                self.form_status = None;
                 return ret;
             }
         }
 
-        let mut ret = if self.cond_status == Some(CondStatus::PrintFormCondExpr2) {
+        let mut ret = if self.cond_status == Some(CondStatus::FormCondExpr2) {
             let (ret, left) = self
                 .text
                 .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1));
@@ -280,14 +279,55 @@ impl<'s> Parser<'s> {
         ret
     }
 
+    fn read_form_text(&mut self) -> ParserResult<(String, Vec<(Expr, String)>)> {
+        let first = self.read_normal_text().into();
+
+        let mut other = Vec::new();
+
+        loop {
+            let expr = match self.form_status {
+                None => break,
+                Some(FormStatus::FormIntExpr) => {
+                    let expr = self.next_expr()?;
+                    self.skip_ws();
+                    if !self.try_get_char('}') {
+                        return Err(ParserError::MissingToken("}".into(), self.span));
+                    }
+                    expr
+                }
+                Some(FormStatus::FormStrExpr) => {
+                    let expr = self.next_expr()?;
+                    self.skip_ws();
+                    if !self.try_get_char('%') {
+                        return Err(ParserError::MissingToken("%".into(), self.span));
+                    }
+                    expr
+                }
+                Some(FormStatus::FormCondExpr) | Some(FormStatus::FormSharpExpr) => {
+                    todo!("print conditional")
+                }
+            };
+
+            self.form_status = None;
+
+            other.push((expr, self.read_normal_text().into()));
+        }
+
+        Ok((first, other))
+    }
+
     fn try_read_command(&mut self) -> Option<ParserResult<Stmt>> {
         if self.try_read_prefix("PRINTFORM") {
-            todo!()
-            // let flags = self.read_print_flags();
-            // self.skip_blank();
+            let flags = match self.read_print_flags() {
+                Ok(f) => f,
+                Err(err) => return Some(Err(err)),
+            };
+            self.skip_blank();
 
-            // self.status = Some(ParserStatus::PrintForm);
-            // Some(ret)
+            Some(
+                self.read_form_text()
+                    .map(|(first, other)| Stmt::PrintForm(flags, first, other)),
+            )
         } else if self.try_read_prefix("PRINT") {
             let flags = match self.read_print_flags() {
                 Ok(f) => f,
@@ -353,8 +393,40 @@ impl<'s> Parser<'s> {
         Some(Ok(if minus { -ret } else { ret }))
     }
 
+    fn read_term(&mut self) -> ParserResult<Expr> {
+        self.skip_ws();
+
+        if let Some(num) = self.try_read_number() {
+            self.skip_ws();
+
+            num.map(Expr::IntLit)
+        } else {
+            Err(ParserError::InvalidCode(
+                format!("표현식이 와야합니다."),
+                self.span,
+            ))
+        }
+    }
+
     fn next_expr(&mut self) -> ParserResult<Expr> {
-        todo!("Expr")
+        self.skip_ws();
+
+        let mut term = self.read_term()?;
+
+        self.skip_ws();
+
+        let mut temp = self.clone();
+
+        if let Some(symbol) = temp.try_get_symbol() {
+            if let Ok(binop) = symbol.parse::<BinaryOperator>() {
+                *self = temp;
+                term = Expr::BinopExpr(Box::new(term), binop, Box::new(self.read_term()?));
+            } else if symbol == "?" {
+                todo!("conditional")
+            }
+        }
+
+        Ok(term)
     }
 
     fn next_stmt(&mut self) -> Option<ParserResult<Stmt>> {
@@ -362,7 +434,7 @@ impl<'s> Parser<'s> {
 
         if let Some(com) = self.try_read_command() {
             Some(com)
-        } else if let Some(ident) = self.try_get_ident() {
+        } else if let Some(_ident) = self.try_get_ident() {
             // assign
             self.skip_ws();
             match self.try_get_symbol() {

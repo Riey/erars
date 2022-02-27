@@ -7,8 +7,10 @@ pub type ParserResult<T> = Result<T, ParserError>;
 pub enum ParserError {
     #[error("잘못된 코드가 발견되었습니다. `{0}` {1}")]
     InvalidCode(String, Span),
-    #[error("예상치 못한 토큰 `{0}`가 발견되었습니다. {1}")]
+    #[error("예상치 못 한 토큰 `{0}`가 발견되었습니다. {1}")]
     UnexpectedToken(String, Span),
+    #[error("토큰 `{0}`를 찾을 수 없습니다. {1}")]
+    MissingToken(String, Span),
 }
 
 impl fmt::Debug for ParserError {
