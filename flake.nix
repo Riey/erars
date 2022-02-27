@@ -33,6 +33,7 @@
                         buildInputs = deps;
                         nativeBuildInputs = with pkgs; [
                             pkg-config
+                            rustfmt
                             rustc
                             cargo
                         ];

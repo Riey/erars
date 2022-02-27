@@ -3,30 +3,21 @@ mod compiler;
 mod error;
 mod event;
 mod instruction;
-mod lexer;
 mod location;
 mod operator;
 mod parser;
-mod token;
-
-use lalrpop_util::lalrpop_mod;
-
-lalrpop_mod!(
-    #[allow(unused)]
-    grammar
-);
 
 pub use crate::{
     ast::{Expr, Function, FunctionHeader, FunctionInfo, Stmt},
     compiler::compile,
-    error::{LexicalError, LexicalResult},
+    error::{ParserError, ParserResult},
     event::{Event, EventFlags, EventType},
     instruction::Instruction,
-    lexer::Lexer,
     location::{Source, SourceLocation, SourceLocationMessage},
     operator::{BinaryOperator, UnaryOperator},
-    parser::{parse_body, parse_expr, parse_function, parse_program},
-    token::{Alignment, PrintFlags, Token},
+    parser::{
+        parse_body, parse_expr, parse_function, parse_program, Alignment, Parser, PrintFlags,
+    },
 };
 
 pub use source_span::Span;
