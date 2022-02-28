@@ -173,11 +173,27 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn ensure_get_prefix(&mut self, prefix: &str) -> ParserResult<()> {
+        if self.try_get_prefix(prefix) {
+            Ok(())
+        } else {
+            Err(ParserError::MissingToken(prefix.to_string(), self.span))
+        }
+    }
+
+    fn ensure_get_char(&mut self, prefix: char) -> ParserResult<()> {
+        if self.try_get_char(prefix) {
+            Ok(())
+        } else {
+            Err(ParserError::MissingToken(prefix.to_string(), self.span))
+        }
+    }
+
     fn skip_blank(&mut self) {
         self.try_get_char(' ');
     }
 
-    fn try_read_prefix(&mut self, prefix: &str) -> bool {
+    fn try_get_prefix(&mut self, prefix: &str) -> bool {
         if let Some(text) = self.text.strip_prefix(prefix) {
             self.shift_position(prefix);
             self.text = text;
@@ -290,17 +306,15 @@ impl<'s> Parser<'s> {
                 Some(FormStatus::FormIntExpr) => {
                     let expr = self.next_expr()?;
                     self.skip_ws();
-                    if !self.try_get_char('}') {
-                        return Err(ParserError::MissingToken("}".into(), self.span));
-                    }
+                    self.span.clear();
+                    self.ensure_get_char('}')?;
                     expr
                 }
                 Some(FormStatus::FormStrExpr) => {
                     let expr = self.next_expr()?;
                     self.skip_ws();
-                    if !self.try_get_char('%') {
-                        return Err(ParserError::MissingToken("%".into(), self.span));
-                    }
+                    self.span.clear();
+                    self.ensure_get_char('%')?;
                     expr
                 }
                 Some(FormStatus::FormCondExpr) | Some(FormStatus::FormSharpExpr) => {
@@ -317,7 +331,7 @@ impl<'s> Parser<'s> {
     }
 
     fn try_read_command(&mut self) -> Option<ParserResult<Stmt>> {
-        if self.try_read_prefix("PRINTFORM") {
+        if self.try_get_prefix("PRINTFORM") {
             let flags = match self.read_print_flags() {
                 Ok(f) => f,
                 Err(err) => return Some(Err(err)),
@@ -328,7 +342,7 @@ impl<'s> Parser<'s> {
                 self.read_form_text()
                     .map(|(first, other)| Stmt::PrintForm(flags, first, other)),
             )
-        } else if self.try_read_prefix("PRINT") {
+        } else if self.try_get_prefix("PRINT") {
             let flags = match self.read_print_flags() {
                 Ok(f) => f,
                 Err(err) => return Some(Err(err)),
@@ -409,6 +423,8 @@ impl<'s> Parser<'s> {
     }
 
     fn next_expr(&mut self) -> ParserResult<Expr> {
+        self.span.clear();
+
         self.skip_ws();
 
         let mut term = self.read_term()?;
@@ -417,12 +433,26 @@ impl<'s> Parser<'s> {
 
         let mut temp = self.clone();
 
-        if let Some(symbol) = temp.try_get_symbol() {
-            if let Ok(binop) = symbol.parse::<BinaryOperator>() {
+        loop {
+            if let Some(symbol) = temp.try_get_symbol() {
+                if let Ok(binop) = symbol.parse::<BinaryOperator>() {
+                    term = Expr::BinopExpr(Box::new(term), binop, Box::new(temp.read_term()?));
+                } else if symbol == "?" {
+                    let if_true = temp.next_expr()?;
+                    temp.skip_ws();
+                    temp.span.clear();
+                    temp.ensure_get_char('#')?;
+
+                    let or_false = temp.next_expr()?;
+                    temp.skip_ws();
+                    temp.span.clear();
+                    term = Expr::CondExpr(Box::new(term), Box::new(if_true), Box::new(or_false));
+                } else {
+                    break;
+                }
+            } else {
                 *self = temp;
-                term = Expr::BinopExpr(Box::new(term), binop, Box::new(self.read_term()?));
-            } else if symbol == "?" {
-                todo!("conditional")
+                break;
             }
         }
 
@@ -681,7 +711,7 @@ CondExpr(
     #[test]
     fn cond_expr() {
         k9::snapshot!(
-            parse_expr("1 ? 2 # 3"),
+            parse_expr("1 ? 2 # 3").unwrap(),
             "
 CondExpr(
     IntLit(
