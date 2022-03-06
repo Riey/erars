@@ -1,5 +1,6 @@
+use std::ops::Range;
+
 use crate::{BinaryOperator, Expr, Function, ParserError, ParserResult, Stmt};
-use codespan::Span;
 use serde::{Deserialize, Serialize};
 
 bitflags::bitflags! {
@@ -56,17 +57,17 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn current_loc(&self) -> u32 {
-        (self.text.as_ptr() as usize - self.begin_loc) as u32
+    fn current_loc(&self) -> usize {
+        self.text.as_ptr() as usize - self.begin_loc
     }
 
-    fn from_prev_loc_span(&self, prev_loc: u32) -> Span {
-        Span::new(prev_loc, self.current_loc())
+    fn from_prev_loc_span(&self, prev_loc: usize) -> Range<usize> {
+        prev_loc..self.current_loc()
     }
 
-    fn current_loc_span(&self) -> Span {
+    fn current_loc_span(&self) -> Range<usize> {
         let loc = self.current_loc();
-        Span::new(loc, loc)
+        loc..loc
     }
 
     fn read_until_newline(&mut self) -> &'s str {
@@ -75,10 +76,6 @@ impl<'s> Parser<'s> {
         let ret = unsafe { std::str::from_utf8_unchecked(slice.get_unchecked(..pos)) };
         self.consume(ret);
         ret
-    }
-
-    fn consume_bytes(&mut self, count: usize) {
-        self.text = self.text.split_at(self.text.len() - count).1;
     }
 
     fn skip_ws(&mut self) {
@@ -545,164 +542,74 @@ pub fn parse_body(s: &str) -> ParserResult<Vec<Stmt>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use codespan_reporting::diagnostic::{Diagnostic, Label};
+    use codespan_reporting::files::SimpleFiles;
+    use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
+    use codespan_reporting::term::Config;
+
+    fn do_test<T>(f: fn(&str) -> ParserResult<T>, source: &str) -> T {
+        let mut files = SimpleFiles::new();
+        let file_id = files.add("test.erb", source);
+
+        match f(source) {
+            Ok(ret) => ret,
+            Err((err, span)) => {
+                let diagnostic = Diagnostic::error()
+                    .with_code("E0001")
+                    .with_message("Compile ERROR")
+                    .with_labels(vec![
+                        Label::primary(file_id, span).with_message(format!("{}", err))
+                    ]);
+                let writer = StandardStream::stderr(ColorChoice::Always);
+                let config = Config::default();
+                codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+                    .unwrap();
+                panic!("Test failed");
+            }
+        }
+    }
+
+    macro_rules! snapshot {
+        ($func:expr, $code:literal $(,)? $( $expected:literal )?) => {
+            k9::snapshot!(do_test($func, $code) $(, $expected)?);
+        };
+    }
 
     #[test]
     fn var_expr() {
-        k9::snapshot!(
-            parse_expr("COUNT:123"),
-            r#"
-Var(
-    "COUNT",
-    [
-        IntLit(
-            123,
-        ),
-    ],
-)
-"#
-        );
+        snapshot!(parse_expr, "COUNT:123");
     }
 
     #[test]
     fn var_empty_expr() {
-        k9::snapshot!(
-            parse_expr("COUNT"),
-            r#"
-Var(
-    "COUNT",
-    [],
-)
-"#
-        );
+        snapshot!(parse_expr, "COUNT");
     }
 
     #[test]
     fn var_var_expr() {
-        k9::snapshot!(
-            parse_expr("COUNT:A"),
-            r#"
-Var(
-    "COUNT",
-    [
-        Var(
-            "A",
-            [],
-        ),
-    ],
-)
-"#
-        );
+        snapshot!(parse_expr, "COUNT:A");
     }
 
     #[test]
     fn assign() {
-        k9::snapshot!(
-            parse_body("A:2 = 123"),
-            r#"
-[
-    Assign(
-        Var(
-            "A",
-            [
-                IntLit(
-                    2,
-                ),
-            ],
-        ),
-        IntLit(
-            123,
-        ),
-    ),
-]
-"#
-        );
+        snapshot!(parse_body, "A:2 = 123");
     }
 
     #[test]
     fn paran_expr() {
-        k9::snapshot!(
-            parse_expr("1 + 2 ? 1 + 2 * 3 # (5+1) / 2"),
-            "
-CondExpr(
-    BinopExpr(
-        IntLit(
-            1,
-        ),
-        Add,
-        IntLit(
-            2,
-        ),
-    ),
-    BinopExpr(
-        IntLit(
-            1,
-        ),
-        Add,
-        BinopExpr(
-            IntLit(
-                2,
-            ),
-            Mul,
-            IntLit(
-                3,
-            ),
-        ),
-    ),
-    BinopExpr(
-        BinopExpr(
-            IntLit(
-                5,
-            ),
-            Add,
-            IntLit(
-                1,
-            ),
-        ),
-        Div,
-        IntLit(
-            2,
-        ),
-    ),
-)
-"
-        );
+        snapshot!(parse_expr, "1 + 2 ? 1 + 2 * 3 # (5+1) / 2");
     }
 
     #[test]
     fn cond_printform() {
-        k9::snapshot!(
-            parse_body("PRINTFORML \\@ 1 ? asdf2 # 3fe \\@"),
-            r#"
-[
-    PrintForm(
-        NEWLINE,
-        "",
-        [
-            (
-                CondExpr(
-                    IntLit(
-                        1,
-                    ),
-                    StringLit(
-                        "asdf2",
-                    ),
-                    StringLit(
-                        "3fe",
-                    ),
-                ),
-                "",
-            ),
-        ],
-    ),
-]
-"#
-        );
+        snapshot!(parse_body, "PRINTFORML \\@ 1 ? asdf2 # 3fe \\@");
     }
 
     #[test]
     fn cond_expr() {
-        k9::snapshot!(
-            parse_expr("1 ? 2 # 3").unwrap(),
+        snapshot!(
+            parse_expr,
+            "1 ? 2 # 3",
             "
 CondExpr(
     IntLit(
@@ -721,8 +628,9 @@ CondExpr(
 
     #[test]
     fn parse_simple_function() {
-        k9::snapshot!(
-            parse_function("@SYSTEM_TITLE\n#PRI\nPRINTL Hello, world!\n"),
+        snapshot!(
+            parse_function,
+            "@SYSTEM_TITLE\n#PRI\nPRINTL Hello, world!\n",
             r#"
 Function {
     header: FunctionHeader {
@@ -746,8 +654,9 @@ Function {
 
     #[test]
     fn hello_world() {
-        k9::snapshot!(
-            parse_body("PRINTL Hello, world!").unwrap(),
+        snapshot!(
+            parse_body,
+            "PRINTL Hello, world!",
             r#"
 [
     Print(
@@ -761,8 +670,9 @@ Function {
 
     #[test]
     fn form_simple() {
-        k9::snapshot!(
-            parse_body("PRINTFORML 1 + 1 = {1 + 1}").unwrap(),
+        snapshot!(
+            parse_body,
+            "PRINTFORML 1 + 1 = {1 + 1}",
             r#"
 [
     PrintForm(

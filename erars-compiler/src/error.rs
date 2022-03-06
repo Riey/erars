@@ -1,7 +1,6 @@
-use codespan::Span;
-use std::fmt;
+use std::{fmt, ops::Range};
 
-pub type ParserResult<T> = Result<T, (ParserError, Span)>;
+pub type ParserResult<T> = Result<T, (ParserError, Range<usize>)>;
 
 #[derive(thiserror::Error)]
 pub enum ParserError {
