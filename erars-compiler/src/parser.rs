@@ -421,25 +421,24 @@ impl<'s> Parser<'s> {
 
         self.skip_ws();
 
-        let mut temp = self.clone();
-
         loop {
-            if let Some(symbol) = temp.try_get_symbol() {
+            let backup = self.text;
+            if let Some(symbol) = self.try_get_symbol() {
                 if let Ok(binop) = symbol.parse::<BinaryOperator>() {
-                    term = Expr::BinopExpr(Box::new(term), binop, Box::new(temp.read_term()?));
+                    term = Expr::BinopExpr(Box::new(term), binop, Box::new(self.read_term()?));
                 } else if symbol == "?" {
-                    let if_true = temp.next_expr()?;
-                    temp.skip_ws();
-                    temp.ensure_get_char('#')?;
+                    let if_true = self.next_expr()?;
+                    self.skip_ws();
+                    self.ensure_get_char('#')?;
 
-                    let or_false = temp.next_expr()?;
-                    temp.skip_ws();
+                    let or_false = self.next_expr()?;
+                    self.skip_ws();
                     term = Expr::CondExpr(Box::new(term), Box::new(if_true), Box::new(or_false));
                 } else {
+                    self.text = backup;
                     break;
                 }
             } else {
-                *self = temp;
                 break;
             }
         }
@@ -603,6 +602,25 @@ mod tests {
     #[test]
     fn cond_printform() {
         snapshot!(parse_body, "PRINTFORML \\@ 1 ? asdf2 # 3fe \\@");
+    }
+
+    #[test]
+    fn plus() {
+        snapshot!(
+            parse_expr,
+            "1 + 1",
+            "
+BinopExpr(
+    IntLit(
+        1,
+    ),
+    Add,
+    IntLit(
+        1,
+    ),
+)
+"
+        );
     }
 
     #[test]
