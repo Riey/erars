@@ -1,6 +1,6 @@
 use crate::{BinaryOperator, Expr, Function, ParserError, ParserResult, Stmt};
+use codespan::Span;
 use serde::{Deserialize, Serialize};
-use source_span::{DefaultMetrics, Position, Span};
 
 bitflags::bitflags! {
     #[derive(Serialize, Deserialize)]
@@ -18,8 +18,6 @@ pub enum Alignment {
     Center,
     Right,
 }
-
-const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FormStatus {
@@ -45,17 +43,30 @@ pub struct Parser<'s> {
     text: &'s str,
     form_status: Option<FormStatus>,
     cond_status: Option<CondStatus>,
-    span: Span,
+    begin_loc: usize,
 }
 
 impl<'s> Parser<'s> {
     pub fn new(text: &'s str) -> Self {
         Self {
             text,
-            span: Span::default(),
             form_status: None,
             cond_status: None,
+            begin_loc: text.as_ptr() as usize,
         }
+    }
+
+    fn current_loc(&self) -> u32 {
+        (self.text.as_ptr() as usize - self.begin_loc) as u32
+    }
+
+    fn from_prev_loc_span(&self, prev_loc: u32) -> Span {
+        Span::new(prev_loc, self.current_loc())
+    }
+
+    fn current_loc_span(&self) -> Span {
+        let loc = self.current_loc();
+        Span::new(loc, loc)
     }
 
     fn read_until_newline(&mut self) -> &'s str {
@@ -64,6 +75,10 @@ impl<'s> Parser<'s> {
         let ret = unsafe { std::str::from_utf8_unchecked(slice.get_unchecked(..pos)) };
         self.consume(ret);
         ret
+    }
+
+    fn consume_bytes(&mut self, count: usize) {
+        self.text = self.text.split_at(self.text.len() - count).1;
     }
 
     fn skip_ws(&mut self) {
@@ -85,40 +100,24 @@ impl<'s> Parser<'s> {
                         .text
                         .split_at(self.text.len() - bytes.as_slice().len() - 1)
                         .1;
-                    self.span.clear();
                     return;
                 }
             }
-
-            self.span.push(*b as char, &METRICS);
         }
 
-        self.span.clear();
         self.text = self
             .text
             .split_at(self.text.len() - bytes.as_slice().len())
             .0;
     }
 
-    fn shift_position_char(&mut self, ch: char) {
-        self.span.push(ch, &METRICS);
-    }
-
-    fn shift_position(&mut self, s: &str) {
-        for c in s.chars() {
-            self.span.push(c, &METRICS);
-        }
-    }
-
     fn consume(&mut self, s: &str) {
-        self.shift_position(s);
         self.text = &self.text[s.len()..];
     }
 
     fn get_ident(&mut self) -> &'s str {
         let pos = self.text.find(is_not_ident_char).unwrap_or(self.text.len());
         let (ret, text) = self.text.split_at(pos);
-        self.shift_position(ret);
         self.text = text;
         ret
     }
@@ -129,7 +128,6 @@ impl<'s> Parser<'s> {
             .find(is_not_symbol_char)
             .unwrap_or(self.text.len());
         let (ret, text) = self.text.split_at(pos);
-        self.shift_position(ret);
         self.text = text;
         ret
     }
@@ -165,7 +163,6 @@ impl<'s> Parser<'s> {
 
     fn try_get_char(&mut self, prefix: char) -> bool {
         if let Some(text) = self.text.strip_prefix(prefix) {
-            self.shift_position_char(prefix);
             self.text = text;
             true
         } else {
@@ -177,7 +174,10 @@ impl<'s> Parser<'s> {
         if self.try_get_prefix(prefix) {
             Ok(())
         } else {
-            Err(ParserError::MissingToken(prefix.to_string(), self.span))
+            Err((
+                ParserError::MissingToken(prefix.to_string()),
+                self.current_loc_span(),
+            ))
         }
     }
 
@@ -185,7 +185,10 @@ impl<'s> Parser<'s> {
         if self.try_get_char(prefix) {
             Ok(())
         } else {
-            Err(ParserError::MissingToken(prefix.to_string(), self.span))
+            Err((
+                ParserError::MissingToken(prefix.to_string()),
+                self.current_loc_span(),
+            ))
         }
     }
 
@@ -195,7 +198,6 @@ impl<'s> Parser<'s> {
 
     fn try_get_prefix(&mut self, prefix: &str) -> bool {
         if let Some(text) = self.text.strip_prefix(prefix) {
-            self.shift_position(prefix);
             self.text = text;
             true
         } else {
@@ -204,6 +206,8 @@ impl<'s> Parser<'s> {
     }
 
     fn read_print_flags(&mut self) -> ParserResult<PrintFlags> {
+        let start = self.current_loc();
+
         let mut ret = PrintFlags::empty();
 
         if self.try_get_char('L') {
@@ -215,9 +219,9 @@ impl<'s> Parser<'s> {
         if self.ensure_whitespace_or_empty() {
             Ok(ret)
         } else {
-            Err(ParserError::InvalidCode(
-                format!("알수없는 PRINT 플래그입니다"),
-                self.span,
+            Err((
+                ParserError::InvalidCode(format!("알수없는 PRINT 플래그입니다")),
+                self.from_prev_loc_span(start),
             ))
         }
     }
@@ -228,7 +232,6 @@ impl<'s> Parser<'s> {
 
         loop {
             if let Some(ch) = chars.next() {
-                self.shift_position_char(ch);
                 match ch {
                     '%' => {
                         self.form_status = Some(FormStatus::FormStrExpr);
@@ -254,7 +257,6 @@ impl<'s> Parser<'s> {
                                     self.cond_status = Some(CondStatus::FormCondExpr1);
                                     skip_count = 2;
                                 }
-                                self.shift_position_char('@');
                                 break;
                             }
                             // TODO other escapes
@@ -306,14 +308,12 @@ impl<'s> Parser<'s> {
                 Some(FormStatus::FormIntExpr) => {
                     let expr = self.next_expr()?;
                     self.skip_ws();
-                    self.span.clear();
                     self.ensure_get_char('}')?;
                     expr
                 }
                 Some(FormStatus::FormStrExpr) => {
                     let expr = self.next_expr()?;
                     self.skip_ws();
-                    self.span.clear();
                     self.ensure_get_char('%')?;
                     expr
                 }
@@ -357,17 +357,13 @@ impl<'s> Parser<'s> {
     }
 
     fn try_read_number(&mut self) -> Option<ParserResult<i64>> {
+        let start = self.current_loc();
         let mut chars = self.text.chars();
 
         let (mut ret, minus) = match chars.next() {
-            Some(n @ '0'..='9') => {
-                self.shift_position_char(n);
-                ((n as u32 - '0' as u32) as i64, false)
-            }
+            Some(n @ '0'..='9') => ((n as u32 - '0' as u32) as i64, false),
             Some('-') => {
                 if let Some(n @ '0'..='9') = chars.next() {
-                    self.shift_position_char('-');
-                    self.shift_position_char(n);
                     ((n as u32 - '0' as u32) as i64, true)
                 } else {
                     return None;
@@ -379,14 +375,13 @@ impl<'s> Parser<'s> {
         loop {
             match chars.next() {
                 Some(n @ '0'..='9') => {
-                    self.shift_position_char(n);
                     ret = ret * 10 + (n as u32 - '0' as u32) as i64;
                 }
                 Some(ch) => {
                     if is_ident_char(ch) {
-                        return Some(Err(ParserError::InvalidCode(
-                            format!("식별자 앞에 숫자를 쓸 수 없습니다."),
-                            self.span,
+                        return Some(Err((
+                            ParserError::InvalidCode(format!("식별자 앞에 숫자를 쓸 수 없습니다.")),
+                            self.from_prev_loc_span(start),
                         )));
                     }
 
@@ -415,16 +410,14 @@ impl<'s> Parser<'s> {
 
             num.map(Expr::IntLit)
         } else {
-            Err(ParserError::InvalidCode(
-                format!("표현식이 와야합니다."),
-                self.span,
+            Err((
+                ParserError::InvalidCode(format!("표현식이 와야합니다.")),
+                self.current_loc_span(),
             ))
         }
     }
 
     fn next_expr(&mut self) -> ParserResult<Expr> {
-        self.span.clear();
-
         self.skip_ws();
 
         let mut term = self.read_term()?;
@@ -440,12 +433,10 @@ impl<'s> Parser<'s> {
                 } else if symbol == "?" {
                     let if_true = temp.next_expr()?;
                     temp.skip_ws();
-                    temp.span.clear();
                     temp.ensure_get_char('#')?;
 
                     let or_false = temp.next_expr()?;
                     temp.skip_ws();
-                    temp.span.clear();
                     term = Expr::CondExpr(Box::new(term), Box::new(if_true), Box::new(or_false));
                 } else {
                     break;
@@ -469,9 +460,9 @@ impl<'s> Parser<'s> {
             self.skip_ws();
             match self.try_get_symbol() {
                 Some(symbol) => todo!("{}", symbol),
-                None => Some(Err(ParserError::InvalidCode(
-                    format!("잘못된 코드"),
-                    self.span,
+                None => Some(Err((
+                    ParserError::InvalidCode(format!("알수없는 코드")),
+                    self.current_loc_span(),
                 ))),
             }
         } else {
