@@ -114,6 +114,11 @@ impl<'s> Parser<'s> {
     fn get_ident(&mut self) -> &'s str {
         let pos = self.text.find(is_not_ident_char).unwrap_or(self.text.len());
         let (ret, text) = self.text.split_at(pos);
+
+        if ret.as_bytes().first().map_or(false, |&b| matches!(b, b'0'..=b'9')) {
+            return "";
+        }
+
         self.text = text;
         ret
     }
@@ -422,8 +427,6 @@ impl<'s> Parser<'s> {
         self.skip_ws();
 
         if let Some(num) = self.try_read_number() {
-            self.skip_ws();
-
             num.map(Expr::IntLit)
         } else {
             Err((
@@ -435,6 +438,15 @@ impl<'s> Parser<'s> {
 
     fn next_expr(&mut self) -> ParserResult<Expr> {
         self.skip_ws();
+
+        if let Some(ident) = self.try_get_ident() {
+            // TODO: method
+            let mut args = Vec::new();
+            while self.try_get_char(':') {
+                args.push(self.read_term()?);
+            }
+            return Ok(Expr::Var(ident.into(), args));
+        }
 
         let mut term = self.read_term()?;
 
