@@ -1,33 +1,69 @@
-use crate::{BinaryOperator, EventFlags, EventType, PrintFlags, UnaryOperator};
+use std::fmt;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+use serde::{Serialize, Deserialize};
+
+use crate::{BinaryOperator, EventFlags, PrintFlags, UnaryOperator};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stmt {
     Print(PrintFlags, String),
-    PrintForm(PrintFlags, String, Vec<(Expr, String)>),
+    PrintForm(PrintFlags, FormText),
     Assign(Expr, Expr),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
     pub header: FunctionHeader,
     pub body: Vec<Stmt>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
     pub name: String,
     pub infos: Vec<FunctionInfo>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FunctionInfo {
     EventFlag(EventFlags),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct FormText {
+    pub first: String,
+    pub other: Vec<(Expr, String)>,
+}
+
+impl FormText {
+    pub fn new(first: String) -> Self {
+        Self {
+            first,
+            other: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, expr: Expr, text: String) {
+        self.other.push((expr, text));
+    }
+}
+
+impl fmt::Debug for FormText {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.first)?;
+
+        for (expr, text) in self.other.iter() {
+            write!(f, "{{{:?}}}{}", expr, text)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Expr {
     StringLit(String),
     IntLit(i64),
+    FormText(FormText),
     Var(String, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),
     BinopExpr(Box<Self>, BinaryOperator, Box<Self>),

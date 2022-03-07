@@ -12,10 +12,13 @@ codespan-reporting = "0.11.1"
 either = "1.6.1"
 enum-map = "2.0.1"
 memchr = "2.4.1"
+option_set = "0.1.4"
 serde = { version = "1.0.136", features = ["derive"] }
-strum = { version = "0.23.0", features = ["derive"] }
+strum = { version = "0.24.0", features = ["derive"] }
 thiserror = "1.0.30"
 utf8-decode = "1.0.1"
 
 [dev-dependencies]
+glob = "0.3.0"
 k9 = "0.11.1"
+ron = "0.7.0"

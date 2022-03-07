@@ -1,11 +1,11 @@
 use std::ops::Range;
 
-use crate::{BinaryOperator, Expr, Function, ParserError, ParserResult, Stmt};
+use crate::{ast::FormText, BinaryOperator, Expr, Function, ParserError, ParserResult, Stmt};
+use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
-bitflags::bitflags! {
-    #[derive(Serialize, Deserialize)]
-    pub struct PrintFlags: u32 {
+option_set::option_set! {
+    pub struct PrintFlags: UpperSnake + u32 {
         const NEWLINE = 0x1;
         const WAIT = 0x2;
         const LEFT_ALIGN = 0x4;
@@ -22,10 +22,8 @@ pub enum Alignment {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FormStatus {
-    // \@ ~ ?
+    /// \@ ~ ?
     FormCondExpr,
-    // #
-    FormSharpExpr,
     /// In this case, '%' can't be used as rem operator
     FormIntExpr,
     FormStrExpr,
@@ -34,9 +32,9 @@ enum FormStatus {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CondStatus {
     // ? ~ #
-    FormCondExpr1,
+    CondFormer,
     // # ~ \@
-    FormCondExpr2,
+    CondLater,
 }
 
 #[derive(Clone)]
@@ -73,7 +71,8 @@ impl<'s> Parser<'s> {
     fn read_until_newline(&mut self) -> &'s str {
         let slice = self.text.as_bytes();
         let pos = memchr::memchr(b'\n', slice).unwrap_or(slice.len());
-        let ret = unsafe { std::str::from_utf8_unchecked(slice.get_unchecked(..pos)) };
+        let ret = unsafe { std::str::from_utf8_unchecked(slice.get_unchecked(..pos)) }
+            .trim_end_matches('\r');
         self.consume(ret);
         ret
     }
@@ -167,6 +166,7 @@ impl<'s> Parser<'s> {
         }
     }
 
+    #[allow(unused)]
     fn ensure_get_prefix(&mut self, prefix: &str) -> ParserResult<()> {
         if self.try_get_prefix(prefix) {
             Ok(())
@@ -223,7 +223,7 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn read_normal_text(&mut self) -> &'s str {
+    fn read_normal_text(&mut self) -> ParserResult<&'s str> {
         let mut chars = self.text.chars();
         let mut skip_count = 1;
 
@@ -238,21 +238,25 @@ impl<'s> Parser<'s> {
                         self.form_status = Some(FormStatus::FormIntExpr);
                         break;
                     }
-                    '#' if self.cond_status == Some(CondStatus::FormCondExpr1) => {
-                        self.form_status = Some(FormStatus::FormSharpExpr);
-                        self.cond_status = Some(CondStatus::FormCondExpr2);
+                    '#' if self.cond_status == Some(CondStatus::CondFormer) => {
+                        self.cond_status = Some(CondStatus::CondLater);
                         break;
                     }
                     '\\' => {
                         match chars.next() {
                             Some('@') => {
-                                if self.cond_status == Some(CondStatus::FormCondExpr2) {
-                                    self.cond_status = None;
-                                    skip_count = 3;
-                                } else {
+                                match self.cond_status {
+                                    Some(CondStatus::CondLater) => {
+                                        self.cond_status = None;
+                                        skip_count = 3;
+                                    }
+                                    Some(_) => {
+                                    return Err((ParserError::UnexpectedToken("\\@".into()), self.current_loc_span()));
+                                    }
+                                    None => {
                                     self.form_status = Some(FormStatus::FormCondExpr);
-                                    self.cond_status = Some(CondStatus::FormCondExpr1);
                                     skip_count = 2;
+                                    }
                                 }
                                 break;
                             }
@@ -261,6 +265,12 @@ impl<'s> Parser<'s> {
                             // TODO return error
                             None => break,
                         }
+                    }
+                    '\r' => {
+                        skip_count += 1;
+                        chars.next();
+                        self.form_status = None;
+                        break;
                     }
                     '\n' => {
                         self.form_status = None;
@@ -272,11 +282,11 @@ impl<'s> Parser<'s> {
                 let ret = self.text;
                 self.text = "";
                 self.form_status = None;
-                return ret;
+                return Ok(ret);
             }
         }
 
-        let mut ret = if self.cond_status == Some(CondStatus::FormCondExpr2) {
+        let mut ret = if self.cond_status == Some(CondStatus::CondLater) {
             let (ret, left) = self
                 .text
                 .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1));
@@ -291,13 +301,13 @@ impl<'s> Parser<'s> {
 
         ret = &ret[..ret.len() - skip_count];
 
-        ret
+        Ok(ret)
     }
 
-    fn read_form_text(&mut self) -> ParserResult<(String, Vec<(Expr, String)>)> {
-        let first = self.read_normal_text().into();
+    fn read_form_text(&mut self) -> ParserResult<FormText> {
+        debug_assert!(self.form_status.is_none());
 
-        let mut other = Vec::new();
+        let mut form_text = FormText::new(self.read_normal_text()?.into());
 
         loop {
             let expr = match self.form_status {
@@ -314,17 +324,24 @@ impl<'s> Parser<'s> {
                     self.ensure_get_char('%')?;
                     expr
                 }
-                Some(FormStatus::FormCondExpr) | Some(FormStatus::FormSharpExpr) => {
-                    todo!("print conditional")
+                Some(FormStatus::FormCondExpr) => {
+                    let cond = self.read_term()?;
+                    self.skip_ws();
+                    self.ensure_get_char('?')?;
+                    self.skip_blank();
+                    self.form_status = None;
+                    self.cond_status = Some(CondStatus::CondFormer);
+                    let if_true = self.read_form_text()?;
+                    let or_false = self.read_form_text()?;
+                    Expr::cond(cond, Expr::FormText(if_true), Expr::FormText(or_false))
                 }
             };
 
             self.form_status = None;
-
-            other.push((expr, self.read_normal_text().into()));
+            form_text.push(expr, self.read_normal_text()?.into());
         }
 
-        Ok((first, other))
+        Ok(form_text)
     }
 
     fn try_read_command(&mut self) -> Option<ParserResult<Stmt>> {
@@ -335,10 +352,12 @@ impl<'s> Parser<'s> {
             };
             self.skip_blank();
 
-            Some(
-                self.read_form_text()
-                    .map(|(first, other)| Stmt::PrintForm(flags, first, other)),
-            )
+            let form_text = match self.read_form_text() {
+                Ok(f) => f,
+                Err(err) => return Some(Err(err)),
+            };
+
+            Some(Ok(Stmt::PrintForm(flags, form_text)))
         } else if self.try_get_prefix("PRINT") {
             let flags = match self.read_print_flags() {
                 Ok(f) => f,
@@ -546,12 +565,14 @@ mod tests {
     use codespan_reporting::term::termcolor::{ColorChoice, StandardStream};
     use codespan_reporting::term::Config;
 
-    fn do_test<T>(f: fn(&str) -> ParserResult<T>, source: &str) -> T {
+    fn do_test<T: std::fmt::Debug>(f: fn(&str) -> ParserResult<T>, source: &str, expected: &str) {
         let mut files = SimpleFiles::new();
         let file_id = files.add("test.erb", source);
 
         match f(source) {
-            Ok(ret) => ret,
+            Ok(ret) => {
+                k9::assert_equal!(format!("\n{:#?}\n", ret), expected);
+            }
             Err((err, span)) => {
                 let diagnostic = Diagnostic::error()
                     .with_code("E0001")
@@ -568,45 +589,39 @@ mod tests {
         }
     }
 
-    macro_rules! snapshot {
-        ($func:expr, $code:literal $(,)? $( $expected:literal )?) => {
-            k9::snapshot!(do_test($func, $code) $(, $expected)?);
-        };
-    }
-
     #[test]
     fn var_expr() {
-        snapshot!(parse_expr, "COUNT:123");
+        do_test(parse_expr, "COUNT:123", "");
     }
 
     #[test]
     fn var_empty_expr() {
-        snapshot!(parse_expr, "COUNT");
+        do_test(parse_expr, "COUNT", "");
     }
 
     #[test]
     fn var_var_expr() {
-        snapshot!(parse_expr, "COUNT:A");
+        do_test(parse_expr, "COUNT:A", "");
     }
 
     #[test]
     fn assign() {
-        snapshot!(parse_body, "A:2 = 123");
+        do_test(parse_body, "A:2 = 123", "");
     }
 
     #[test]
     fn paran_expr() {
-        snapshot!(parse_expr, "1 + 2 ? 1 + 2 * 3 # (5+1) / 2");
+        do_test(parse_expr, "1 + 2 ? 1 + 2 * 3 # (5+1) / 2", "");
     }
 
     #[test]
     fn cond_printform() {
-        snapshot!(parse_body, "PRINTFORML \\@ 1 ? asdf2 # 3fe \\@");
+        do_test(parse_body, "PRINTFORML \\@ 1 ? asdf2 # 3fe \\@", "");
     }
 
     #[test]
     fn plus() {
-        snapshot!(
+        do_test(
             parse_expr,
             "1 + 1",
             "
@@ -619,18 +634,17 @@ BinopExpr(
         1,
     ),
 )
-"
+",
         );
     }
 
     #[test]
     fn cond_expr() {
-        snapshot!(
+        do_test(
             parse_expr,
             "1 ? 2 # 3",
             "
-CondExpr(
-    IntLit(
+CondExpr(IntLit(
         1,
     ),
     IntLit(
@@ -640,13 +654,13 @@ CondExpr(
         3,
     ),
 )
-"
+",
         );
     }
 
     #[test]
     fn parse_simple_function() {
-        snapshot!(
+        do_test(
             parse_function,
             "@SYSTEM_TITLE\n#PRI\nPRINTL Hello, world!\n",
             r#"
@@ -666,13 +680,13 @@ Function {
         ),
     ],
 }
-"#
+"#,
         );
     }
 
     #[test]
     fn hello_world() {
-        snapshot!(
+        do_test(
             parse_body,
             "PRINTL Hello, world!",
             r#"
@@ -682,13 +696,13 @@ Function {
         "Hello, world!",
     ),
 ]
-"#
+"#,
         );
     }
 
     #[test]
     fn form_simple() {
-        snapshot!(
+        do_test(
             parse_body,
             "PRINTFORML 1 + 1 = {1 + 1}",
             r#"
@@ -712,7 +726,7 @@ Function {
         ],
     ),
 ]
-"#
+"#,
         );
     }
 }
