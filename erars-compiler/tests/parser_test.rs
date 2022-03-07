@@ -6,7 +6,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_compiler::{parse_body, Expr, ParserResult, Stmt, parse_expr};
+use erars_compiler::{parse_body, parse_expr, Expr, ParserResult, Stmt};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -45,7 +45,6 @@ fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
             let config = Config::default();
             codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                 .unwrap();
-            panic!("Test failed");
         }
     }
 }

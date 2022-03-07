@@ -1,6 +1,6 @@
 use std::fmt;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{BinaryOperator, EventFlags, PrintFlags, UnaryOperator};
 
