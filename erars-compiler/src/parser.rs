@@ -115,7 +115,11 @@ impl<'s> Parser<'s> {
         let pos = self.text.find(is_not_ident_char).unwrap_or(self.text.len());
         let (ret, text) = self.text.split_at(pos);
 
-        if ret.as_bytes().first().map_or(false, |&b| matches!(b, b'0'..=b'9')) {
+        if ret
+            .as_bytes()
+            .first()
+            .map_or(false, |&b| matches!(b, b'0'..=b'9'))
+        {
             return "";
         }
 
@@ -330,7 +334,7 @@ impl<'s> Parser<'s> {
                     expr
                 }
                 Some(FormStatus::FormCondExpr) => {
-                    let cond = self.read_term()?;
+                    let cond = self.next_expr()?;
                     self.skip_ws();
                     self.ensure_get_char('?')?;
                     self.skip_blank();
@@ -449,6 +453,7 @@ impl<'s> Parser<'s> {
         }
 
         let mut term = self.read_term()?;
+        let mut operand_stack = Vec::new();
 
         self.skip_ws();
 
@@ -456,15 +461,17 @@ impl<'s> Parser<'s> {
             let backup = self.text;
             if let Some(symbol) = self.try_get_symbol() {
                 if let Ok(binop) = symbol.parse::<BinaryOperator>() {
-                    term = Expr::BinopExpr(Box::new(term), binop, Box::new(self.read_term()?));
+                    operand_stack.push((binop, self.read_term()?));
+                    self.skip_ws();
                 } else if symbol == "?" {
+                    let cond = calculate_binop_expr(term, &mut operand_stack);
                     let if_true = self.next_expr()?;
                     self.skip_ws();
                     self.ensure_get_char('#')?;
 
                     let or_false = self.next_expr()?;
                     self.skip_ws();
-                    term = Expr::CondExpr(Box::new(term), Box::new(if_true), Box::new(or_false));
+                    term = Expr::cond(cond, if_true, or_false);
                 } else {
                     self.text = backup;
                     break;
@@ -474,7 +481,7 @@ impl<'s> Parser<'s> {
             }
         }
 
-        Ok(term)
+        Ok(calculate_binop_expr(term, &mut operand_stack))
     }
 
     fn next_stmt(&mut self) -> Option<ParserResult<Stmt>> {
@@ -553,6 +560,43 @@ fn is_not_symbol_char(c: char) -> bool {
     !is_symbol_char(c)
 }
 
+fn calculate_binop_expr(first: Expr, stack: &mut Vec<(BinaryOperator, Expr)>) -> Expr {
+    let mut expr_stack = Vec::with_capacity(16);
+    let mut op_stack: Vec<BinaryOperator> = Vec::with_capacity(10);
+
+    expr_stack.push(first);
+
+    for (op, expr) in stack.drain(..) {
+        loop {
+            if op_stack
+                .last()
+                .map_or(true, |o| o.priority() < op.priority())
+            {
+                expr_stack.push(expr);
+                op_stack.push(op);
+                break;
+            } else {
+                let op = op_stack.pop().unwrap();
+                let rhs = expr_stack.pop().unwrap();
+                let lhs = expr_stack.pop().unwrap();
+                expr_stack.push(Expr::binary(lhs, op, rhs));
+            }
+        }
+    }
+
+    for op in op_stack.into_iter().rev() {
+        let rhs = expr_stack.pop().unwrap();
+        let lhs = expr_stack.pop().unwrap();
+        expr_stack.push(Expr::binary(lhs, op, rhs));
+    }
+
+    let ret = expr_stack.pop().unwrap();
+
+    debug_assert!(expr_stack.is_empty());
+
+    ret
+}
+
 pub fn parse_program(s: &str) -> ParserResult<Vec<Function>> {
     Parser::new(s).next_program()
 }
@@ -567,4 +611,62 @@ pub fn parse_expr(s: &str) -> ParserResult<Expr> {
 
 pub fn parse_body(s: &str) -> ParserResult<Vec<Stmt>> {
     Parser::new(s).next_body()
+}
+
+#[test]
+fn calculate_test() {
+    k9::snapshot!(
+        calculate_binop_expr(
+            Expr::int(1),
+            &mut vec![
+                (BinaryOperator::Add, Expr::int(2)),
+                (BinaryOperator::Mul, Expr::int(3)),
+            ]
+        ),
+        "
+BinopExpr(
+    IntLit(
+        1,
+    ),
+    Add,
+    BinopExpr(
+        IntLit(
+            2,
+        ),
+        Mul,
+        IntLit(
+            3,
+        ),
+    ),
+)
+"
+    );
+
+    // 1 * 3 + 2
+    k9::snapshot!(
+        calculate_binop_expr(
+            Expr::int(1),
+            &mut vec![
+                (BinaryOperator::Mul, Expr::int(3)),
+                (BinaryOperator::Add, Expr::int(2)),
+            ]
+        ),
+        "
+BinopExpr(
+    BinopExpr(
+        IntLit(
+            1,
+        ),
+        Mul,
+        IntLit(
+            3,
+        ),
+    ),
+    Add,
+    IntLit(
+        2,
+    ),
+)
+"
+    );
 }

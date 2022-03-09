@@ -67,3 +67,19 @@ pub enum BinaryOperator {
     #[strum(to_string = ">=")]
     GreaterOrEqual,
 }
+
+impl BinaryOperator {
+    pub const fn priority(self) -> usize {
+        use BinaryOperator::*;
+
+        match self {
+            BitAnd | BitOr | BitXor => 2,
+            And | Or | Xor => 3,
+            Equal | NotEqual => 4,
+            Less | LessOrEqual | Greater | GreaterOrEqual => 5,
+
+            Add | Sub => 6,
+            Mul | Div | Rem => 7,
+        }
+    }
+}
