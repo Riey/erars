@@ -45,6 +45,7 @@ fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
             let config = Config::default();
             codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                 .unwrap();
+            panic!("Test failed");
         }
     }
 }
