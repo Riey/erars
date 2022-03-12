@@ -2,6 +2,7 @@ mod ast;
 mod compiler;
 mod error;
 mod event;
+mod function;
 mod instruction;
 mod operator;
 mod parser;
@@ -11,6 +12,7 @@ pub use crate::{
     compiler::compile,
     error::{ParserError, ParserResult},
     event::{Event, EventFlags, EventType},
+    function::{EventCollection, FunctionDic},
     instruction::Instruction,
     operator::{BinaryOperator, UnaryOperator},
     parser::{

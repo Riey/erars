@@ -1,6 +1,9 @@
 use std::ops::Range;
 
-use crate::{ast::FormText, BinaryOperator, Expr, Function, ParserError, ParserResult, Stmt};
+use crate::{
+    ast::FormText, BinaryOperator, EventFlags, Expr, Function, FunctionHeader, FunctionInfo,
+    ParserError, ParserResult, Stmt,
+};
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
@@ -519,7 +522,66 @@ impl<'s> Parser<'s> {
     }
 
     fn next_function(&mut self) -> ParserResult<Function> {
-        todo!("Function")
+        self.skip_ws();
+        self.ensure_get_char('@')?;
+        let label = self.try_get_ident().ok_or_else(|| {
+            (
+                ParserError::MissingToken("Function label".into()),
+                self.current_loc_span(),
+            )
+        })?;
+
+        self.skip_ws();
+
+        if self.try_get_char('(') {
+            todo!("paran argument");
+        } else if self.try_get_char(',') {
+            todo!("comma argument");
+        }
+
+        let mut infos = Vec::new();
+
+        loop {
+            self.skip_ws();
+            if self.try_get_char('#') {
+                let start = self.current_loc();
+                let info = self.try_get_ident().ok_or_else(|| {
+                    (
+                        ParserError::MissingToken("Function info".into()),
+                        self.current_loc_span(),
+                    )
+                })?;
+                match info {
+                    "PRI" => {
+                        infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
+                    }
+                    "LATER" => {
+                        infos.push(FunctionInfo::EventFlag(EventFlags::Later));
+                    }
+                    "SINGLE" => {
+                        infos.push(FunctionInfo::EventFlag(EventFlags::Single));
+                    }
+                    other => {
+                        return Err((
+                            ParserError::UnexpectedToken(other.into()),
+                            self.from_prev_loc_span(start),
+                        ))
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+
+        let body = self.next_body()?;
+
+        Ok(Function {
+            header: FunctionHeader {
+                name: label.into(),
+                infos,
+            },
+            body,
+        })
     }
 
     fn next_program(&mut self) -> ParserResult<Vec<Function>> {

@@ -658,9 +658,9 @@ checksum = "55673de2eb96660dde25ba7b2d36a7054beead1a2bec74dcfd5eb05a1e1ba76d"
 
 [[package]]
 name = "enum-map"
-version = "2.0.1"
+version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4daa8ce58bdc96f86eb90b4b8eab8f1e051da02f8c564389ae2b8ce38932f758"
+checksum = "82605a2a3d13a9661b07ba27f39d00496aa347c9c236b1a3b8201c1b6d761408"
 dependencies = [
  "enum-map-derive",
  "serde",
@@ -737,6 +737,7 @@ dependencies = [
  "bitflags",
  "either",
  "enum-map",
+ "hashbrown 0.12.0",
  "k9",
  "memchr",
  "option_set",

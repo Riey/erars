@@ -6,7 +6,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_compiler::{parse_body, parse_expr, Expr, ParserResult, Stmt};
+use erars_compiler::{parse_body, parse_expr, parse_function, Expr, ParserResult, Stmt};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -71,6 +71,9 @@ fn parse() {
             }
             "Expr" => {
                 do_test(parse_expr, &erb_source, output);
+            }
+            "Function" => {
+                do_test(parse_function, &erb_source, output);
             }
             other => panic!("Unknown parse type: {}", other),
         }
