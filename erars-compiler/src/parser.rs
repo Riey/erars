@@ -430,7 +430,11 @@ impl<'s> Parser<'s> {
     fn read_term(&mut self) -> ParserResult<Expr> {
         self.skip_ws();
 
-        if let Some(num) = self.try_read_number() {
+        if self.try_get_char('(') {
+            let inner = self.next_expr()?;
+            self.ensure_get_char(')')?;
+            Ok(inner)
+        } else if let Some(num) = self.try_read_number() {
             num.map(Expr::IntLit)
         } else {
             Err((
