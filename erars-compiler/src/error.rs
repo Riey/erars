@@ -1,6 +1,7 @@
 use std::{fmt, ops::Range};
 
 pub type ParserResult<T> = Result<T, (ParserError, Range<usize>)>;
+pub type CompileResult<T> = Result<T, CompileError>;
 
 #[derive(thiserror::Error)]
 pub enum ParserError {
@@ -13,6 +14,16 @@ pub enum ParserError {
 }
 
 impl fmt::Debug for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+#[derive(thiserror::Error)]
+pub enum CompileError {
+}
+
+impl fmt::Debug for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
     }
