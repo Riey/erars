@@ -585,7 +585,11 @@ impl<'s> Parser<'s> {
     }
 
     fn next_program(&mut self) -> ParserResult<Vec<Function>> {
-        todo!("Program")
+        let mut ret = Vec::new();
+        while let Ok(func) = self.next_function() {
+            ret.push(func);
+        }
+        Ok(ret)
     }
 }
 
