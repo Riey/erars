@@ -50,32 +50,31 @@ fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     }
 }
 
-#[test]
-fn parse() {
-    let erb_files = glob::glob("tests/parse_tests/*.erb").unwrap();
+fn run_test_set<T: std::fmt::Debug + Eq + DeserializeOwned>(
+    f: fn(&str) -> ParserResult<T>,
+    pattern: &str,
+) {
+    let erb_files = glob::glob(pattern).unwrap();
 
     for erb_file in erb_files {
         let erb_file = erb_file.unwrap();
+        let ron_file = erb_file.parent().unwrap().join(format!(
+            "{}.ron",
+            erb_file.file_stem().unwrap().to_str().unwrap()
+        ));
 
         eprintln!("Check {}", erb_file.display());
 
         let erb_source = std::fs::read_to_string(erb_file).unwrap();
-        let mut lines = erb_source.lines();
+        let ron_source = std::fs::read_to_string(ron_file).unwrap();
 
-        let ty = &lines.next().unwrap()[2..];
-        let output = &lines.next().unwrap()[2..];
-
-        match ty {
-            "Body" => {
-                do_test(parse_body, &erb_source, output);
-            }
-            "Expr" => {
-                do_test(parse_expr, &erb_source, output);
-            }
-            "Function" => {
-                do_test(parse_function, &erb_source, output);
-            }
-            other => panic!("Unknown parse type: {}", other),
-        }
+        do_test(f, &erb_source, &ron_source);
     }
+}
+
+#[test]
+fn parse() {
+    run_test_set(parse_expr, "tests/parse_tests/exprs/*.erb");
+    run_test_set(parse_body, "tests/parse_tests/bodys/*.erb");
+    run_test_set(parse_function, "tests/parse_tests/functions/*.erb");
 }

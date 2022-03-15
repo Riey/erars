@@ -1,0 +1,1 @@
+BinopExpr(BinopExpr(IntLit(1), Add, IntLit(2)), Mul, IntLit(3))
