@@ -9,17 +9,6 @@ use codespan_reporting::{
 use erars_compiler::{parse_body, parse_expr, parse_function, Expr, ParserResult, Stmt};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-enum Content {
-    Expr(Expr),
-    Stmt(Stmt),
-}
-
-#[derive(Serialize, Deserialize)]
-struct ParseConfig {
-    content: Content,
-}
-
 fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     f: fn(&str) -> ParserResult<T>,
     source: &str,
@@ -73,7 +62,7 @@ fn run_test_set<T: std::fmt::Debug + Eq + DeserializeOwned>(
 }
 
 #[test]
-fn parse() {
+fn parse_test() {
     run_test_set(parse_expr, "tests/parse_tests/exprs/*.erb");
     run_test_set(parse_body, "tests/parse_tests/bodys/*.erb");
     run_test_set(parse_function, "tests/parse_tests/functions/*.erb");

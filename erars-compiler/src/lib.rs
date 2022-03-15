@@ -9,8 +9,8 @@ mod parser;
 
 pub use crate::{
     ast::{Expr, Function, FunctionHeader, FunctionInfo, Stmt},
-    compiler::compile,
-    error::{ParserError, ParserResult, CompileError, CompileResult},
+    compiler::{compile, CompiledFunction},
+    error::{CompileError, CompileResult, ParserError, ParserResult},
     event::{Event, EventFlags, EventType},
     function::{EventCollection, FunctionDic},
     instruction::Instruction,

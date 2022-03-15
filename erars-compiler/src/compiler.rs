@@ -1,10 +1,7 @@
-use crate::{
-    ast::FormText, CompileResult, Expr, Function, FunctionHeader,
-    Instruction, Stmt,
-};
+use crate::{ast::FormText, CompileResult, Expr, Function, FunctionHeader, Instruction, Stmt};
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledFunction {
     header: FunctionHeader,
     body: Vec<Instruction>,

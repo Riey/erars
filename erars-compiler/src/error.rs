@@ -20,8 +20,7 @@ impl fmt::Debug for ParserError {
 }
 
 #[derive(thiserror::Error)]
-pub enum CompileError {
-}
+pub enum CompileError {}
 
 impl fmt::Debug for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
