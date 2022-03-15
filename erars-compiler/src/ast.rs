@@ -5,10 +5,16 @@ use serde::{Deserialize, Serialize};
 use crate::{BinaryOperator, EventFlags, PrintFlags, UnaryOperator};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Variable {
+    pub name: String,
+    pub args: Vec<Expr>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stmt {
     Print(PrintFlags, String),
     PrintForm(PrintFlags, FormText),
-    Assign(Expr, Expr),
+    Assign(Variable, Option<BinaryOperator>, Expr),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,7 +70,7 @@ pub enum Expr {
     StringLit(String),
     IntLit(i64),
     FormText(FormText),
-    Var(String, Vec<Self>),
+    Var(Variable),
     UnaryopExpr(Box<Self>, UnaryOperator),
     BinopExpr(Box<Self>, BinaryOperator, Box<Self>),
     CondExpr(Box<Self>, Box<Self>, Box<Self>),
@@ -80,7 +86,10 @@ impl Expr {
     }
 
     pub fn var(n: impl Into<String>, args: Vec<Self>) -> Self {
-        Self::Var(n.into(), args)
+        Self::Var(Variable {
+            name: n.into(),
+            args,
+        })
     }
 
     pub fn unary(op1: Self, op: UnaryOperator) -> Self {

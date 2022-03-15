@@ -1,1 +1,1 @@
-Var("COUNT", [])
+Var((name: "COUNT", args: []))

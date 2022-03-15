@@ -1,1 +1,1 @@
-Var("COUNT", [IntLit(123)])
+Var((name: "COUNT", args: [IntLit(123)]))

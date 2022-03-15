@@ -1,0 +1,10 @@
+[
+    Assign(
+        (
+            name: "COUNT",
+            args: [BinopExpr(IntLit(1), Add, IntLit(3))],
+        ),
+        None,
+        BinopExpr(IntLit(23), Add, IntLit(45)),
+    )
+]

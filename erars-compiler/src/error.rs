@@ -11,6 +11,8 @@ pub enum ParserError {
     UnexpectedToken(String),
     #[error("토큰 `{0}`를 찾을 수 없습니다.")]
     MissingToken(String),
+    #[error("코드가 끝났습니다")]
+    Eof,
 }
 
 impl fmt::Debug for ParserError {

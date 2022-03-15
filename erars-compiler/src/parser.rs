@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::{
     ast::FormText, BinaryOperator, EventFlags, Expr, Function, FunctionHeader, FunctionInfo,
-    ParserError, ParserResult, Stmt,
+    ParserError, ParserResult, Stmt, Variable,
 };
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
@@ -447,16 +447,25 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn next_var(&mut self, ident: &'s str) -> ParserResult<Variable> {
+        let mut args = Vec::new();
+
+        while self.try_get_char(':') {
+            args.push(self.read_term()?);
+        }
+
+        Ok(Variable {
+            name: ident.into(),
+            args,
+        })
+    }
+
     fn next_expr(&mut self) -> ParserResult<Expr> {
         self.skip_ws();
 
         if let Some(ident) = self.try_get_ident() {
             // TODO: method
-            let mut args = Vec::new();
-            while self.try_get_char(':') {
-                args.push(self.read_term()?);
-            }
-            return Ok(Expr::Var(ident.into(), args));
+            return Ok(Expr::Var(self.next_var(ident)?));
         }
 
         let mut term = self.read_term()?;
@@ -491,31 +500,48 @@ impl<'s> Parser<'s> {
         Ok(calculate_binop_expr(term, &mut operand_stack))
     }
 
-    fn next_stmt(&mut self) -> Option<ParserResult<Stmt>> {
+    fn next_stmt(&mut self) -> ParserResult<Stmt> {
         self.skip_ws();
 
         if let Some(com) = self.try_read_command() {
-            Some(com)
-        } else if let Some(_ident) = self.try_get_ident() {
+            com
+        } else if let Some(ident) = self.try_get_ident() {
             // assign
+            let var = self.next_var(ident)?;
+
             self.skip_ws();
+            let symbol_start = self.current_loc();
             match self.try_get_symbol() {
-                Some(symbol) => todo!("{}", symbol),
-                None => Some(Err((
+                Some(symbol) => {
+                    if let Some(left) = symbol.strip_suffix("=") {
+                        let additional_op = left.parse().ok();
+                        Ok(Stmt::Assign(var, additional_op, self.next_expr()?))
+                    } else {
+                        Err((
+                            ParserError::InvalidCode(format!("알수없는 연산자")),
+                            self.from_prev_loc_span(symbol_start),
+                        ))
+                    }
+                }
+                None => Err((
                     ParserError::InvalidCode(format!("알수없는 코드")),
                     self.current_loc_span(),
-                ))),
+                )),
             }
         } else {
-            None
+            Err((ParserError::Eof, self.current_loc_span()))
         }
     }
 
     fn next_body(&mut self) -> ParserResult<Vec<Stmt>> {
         let mut ret = Vec::with_capacity(100);
 
-        while let Some(stmt) = self.next_stmt() {
-            ret.push(stmt?);
+        loop {
+            match self.next_stmt() {
+                Ok(stmt) => ret.push(stmt),
+                Err((ParserError::Eof, _)) => break,
+                Err(err) => return Err(err),
+            }
         }
 
         Ok(ret)
