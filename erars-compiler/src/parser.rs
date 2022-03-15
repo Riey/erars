@@ -104,10 +104,7 @@ impl<'s> Parser<'s> {
             }
         }
 
-        self.text = self
-            .text
-            .split_at(self.text.len() - bytes.as_slice().len())
-            .0;
+        self.text = &self.text[self.text.len()..];
     }
 
     fn consume(&mut self, s: &str) {
@@ -356,6 +353,47 @@ impl<'s> Parser<'s> {
         Ok(form_text)
     }
 
+    fn read_if_block(
+        &mut self,
+        else_ifs: &mut Vec<(Expr, Vec<Stmt>)>,
+    ) -> ParserResult<Option<Vec<Stmt>>> {
+        self.skip_ws();
+
+        let mut body = Vec::new();
+        let cond = self.next_expr()?;
+
+        let else_body = loop {
+            self.skip_ws();
+
+            if self.try_get_prefix("ENDIF") {
+                else_ifs.push((cond, body));
+                break None;
+            } else if self.try_get_prefix("ELSE") {
+                if self.try_get_prefix("IF") {
+                    // ELSEIF
+                    else_ifs.push((cond, body));
+                    break self.read_if_block(else_ifs)?;
+                } else {
+                    else_ifs.push((cond, body));
+                    // ELSE
+                    let mut else_body = Vec::new();
+                    loop {
+                        self.skip_ws();
+                        if self.try_get_prefix("ENDIF") {
+                            break;
+                        }
+                        else_body.push(self.next_stmt()?);
+                    }
+                    break Some(else_body);
+                }
+            }
+
+            body.push(self.next_stmt()?);
+        };
+
+        Ok(else_body)
+    }
+
     fn try_read_command(&mut self) -> Option<ParserResult<Stmt>> {
         if self.try_get_prefix("PRINTFORM") {
             let flags = match self.read_print_flags() {
@@ -379,6 +417,14 @@ impl<'s> Parser<'s> {
 
             let text = self.read_until_newline();
             Some(Ok(Stmt::Print(flags, text.into())))
+        } else if self.try_get_prefix("IF") {
+            let mut else_ifs = Vec::new();
+            let else_body = match self.read_if_block(&mut else_ifs) {
+                Ok(e) => e,
+                Err(err) => return Some(Err(err)),
+            };
+
+            Some(Ok(Stmt::If(else_ifs, else_body)))
         } else {
             None
         }
@@ -437,6 +483,9 @@ impl<'s> Parser<'s> {
             let inner = self.next_expr()?;
             self.ensure_get_char(')')?;
             Ok(inner)
+        } else if let Some(ident) = self.try_get_ident() {
+            // TODO: method
+            return Ok(Expr::Var(self.next_var(ident)?));
         } else if let Some(num) = self.try_read_number() {
             num.map(Expr::IntLit)
         } else {
@@ -462,11 +511,6 @@ impl<'s> Parser<'s> {
 
     fn next_expr(&mut self) -> ParserResult<Expr> {
         self.skip_ws();
-
-        if let Some(ident) = self.try_get_ident() {
-            // TODO: method
-            return Ok(Expr::Var(self.next_var(ident)?));
-        }
 
         let mut term = self.read_term()?;
         let mut operand_stack = Vec::new();
@@ -528,8 +572,13 @@ impl<'s> Parser<'s> {
                     self.current_loc_span(),
                 )),
             }
-        } else {
+        } else if self.text.is_empty() {
             Err((ParserError::Eof, self.current_loc_span()))
+        } else {
+            Err((
+                ParserError::InvalidCode(format!("알수없는 코드")),
+                self.current_loc_span(),
+            ))
         }
     }
 
@@ -649,6 +698,8 @@ fn is_symbol_char(c: char) -> bool {
             | '/'
             | '?'
             | ':'
+            | '<'
+            | '>'
     )
 }
 
