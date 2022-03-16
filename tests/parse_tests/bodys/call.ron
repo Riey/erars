@@ -1,0 +1,10 @@
+[
+    Call(
+        "FOO",
+        [
+            IntLit(123),
+            Var((name: "A", args: [IntLit(634)])),
+            StringLit("123"),
+        ]
+    )
+]

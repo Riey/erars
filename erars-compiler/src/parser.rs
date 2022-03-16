@@ -7,6 +7,15 @@ use crate::{
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
+macro_rules! try_option {
+    ($e:expr) => {
+        match $e {
+            Ok(e) => e,
+            Err(err) => return Some(Err(err)),
+        }
+    };
+}
+
 option_set::option_set! {
     pub struct PrintFlags: UpperSnake + u32 {
         const NEWLINE = 0x1;
@@ -69,6 +78,14 @@ impl<'s> Parser<'s> {
     fn current_loc_span(&self) -> Range<usize> {
         let loc = self.current_loc();
         loc..loc
+    }
+
+    fn read_until_quote(&mut self) -> &'s str {
+        let slice = self.text.as_bytes();
+        let pos = memchr::memchr(b'"', slice).unwrap_or(slice.len());
+        let ret = unsafe { std::str::from_utf8_unchecked(slice.get_unchecked(..pos)) };
+        self.consume(ret);
+        ret
     }
 
     fn read_until_newline(&mut self) -> &'s str {
@@ -396,38 +413,60 @@ impl<'s> Parser<'s> {
 
     fn try_read_command(&mut self) -> Option<ParserResult<Stmt>> {
         if self.try_get_prefix("PRINTFORM") {
-            let flags = match self.read_print_flags() {
-                Ok(f) => f,
-                Err(err) => return Some(Err(err)),
-            };
+            let flags = try_option!(self.read_print_flags());
             self.skip_blank();
 
-            let form_text = match self.read_form_text() {
-                Ok(f) => f,
-                Err(err) => return Some(Err(err)),
-            };
+            let form_text = try_option!(self.read_form_text());
 
             Some(Ok(Stmt::PrintForm(flags, form_text)))
         } else if self.try_get_prefix("PRINT") {
-            let flags = match self.read_print_flags() {
-                Ok(f) => f,
-                Err(err) => return Some(Err(err)),
-            };
+            let flags = try_option!(self.read_print_flags());
             self.skip_blank();
 
             let text = self.read_until_newline();
             Some(Ok(Stmt::Print(flags, text.into())))
         } else if self.try_get_prefix("IF") {
             let mut else_ifs = Vec::new();
-            let else_body = match self.read_if_block(&mut else_ifs) {
-                Ok(e) => e,
-                Err(err) => return Some(Err(err)),
-            };
+            let else_body = try_option!(self.read_if_block(&mut else_ifs));
 
             Some(Ok(Stmt::If(else_ifs, else_body)))
+        } else if self.try_get_prefix("CALL") {
+            self.skip_ws();
+
+            let func = match self.try_get_ident() {
+                Some(ident) => ident,
+                None => {
+                    return Some(Err((
+                        ParserError::MissingToken(format!("Function label")),
+                        self.current_loc_span(),
+                    )))
+                }
+            };
+
+            Some(Ok(Stmt::Call(func.into(), try_option!(self.read_args()))))
         } else {
             None
         }
+    }
+
+    fn read_args(&mut self) -> ParserResult<Vec<Expr>> {
+        self.skip_ws();
+
+        let mut ret = Vec::new();
+
+        if self.try_get_char(',') {
+            loop {
+                ret.push(self.next_expr()?);
+
+                self.skip_ws();
+
+                if !self.try_get_char(',') {
+                    break;
+                }
+            }
+        }
+
+        Ok(ret)
     }
 
     fn try_read_number(&mut self) -> Option<ParserResult<i64>> {
@@ -483,6 +522,10 @@ impl<'s> Parser<'s> {
             let inner = self.next_expr()?;
             self.ensure_get_char(')')?;
             Ok(inner)
+        } else if self.try_get_char('"') {
+            let inner = self.read_until_quote();
+            self.ensure_get_char('"')?;
+            Ok(Expr::str(inner))
         } else if let Some(ident) = self.try_get_ident() {
             return Ok(Expr::var(ident, Vec::new()));
         } else if let Some(num) = self.try_read_number() {

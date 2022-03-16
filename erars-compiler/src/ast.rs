@@ -16,6 +16,7 @@ pub enum Stmt {
     PrintForm(PrintFlags, FormText),
     Assign(Variable, Option<BinaryOperator>, Expr),
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
+    Call(String, Vec<Expr>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
