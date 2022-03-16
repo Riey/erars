@@ -1,0 +1,10 @@
+Var(
+    (
+        name: "COUNT",
+        args: [
+            // Var in arg position can't get args
+            Var((name: "A", args: [])),
+            IntLit(123),
+        ],
+    ),
+)

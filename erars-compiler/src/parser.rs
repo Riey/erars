@@ -484,8 +484,7 @@ impl<'s> Parser<'s> {
             self.ensure_get_char(')')?;
             Ok(inner)
         } else if let Some(ident) = self.try_get_ident() {
-            // TODO: method
-            return Ok(Expr::Var(self.next_var(ident)?));
+            return Ok(Expr::var(ident, Vec::new()));
         } else if let Some(num) = self.try_read_number() {
             num.map(Expr::IntLit)
         } else {
@@ -512,7 +511,12 @@ impl<'s> Parser<'s> {
     fn next_expr(&mut self) -> ParserResult<Expr> {
         self.skip_ws();
 
-        let mut term = self.read_term()?;
+        let mut term = if let Some(var) = self.try_get_ident() {
+            Expr::Var(self.next_var(var)?)
+        } else {
+            self.read_term()?
+        };
+
         let mut operand_stack = Vec::new();
 
         self.skip_ws();

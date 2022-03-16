@@ -7,7 +7,7 @@ use codespan_reporting::{
     },
 };
 use erars_compiler::{parse_body, parse_expr, parse_function, Expr, ParserResult, Stmt};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 
 fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     f: fn(&str) -> ParserResult<T>,
