@@ -719,7 +719,6 @@ impl<'s> Parser<'s> {
                         break;
                     }
                 }
-
             }
         }
 

@@ -1,6 +1,7 @@
 use crate::{
     ast::FormText, CompileResult, Expr, Function, FunctionHeader, Instruction, Stmt, Variable,
 };
+use arrayvec::ArrayVec;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -66,10 +67,8 @@ impl Compiler {
                 self.insert(true_end, Instruction::Goto(self.current_no()));
             }
             Expr::Var(var) => {
-                self.get_var(var)?;
-                self.out.push(Instruction::LoadVar);
+                self.push_var(var)?;
             }
-            _ => todo!(),
         }
 
         Ok(())
@@ -82,6 +81,20 @@ impl Compiler {
         }
         self.push_list_end();
         self.out.push(Instruction::LoadStr(var.name));
+
+        Ok(())
+    }
+
+    fn store_var(&mut self, var: Variable) -> CompileResult<()> {
+        self.get_var(var)?;
+        self.out.push(Instruction::StoreVar);
+
+        Ok(())
+    }
+
+    fn push_var(&mut self, var: Variable) -> CompileResult<()> {
+        self.get_var(var)?;
+        self.out.push(Instruction::LoadVar);
 
         Ok(())
     }
@@ -108,8 +121,57 @@ impl Compiler {
                 self.push_form(form)?;
                 self.out.push(Instruction::Print(flags));
             }
-            _ => todo!(),
+            Stmt::If(else_ifs, else_part) => {
+                let mut end_stack = ArrayVec::<u32, 24>::new();
+
+                for (cond, body) in else_ifs {
+                    self.push_if(cond, body)?;
+                    end_stack.push(self.mark());
+                }
+
+                if let Some(else_part) = else_part {
+                    for line in else_part {
+                        self.push_stmt(line)?;
+                    }
+                }
+
+                for end in end_stack {
+                    self.insert(end, Instruction::Goto(self.current_no()));
+                }
+            }
+            Stmt::Assign(var, add_op, rhs) => {
+                if let Some(add_op) = add_op {
+                    self.push_var(var.clone())?;
+                    self.push_expr(rhs)?;
+                    self.out.push(Instruction::BinaryOperator(add_op));
+                } else {
+                    self.push_expr(rhs)?;
+                }
+
+                self.store_var(var)?;
+            }
+            Stmt::Call(name, args) => {
+                self.push_list_begin();
+                for arg in args {
+                    self.push_expr(arg)?;
+                }
+                self.push_list_end();
+                self.out.push(Instruction::LoadStr(name));
+                self.out.push(Instruction::Call);
+            }
         }
+
+        Ok(())
+    }
+
+    fn push_if(&mut self, cond: Expr, body: Vec<Stmt>) -> CompileResult<()> {
+        self.push_expr(cond)?;
+        let begin = self.mark();
+
+        for line in body {
+            self.push_stmt(line)?;
+        }
+        self.insert(begin, Instruction::GotoIfNot(self.current_no()));
 
         Ok(())
     }
