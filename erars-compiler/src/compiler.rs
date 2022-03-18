@@ -1,4 +1,6 @@
-use crate::{ast::FormText, CompileResult, Expr, Function, FunctionHeader, Instruction, Stmt};
+use crate::{
+    ast::FormText, CompileResult, Expr, Function, FunctionHeader, Instruction, Stmt, Variable,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,8 +65,23 @@ impl Compiler {
                 self.push_expr(*or_false)?;
                 self.insert(true_end, Instruction::Goto(self.current_no()));
             }
+            Expr::Var(var) => {
+                self.get_var(var)?;
+                self.out.push(Instruction::LoadVar);
+            }
             _ => todo!(),
         }
+
+        Ok(())
+    }
+
+    fn get_var(&mut self, var: Variable) -> CompileResult<()> {
+        self.push_list_begin();
+        for arg in var.args {
+            self.push_expr(arg)?;
+        }
+        self.push_list_end();
+        self.out.push(Instruction::LoadStr(var.name));
 
         Ok(())
     }
