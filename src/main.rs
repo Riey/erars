@@ -1,11 +1,20 @@
 use std::sync::Arc;
 
+use codespan_reporting::{
+    diagnostic::{Diagnostic, Label},
+    files::SimpleFiles,
+    term::{
+        termcolor::{ColorChoice, StandardStream},
+        Config,
+    },
+};
 use eframe::NativeOptions;
 use erars::{
     function::FunctionDic,
     ui::{ConsoleChannel, EraApp},
     vm::{TerminalVm, VariableInfo, VmContext},
 };
+use erars_compiler::{CompiledFunctionType, Event, EventType};
 use hashbrown::HashMap;
 
 fn main() {
@@ -29,20 +38,55 @@ fn main() {
 
         let mut function_dic = FunctionDic::new();
 
+        let mut files = SimpleFiles::new();
+
         for erb in erbs {
             erb.map_err(anyhow::Error::from)
                 .and_then(|erb| {
-                    erars::compiler::compile(
-                        std::fs::read_to_string(erb)
-                            .unwrap()
-                            .trim_start_matches("\u{feff}"),
-                        &mut function_dic,
-                    )
+                    let source = std::fs::read_to_string(&erb).unwrap();
+                    let program =
+                        erars_compiler::parse_program(source.trim_start_matches("\u{feff}"));
+                    let file_id = files.add(erb.to_str().unwrap().to_string(), source);
+
+                    let program = match program {
+                        Ok(p) => p,
+                        Err((err, span)) => {
+                            let diagnostic = Diagnostic::error()
+                                .with_code("E0001")
+                                .with_message("Compile ERROR")
+                                .with_labels(vec![
+                                    Label::primary(file_id, span).with_message(format!("{}", err))
+                                ]);
+                            let writer = StandardStream::stderr(ColorChoice::Always);
+                            let config = Config::default();
+                            codespan_reporting::term::emit(
+                                &mut writer.lock(),
+                                &config,
+                                &files,
+                                &diagnostic,
+                            )
+                            .unwrap();
+                            return Ok(());
+                        }
+                    };
+
+                    for func in program {
+                        let func = erars_compiler::compile(func).unwrap();
+
+                        match func.ty {
+                            CompiledFunctionType::Event(ev) => {
+                                function_dic.insert_event(ev, func.body)
+                            }
+                            CompiledFunctionType::Normal(label) => {
+                                function_dic.insert_func(label, func.body)
+                            }
+                        }
+                    }
+
+                    Ok(())
                 })
                 .unwrap()
         }
-
-        std::fs::write("dump.txt", format!("{:#?}", function_dic)).unwrap();
 
         let mut ctx = VmContext::new(&infos);
         let vm = TerminalVm::new(function_dic);

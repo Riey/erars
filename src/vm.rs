@@ -9,11 +9,9 @@ use strum::{Display, EnumIter, EnumString};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::compiler::PrintFlags;
-use crate::event::EventType;
+use erars_compiler::{BeginType, BinaryOperator, EventType, Instruction, PrintFlags};
+
 use crate::function::FunctionDic;
-use crate::instruction::{BeginType, Instruction};
-use crate::operator::BinaryOperator;
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 use crate::value::Value;
 
@@ -536,7 +534,10 @@ impl TerminalVm {
     }
 
     fn call(&self, name: &str, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<Workflow> {
-        let body = self.dic.get_func(name)?;
+        let body = self
+            .dic
+            .get_func(name)
+            .ok_or_else(|| anyhow!("Can't find function name {}", name))?;
         self.run_body(body, chan, ctx)
     }
 

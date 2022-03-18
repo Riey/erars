@@ -1,11 +1,7 @@
-use anyhow::{anyhow, Result};
 use enum_map::EnumMap;
 use hashbrown::HashMap;
 
-use crate::{
-    event::{Event, EventFlags, EventType},
-    instruction::Instruction,
-};
+use erars_compiler::{Event, EventFlags, EventType, Instruction};
 use serde::{Deserialize, Serialize};
 
 type FunctionBody = Vec<Instruction>;
@@ -19,7 +15,7 @@ pub struct EventCollection {
 }
 
 impl EventCollection {
-    pub fn run(&self, mut f: impl FnMut(&[Instruction]) -> Result<()>) -> Result<()> {
+    pub fn run<E>(&self, mut f: impl FnMut(&[Instruction]) -> Result<(), E>) -> Result<(), E> {
         if let Some(single) = self.single.as_ref() {
             f(single)?;
         } else {
@@ -72,10 +68,7 @@ impl FunctionDic {
         &self.event[ty]
     }
 
-    pub fn get_func(&self, name: &str) -> Result<&[Instruction]> {
-        self.normal
-            .get(name)
-            .map(|b| &**b)
-            .ok_or_else(|| anyhow!("Function {} is not exists", name))
+    pub fn get_func(&self, name: &str) -> Option<&[Instruction]> {
+        self.normal.get(name).map(|b| &**b)
     }
 }

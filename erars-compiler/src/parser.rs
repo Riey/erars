@@ -32,6 +32,12 @@ pub enum Alignment {
     Right,
 }
 
+impl Default for Alignment {
+    fn default() -> Self {
+        Alignment::Left
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FormStatus {
     /// \@ ~ ?
