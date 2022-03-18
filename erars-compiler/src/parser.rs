@@ -708,9 +708,21 @@ impl<'s> Parser<'s> {
 
     fn next_program(&mut self) -> ParserResult<Vec<Function>> {
         let mut ret = Vec::new();
-        while let Ok(func) = self.next_function() {
-            ret.push(func);
+
+        loop {
+            match self.next_function() {
+                Ok(f) => ret.push(f),
+                Err(err) => {
+                    if !self.text.is_empty() {
+                        return Err(err);
+                    } else {
+                        break;
+                    }
+                }
+
+            }
         }
+
         Ok(ret)
     }
 }

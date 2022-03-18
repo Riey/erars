@@ -10,6 +10,7 @@ use erars_compiler::{parse_body, parse_expr, parse_function, Expr, ParserResult,
 use serde::de::DeserializeOwned;
 
 fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
+    path: &str,
     f: fn(&str) -> ParserResult<T>,
     source: &str,
     expected: &str,
@@ -17,7 +18,7 @@ fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     let expected: T = ron::from_str(expected).unwrap();
 
     let mut files = SimpleFiles::new();
-    let file_id = files.add("test.erb", source);
+    let file_id = files.add(path, source);
 
     match f(source) {
         Ok(ret) => {
@@ -54,10 +55,15 @@ fn run_test_set<T: std::fmt::Debug + Eq + DeserializeOwned>(
 
         eprintln!("Check {}", erb_file.display());
 
-        let erb_source = std::fs::read_to_string(erb_file).unwrap();
+        let erb_source = std::fs::read_to_string(&erb_file).unwrap();
         let ron_source = std::fs::read_to_string(ron_file).unwrap();
 
-        do_test(f, &erb_source, &ron_source);
+        do_test(
+            erb_file.as_os_str().to_str().unwrap(),
+            f,
+            &erb_source,
+            &ron_source,
+        );
     }
 }
 

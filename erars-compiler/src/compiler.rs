@@ -23,6 +23,13 @@ impl Compiler {
         self.out.len() as u32
     }
 
+    fn insert(&mut self, mark: u32, inst: Instruction) {
+        *self
+            .out
+            .get_mut(mark as usize)
+            .unwrap_or_else(|| unreachable!("Invalid mark {}", mark)) = inst;
+    }
+
     fn push_list_begin(&mut self) {
         self.out.push(Instruction::ListBegin);
     }
@@ -46,6 +53,15 @@ impl Compiler {
             }
             Expr::FormText(form) => {
                 self.push_form(form)?;
+            }
+            Expr::CondExpr(cond, if_true, or_false) => {
+                self.push_expr(*cond)?;
+                let begin = self.mark();
+                self.push_expr(*if_true)?;
+                let true_end = self.mark();
+                self.insert(begin, Instruction::GotoIfNot(true_end + 1));
+                self.push_expr(*or_false)?;
+                self.insert(true_end, Instruction::Goto(self.current_no()));
             }
             _ => todo!(),
         }

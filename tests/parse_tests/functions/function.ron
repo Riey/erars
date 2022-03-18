@@ -1,1 +1,7 @@
-( header: (name: "FOO", infos: [EventFlag(Pre)]), body: [Print(["NEWLINE"], "Hello")] )
+(
+    header: (name: "FOO", infos: [EventFlag(Pre)]),
+    body: [
+        Print(["NEWLINE"], "Hello"),
+        PrintForm(["NEWLINE"], (first: "", other: [(IntLit(123), "")]))
+    ]
+)
