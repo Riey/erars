@@ -1,0 +1,13 @@
+BinopExpr(
+    BinopExpr(
+        Var((name: "RESULT", args: [])),
+        Equal,
+        IntLit(0)
+    ),
+    And,
+    BinopExpr(
+        Var((name: "TALENT", args: [Var((name: "MASTER", args: [])), IntLit(998)])),
+        Equal,
+        IntLit(0)
+    ),
+)
