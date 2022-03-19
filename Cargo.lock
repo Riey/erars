@@ -70,6 +70,9 @@ name = "arrayvec"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "atomic_refcell"
@@ -745,6 +748,7 @@ dependencies = [
  "k9",
  "memchr",
  "option_set",
+ "ordered-float",
  "serde",
  "strum 0.24.0",
  "thiserror",
@@ -1359,6 +1363,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c83b2d96bdcfa87852ffdc8e77e5fb544ffe2f85ed60568f5b62c98a05ec9a9b"
 dependencies = [
  "heck 0.3.3",
+ "serde",
+]
+
+[[package]]
+name = "ordered-float"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7940cf2ca942593318d07fcf2596cdca60a85c9e7fab408a5e21a4f9dcd40d87"
+dependencies = [
+ "num-traits",
  "serde",
 ]
 

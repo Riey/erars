@@ -23,6 +23,8 @@ pub enum Stmt {
     Call(String, Vec<Expr>),
     Begin(BeginType),
     Command(String, Vec<Expr>),
+    Return(Vec<Expr>),
+    ReturnF(Expr),
     Alignment(Alignment),
 }
 

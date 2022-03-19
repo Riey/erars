@@ -493,16 +493,20 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::If(else_ifs, else_body)))
             }
-            "GOTO" => Ok(Some(Stmt::Goto(
-                self.try_get_ident()
-                    .ok_or_else(|| {
-                        (
-                            ParserError::MissingToken(format!("GOTO label")),
-                            self.current_loc_span(),
-                        )
-                    })?
-                    .into(),
-            ))),
+            "GOTO" => {
+                self.skip_ws();
+
+                Ok(Some(Stmt::Goto(
+                    self.try_get_ident()
+                        .ok_or_else(|| {
+                            (
+                                ParserError::MissingToken(format!("label name")),
+                                self.current_loc_span(),
+                            )
+                        })?
+                        .into(),
+                )))
+            }
             "REUSELASTLINE" => {
                 self.skip_blank();
                 Ok(Some(Stmt::ReuseLastLine(self.read_until_newline().into())))
@@ -511,6 +515,14 @@ impl<'s> Parser<'s> {
                 let cond = self.next_expr()?;
                 let body = self.next_stmt()?;
                 Ok(Some(Stmt::Sif(cond, Box::new(body))))
+            }
+            "RETURN" => {
+                self.skip_ws();
+                Ok(Some(Stmt::Return(self.read_args()?)))
+            }
+            "RETURNF" => {
+                self.skip_ws();
+                Ok(Some(Stmt::ReturnF(self.next_expr()?)))
             }
             "BEGIN" => {
                 self.skip_ws();
@@ -565,6 +577,11 @@ impl<'s> Parser<'s> {
         self.skip_ws();
 
         let mut ret = Vec::new();
+
+        if self.try_get_char('\n') {
+            // empty
+            return Ok(ret);
+        }
 
         loop {
             ret.push(self.next_expr()?);

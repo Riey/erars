@@ -13,6 +13,7 @@ enum-map = { version = "2.0.3", features = ["serde"] }
 hashbrown = { version = "0.12.0", features = ["serde"] }
 memchr = "2.4.1"
 option_set = "0.1.4"
+ordered-float = { version = "2.10.0", features = ["serde"] }
 serde = { version = "1.0.136", features = ["derive"] }
 strum = { version = "0.24.0", features = ["derive"] }
 thiserror = "1.0.30"

@@ -1,4 +1,5 @@
 use crate::{Alignment, BinaryOperator, PrintFlags, UnaryOperator};
+use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
@@ -31,6 +32,9 @@ pub enum Instruction {
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
     SetAlignment(Alignment),
+    Times(NotNan<f32>),
+    Return,
+    ReturnF,
     Goto(u32),
     GotoIfNot(u32),
 }

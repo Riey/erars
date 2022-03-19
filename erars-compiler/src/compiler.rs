@@ -180,6 +180,14 @@ impl Compiler {
 
                 self.store_var(var)?;
             }
+            Stmt::Return(exprs) => {
+                self.push_list(exprs)?;
+                self.out.push(Instruction::Return);
+            }
+            Stmt::ReturnF(expr) => {
+                self.push_expr(expr)?;
+                self.out.push(Instruction::ReturnF);
+            }
             Stmt::Call(name, args) => {
                 self.push_list(args)?;
                 self.out.push(Instruction::LoadStr(name));
@@ -197,9 +205,9 @@ impl Compiler {
                 self.out.push(Instruction::Command);
             }
             Stmt::Label(label) => {
-                self.marks
-                    .insert(label, self.current_no())
-                    .ok_or_else(|| CompileError::DuplicatedGotoLabel)?;
+                if self.marks.insert(label, self.current_no()).is_some() {
+                    return Err(CompileError::DuplicatedGotoLabel);
+                }
             }
             Stmt::Goto(label) => {
                 let mark = self.mark();
