@@ -1,2 +1,3 @@
-tests/* linguist-vendored
+tests/compile_tests/* linguist-vendored
+tests/parse_tests/* linguist-vendored
 ERB/* linguist-vendored
