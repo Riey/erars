@@ -14,7 +14,7 @@ use erars::{
     ui::{ConsoleChannel, EraApp},
     vm::{TerminalVm, VariableInfo, VmContext},
 };
-use erars_compiler::{CompiledFunctionType, Event, EventType};
+use erars_compiler::CompiledFunctionType;
 use hashbrown::HashMap;
 
 fn main() {

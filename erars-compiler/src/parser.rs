@@ -73,6 +73,13 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn is_str_var(&self, name: &str) -> bool {
+        match name {
+            "LOCALS" | "STR" => true,
+            _ => false,
+        }
+    }
+
     fn current_loc(&self) -> usize {
         self.text.as_ptr() as usize - self.begin_loc
     }
@@ -610,15 +617,24 @@ impl<'s> Parser<'s> {
             let symbol_start = self.current_loc();
             match self.try_get_symbol() {
                 Some(symbol) => {
-                    if let Some(left) = symbol.strip_suffix("=") {
+                    if self.is_str_var(ident) {
+                        if symbol == "=" {
+                            self.skip_blank();
+                            return Ok(Stmt::Assign(
+                                var,
+                                None,
+                                Expr::FormText(self.read_form_text()?),
+                            ));
+                        }
+                    } else if let Some(left) = symbol.strip_suffix("=") {
                         let additional_op = left.parse().ok();
-                        Ok(Stmt::Assign(var, additional_op, self.next_expr()?))
-                    } else {
-                        Err((
-                            ParserError::InvalidCode(format!("알수없는 연산자")),
-                            self.from_prev_loc_span(symbol_start),
-                        ))
+                        return Ok(Stmt::Assign(var, additional_op, self.next_expr()?));
                     }
+
+                    Err((
+                        ParserError::InvalidCode(format!("알수없는 연산자")),
+                        self.from_prev_loc_span(symbol_start),
+                    ))
                 }
                 None => Err((
                     ParserError::InvalidCode(format!("알수없는 코드")),

@@ -1,0 +1,7 @@
+[
+    Assign(
+        (name: "LOCALS", args: []),
+        None,
+        FormText((first: "", other: [(IntLit(123), "456")])),
+    )
+]

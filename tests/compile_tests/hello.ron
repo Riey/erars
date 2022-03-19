@@ -1,9 +1,6 @@
 [
     (
-        header: (
-            name: "FOO",
-            infos: [],
-        ),
+        ty: Normal("FOO"),
         body: [
             LoadStr("Hello, world!"),
             Print(["NEWLINE"]),

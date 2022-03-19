@@ -6,7 +6,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_compiler::{parse_body, parse_expr, parse_function, Expr, ParserResult, Stmt};
+use erars_compiler::{parse_body, parse_expr, parse_function, ParserResult};
 use serde::de::DeserializeOwned;
 
 fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
