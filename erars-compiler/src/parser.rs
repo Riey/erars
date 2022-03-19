@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use crate::{
-    ast::FormText, BinaryOperator, EventFlags, Expr, Function, FunctionHeader, FunctionInfo,
-    ParserError, ParserResult, Stmt, Variable,
+    ast::FormText, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionHeader,
+    FunctionInfo, ParserError, ParserResult, Stmt, Variable,
 };
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
@@ -113,12 +113,21 @@ impl<'s> Parser<'s> {
         ret
     }
 
+    fn skip_ws_newline(&mut self) {
+        loop {
+            self.skip_ws();
+            if !self.try_get_char('\n') {
+                break;
+            }
+        }
+    }
+
     fn skip_ws(&mut self) {
         let mut bytes = self.text.as_bytes().iter();
 
         while let Some(b) = bytes.next() {
             match b {
-                b' ' | b'\t' | b'\r' | b'\n' => {}
+                b' ' | b'\t' | b'\r' => {}
                 b';' => {
                     let slice = bytes.as_slice();
                     let pos = memchr::memchr(b'\n', slice).unwrap_or(slice.len());
@@ -433,7 +442,7 @@ impl<'s> Parser<'s> {
         let cond = self.next_expr()?;
 
         let else_body = loop {
-            self.skip_ws();
+            self.skip_ws_newline();
 
             if self.try_get_prefix("ENDIF") {
                 else_ifs.push((cond, body));
@@ -448,7 +457,7 @@ impl<'s> Parser<'s> {
                     // ELSE
                     let mut else_body = Vec::new();
                     loop {
-                        self.skip_ws();
+                        self.skip_ws_newline();
                         if self.try_get_prefix("ENDIF") {
                             break;
                         }
@@ -503,6 +512,17 @@ impl<'s> Parser<'s> {
                 let body = self.next_stmt()?;
                 Ok(Some(Stmt::Sif(cond, Box::new(body))))
             }
+            "BEGIN" => {
+                self.skip_ws();
+                let start = self.current_loc();
+                let ty = self.get_ident().parse::<BeginType>().map_err(|_| {
+                    (
+                        ParserError::MissingToken(format!("Begin type")),
+                        self.from_prev_loc_span(start),
+                    )
+                })?;
+                Ok(Some(Stmt::Begin(ty)))
+            }
             "CALL" => {
                 self.skip_ws();
 
@@ -531,10 +551,12 @@ impl<'s> Parser<'s> {
                     )
                 })?;
 
-                Ok(Some(Stmt::Alignment(dbg!(align))))
+                Ok(Some(Stmt::Alignment(align)))
             }
-            "DRAWLINE" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
-            "STRLENS" => Ok(Some(Stmt::Command(command.into(), self.read_args()?))),
+            "DRAWLINE" | "INPUT" | "INPUTS" | "RESETDATA" | "ADDDEFCHARA" => {
+                Ok(Some(Stmt::Command(command.into(), Vec::new())))
+            }
+            "STRLENS" | "ADDCHARA" => Ok(Some(Stmt::Command(command.into(), self.read_args()?))),
             _ => Ok(None),
         }
     }
@@ -705,7 +727,7 @@ impl<'s> Parser<'s> {
     }
 
     fn next_stmt(&mut self) -> ParserResult<Stmt> {
-        self.skip_ws();
+        self.skip_ws_newline();
 
         let ident_start = self.current_loc();
 
@@ -780,7 +802,7 @@ impl<'s> Parser<'s> {
     }
 
     fn next_function(&mut self) -> ParserResult<Function> {
-        self.skip_ws();
+        self.skip_ws_newline();
         self.ensure_get_char('@')?;
         let label = self.try_get_ident().ok_or_else(|| {
             (
@@ -800,7 +822,7 @@ impl<'s> Parser<'s> {
         let mut infos = Vec::new();
 
         loop {
-            self.skip_ws();
+            self.skip_ws_newline();
             if self.try_get_char('#') {
                 let start = self.current_loc();
                 let info = self.try_get_ident().ok_or_else(|| {
@@ -849,7 +871,7 @@ impl<'s> Parser<'s> {
             match self.next_function() {
                 Ok(f) => ret.push(f),
                 Err(err) => {
-                    self.skip_ws();
+                    self.skip_ws_newline();
 
                     if self.text.is_empty() || self.text.starts_with('@') {
                         break;
