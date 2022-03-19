@@ -1,14 +1,20 @@
 use crate::{Alignment, BinaryOperator, PrintFlags, UnaryOperator};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
-use strum::EnumString;
+use strum::{Display, EnumString};
 
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString, Display)]
 pub enum BeginType {
     #[strum(to_string = "TITLE")]
     Title,
     #[strum(to_string = "FIRST")]
     First,
+    #[strum(to_string = "SHOP")]
+    Shop,
+    #[strum(to_string = "TURNEND")]
+    TurnEnd,
+    #[strum(to_string = "AFTERTRAIN")]
+    AfterTrain,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

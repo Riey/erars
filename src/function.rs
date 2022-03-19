@@ -3,8 +3,8 @@ use arrayvec::ArrayVec;
 use enum_map::EnumMap;
 use hashbrown::HashMap;
 
-use erars_compiler::{Event, EventType, EventFlags, Instruction};
 use crate::value::Value;
+use erars_compiler::{CompiledFunction, Event, EventFlags, EventType, FunctionInfo, Instruction};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -93,6 +93,29 @@ impl FunctionDic {
         Self {
             normal: HashMap::new(),
             event: EnumMap::default(),
+        }
+    }
+
+    pub fn insert_compiled_func(&mut self, func: CompiledFunction) {
+        let body = FunctionBody {
+            body: func.body,
+            ..Default::default()
+        };
+        let header = func.header;
+        let mut flags = EventFlags::None;
+
+        for info in header.infos {
+            match info {
+                FunctionInfo::EventFlag(f) => {
+                    flags = f;
+                }
+            }
+        }
+
+        if let Ok(ty) = header.name.parse::<EventType>() {
+            self.insert_event(Event { ty, flags }, body);
+        } else {
+            self.insert_func(header.name, body);
         }
     }
 

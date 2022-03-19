@@ -9,9 +9,11 @@ use strum::{Display, EnumIter, EnumString};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
-use erars_compiler::{BeginType, BinaryOperator, EventType, Instruction, PrintFlags, UnaryOperator};
+use erars_compiler::{
+    BeginType, BinaryOperator, EventType, Instruction, PrintFlags, UnaryOperator,
+};
 
-use crate::function::{FunctionDic, FunctionBody};
+use crate::function::{FunctionBody, FunctionDic};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 use crate::value::Value;
 

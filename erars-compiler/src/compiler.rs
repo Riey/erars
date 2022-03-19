@@ -1,6 +1,6 @@
 use crate::{
-    ast::FormText, CompileError, CompileResult, Event, EventFlags, EventType, Expr, Function,
-    FunctionInfo, Instruction, Stmt, Variable,
+    ast::FormText, CompileError, CompileResult, Expr, Function,
+    FunctionHeader, Instruction, Stmt, Variable,
 };
 use arrayvec::ArrayVec;
 use hashbrown::HashMap;
@@ -8,14 +8,8 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledFunction {
-    pub ty: CompiledFunctionType,
+    pub header: FunctionHeader,
     pub body: Vec<Instruction>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CompiledFunctionType {
-    Normal(String),
-    Event(Event),
 }
 
 #[derive(Default)]
@@ -253,24 +247,8 @@ pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
         compiler.push_stmt(stmt)?;
     }
 
-    let mut flags = EventFlags::None;
-
-    for info in func.header.infos {
-        match info {
-            FunctionInfo::EventFlag(flag) => {
-                assert_eq!(flags, EventFlags::None);
-                flags = flag;
-            }
-        }
-    }
-
-    let ty = match func.header.name.parse::<EventType>() {
-        Ok(ty) => CompiledFunctionType::Event(Event { ty, flags }),
-        Err(_) => CompiledFunctionType::Normal(func.header.name),
-    };
-
     Ok(CompiledFunction {
-        ty,
+        header: func.header,
         body: compiler.finish(),
     })
 }

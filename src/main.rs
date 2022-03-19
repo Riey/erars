@@ -14,7 +14,6 @@ use erars::{
     ui::{ConsoleChannel, EraApp},
     vm::{TerminalVm, VariableInfo, VmContext},
 };
-use erars_compiler::CompiledFunctionType;
 use hashbrown::HashMap;
 
 fn main() {
@@ -62,12 +61,7 @@ fn main() {
             for func in program {
                 let func = erars_compiler::compile(func).unwrap();
 
-                match func.ty {
-                    CompiledFunctionType::Event(ev) => function_dic.insert_event(ev, func.body),
-                    CompiledFunctionType::Normal(label) => {
-                        function_dic.insert_func(label, func.body)
-                    }
-                }
+                function_dic.insert_compiled_func(func);
             }
         }
 
