@@ -450,6 +450,10 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::If(else_ifs, else_body)))
             }
+            "REUSELASTLINE" => {
+                self.skip_blank();
+                Ok(Some(Stmt::ReuseLastLine(self.read_until_newline().into())))
+            }
             "SIF" => {
                 let cond = self.next_expr()?;
                 let body = self.next_stmt()?;

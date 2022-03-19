@@ -14,6 +14,7 @@ pub struct Variable {
 pub enum Stmt {
     Print(PrintFlags, String),
     PrintForm(PrintFlags, FormText),
+    ReuseLastLine(String),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<Stmt>),
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),

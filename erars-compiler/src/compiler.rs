@@ -138,6 +138,10 @@ impl Compiler {
                 self.push_form(form)?;
                 self.out.push(Instruction::Print(flags));
             }
+            Stmt::ReuseLastLine(text) => {
+                self.out.push(Instruction::LoadStr(text));
+                self.out.push(Instruction::ReuseLastLine);
+            }
             Stmt::Sif(cond, body) => {
                 self.push_expr(cond)?;
                 let mark = self.mark();
