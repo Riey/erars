@@ -9,9 +9,9 @@ use strum::{Display, EnumIter, EnumString};
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
-use erars_compiler::{BeginType, BinaryOperator, EventType, Instruction, PrintFlags};
+use erars_compiler::{BeginType, BinaryOperator, EventType, Instruction, PrintFlags, UnaryOperator};
 
-use crate::function::FunctionDic;
+use crate::function::{FunctionDic, FunctionBody};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 use crate::value::Value;
 
@@ -20,7 +20,6 @@ use crate::value::Value;
 pub struct VariableInfo {
     is_chara: bool,
     is_str: bool,
-    builtin: Option<BulitinVariable>,
     default_int: i64,
     size: Vec<usize>,
 }
@@ -190,6 +189,57 @@ impl VariableStorage {
         }
     }
 
+    fn init_local(&mut self, name: &str, body: &FunctionBody) {
+        self.variables
+            .entry(format!("ARG@{}", name))
+            .or_insert_with(|| {
+                let arg_info = VariableInfo {
+                    default_int: 0,
+                    size: vec![1000],
+                    is_str: false,
+                    is_chara: false,
+                };
+                let arg = Variable::new(&arg_info);
+                (arg_info, Either::Left(arg))
+            });
+        self.variables
+            .entry(format!("ARGS@{}", name))
+            .or_insert_with(|| {
+                let args_info = VariableInfo {
+                    default_int: 0,
+                    size: vec![100],
+                    is_str: true,
+                    is_chara: false,
+                };
+                let args = Variable::new(&args_info);
+                (args_info, Either::Left(args))
+            });
+        self.variables
+            .entry(format!("LOCAL@{}", name))
+            .or_insert_with(|| {
+                let local_info = VariableInfo {
+                    default_int: 0,
+                    size: vec![body.local_size()],
+                    is_str: false,
+                    is_chara: false,
+                };
+                let local = Variable::new(&local_info);
+                (local_info, Either::Left(local))
+            });
+        self.variables
+            .entry(format!("LOCALS@{}", name))
+            .or_insert_with(|| {
+                let locals_info = VariableInfo {
+                    default_int: 0,
+                    size: vec![body.locals_size()],
+                    is_str: true,
+                    is_chara: false,
+                };
+                let locals = Variable::new(&locals_info);
+                (locals_info, Either::Left(locals))
+            });
+    }
+
     pub fn target(&mut self) -> Result<usize> {
         Ok((*self
             .get_global("TARGET")
@@ -326,7 +376,6 @@ impl TerminalVm {
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        eprintln!("Run {:?}", inst);
         match inst {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
@@ -405,6 +454,57 @@ impl TerminalVm {
 
                 // TODO: PRINTW
             }
+            Instruction::ReturnF => return Ok(Some(Workflow::Return)),
+            Instruction::Return => {
+                let values = ctx.take_list();
+
+                let mut result_idx = 0usize;
+                let mut results_idx = 0usize;
+
+                for value in values {
+                    match value {
+                        Value::Int(_) => {
+                            ctx.var
+                                .get_global("RESULT")
+                                .unwrap()
+                                .set(iter::once(result_idx), value)?;
+                            result_idx += 1;
+                        }
+                        Value::String(_) => {
+                            ctx.var
+                                .get_global("RESULTS")
+                                .unwrap()
+                                .set(iter::once(results_idx), value)?;
+                            results_idx += 1;
+                        }
+                    }
+                }
+
+                return Ok(Some(Workflow::Return));
+            }
+            Instruction::Call => {
+                let func = ctx.pop_str()?;
+                let args = ctx.take_list();
+
+                match func.as_str() {
+                    "TOSTR" => {
+                        let mut args = args.into_iter();
+                        let value = args.next().unwrap().try_into_int()?;
+                        let format = args.next();
+
+                        let ret = if let Some(_format) = format {
+                            format!("{00}", value)
+                        } else {
+                            value.to_string()
+                        };
+
+                        ctx.push(ret);
+                    }
+                    _ => {
+                        self.call(&func, &args, chan, ctx)?;
+                    }
+                }
+            }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
                 chan.send_msg(ConsoleMessage::Exit);
@@ -417,6 +517,17 @@ impl TerminalVm {
                     .fold(String::new(), |s, l| s + &l.into_str());
                 ctx.push(ret);
             }
+            Instruction::Times(t) => {
+                let arg = ctx.pop_int()?;
+                let ret = (arg as f32 * t.into_inner()) as i64;
+                ctx.push(ret);
+            }
+            Instruction::UnaryOperator(op) => match op {
+                UnaryOperator::Not => {
+                    let operand = ctx.pop().as_bool();
+                    ctx.push(!operand);
+                }
+            },
             Instruction::BinaryOperator(op) => {
                 let rhs = ctx.pop();
                 let lhs = ctx.pop();
@@ -436,26 +547,6 @@ impl TerminalVm {
                 };
 
                 ctx.push(ret);
-            }
-            Instruction::CallMethod => {
-                let name = ctx.pop_str()?;
-                let mut args = ctx.take_list().into_iter();
-
-                match name.as_str() {
-                    "TOSTR" => {
-                        let value = args.next().unwrap().try_into_int()?;
-                        let format = args.next();
-
-                        let ret = if let Some(_format) = format {
-                            format!("{00}", value)
-                        } else {
-                            value.to_string()
-                        };
-
-                        ctx.push(ret);
-                    }
-                    _ => bail!("Unknown method {}", name),
-                }
             }
             Instruction::Goto(no) => {
                 *cursor = *no as usize;
@@ -504,7 +595,7 @@ impl TerminalVm {
                     }
                 }
             }
-            _ => bail!("{:?}", inst),
+            _ => bail!("TODO: {:?}", inst),
         }
 
         Ok(None)
@@ -512,13 +603,15 @@ impl TerminalVm {
 
     fn run_body(
         &self,
-        body: &[Instruction],
+        body: &FunctionBody,
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         let mut cursor = 0;
 
-        while let Some(inst) = body.get(cursor) {
+        let insts = body.body();
+
+        while let Some(inst) = insts.get(cursor) {
             cursor += 1;
             match self.run_instruction(inst, &mut cursor, chan, ctx) {
                 Ok(None) => {}
@@ -533,16 +626,28 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    fn call(&self, name: &str, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<Workflow> {
-        let body = self
-            .dic
-            .get_func(name)
-            .ok_or_else(|| anyhow!("Can't find function name {}", name))?;
+    fn call(
+        &self,
+        label: &str,
+        args: &[Value],
+        chan: &ConsoleChannel,
+        ctx: &mut VmContext,
+    ) -> Result<Workflow> {
+        let body = self.dic.get_func(label)?;
+
+        ctx.var.init_local(label, body);
+
+        for ((arg_name, arg_indices), arg) in body.args().iter().zip(args) {
+            let var = ctx.var.get_global(arg_name).unwrap();
+            var.set(arg_indices.iter().copied(), arg.clone())?;
+        }
+
         self.run_body(body, chan, ctx)
     }
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         self.dic.get_event(ty).run(|body| {
+            ctx.var.init_local(ty.into(), body);
             self.run_body(body, chan, ctx)?;
 
             Ok(())
@@ -552,13 +657,14 @@ impl TerminalVm {
     fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         match ty {
             BeginType::Title => {
-                self.call("SYSTEM_TITLE", chan, ctx)?;
+                self.call("SYSTEM_TITLE", &[], chan, ctx)?;
                 Ok(())
             }
             BeginType::First => {
                 self.call_event(EventType::First, chan, ctx)?;
                 Ok(())
             }
+            _ => bail!("TODO: {}", ty),
         }
     }
 

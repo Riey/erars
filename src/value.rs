@@ -35,6 +35,12 @@ impl Value {
     }
 }
 
+impl From<Value> for bool {
+    fn from(v: Value) -> bool {
+        v.as_bool()
+    }
+}
+
 impl TryFrom<Value> for String {
     type Error = Error;
 
@@ -95,6 +101,12 @@ impl From<String> for Value {
 impl From<i64> for Value {
     fn from(v: i64) -> Self {
         Self::Int(v)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(b: bool) -> Self {
+        Self::Int(b as _)
     }
 }
 
