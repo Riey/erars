@@ -516,6 +516,7 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::Alignment(align)))
             }
+            "STRLENS" => Ok(Some(Stmt::Command(command.into(), self.read_args()?))),
             _ => Ok(None),
         }
     }
@@ -684,13 +685,13 @@ impl<'s> Parser<'s> {
                 return Ok(com);
             }
 
+            // assign
+            let var = self.next_var(ident)?;
+
             self.skip_ws();
             let symbol_start = self.current_loc();
             match self.try_get_symbol() {
                 Some(symbol) => {
-                    // assign
-                    let var = self.next_var(ident)?;
-
                     if self.is_str_var(ident) {
                         if symbol == "=" {
                             self.skip_blank();
