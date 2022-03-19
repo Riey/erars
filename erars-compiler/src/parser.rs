@@ -456,7 +456,13 @@ impl<'s> Parser<'s> {
                 }
             };
 
-            Some(Ok(Stmt::Call(func.into(), try_option!(self.read_args()))))
+            let args = if self.try_get_char(',') {
+                try_option!(self.read_args())
+            } else {
+                Vec::new()
+            };
+
+            Some(Ok(Stmt::Call(func.into(), args)))
         } else {
             None
         }
@@ -467,15 +473,13 @@ impl<'s> Parser<'s> {
 
         let mut ret = Vec::new();
 
-        if self.try_get_char(',') {
-            loop {
-                ret.push(self.next_expr()?);
+        loop {
+            ret.push(self.next_expr()?);
 
-                self.skip_ws();
+            self.skip_ws();
 
-                if !self.try_get_char(',') {
-                    break;
-                }
+            if !self.try_get_char(',') {
+                break;
             }
         }
 
@@ -567,8 +571,16 @@ impl<'s> Parser<'s> {
     fn next_expr(&mut self) -> ParserResult<Expr> {
         self.skip_ws();
 
-        let mut term = if let Some(var) = self.try_get_ident() {
-            Expr::Var(self.next_var(var)?)
+        let mut term = if let Some(ident) = self.try_get_ident() {
+            if self.try_get_char('(') {
+                // method
+                let args = self.read_args()?;
+                self.ensure_get_char(')')?;
+                Expr::Method(ident.into(), args)
+            } else {
+                // variable
+                Expr::Var(self.next_var(ident)?)
+            }
         } else {
             self.read_term()?
         };

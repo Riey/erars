@@ -1,0 +1,1 @@
+Method("FOO", [IntLit(123), StringLit("BAR"), Var((name: "LOCAL", args: [IntLit(123)]))])

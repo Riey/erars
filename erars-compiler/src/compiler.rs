@@ -40,6 +40,15 @@ impl Compiler {
             .unwrap_or_else(|| unreachable!("Invalid mark {}", mark)) = inst;
     }
 
+    fn push_list(&mut self, args: impl IntoIterator<Item = Expr>) -> CompileResult<()> {
+        self.push_list_begin();
+        for arg in args {
+            self.push_expr(arg)?;
+        }
+        self.push_list_end();
+        Ok(())
+    }
+
     fn push_list_begin(&mut self) {
         self.out.push(Instruction::ListBegin);
     }
@@ -73,6 +82,11 @@ impl Compiler {
                 self.push_expr(*or_false)?;
                 self.insert(true_end, Instruction::Goto(self.current_no()));
             }
+            Expr::Method(name, args) => {
+                self.push_list(args)?;
+                self.out.push(Instruction::LoadStr(name));
+                self.out.push(Instruction::CallMethod);
+            }
             Expr::Var(var) => {
                 self.push_var(var)?;
             }
@@ -82,11 +96,7 @@ impl Compiler {
     }
 
     fn get_var(&mut self, var: Variable) -> CompileResult<()> {
-        self.push_list_begin();
-        for arg in var.args {
-            self.push_expr(arg)?;
-        }
-        self.push_list_end();
+        self.push_list(var.args)?;
         self.out.push(Instruction::LoadStr(var.name));
 
         Ok(())
@@ -158,11 +168,7 @@ impl Compiler {
                 self.store_var(var)?;
             }
             Stmt::Call(name, args) => {
-                self.push_list_begin();
-                for arg in args {
-                    self.push_expr(arg)?;
-                }
-                self.push_list_end();
+                self.push_list(args)?;
                 self.out.push(Instruction::LoadStr(name));
                 self.out.push(Instruction::Call);
             }

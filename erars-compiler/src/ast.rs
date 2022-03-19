@@ -73,6 +73,7 @@ pub enum Expr {
     IntLit(i64),
     FormText(FormText),
     Var(Variable),
+    Method(String, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),
     BinopExpr(Box<Self>, BinaryOperator, Box<Self>),
     CondExpr(Box<Self>, Box<Self>, Box<Self>),
