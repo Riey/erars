@@ -185,6 +185,9 @@ impl Compiler {
                 self.out.push(Instruction::LoadStr(name));
                 self.out.push(Instruction::Call);
             }
+            Stmt::Begin(ty) => {
+                self.out.push(Instruction::Begin(ty));
+            }
             Stmt::Alignment(align) => {
                 self.out.push(Instruction::SetAlignment(align));
             }
