@@ -1,8 +1,9 @@
 use crate::{
-    ast::FormText, CompileResult, Event, EventFlags, EventType, Expr, Function, FunctionInfo,
-    Instruction, Stmt, Variable,
+    ast::FormText, CompileError, CompileResult, Event, EventFlags, EventType, Expr, Function,
+    FunctionInfo, Instruction, Stmt, Variable,
 };
 use arrayvec::ArrayVec;
+use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,6 +21,8 @@ pub enum CompiledFunctionType {
 #[derive(Default)]
 struct Compiler {
     out: Vec<Instruction>,
+    marks: HashMap<String, u32>,
+    goto_marks: HashMap<String, Vec<u32>>,
 }
 
 impl Compiler {
@@ -190,6 +193,15 @@ impl Compiler {
                 self.out.push(Instruction::LoadStr(name));
                 self.out.push(Instruction::Command);
             }
+            Stmt::Label(label) => {
+                self.marks
+                    .insert(label, self.current_no())
+                    .ok_or_else(|| CompileError::DuplicatedGotoLabel)?;
+            }
+            Stmt::Goto(label) => {
+                let mark = self.mark();
+                self.goto_marks.entry(label.into()).or_default().push(mark);
+            }
         }
 
         Ok(())
@@ -207,7 +219,18 @@ impl Compiler {
         Ok(())
     }
 
-    pub fn finish(self) -> Vec<Instruction> {
+    pub fn finish(mut self) -> Vec<Instruction> {
+        for (label, marks) in self.goto_marks {
+            match self.marks.get(&label) {
+                Some(label_pos) => {
+                    for goto_pos in marks {
+                        self.out[goto_pos as usize] = Instruction::Goto(*label_pos);
+                    }
+                }
+                None => unreachable!("Unknown goto label ${}", label),
+            }
+        }
+
         self.out
     }
 }

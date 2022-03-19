@@ -22,7 +22,10 @@ impl fmt::Debug for ParserError {
 }
 
 #[derive(thiserror::Error)]
-pub enum CompileError {}
+pub enum CompileError {
+    #[error("중복된 GOTO 라벨입니다.")]
+    DuplicatedGotoLabel,
+}
 
 impl fmt::Debug for CompileError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

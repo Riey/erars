@@ -484,6 +484,16 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::If(else_ifs, else_body)))
             }
+            "GOTO" => Ok(Some(Stmt::Goto(
+                self.try_get_ident()
+                    .ok_or_else(|| {
+                        (
+                            ParserError::MissingToken(format!("GOTO label")),
+                            self.current_loc_span(),
+                        )
+                    })?
+                    .into(),
+            ))),
             "REUSELASTLINE" => {
                 self.skip_blank();
                 Ok(Some(Stmt::ReuseLastLine(self.read_until_newline().into())))
@@ -736,6 +746,14 @@ impl<'s> Parser<'s> {
                     ident_start..ident_end,
                 )),
             }
+        } else if self.try_get_char('$') {
+            let label = self.try_get_ident().ok_or_else(|| {
+                (
+                    ParserError::MissingToken(format!("GOTO label")),
+                    self.current_loc_span(),
+                )
+            })?;
+            Ok(Stmt::Label(label.into()))
         } else if self.text.is_empty() {
             Err((ParserError::Eof, self.from_prev_loc_span(ident_start)))
         } else {

@@ -12,6 +12,8 @@ pub struct Variable {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stmt {
+    Label(String),
+    Goto(String),
     Print(PrintFlags, String),
     PrintForm(PrintFlags, FormText),
     ReuseLastLine(String),
