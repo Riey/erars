@@ -6,7 +6,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_compiler::{parse_body, parse_expr, parse_function, ParserResult, parse_program};
+use erars_compiler::{parse_body, parse_expr, parse_function, parse_program, ParserResult};
 use serde::de::DeserializeOwned;
 
 #[test]

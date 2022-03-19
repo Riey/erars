@@ -3,5 +3,16 @@
         (name: "LOCALS", args: []),
         None,
         FormText((first: "", other: [(IntLit(123), "456")])),
-    )
+    ),
+    Assign(
+        (name: "LOCALS", args: []),
+        None,
+        FormText((
+            first: "",
+            other: [
+                (Var((name: "LOCAL", args: [IntLit(0)])), "."),
+                (Method("TOSTR", [Var((name: "LOCAL", args: [IntLit(1)])), StringLit("00")]), ""),
+            ]
+        )),
+    ),
 ]

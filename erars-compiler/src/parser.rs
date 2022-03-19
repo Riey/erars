@@ -52,6 +52,7 @@ pub struct Parser<'s> {
     form_status: Option<FormStatus>,
     cond_status: Option<CondStatus>,
     begin_loc: usize,
+    ban_percent: bool,
 }
 
 impl<'s> Parser<'s> {
@@ -61,6 +62,7 @@ impl<'s> Parser<'s> {
             form_status: None,
             cond_status: None,
             begin_loc: text.as_ptr() as usize,
+            ban_percent: false,
         }
     }
 
@@ -158,6 +160,16 @@ impl<'s> Parser<'s> {
         ret
     }
 
+    fn get_non_percent_symbol(&mut self) -> &'s str {
+        let pos = self
+            .text
+            .find(is_not_non_percent_symbol_char)
+            .unwrap_or(self.text.len());
+        let (ret, text) = self.text.split_at(pos);
+        self.text = text;
+        ret
+    }
+
     fn try_get_ident(&mut self) -> Option<&'s str> {
         let ident = self.get_ident();
 
@@ -170,6 +182,16 @@ impl<'s> Parser<'s> {
 
     fn try_get_symbol(&mut self) -> Option<&'s str> {
         let symbol = self.get_symbol();
+
+        if symbol.is_empty() {
+            None
+        } else {
+            Some(symbol)
+        }
+    }
+
+    fn try_get_non_percent_symbol(&mut self) -> Option<&'s str> {
+        let symbol = self.get_non_percent_symbol();
 
         if symbol.is_empty() {
             None
@@ -364,6 +386,7 @@ impl<'s> Parser<'s> {
                     expr
                 }
                 Some(FormStatus::FormStrExpr) => {
+                    self.ban_percent = true;
                     let expr = self.next_expr()?;
                     self.skip_ws();
                     self.ensure_get_char('%')?;
@@ -587,7 +610,9 @@ impl<'s> Parser<'s> {
         let mut term = if let Some(ident) = self.try_get_ident() {
             if self.try_get_char('(') {
                 // method
+                let b = self.ban_percent;
                 let args = self.read_args()?;
+                self.ban_percent = b;
                 self.ensure_get_char(')')?;
                 Expr::Method(ident.into(), args)
             } else {
@@ -604,7 +629,13 @@ impl<'s> Parser<'s> {
 
         loop {
             let backup = self.text;
-            if let Some(symbol) = self.try_get_symbol() {
+            let symbol = if self.ban_percent {
+                self.try_get_non_percent_symbol()
+            } else {
+                self.try_get_symbol()
+            };
+
+            if let Some(symbol) = symbol {
                 if let Ok(binop) = symbol.parse::<BinaryOperator>() {
                     operand_stack.push((binop, self.read_term()?));
                     self.skip_ws();
@@ -816,6 +847,10 @@ fn is_symbol_char(c: char) -> bool {
 
 fn is_not_symbol_char(c: char) -> bool {
     !is_symbol_char(c)
+}
+
+fn is_not_non_percent_symbol_char(c: char) -> bool {
+    c == '%' || !is_symbol_char(c)
 }
 
 fn calculate_binop_expr(first: Expr, stack: &mut Vec<(BinaryOperator, Expr)>) -> Expr {
