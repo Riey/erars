@@ -1,0 +1,14 @@
+[
+    (
+        header: (name: "FOO", infos: []),
+        body: [Print([], "foo")],
+    ),
+    (
+        header: (name: "FOO", infos: []),
+        body: [Print([], "foo")],
+    ),
+    (
+        header: (name: "BAR", infos: []),
+        body: [Print([], "bar")],
+    ),
+]

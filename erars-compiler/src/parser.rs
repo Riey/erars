@@ -681,6 +681,7 @@ impl<'s> Parser<'s> {
             match self.next_stmt() {
                 Ok(stmt) => ret.push(stmt),
                 Err((ParserError::Eof, _)) => break,
+                Err(_) if self.text.starts_with('@') => break,
                 Err(err) => return Err(err),
             }
         }
@@ -758,10 +759,12 @@ impl<'s> Parser<'s> {
             match self.next_function() {
                 Ok(f) => ret.push(f),
                 Err(err) => {
-                    if !self.text.is_empty() {
-                        return Err(err);
-                    } else {
+                    self.skip_ws();
+
+                    if self.text.is_empty() || self.text.starts_with('@') {
                         break;
+                    } else {
+                        return Err(err);
                     }
                 }
             }

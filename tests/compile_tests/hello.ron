@@ -6,4 +6,11 @@
             Print(["NEWLINE"]),
         ],
     ),
+    (
+        ty: Normal("FOO"),
+        body: [
+            LoadStr("Hello, world!"),
+            Print(["NEWLINE"]),
+        ],
+    ),
 ]

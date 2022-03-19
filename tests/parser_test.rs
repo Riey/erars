@@ -6,8 +6,16 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_compiler::{parse_body, parse_expr, parse_function, ParserResult};
+use erars_compiler::{parse_body, parse_expr, parse_function, ParserResult, parse_program};
 use serde::de::DeserializeOwned;
+
+#[test]
+fn parse_test() {
+    run_test_set(parse_expr, "tests/parse_tests/exprs/*.erb");
+    run_test_set(parse_body, "tests/parse_tests/bodys/*.erb");
+    run_test_set(parse_function, "tests/parse_tests/functions/*.erb");
+    run_test_set(parse_program, "tests/parse_tests/programs/*.erb");
+}
 
 fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     path: &str,
@@ -65,11 +73,4 @@ fn run_test_set<T: std::fmt::Debug + Eq + DeserializeOwned>(
             &ron_source,
         );
     }
-}
-
-#[test]
-fn parse_test() {
-    run_test_set(parse_expr, "tests/parse_tests/exprs/*.erb");
-    run_test_set(parse_body, "tests/parse_tests/bodys/*.erb");
-    run_test_set(parse_function, "tests/parse_tests/functions/*.erb");
 }
