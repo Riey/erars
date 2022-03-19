@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{BinaryOperator, EventFlags, PrintFlags, UnaryOperator};
+use crate::{Alignment, BinaryOperator, EventFlags, PrintFlags, UnaryOperator};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Variable {
@@ -19,6 +19,8 @@ pub enum Stmt {
     Sif(Expr, Box<Stmt>),
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
     Call(String, Vec<Expr>),
+    Command(String, Vec<Expr>),
+    Alignment(Alignment),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -6,6 +6,7 @@ use crate::{
 };
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
+use strum::EnumString;
 
 option_set::option_set! {
     pub struct PrintFlags: UpperSnake + u32 {
@@ -16,10 +17,13 @@ option_set::option_set! {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, EnumString)]
 pub enum Alignment {
+    #[strum(to_string = "LEFT")]
     Left,
+    #[strum(to_string = "CENTER")]
     Center,
+    #[strum(to_string = "RIGHT")]
     Right,
 }
 
@@ -500,6 +504,18 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::Call(func.into(), args)))
             }
+            "ALIGNMENT" => {
+                self.skip_blank();
+                let start = self.current_loc();
+                let align = self.get_ident().parse::<Alignment>().map_err(|_| {
+                    (
+                        ParserError::MissingToken(format!("ALIGNMENT")),
+                        self.from_prev_loc_span(start),
+                    )
+                })?;
+
+                Ok(Some(Stmt::Alignment(align)))
+            }
             _ => Ok(None),
         }
     }
@@ -668,13 +684,13 @@ impl<'s> Parser<'s> {
                 return Ok(com);
             }
 
-            // assign
-            let var = self.next_var(ident)?;
-
             self.skip_ws();
             let symbol_start = self.current_loc();
             match self.try_get_symbol() {
                 Some(symbol) => {
+                    // assign
+                    let var = self.next_var(ident)?;
+
                     if self.is_str_var(ident) {
                         if symbol == "=" {
                             self.skip_blank();

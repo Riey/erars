@@ -182,6 +182,14 @@ impl Compiler {
                 self.out.push(Instruction::LoadStr(name));
                 self.out.push(Instruction::Call);
             }
+            Stmt::Alignment(align) => {
+                self.out.push(Instruction::SetAlignment(align));
+            }
+            Stmt::Command(name, args) => {
+                self.push_list(args)?;
+                self.out.push(Instruction::LoadStr(name));
+                self.out.push(Instruction::Command);
+            }
         }
 
         Ok(())
