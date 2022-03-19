@@ -39,53 +39,44 @@ fn main() {
         let mut function_dic = FunctionDic::new();
 
         let mut files = SimpleFiles::new();
+        let mut diagnostic = Diagnostic::error()
+            .with_code("E0001")
+            .with_message("Compile ERROR");
 
         for erb in erbs {
-            erb.map_err(anyhow::Error::from)
-                .and_then(|erb| {
-                    let source = std::fs::read_to_string(&erb).unwrap();
-                    let program =
-                        erars_compiler::parse_program(source.trim_start_matches("\u{feff}"));
-                    let file_id = files.add(erb.to_str().unwrap().to_string(), source);
+            let erb = erb.unwrap();
+            let source = std::fs::read_to_string(&erb).unwrap();
+            let program = erars_compiler::parse_program(source.trim_start_matches("\u{feff}"));
+            let file_id = files.add(erb.to_str().unwrap().to_string(), source);
 
-                    let program = match program {
-                        Ok(p) => p,
-                        Err((err, span)) => {
-                            let diagnostic = Diagnostic::error()
-                                .with_code("E0001")
-                                .with_message("Compile ERROR")
-                                .with_labels(vec![
-                                    Label::primary(file_id, span).with_message(format!("{}", err))
-                                ]);
-                            let writer = StandardStream::stderr(ColorChoice::Always);
-                            let config = Config::default();
-                            codespan_reporting::term::emit(
-                                &mut writer.lock(),
-                                &config,
-                                &files,
-                                &diagnostic,
-                            )
-                            .unwrap();
-                            return Ok(());
-                        }
-                    };
+            let program = match program {
+                Ok(p) => p,
+                Err((err, span)) => {
+                    diagnostic
+                        .labels
+                        .push(Label::primary(file_id, span).with_message(format!("{}", err)));
+                    continue;
+                }
+            };
 
-                    for func in program {
-                        let func = erars_compiler::compile(func).unwrap();
+            for func in program {
+                let func = erars_compiler::compile(func).unwrap();
 
-                        match func.ty {
-                            CompiledFunctionType::Event(ev) => {
-                                function_dic.insert_event(ev, func.body)
-                            }
-                            CompiledFunctionType::Normal(label) => {
-                                function_dic.insert_func(label, func.body)
-                            }
-                        }
+                match func.ty {
+                    CompiledFunctionType::Event(ev) => function_dic.insert_event(ev, func.body),
+                    CompiledFunctionType::Normal(label) => {
+                        function_dic.insert_func(label, func.body)
                     }
+                }
+            }
+        }
 
-                    Ok(())
-                })
-                .unwrap()
+        if !diagnostic.labels.is_empty() {
+            let writer = StandardStream::stderr(ColorChoice::Always);
+            let config = Config::default();
+            codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+                .unwrap();
+            return;
         }
 
         let mut ctx = VmContext::new(&infos);
