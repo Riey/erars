@@ -15,6 +15,7 @@ pub enum Stmt {
     Print(PrintFlags, String),
     PrintForm(PrintFlags, FormText),
     Assign(Variable, Option<BinaryOperator>, Expr),
+    Sif(Expr, Box<Stmt>),
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
     Call(String, Vec<Expr>),
 }

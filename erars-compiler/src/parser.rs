@@ -438,6 +438,11 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::If(else_ifs, else_body)))
             }
+            "SIF" => {
+                let cond = self.next_expr()?;
+                let body = self.next_stmt()?;
+                Ok(Some(Stmt::Sif(cond, Box::new(body))))
+            }
             "CALL" => {
                 self.skip_ws();
 

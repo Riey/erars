@@ -138,6 +138,12 @@ impl Compiler {
                 self.push_form(form)?;
                 self.out.push(Instruction::Print(flags));
             }
+            Stmt::Sif(cond, body) => {
+                self.push_expr(cond)?;
+                let mark = self.mark();
+                self.push_stmt(*body)?;
+                self.insert(mark, Instruction::GotoIfNot(self.current_no()));
+            }
             Stmt::If(else_ifs, else_part) => {
                 let mut end_stack = ArrayVec::<u32, 24>::new();
 
