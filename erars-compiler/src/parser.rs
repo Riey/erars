@@ -50,13 +50,19 @@ enum CondStatus {
     CondLater,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+struct BanState {
+    percent: bool,
+    arg: bool,
+}
+
 #[derive(Clone)]
 pub struct Parser<'s> {
     text: &'s str,
     form_status: Option<FormStatus>,
     cond_status: Option<CondStatus>,
     begin_loc: usize,
-    ban_percent: bool,
+    ban_state: BanState,
 }
 
 impl<'s> Parser<'s> {
@@ -66,13 +72,13 @@ impl<'s> Parser<'s> {
             form_status: None,
             cond_status: None,
             begin_loc: text.as_ptr() as usize,
-            ban_percent: false,
+            ban_state: BanState::default(),
         }
     }
 
     fn is_str_var(&self, name: &str) -> bool {
         match name {
-            "LOCALS" | "STR" => true,
+            "LOCALS" | "STR" | "NAME" | "CALLNAME" | "NICKNAME" | "MASTERNAME" => true,
             _ => false,
         }
     }
@@ -390,8 +396,9 @@ impl<'s> Parser<'s> {
                     expr
                 }
                 Some(FormStatus::FormStrExpr) => {
-                    self.ban_percent = true;
+                    self.ban_state.percent = true;
                     let expr = self.next_expr()?;
+                    self.ban_state.percent = false;
                     self.skip_ws();
                     self.ensure_get_char('%')?;
                     expr
@@ -505,7 +512,7 @@ impl<'s> Parser<'s> {
                 Ok(Some(Stmt::Call(func.into(), args)))
             }
             "ALIGNMENT" => {
-                self.skip_blank();
+                self.skip_ws();
                 let start = self.current_loc();
                 let align = self.get_ident().parse::<Alignment>().map_err(|_| {
                     (
@@ -514,8 +521,9 @@ impl<'s> Parser<'s> {
                     )
                 })?;
 
-                Ok(Some(Stmt::Alignment(align)))
+                Ok(Some(Stmt::Alignment(dbg!(align))))
             }
+            "DRAWLINE" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
             "STRLENS" => Ok(Some(Stmt::Command(command.into(), self.read_args()?))),
             _ => Ok(None),
         }
@@ -597,7 +605,30 @@ impl<'s> Parser<'s> {
             self.ensure_get_char('"')?;
             Ok(Expr::str(inner))
         } else if let Some(ident) = self.try_get_ident() {
-            return Ok(Expr::var(ident, Vec::new()));
+            if self.try_get_char('(') {
+                // method
+                let b = self.ban_state;
+                let args = self.read_args()?;
+                self.ban_state = b;
+                self.ensure_get_char(')')?;
+                Ok(Expr::Method(ident.into(), args))
+            } else {
+                // variable
+
+                // eliminate nested variable
+                let var = if self.ban_state.arg {
+                    Variable {
+                        name: ident.into(),
+                        args: Vec::new(),
+                    }
+                } else {
+                    self.ban_state.arg = true;
+                    let var = self.next_var(ident)?;
+                    self.ban_state.arg = false;
+                    var
+                };
+                Ok(Expr::Var(var))
+            }
         } else if let Some(num) = self.try_read_number() {
             num.map(Expr::IntLit)
         } else {
@@ -624,21 +655,7 @@ impl<'s> Parser<'s> {
     fn next_expr(&mut self) -> ParserResult<Expr> {
         self.skip_ws();
 
-        let mut term = if let Some(ident) = self.try_get_ident() {
-            if self.try_get_char('(') {
-                // method
-                let b = self.ban_percent;
-                let args = self.read_args()?;
-                self.ban_percent = b;
-                self.ensure_get_char(')')?;
-                Expr::Method(ident.into(), args)
-            } else {
-                // variable
-                Expr::Var(self.next_var(ident)?)
-            }
-        } else {
-            self.read_term()?
-        };
+        let mut term = self.read_term()?;
 
         let mut operand_stack = Vec::new();
 
@@ -646,7 +663,7 @@ impl<'s> Parser<'s> {
 
         loop {
             let backup = self.text;
-            let symbol = if self.ban_percent {
+            let symbol = if self.ban_state.percent {
                 self.try_get_non_percent_symbol()
             } else {
                 self.try_get_symbol()
@@ -680,7 +697,10 @@ impl<'s> Parser<'s> {
     fn next_stmt(&mut self) -> ParserResult<Stmt> {
         self.skip_ws();
 
+        let ident_start = self.current_loc();
+
         if let Some(ident) = self.try_get_ident() {
+            let ident_end = self.current_loc();
             if let Some(com) = self.try_process_command(ident)? {
                 return Ok(com);
             }
@@ -707,21 +727,21 @@ impl<'s> Parser<'s> {
                     }
 
                     Err((
-                        ParserError::InvalidCode(format!("알수없는 연산자")),
+                        ParserError::InvalidCode(format!("식별자뒤에 알수없는 연산자가 왔습니다")),
                         self.from_prev_loc_span(symbol_start),
                     ))
                 }
                 None => Err((
-                    ParserError::InvalidCode(format!("알수없는 코드")),
-                    self.current_loc_span(),
+                    ParserError::InvalidCode(format!("알수없는 식별자 {}", ident)),
+                    ident_start..ident_end,
                 )),
             }
         } else if self.text.is_empty() {
-            Err((ParserError::Eof, self.current_loc_span()))
+            Err((ParserError::Eof, self.from_prev_loc_span(ident_start)))
         } else {
             Err((
                 ParserError::InvalidCode(format!("알수없는 코드")),
-                self.current_loc_span(),
+                self.from_prev_loc_span(ident_start),
             ))
         }
     }
