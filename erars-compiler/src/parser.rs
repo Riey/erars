@@ -7,15 +7,6 @@ use crate::{
 use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
-macro_rules! try_option {
-    ($e:expr) => {
-        match $e {
-            Ok(e) => e,
-            Err(err) => return Some(Err(err)),
-        }
-    };
-}
-
 option_set::option_set! {
     pub struct PrintFlags: UpperSnake + u32 {
         const NEWLINE = 0x1;
@@ -424,47 +415,48 @@ impl<'s> Parser<'s> {
         Ok(else_body)
     }
 
-    fn try_read_command(&mut self) -> Option<ParserResult<Stmt>> {
-        if self.try_get_prefix("PRINTFORM") {
-            let flags = try_option!(self.read_print_flags());
-            self.skip_blank();
+    fn try_process_command(&mut self, command: &str) -> ParserResult<Option<Stmt>> {
+        match command {
+            "PRINTFORM" => {
+                let flags = self.read_print_flags()?;
+                self.skip_blank();
 
-            let form_text = try_option!(self.read_form_text());
+                let form_text = self.read_form_text()?;
 
-            Some(Ok(Stmt::PrintForm(flags, form_text)))
-        } else if self.try_get_prefix("PRINT") {
-            let flags = try_option!(self.read_print_flags());
-            self.skip_blank();
+                Ok(Some(Stmt::PrintForm(flags, form_text)))
+            }
+            "PRINT" => {
+                let flags = self.read_print_flags()?;
+                self.skip_blank();
 
-            let text = self.read_until_newline();
-            Some(Ok(Stmt::Print(flags, text.into())))
-        } else if self.try_get_prefix("IF") {
-            let mut else_ifs = Vec::new();
-            let else_body = try_option!(self.read_if_block(&mut else_ifs));
+                let text = self.read_until_newline();
+                Ok(Some(Stmt::Print(flags, text.into())))
+            }
+            "IF" => {
+                let mut else_ifs = Vec::new();
+                let else_body = self.read_if_block(&mut else_ifs)?;
 
-            Some(Ok(Stmt::If(else_ifs, else_body)))
-        } else if self.try_get_prefix("CALL") {
-            self.skip_ws();
+                Ok(Some(Stmt::If(else_ifs, else_body)))
+            }
+            "CALL" => {
+                self.skip_ws();
 
-            let func = match self.try_get_ident() {
-                Some(ident) => ident,
-                None => {
-                    return Some(Err((
+                let func = self.try_get_ident().ok_or_else(|| {
+                    (
                         ParserError::MissingToken(format!("Function label")),
                         self.current_loc_span(),
-                    )))
-                }
-            };
+                    )
+                })?;
 
-            let args = if self.try_get_char(',') {
-                try_option!(self.read_args())
-            } else {
-                Vec::new()
-            };
+                let args = if self.try_get_char(',') {
+                    self.read_args()?
+                } else {
+                    Vec::new()
+                };
 
-            Some(Ok(Stmt::Call(func.into(), args)))
-        } else {
-            None
+                Ok(Some(Stmt::Call(func.into(), args)))
+            }
+            _ => Ok(None),
         }
     }
 
@@ -619,9 +611,11 @@ impl<'s> Parser<'s> {
     fn next_stmt(&mut self) -> ParserResult<Stmt> {
         self.skip_ws();
 
-        if let Some(com) = self.try_read_command() {
-            com
-        } else if let Some(ident) = self.try_get_ident() {
+        if let Some(ident) = self.try_get_ident() {
+            if let Some(com) = self.try_process_command(ident)? {
+                return Ok(com);
+            }
+
             // assign
             let var = self.next_var(ident)?;
 
