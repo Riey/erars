@@ -1,0 +1,7 @@
+[
+    Assign(
+        (name: "FLAG", args: [IntLit(13)]),
+        Some(BitOr),
+        IntLit(2),
+    )
+]
