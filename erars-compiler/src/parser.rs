@@ -178,14 +178,14 @@ impl<'s> Parser<'s> {
         }
     }
 
-    /// return false if current char is whitespace or EOS
-    fn ensure_whitespace_or_empty(&self) -> bool {
-        self.text
-            .chars()
-            .next()
-            .map(|c| c.is_ascii_whitespace())
-            .unwrap_or(true)
-    }
+    // /// return false if current char is whitespace or EOS
+    // fn ensure_whitespace_or_empty(&self) -> bool {
+    //     self.text
+    //         .chars()
+    //         .next()
+    //         .map(|c| c.is_ascii_whitespace())
+    //         .unwrap_or(true)
+    // }
 
     fn try_get_char(&mut self, prefix: char) -> bool {
         if let Some(text) = self.text.strip_prefix(prefix) {
@@ -232,25 +232,40 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn read_print_flags(&mut self) -> ParserResult<PrintFlags> {
-        let start = self.current_loc();
+    fn read_print_flags(&mut self, mut postfix: &str) -> ParserResult<PrintFlags> {
+        let mut cursor = self.current_loc() - postfix.len();
 
         let mut ret = PrintFlags::empty();
 
-        if self.try_get_char('L') {
-            ret.insert(PrintFlags::NEWLINE);
-        } else if self.try_get_char('W') {
-            ret.insert(PrintFlags::WAIT | PrintFlags::NEWLINE);
+        macro_rules! parse_flag {
+            (
+                $($ch:expr => $flag:expr,)+
+            ) => {
+                $(
+                    if let Some(left) = postfix.strip_prefix($ch) {
+                        ret |= $flag;
+                        postfix = left;
+                        cursor += $ch.len();
+                    }
+                )+
+            };
         }
 
-        if self.ensure_whitespace_or_empty() {
-            Ok(ret)
-        } else {
-            Err((
+        parse_flag!(
+            "L" => PrintFlags::NEWLINE,
+            "W" => PrintFlags::NEWLINE | PrintFlags::WAIT,
+            "LC" => PrintFlags::LEFT_ALIGN,
+            "C" => PrintFlags::RIGHT_ALIGN,
+        );
+
+        if !postfix.is_empty() {
+            return Err((
                 ParserError::InvalidCode(format!("알수없는 PRINT 플래그입니다")),
-                self.from_prev_loc_span(start),
-            ))
+                self.from_prev_loc_span(cursor),
+            ));
         }
+
+        Ok(ret)
     }
 
     fn read_normal_text(&mut self) -> ParserResult<&'s str> {
@@ -416,22 +431,19 @@ impl<'s> Parser<'s> {
     }
 
     fn try_process_command(&mut self, command: &str) -> ParserResult<Option<Stmt>> {
+        if let Some(postfix) = command.strip_prefix("PRINT") {
+            if let Some(postfix) = postfix.strip_prefix("FORM") {
+                let flags = self.read_print_flags(postfix)?;
+                self.skip_blank();
+                return Ok(Some(Stmt::PrintForm(flags, self.read_form_text()?)));
+            } else {
+                let flags = self.read_print_flags(postfix)?;
+                self.skip_blank();
+                return Ok(Some(Stmt::Print(flags, self.read_until_newline().into())));
+            }
+        }
+
         match command {
-            "PRINTFORM" => {
-                let flags = self.read_print_flags()?;
-                self.skip_blank();
-
-                let form_text = self.read_form_text()?;
-
-                Ok(Some(Stmt::PrintForm(flags, form_text)))
-            }
-            "PRINT" => {
-                let flags = self.read_print_flags()?;
-                self.skip_blank();
-
-                let text = self.read_until_newline();
-                Ok(Some(Stmt::Print(flags, text.into())))
-            }
             "IF" => {
                 let mut else_ifs = Vec::new();
                 let else_body = self.read_if_block(&mut else_ifs)?;
