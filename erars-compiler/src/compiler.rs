@@ -284,8 +284,10 @@ impl Compiler {
                 let mark = self.mark();
                 self.goto_marks.entry(label.into()).or_default().push(mark);
             }
-            Stmt::Varset(_var, _args) => {
-                todo!("VARSET");
+            Stmt::Varset(var, args) => {
+                self.push_list(args)?;
+                self.get_var(var)?;
+                self.out.push(Instruction::Varset);
             }
         }
 

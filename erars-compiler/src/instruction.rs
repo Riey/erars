@@ -28,6 +28,7 @@ pub enum Instruction {
     LoadStr(String),
     LoadVar,
     StoreVar,
+    Varset,
     CallMethod,
     Call,
     Begin(BeginType),
