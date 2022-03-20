@@ -41,6 +41,7 @@ pub struct Function {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
     pub name: String,
+    pub args: Vec<(Variable, Option<Expr>)>,
     pub infos: Vec<FunctionInfo>,
 }
 

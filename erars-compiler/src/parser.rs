@@ -67,11 +67,15 @@ pub struct Parser<'s> {
 
 impl<'s> Parser<'s> {
     pub fn new(text: &'s str) -> Self {
+        let begin_loc = text.as_ptr() as usize;
+
+        let text = text.trim_start_matches("\u{feff}");
+
         Self {
             text,
             form_status: None,
             cond_status: None,
-            begin_loc: text.as_ptr() as usize,
+            begin_loc,
             ban_state: BanState::default(),
         }
     }
@@ -534,7 +538,7 @@ impl<'s> Parser<'s> {
                 })?;
                 Ok(Some(Stmt::Begin(ty)))
             }
-            "CALL" => {
+            "CALL" | "CALLF" => {
                 self.skip_ws();
 
                 let func = self.try_get_ident().ok_or_else(|| {
@@ -623,7 +627,7 @@ impl<'s> Parser<'s> {
             | "WAITANYKEY" | "RESTART" | "FONTITALIC" | "FONTBOLD" | "FONTREGULAR" => {
                 Ok(Some(Stmt::Command(command.into(), Vec::new())))
             }
-            "STRLENS" | "ADDCHARA" | "CLEARLINE" => {
+            "STRLENS" | "ADDCHARA" | "DELCHARA" | "CLEARLINE" => {
                 Ok(Some(Stmt::Command(command.into(), self.read_args()?)))
             }
             _ => Ok(None),

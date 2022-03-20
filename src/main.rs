@@ -44,8 +44,9 @@ fn main() {
 
         for erb in erbs {
             let erb = erb.unwrap();
+
             let source = std::fs::read_to_string(&erb).unwrap();
-            let program = erars_compiler::parse_program(source.trim_start_matches("\u{feff}"));
+            let program = erars_compiler::parse_program(&source);
             let file_id = files.add(erb.to_str().unwrap().to_string(), source);
 
             let program = match program {
