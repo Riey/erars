@@ -1,6 +1,6 @@
 use crate::{
-    ast::FormText, CompileError, CompileResult, Expr, Function, FunctionHeader, Instruction, Stmt,
-    Variable,
+    ast::FormText, BinaryOperator, CompileError, CompileResult, Expr, Function, FunctionHeader,
+    Instruction, Stmt, Variable,
 };
 use arrayvec::ArrayVec;
 use hashbrown::HashMap;
@@ -17,6 +17,8 @@ struct Compiler {
     out: Vec<Instruction>,
     marks: HashMap<String, u32>,
     goto_marks: HashMap<String, Vec<u32>>,
+    continue_marks: Vec<u32>,
+    break_marks: Vec<Vec<u32>>,
 }
 
 impl Compiler {
@@ -145,6 +147,60 @@ impl Compiler {
                 self.push_stmt(*body)?;
                 self.insert(mark, Instruction::GotoIfNot(self.current_no()));
             }
+            Stmt::Continue => self.out.push(Instruction::Goto(
+                *self
+                    .continue_marks
+                    .last()
+                    .ok_or(CompileError::ContinueNotLoop)?,
+            )),
+            Stmt::Break => {
+                let mark = self.mark();
+                self.break_marks
+                    .last_mut()
+                    .ok_or(CompileError::BreakNotLoop)?
+                    .push(mark);
+            }
+            Stmt::For(var, init, end, step, body) => {
+                // var = int
+                // LOOP:
+                // if var > end {
+                //     body
+                //     var += step;
+                //     goto LOOP;
+                // }
+
+                self.push_expr(init)?;
+                self.store_var(var.clone())?;
+
+                let loop_mark = self.mark();
+
+                self.push_expr(Expr::binary(
+                    Expr::Var(var.clone()),
+                    BinaryOperator::Greater,
+                    end,
+                ))?;
+
+                let start_mark = self.mark();
+
+                self.continue_marks.push(start_mark);
+                self.break_marks.push(Vec::new());
+
+                for stmt in body {
+                    self.push_stmt(stmt)?;
+                }
+
+                self.get_var(var.clone())?;
+                self.push_expr(step)?;
+                self.store_var(var)?;
+                self.out.push(Instruction::Goto(loop_mark));
+
+                self.continue_marks.pop();
+                for break_mark in self.break_marks.pop().unwrap() {
+                    self.insert(break_mark, Instruction::Goto(self.current_no()));
+                }
+
+                self.insert(start_mark, Instruction::GotoIfNot(self.current_no()));
+            }
             Stmt::If(else_ifs, else_part) => {
                 let mut end_stack = ArrayVec::<u32, 24>::new();
 
@@ -207,7 +263,7 @@ impl Compiler {
                 let mark = self.mark();
                 self.goto_marks.entry(label.into()).or_default().push(mark);
             }
-            Stmt::Varset(var, args) => {
+            Stmt::Varset(_var, _args) => {
                 todo!("VARSET");
             }
         }

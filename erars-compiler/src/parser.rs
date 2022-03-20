@@ -564,6 +564,39 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::Alignment(align)))
             }
+            "FOR" => {
+                self.skip_ws();
+                let start = self.current_loc();
+                let ident = self.try_get_ident().ok_or_else(|| {
+                    (
+                        ParserError::MissingToken(format!("Variable")),
+                        self.from_prev_loc_span(start),
+                    )
+                })?;
+                let var = self.next_var(ident)?;
+                self.skip_ws();
+                self.ensure_get_char(',')?;
+                let init = self.next_expr()?;
+                self.ensure_get_char(',')?;
+                let end = self.next_expr()?;
+                let step = if self.try_get_char(',') {
+                    self.next_expr()?
+                } else {
+                    Expr::IntLit(1)
+                };
+                let mut body = Vec::new();
+
+                loop {
+                    self.skip_ws_newline();
+                    if self.try_get_prefix("NEXT") {
+                        break;
+                    }
+
+                    body.push(self.next_stmt()?);
+                }
+
+                Ok(Some(Stmt::For(var, init, end, step, body)))
+            }
             "VARSET" => {
                 self.skip_ws();
                 let start = self.current_loc();
@@ -584,9 +617,15 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::Varset(var, args)))
             }
+            "CONTINUE" => Ok(Some(Stmt::Continue)),
+            "BREAK" => Ok(Some(Stmt::Break)),
             "DRAWLINE" | "INPUT" | "INPUTS" | "RESETDATA" | "ADDDEFCHARA" | "WAIT"
-            | "WAITANYKEY" | "RESTART" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
-            "STRLENS" | "ADDCHARA" => Ok(Some(Stmt::Command(command.into(), self.read_args()?))),
+            | "WAITANYKEY" | "RESTART" | "FONTITALIC" | "FONTBOLD" | "FONTREGULAR" => {
+                Ok(Some(Stmt::Command(command.into(), Vec::new())))
+            }
+            "STRLENS" | "ADDCHARA" | "CLEARLINE" => {
+                Ok(Some(Stmt::Command(command.into(), self.read_args()?)))
+            }
             _ => Ok(None),
         }
     }

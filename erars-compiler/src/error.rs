@@ -25,6 +25,10 @@ impl fmt::Debug for ParserError {
 pub enum CompileError {
     #[error("중복된 GOTO 라벨입니다.")]
     DuplicatedGotoLabel,
+    #[error("루프가 아닌곳에서 CONTINUE가 사용됐습니다.")]
+    ContinueNotLoop,
+    #[error("루프가 아닌곳에서 BREAK가 사용됐습니다.")]
+    BreakNotLoop,
 }
 
 impl fmt::Debug for CompileError {
