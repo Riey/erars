@@ -22,6 +22,7 @@ pub enum Stmt {
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
     Call(String, Vec<Expr>),
     Begin(BeginType),
+    Varset(Variable, Vec<Expr>),
     Command(String, Vec<Expr>),
     Return(Vec<Expr>),
     ReturnF(Expr),

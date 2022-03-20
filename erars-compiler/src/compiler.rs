@@ -1,6 +1,6 @@
 use crate::{
-    ast::FormText, CompileError, CompileResult, Expr, Function,
-    FunctionHeader, Instruction, Stmt, Variable,
+    ast::FormText, CompileError, CompileResult, Expr, Function, FunctionHeader, Instruction, Stmt,
+    Variable,
 };
 use arrayvec::ArrayVec;
 use hashbrown::HashMap;
@@ -206,6 +206,9 @@ impl Compiler {
             Stmt::Goto(label) => {
                 let mark = self.mark();
                 self.goto_marks.entry(label.into()).or_default().push(mark);
+            }
+            Stmt::Varset(var, args) => {
+                todo!("VARSET");
             }
         }
 

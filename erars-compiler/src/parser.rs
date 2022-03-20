@@ -374,9 +374,7 @@ impl<'s> Parser<'s> {
         }
 
         let mut ret = if self.cond_status == Some(CondStatus::CondLater) {
-            let (ret, left) = self
-                .text
-                .split_at(self.text.len() - chars.as_str().len());
+            let (ret, left) = self.text.split_at(self.text.len() - chars.as_str().len());
             self.text = left;
             self.skip_blank();
             ret
@@ -566,9 +564,28 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::Alignment(align)))
             }
-            "DRAWLINE" | "INPUT" | "INPUTS" | "RESETDATA" | "ADDDEFCHARA" => {
-                Ok(Some(Stmt::Command(command.into(), Vec::new())))
+            "VARSET" => {
+                self.skip_ws();
+                let start = self.current_loc();
+                let ident = self.try_get_ident().ok_or_else(|| {
+                    (
+                        ParserError::MissingToken(format!("Variable")),
+                        self.from_prev_loc_span(start),
+                    )
+                })?;
+                let var = self.next_var(ident)?;
+                self.skip_ws();
+
+                let args = if self.try_get_char(',') {
+                    self.read_args()?
+                } else {
+                    Vec::new()
+                };
+
+                Ok(Some(Stmt::Varset(var, args)))
             }
+            "DRAWLINE" | "INPUT" | "INPUTS" | "RESETDATA" | "ADDDEFCHARA" | "WAIT"
+            | "WAITANYKEY" | "RESTART" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
             "STRLENS" | "ADDCHARA" => Ok(Some(Stmt::Command(command.into(), self.read_args()?))),
             _ => Ok(None),
         }
