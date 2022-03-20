@@ -15,4 +15,21 @@
             ]
         )),
     ),
+    Assign(
+        (name: "NICKNAME", args: [Var((name: "MASTER", args: []))]),
+        None,
+        FormText((
+            first: "",
+            other: [
+                (
+                    CondExpr(
+                        Var((name: "TALENT", args: [Var((name: "MASTER", args: [])), IntLit(120)])),
+                        FormText((first: "신사", other: [])),
+                        FormText((first: "숙녀", other: [])),
+                    ),
+                    "",
+                ),
+            ],
+        ))
+    )
 ]

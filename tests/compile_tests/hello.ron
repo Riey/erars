@@ -1,13 +1,13 @@
 [
     (
-        ty: Normal("FOO"),
+        header: (name: "FOO", infos: []),
         body: [
             LoadStr("Hello, world!"),
             Print(["NEWLINE"]),
         ],
     ),
     (
-        ty: Normal("FOO"),
+        header: (name: "FOO", infos: []),
         body: [
             LoadStr("Hello, world!"),
             Print(["NEWLINE"]),

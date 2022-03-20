@@ -326,6 +326,7 @@ impl<'s> Parser<'s> {
                     }
                     '#' if self.cond_status == Some(CondStatus::CondFormer) => {
                         self.cond_status = Some(CondStatus::CondLater);
+                        skip_count = 2;
                         break;
                     }
                     '\\' => {
@@ -334,14 +335,14 @@ impl<'s> Parser<'s> {
                                 match self.cond_status {
                                     Some(CondStatus::CondLater) => {
                                         self.cond_status = None;
-                                        skip_count = 3;
+                                        skip_count = 2;
                                     }
                                     Some(_) => {
-                                    return Err((ParserError::UnexpectedToken("\\@".into()), self.current_loc_span()));
+                                        return Err((ParserError::UnexpectedToken("\\@".into()), self.current_loc_span()));
                                     }
                                     None => {
-                                    self.form_status = Some(FormStatus::FormCondExpr);
-                                    skip_count = 2;
+                                        self.form_status = Some(FormStatus::FormCondExpr);
+                                        skip_count = 2;
                                     }
                                 }
                                 break;
@@ -375,7 +376,7 @@ impl<'s> Parser<'s> {
         let mut ret = if self.cond_status == Some(CondStatus::CondLater) {
             let (ret, left) = self
                 .text
-                .split_at((self.text.len() - chars.as_str().len()).saturating_sub(1));
+                .split_at(self.text.len() - chars.as_str().len());
             self.text = left;
             self.skip_blank();
             ret
@@ -413,7 +414,7 @@ impl<'s> Parser<'s> {
                     expr
                 }
                 Some(FormStatus::FormCondExpr) => {
-                    let cond = self.next_expr()?;
+                    let cond = self.read_term()?;
                     self.skip_ws();
                     self.ensure_get_char('?')?;
                     self.skip_blank();
