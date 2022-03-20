@@ -127,6 +127,57 @@ impl Compiler {
         Ok(())
     }
 
+    fn push_for(
+        &mut self,
+        var: Variable,
+        init: Expr,
+        end: Expr,
+        step: Expr,
+        body: Vec<Stmt>,
+    ) -> CompileResult<()> {
+        // var = int
+        // LOOP:
+        // if var > end {
+        //     body
+        //     var += step;
+        //     goto LOOP;
+        // }
+
+        self.push_expr(init)?;
+        self.store_var(var.clone())?;
+
+        let loop_mark = self.mark();
+
+        self.push_expr(Expr::binary(
+            Expr::Var(var.clone()),
+            BinaryOperator::Greater,
+            end,
+        ))?;
+
+        let start_mark = self.mark();
+
+        self.continue_marks.push(start_mark);
+        self.break_marks.push(Vec::new());
+
+        for stmt in body {
+            self.push_stmt(stmt)?;
+        }
+
+        self.get_var(var.clone())?;
+        self.push_expr(step)?;
+        self.store_var(var)?;
+        self.out.push(Instruction::Goto(loop_mark));
+
+        self.continue_marks.pop();
+        for break_mark in self.break_marks.pop().unwrap() {
+            self.insert(break_mark, Instruction::Goto(self.current_no()));
+        }
+
+        self.insert(start_mark, Instruction::GotoIfNot(self.current_no()));
+
+        Ok(())
+    }
+
     pub fn push_stmt(&mut self, stmt: Stmt) -> CompileResult<()> {
         match stmt {
             Stmt::Print(flags, text) => {
@@ -160,47 +211,17 @@ impl Compiler {
                     .ok_or(CompileError::BreakNotLoop)?
                     .push(mark);
             }
-            Stmt::For(var, init, end, step, body) => {
-                // var = int
-                // LOOP:
-                // if var > end {
-                //     body
-                //     var += step;
-                //     goto LOOP;
-                // }
-
-                self.push_expr(init)?;
-                self.store_var(var.clone())?;
-
-                let loop_mark = self.mark();
-
-                self.push_expr(Expr::binary(
-                    Expr::Var(var.clone()),
-                    BinaryOperator::Greater,
-                    end,
-                ))?;
-
-                let start_mark = self.mark();
-
-                self.continue_marks.push(start_mark);
-                self.break_marks.push(Vec::new());
-
-                for stmt in body {
-                    self.push_stmt(stmt)?;
-                }
-
-                self.get_var(var.clone())?;
-                self.push_expr(step)?;
-                self.store_var(var)?;
-                self.out.push(Instruction::Goto(loop_mark));
-
-                self.continue_marks.pop();
-                for break_mark in self.break_marks.pop().unwrap() {
-                    self.insert(break_mark, Instruction::Goto(self.current_no()));
-                }
-
-                self.insert(start_mark, Instruction::GotoIfNot(self.current_no()));
-            }
+            Stmt::Repeat(end, body) => self.push_for(
+                Variable {
+                    name: "COUNT".into(),
+                    args: Vec::new(),
+                },
+                Expr::int(0),
+                end,
+                Expr::int(1),
+                body,
+            )?,
+            Stmt::For(var, init, end, step, body) => self.push_for(var, init, end, step, body)?,
             Stmt::If(else_ifs, else_part) => {
                 let mut end_stack = ArrayVec::<u32, 24>::new();
 

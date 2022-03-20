@@ -458,14 +458,7 @@ impl<'s> Parser<'s> {
                 } else {
                     else_ifs.push((cond, body));
                     // ELSE
-                    let mut else_body = Vec::new();
-                    loop {
-                        self.skip_ws_newline();
-                        if self.try_get_prefix("ENDIF") {
-                            break;
-                        }
-                        else_body.push(self.next_stmt()?);
-                    }
+                    let else_body = self.read_block_until("ENDIF")?;
                     break Some(else_body);
                 }
             }
@@ -568,6 +561,13 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::Alignment(align)))
             }
+            "REPEAT" => {
+                self.skip_ws();
+                let end = self.next_expr()?;
+                let body = self.read_block_until("REND")?;
+
+                Ok(Some(Stmt::Repeat(end, body)))
+            }
             "FOR" => {
                 self.skip_ws();
                 let start = self.current_loc();
@@ -588,16 +588,8 @@ impl<'s> Parser<'s> {
                 } else {
                     Expr::IntLit(1)
                 };
-                let mut body = Vec::new();
 
-                loop {
-                    self.skip_ws_newline();
-                    if self.try_get_prefix("NEXT") {
-                        break;
-                    }
-
-                    body.push(self.next_stmt()?);
-                }
+                let body = self.read_block_until("NEXT")?;
 
                 Ok(Some(Stmt::For(var, init, end, step, body)))
             }
@@ -802,6 +794,21 @@ impl<'s> Parser<'s> {
         }
 
         Ok(calculate_binop_expr(term, &mut operand_stack))
+    }
+
+    fn read_block_until(&mut self, end: &str) -> ParserResult<Vec<Stmt>> {
+        let mut body = Vec::new();
+
+        loop {
+            self.skip_ws_newline();
+            if self.try_get_prefix(end) {
+                break;
+            }
+
+            body.push(self.next_stmt()?);
+        }
+
+        Ok(body)
     }
 
     fn next_stmt(&mut self) -> ParserResult<Stmt> {
