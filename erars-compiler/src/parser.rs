@@ -875,6 +875,35 @@ impl<'s> Parser<'s> {
         Ok(ret)
     }
 
+    fn read_function_args(&mut self) -> ParserResult<Vec<(Variable, Option<Expr>)>> {
+        let mut args = Vec::new();
+
+        loop {
+            self.skip_ws();
+            let ident = self.try_get_ident().ok_or_else(|| {
+                (
+                    ParserError::MissingToken(format!("Arguemnt ident")),
+                    self.current_loc_span(),
+                )
+            })?;
+            let var = self.next_var(ident)?;
+            self.skip_ws();
+            let default_arg = if self.try_get_char('=') {
+                Some(self.next_expr()?)
+            } else {
+                None
+            };
+            args.push((var, default_arg));
+
+            self.skip_ws();
+            if !self.try_get_char(',') {
+                break;
+            }
+        }
+
+        Ok(args)
+    }
+
     fn next_function(&mut self) -> ParserResult<Function> {
         self.skip_ws_newline();
         self.ensure_get_char('@')?;
@@ -887,10 +916,16 @@ impl<'s> Parser<'s> {
 
         self.skip_ws();
 
-        if self.try_get_char('(') {
-            todo!("paran argument");
-        } else if self.try_get_char(',') {
-            todo!("comma argument");
+        let paran = self.try_get_char('(');
+        let comma = self.try_get_char(',');
+        let args = if paran || comma {
+            self.read_function_args()?
+        } else {
+            Vec::new()
+        };
+
+        if paran {
+            self.ensure_get_char(')')?;
         }
 
         let mut infos = Vec::new();
@@ -932,6 +967,7 @@ impl<'s> Parser<'s> {
         Ok(Function {
             header: FunctionHeader {
                 name: label.into(),
+                args,
                 infos,
             },
             body,
