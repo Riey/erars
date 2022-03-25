@@ -1,7 +1,7 @@
 use erars::function::FunctionDic;
-use erars_compiler::{parse_program, compile};
 use erars::ui::{ConsoleChannel, ConsoleMessage};
 use erars::vm::*;
+use erars_compiler::{compile, parse_program};
 
 #[test]
 fn run_test() {

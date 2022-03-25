@@ -224,7 +224,7 @@ impl Compiler {
             )?,
             Stmt::For(var, init, end, step, body) => self.push_for(var, init, end, step, body)?,
             Stmt::If(else_ifs, else_part) => {
-                let mut end_stack = ArrayVec::<u32, 24>::new();
+                let mut end_stack = ArrayVec::<u32, 120>::new();
 
                 for (cond, body) in else_ifs {
                     self.push_if(cond, body)?;

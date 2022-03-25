@@ -4,7 +4,7 @@ use eframe::epi::{App, Frame};
 use egui::{Color32, CtxRef, FontData, FontDefinitions, FontFamily};
 use erars_compiler::Alignment;
 use maplit::btreemap;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::iter;
 use std::sync::Arc;
 use std::time::Duration;

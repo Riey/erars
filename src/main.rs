@@ -78,7 +78,6 @@ fn main() {
             let config = Config::default();
             codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                 .unwrap();
-            #[cfg(debug_assertions)]
             inner_chan.send_msg(erars::ui::ConsoleMessage::Exit);
             return;
         }
@@ -89,7 +88,6 @@ fn main() {
 
         if let Err(err) = ret {
             eprintln!("{}", err);
-            #[cfg(debug_assertions)]
             inner_chan.send_msg(erars::ui::ConsoleMessage::Exit);
         }
 

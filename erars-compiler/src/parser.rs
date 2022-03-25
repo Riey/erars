@@ -69,6 +69,7 @@ impl<'s> Parser<'s> {
     pub fn new(text: &'s str) -> Self {
         let begin_loc = text.as_ptr() as usize;
 
+        // BOM
         let text = text.trim_start_matches("\u{feff}");
 
         Self {
@@ -88,7 +89,12 @@ impl<'s> Parser<'s> {
     }
 
     fn current_loc(&self) -> usize {
-        self.text.as_ptr() as usize - self.begin_loc
+        match (self.text.as_ptr() as usize).checked_sub(self.begin_loc) {
+            Some(n) => n,
+            None => {
+                unreachable!("Text pointer exceeded {}", self.text,)
+            }
+        }
     }
 
     fn from_prev_loc_span(&self, prev_loc: usize) -> Range<usize> {
@@ -264,6 +270,11 @@ impl<'s> Parser<'s> {
         }
     }
 
+    /// Never `self.text = ""` it'll invalidate location infomations
+    fn clear_text(&mut self) {
+        self.text = &self.text[self.text.len()..];
+    }
+
     fn skip_blank(&mut self) {
         self.try_get_char(' ');
     }
@@ -330,7 +341,6 @@ impl<'s> Parser<'s> {
                     }
                     '#' if self.cond_status == Some(CondStatus::CondFormer) => {
                         self.cond_status = Some(CondStatus::CondLater);
-                        skip_count = 2;
                         break;
                     }
                     '\\' => {
@@ -371,24 +381,24 @@ impl<'s> Parser<'s> {
                 }
             } else {
                 let ret = self.text;
-                self.text = "";
+                self.clear_text();
                 self.form_status = None;
                 return Ok(ret);
             }
         }
 
-        let mut ret = if self.cond_status == Some(CondStatus::CondLater) {
+        let ret = if self.cond_status == Some(CondStatus::CondLater) {
             let (ret, left) = self.text.split_at(self.text.len() - chars.as_str().len());
+            let ret = &ret[..ret.len() - skip_count];
+            let ret = ret.strip_suffix(' ').unwrap_or(ret);
             self.text = left;
             self.skip_blank();
             ret
         } else {
             let (ret, left) = self.text.split_at(self.text.len() - chars.as_str().len());
             self.text = left;
-            ret
+            &ret[..ret.len() - skip_count]
         };
-
-        ret = &ret[..ret.len() - skip_count];
 
         Ok(ret)
     }
@@ -686,7 +696,7 @@ impl<'s> Parser<'s> {
                     break;
                 }
                 None => {
-                    self.text = "";
+                    self.clear_text();
                     break;
                 }
             }
