@@ -199,6 +199,15 @@ impl<'s> Parser<'s> {
         ret
     }
 
+    fn ensure_ident<S: Into<String>>(&mut self, name: impl FnOnce() -> S) -> ParserResult<&'s str> {
+        self.try_get_ident().ok_or_else(|| {
+            (
+                ParserError::MissingToken(name().into()),
+                self.current_loc_span(),
+            )
+        })
+    }
+
     fn try_get_ident(&mut self) -> Option<&'s str> {
         let ident = self.get_ident();
 
@@ -499,19 +508,14 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::If(else_ifs, else_body)))
             }
+            // "TIMES" => {
+            //     self.skip_ws();
+            //     self.ensure_var()?;
+            // }
             "GOTO" => {
                 self.skip_ws();
 
-                Ok(Some(Stmt::Goto(
-                    self.try_get_ident()
-                        .ok_or_else(|| {
-                            (
-                                ParserError::MissingToken(format!("label name")),
-                                self.current_loc_span(),
-                            )
-                        })?
-                        .into(),
-                )))
+                Ok(Some(Stmt::Goto(self.ensure_ident(|| "label name")?.into())))
             }
             "REUSELASTLINE" => {
                 self.skip_blank();
@@ -544,12 +548,7 @@ impl<'s> Parser<'s> {
             "CALL" | "CALLF" => {
                 self.skip_ws();
 
-                let func = self.try_get_ident().ok_or_else(|| {
-                    (
-                        ParserError::MissingToken(format!("Function label")),
-                        self.current_loc_span(),
-                    )
-                })?;
+                let func = self.ensure_ident(|| "Function label")?;
 
                 let args = if self.try_get_char(',') {
                     self.read_args()?
@@ -580,14 +579,7 @@ impl<'s> Parser<'s> {
             }
             "FOR" => {
                 self.skip_ws();
-                let start = self.current_loc();
-                let ident = self.try_get_ident().ok_or_else(|| {
-                    (
-                        ParserError::MissingToken(format!("Variable")),
-                        self.from_prev_loc_span(start),
-                    )
-                })?;
-                let var = self.next_var(ident)?;
+                let var = self.ensure_var()?;
                 self.skip_ws();
                 self.ensure_get_char(',')?;
                 let init = self.next_expr()?;
@@ -605,14 +597,7 @@ impl<'s> Parser<'s> {
             }
             "VARSET" => {
                 self.skip_ws();
-                let start = self.current_loc();
-                let ident = self.try_get_ident().ok_or_else(|| {
-                    (
-                        ParserError::MissingToken(format!("Variable")),
-                        self.from_prev_loc_span(start),
-                    )
-                })?;
-                let var = self.next_var(ident)?;
+                let var = self.ensure_var()?;
                 self.skip_ws();
 
                 let args = if self.try_get_char(',') {
@@ -751,6 +736,11 @@ impl<'s> Parser<'s> {
         }
     }
 
+    fn ensure_var(&mut self) -> ParserResult<Variable> {
+        self.ensure_ident(|| format!("Variable"))
+            .and_then(|i| self.next_var(i))
+    }
+
     fn next_var(&mut self, ident: &'s str) -> ParserResult<Variable> {
         let mut args = Vec::new();
 
@@ -864,12 +854,7 @@ impl<'s> Parser<'s> {
                 )),
             }
         } else if self.try_get_char('$') {
-            let label = self.try_get_ident().ok_or_else(|| {
-                (
-                    ParserError::MissingToken(format!("GOTO label")),
-                    self.current_loc_span(),
-                )
-            })?;
+            let label = self.ensure_ident(|| "GOTO label")?;
             Ok(Stmt::Label(label.into()))
         } else if self.text.is_empty() {
             Err((ParserError::Eof, self.from_prev_loc_span(ident_start)))
@@ -901,12 +886,7 @@ impl<'s> Parser<'s> {
 
         loop {
             self.skip_ws();
-            let ident = self.try_get_ident().ok_or_else(|| {
-                (
-                    ParserError::MissingToken(format!("Arguemnt ident")),
-                    self.current_loc_span(),
-                )
-            })?;
+            let ident = self.ensure_ident(|| "Argument ident")?;
             let var = self.next_var(ident)?;
             self.skip_ws();
             let default_arg = if self.try_get_char('=') {
@@ -928,12 +908,7 @@ impl<'s> Parser<'s> {
     fn next_function(&mut self) -> ParserResult<Function> {
         self.skip_ws_newline();
         self.ensure_get_char('@')?;
-        let label = self.try_get_ident().ok_or_else(|| {
-            (
-                ParserError::MissingToken("Function label".into()),
-                self.current_loc_span(),
-            )
-        })?;
+        let label = self.ensure_ident(|| "Function label")?;
 
         self.skip_ws();
 
@@ -955,12 +930,7 @@ impl<'s> Parser<'s> {
             self.skip_ws_newline();
             if self.try_get_char('#') {
                 let start = self.current_loc();
-                let info = self.try_get_ident().ok_or_else(|| {
-                    (
-                        ParserError::MissingToken("Function info".into()),
-                        self.current_loc_span(),
-                    )
-                })?;
+                let info = self.ensure_ident(|| "Function info")?;
                 match info {
                     "PRI" => {
                         infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
