@@ -290,6 +290,11 @@ impl Compiler {
                 self.get_var(var)?;
                 self.out.push(Instruction::Varset);
             }
+            Stmt::Times(var, ratio) => {
+                self.push_var(var.clone())?;
+                self.out.push(Instruction::Times(ratio));
+                self.store_var(var)?;
+            }
         }
 
         Ok(())

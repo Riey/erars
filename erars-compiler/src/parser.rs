@@ -5,6 +5,7 @@ use crate::{
     FunctionInfo, ParserError, ParserResult, Stmt, Variable,
 };
 use bitflags::bitflags;
+use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
@@ -508,10 +509,22 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::If(else_ifs, else_body)))
             }
-            // "TIMES" => {
-            //     self.skip_ws();
-            //     self.ensure_var()?;
-            // }
+            "TIMES" => {
+                self.skip_ws();
+                let var = self.ensure_get_var()?;
+                self.skip_ws();
+                self.ensure_get_char(',')?;
+
+                let start = self.current_loc();
+                let num = self.read_until_newline().trim().parse::<f32>().map_err(|err| {
+                    (
+                        ParserError::InvalidCode(format!("Float parsing error: {}", err)),
+                        self.from_prev_loc_span(start),
+                    )
+                })?;
+
+                Ok(Some(Stmt::Times(var, NotNan::new(num).unwrap())))
+            }
             "GOTO" => {
                 self.skip_ws();
 
@@ -579,7 +592,7 @@ impl<'s> Parser<'s> {
             }
             "FOR" => {
                 self.skip_ws();
-                let var = self.ensure_var()?;
+                let var = self.ensure_get_var()?;
                 self.skip_ws();
                 self.ensure_get_char(',')?;
                 let init = self.next_expr()?;
@@ -597,7 +610,7 @@ impl<'s> Parser<'s> {
             }
             "VARSET" => {
                 self.skip_ws();
-                let var = self.ensure_var()?;
+                let var = self.ensure_get_var()?;
                 self.skip_ws();
 
                 let args = if self.try_get_char(',') {
@@ -736,7 +749,7 @@ impl<'s> Parser<'s> {
         }
     }
 
-    fn ensure_var(&mut self) -> ParserResult<Variable> {
+    fn ensure_get_var(&mut self) -> ParserResult<Variable> {
         self.ensure_ident(|| format!("Variable"))
             .and_then(|i| self.next_var(i))
     }

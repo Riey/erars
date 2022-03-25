@@ -1,5 +1,6 @@
 use std::fmt;
 
+use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
 use crate::{Alignment, BeginType, BinaryOperator, EventFlags, PrintFlags, UnaryOperator};
@@ -20,6 +21,7 @@ pub enum Stmt {
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<Stmt>),
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
+    Times(Variable, NotNan<f32>),
     Call(String, Vec<Expr>),
     Begin(BeginType),
     Varset(Variable, Vec<Expr>),
