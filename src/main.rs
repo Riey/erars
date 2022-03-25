@@ -18,6 +18,13 @@ use hashbrown::HashMap;
 
 fn main() {
     let chan = Arc::new(ConsoleChannel::new());
+    let mut args = std::env::args();
+
+    let target_path = if let Some(path) = args.nth(1) {
+        path
+    } else {
+        ".".into()
+    };
 
     let inner_chan = chan.clone();
 
@@ -26,7 +33,7 @@ fn main() {
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
         let erbs = glob::glob_with(
-            "ERB/**/*.ERB",
+            &format!("{}/ERB/**/*.ERB", target_path),
             glob::MatchOptions {
                 case_sensitive: false,
                 require_literal_leading_dot: true,
