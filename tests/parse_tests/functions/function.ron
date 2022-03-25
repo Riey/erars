@@ -1,5 +1,5 @@
 (
-    header: (name: "FOO", infos: [EventFlag(Pre)]),
+    header: (name: "FOO", args: [], infos: [EventFlag(Pre)]),
     body: [
         Print(["NEWLINE"], "Hello"),
         PrintForm(["NEWLINE"], (first: "", other: [(IntLit(123), "")]))

@@ -78,7 +78,13 @@ fn main() {
 
         let mut ctx = VmContext::new(&infos);
         let vm = TerminalVm::new(function_dic);
-        vm.start(&inner_chan, &mut ctx).unwrap();
+        let ret = vm.start(&inner_chan, &mut ctx);
+
+        if let Err(err) = ret {
+            eprintln!("{}", err);
+            #[cfg(debug_assertions)]
+            inner_chan.send_msg(erars::ui::ConsoleMessage::Exit);
+        }
 
         println!("Program Terminated");
     });

@@ -1,13 +1,13 @@
 [
     (
-        header: (name: "FOO", infos: []),
+        header: (name: "FOO", args: [], infos: []),
         body: [
             LoadStr("Hello, world!"),
             Print(["NEWLINE"]),
         ],
     ),
     (
-        header: (name: "FOO", infos: []),
+        header: (name: "FOO", args: [], infos: []),
         body: [
             LoadStr("Hello, world!"),
             Print(["NEWLINE"]),

@@ -484,7 +484,7 @@ impl TerminalVm {
 
                 return Ok(Some(Workflow::Return));
             }
-            Instruction::Call => {
+            Instruction::CallMethod => {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_list();
 
@@ -502,6 +502,14 @@ impl TerminalVm {
 
                         ctx.push(ret);
                     }
+                    other => bail!("TODO: CallMethod {}", other),
+                }
+            }
+            Instruction::Call => {
+                let func = ctx.pop_str()?;
+                let args = ctx.take_list();
+
+                match func.as_str() {
                     _ => {
                         self.call(&func, &args, chan, ctx)?;
                     }

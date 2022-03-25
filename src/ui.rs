@@ -4,6 +4,7 @@ use eframe::epi::{App, Frame};
 use egui::{Color32, CtxRef, FontData, FontDefinitions, FontFamily};
 use erars_compiler::Alignment;
 use maplit::btreemap;
+use serde::{Serialize, Deserialize};
 use std::iter;
 use std::sync::Arc;
 use std::time::Duration;
@@ -187,7 +188,7 @@ impl EraConsole {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConsoleMessage {
     Print(String),
     NewLine,
@@ -199,7 +200,7 @@ pub enum ConsoleMessage {
     Exit,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InputRequest {
     Anykey,
     EnterKey,

@@ -123,6 +123,7 @@ impl Compiler {
             self.out.push(Instruction::LoadStr(text));
         }
         self.push_list_end();
+        self.out.push(Instruction::ConcatString);
 
         Ok(())
     }
