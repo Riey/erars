@@ -509,6 +509,12 @@ impl<'s> Parser<'s> {
 
                 Ok(Some(Stmt::If(else_ifs, else_body)))
             }
+            "DO" => {
+                let do_body = self.read_block_until("LOOP")?;
+                let cond = self.next_expr()?;
+
+                Ok(Some(Stmt::Do(cond, do_body)))
+            }
             "TIMES" => {
                 self.skip_ws();
                 let var = self.ensure_get_var()?;
@@ -516,12 +522,16 @@ impl<'s> Parser<'s> {
                 self.ensure_get_char(',')?;
 
                 let start = self.current_loc();
-                let num = self.read_until_newline().trim().parse::<f32>().map_err(|err| {
-                    (
-                        ParserError::InvalidCode(format!("Float parsing error: {}", err)),
-                        self.from_prev_loc_span(start),
-                    )
-                })?;
+                let num = self
+                    .read_until_newline()
+                    .trim()
+                    .parse::<f32>()
+                    .map_err(|err| {
+                        (
+                            ParserError::InvalidCode(format!("Float parsing error: {}", err)),
+                            self.from_prev_loc_span(start),
+                        )
+                    })?;
 
                 Ok(Some(Stmt::Times(var, NotNan::new(num).unwrap())))
             }

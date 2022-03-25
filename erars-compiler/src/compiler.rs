@@ -222,6 +222,16 @@ impl Compiler {
                 Expr::int(1),
                 body,
             )?,
+            Stmt::Do(cond, body) => {
+                let start = self.current_no();
+                for line in body {
+                    self.push_stmt(line)?;
+                }
+                self.push_expr(cond)?;
+                let end = self.mark();
+                self.out.push(Instruction::Goto(start));
+                self.insert(end, Instruction::GotoIfNot(self.current_no()));
+            }
             Stmt::For(var, init, end, step, body) => self.push_for(var, init, end, step, body)?,
             Stmt::If(else_ifs, else_part) => {
                 let mut end_stack = ArrayVec::<u32, 120>::new();

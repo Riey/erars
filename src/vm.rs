@@ -551,6 +551,18 @@ impl TerminalVm {
                     BinaryOperator::Div => Value::Int(lhs.try_into_int()? / rhs.try_into_int()?),
                     BinaryOperator::Mul => Value::Int(lhs.try_into_int()? * rhs.try_into_int()?),
                     BinaryOperator::Rem => Value::Int(lhs.try_into_int()? % rhs.try_into_int()?),
+                    BinaryOperator::Less => {
+                        Value::Int((lhs.try_into_int()? < rhs.try_into_int()?).into())
+                    }
+                    BinaryOperator::LessOrEqual => {
+                        Value::Int((lhs.try_into_int()? <= rhs.try_into_int()?).into())
+                    }
+                    BinaryOperator::Greater => {
+                        Value::Int((lhs.try_into_int()? > rhs.try_into_int()?).into())
+                    }
+                    BinaryOperator::GreaterOrEqual => {
+                        Value::Int((lhs.try_into_int()? >= rhs.try_into_int()?).into())
+                    }
                     BinaryOperator::Equal => Value::Int(i64::from(lhs == rhs)),
                     BinaryOperator::NotEqual => Value::Int(i64::from(lhs != rhs)),
                     _ => todo!("{:?}", op),
