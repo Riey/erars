@@ -9,7 +9,7 @@ use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
 use erars_compiler::{
-    BeginType, BinaryOperator, EventType, Instruction, PrintFlags, UnaryOperator,
+    BeginType, BinaryOperator, EventType, Instruction, PrintFlags, UnaryOperator, VariableInterner,
 };
 
 use crate::function::{FunctionBody, FunctionDic};
@@ -322,9 +322,13 @@ impl VmContext {
         self.call_stack.push(self.stack.len());
     }
 
+    pub fn end_func(&mut self) {
+        self.call_stack.pop();
+    }
+
     pub fn return_func(&mut self) -> impl Iterator<Item = Value> + '_ {
-        let base = self.call_stack.pop().unwrap();
-        self.stack.drain(base..)
+        let base = self.call_stack.last().unwrap();
+        self.stack.drain(*base..)
     }
 
     fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
@@ -358,11 +362,15 @@ impl VmContext {
 
 pub struct TerminalVm {
     dic: FunctionDic,
+    var: VariableInterner,
 }
 
 impl TerminalVm {
-    pub fn new(function_dic: FunctionDic) -> Self {
-        Self { dic: function_dic }
+    pub fn new(function_dic: FunctionDic, var: VariableInterner) -> Self {
+        Self {
+            dic: function_dic,
+            var,
+        }
     }
 
     fn run_instruction(
@@ -379,7 +387,7 @@ impl TerminalVm {
             Instruction::StoreVar(var, c) => {
                 let target = ctx.var.target()?;
 
-                let name = ctx.pop_str()?;
+                let name = self.var.resolve(*var).unwrap();
 
                 if name.parse::<BulitinVariable>().is_ok() {
                     bail!("Can't edit builtin variable");
@@ -407,7 +415,7 @@ impl TerminalVm {
             Instruction::LoadVar(var, c) => {
                 let target = ctx.var.target()?;
 
-                let name = ctx.pop_str()?;
+                let name = self.var.resolve(*var).unwrap();
 
                 let value = if let Ok(builtin) = name.parse() {
                     match builtin {
@@ -652,10 +660,14 @@ impl TerminalVm {
 
         ctx.var.init_local(label, body);
 
+        ctx.new_func();
+
         for ((arg_name, arg_indices), arg) in body.args().iter().zip(args) {
             let var = ctx.var.get_global(arg_name).unwrap();
             var.set(arg_indices.iter().copied(), arg.clone())?;
         }
+
+        ctx.end_func();
 
         self.run_body(body, chan, ctx)
     }

@@ -71,7 +71,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                21,
+                37,
             ),
             args: [
                 IntLit(
@@ -100,7 +100,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                6,
+                13,
             ),
             args: [],
         },
@@ -112,19 +112,19 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                6,
+                13,
             ),
             args: [],
         },
         None,
         FormText(
-            {Var(Variable { var_idx: VariableIndex(5), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(5), args: [IntLit(1)] }), StringLit("00")])},
+            {Var(Variable { var_idx: VariableIndex(12), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(12), args: [IntLit(1)] }), StringLit("00")])},
         ),
     ),
     Assign(
         Variable {
             var_idx: VariableIndex(
-                26,
+                46,
             ),
             args: [
                 Var(
@@ -139,7 +139,7 @@ mod body {
         },
         None,
         FormText(
-            {CondExpr(Var(Variable { var_idx: VariableIndex(24), args: [Var(Variable { var_idx: VariableIndex(2), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
+            {CondExpr(Var(Variable { var_idx: VariableIndex(43), args: [Var(Variable { var_idx: VariableIndex(2), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
         ),
     ),
 ]
@@ -162,7 +162,7 @@ mod body {
             Var(
                 Variable {
                     var_idx: VariableIndex(
-                        14,
+                        30,
                     ),
                     args: [
                         IntLit(
@@ -209,7 +209,7 @@ mod body {
                     Var(
                         Variable {
                             var_idx: VariableIndex(
-                                14,
+                                30,
                             ),
                             args: [],
                         },
@@ -231,7 +231,7 @@ mod body {
                     Var(
                         Variable {
                             var_idx: VariableIndex(
-                                14,
+                                30,
                             ),
                             args: [],
                         },
@@ -316,7 +316,7 @@ BinopExpr(
         Var(
             Variable {
                 var_idx: VariableIndex(
-                    3,
+                    10,
                 ),
                 args: [],
             },
@@ -331,7 +331,7 @@ BinopExpr(
         Var(
             Variable {
                 var_idx: VariableIndex(
-                    24,
+                    43,
                 ),
                 args: [
                     Var(
@@ -395,7 +395,7 @@ Method(
         Var(
             Variable {
                 var_idx: VariableIndex(
-                    5,
+                    12,
                 ),
                 args: [
                     IntLit(
@@ -523,7 +523,7 @@ Var(
             Var(
                 Variable {
                     var_idx: VariableIndex(
-                        14,
+                        30,
                     ),
                     args: [],
                 },

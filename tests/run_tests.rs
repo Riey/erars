@@ -23,17 +23,17 @@ fn run_test() {
             dic.insert_compiled_func(compile(func, &var).unwrap());
         }
 
-        let ret = test_runner(dic);
+        let ret = test_runner(dic, var.clone());
         let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();
 
         k9::assert_equal!(ret, expected_ret);
     }
 }
 
-fn test_runner(dic: FunctionDic) -> Vec<ConsoleMessage> {
+fn test_runner(dic: FunctionDic, var: VariableInterner) -> Vec<ConsoleMessage> {
     let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
     let mut ctx = VmContext::new(&infos);
-    let vm = TerminalVm::new(dic);
+    let vm = TerminalVm::new(dic, var);
     let chan = ConsoleChannel::new();
 
     vm.start(&chan, &mut ctx).unwrap();

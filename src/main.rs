@@ -85,7 +85,7 @@ fn main() {
         }
 
         let mut ctx = VmContext::new(&infos);
-        let vm = TerminalVm::new(function_dic);
+        let vm = TerminalVm::new(function_dic, var);
         let ret = vm.start(&inner_chan, &mut ctx);
 
         if let Err(err) = ret {

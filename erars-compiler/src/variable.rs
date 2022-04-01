@@ -71,8 +71,8 @@ pub struct VariableInterner {
 impl VariableInterner {
     pub fn new() -> Self {
         let mut ret = Self {
-            name_idxs: HashMap::new(),
-            names: vec![],
+            name_idxs: HashMap::with_capacity(128),
+            names: Vec::with_capacity(128),
             known_idxs: EnumMap::default(),
             next: 0,
         };
