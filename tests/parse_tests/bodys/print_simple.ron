@@ -1,1 +1,0 @@
-[PrintForm(["NEWLINE"], (first: "1 + 1 = ", other: [(BinopExpr(IntLit(1), Add, IntLit(1)), ""),]))]

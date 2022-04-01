@@ -1,76 +1,645 @@
-use codespan_reporting::{
-    diagnostic::{Diagnostic, Label},
-    files::SimpleFiles,
-    term::{
-        termcolor::{ColorChoice, StandardStream},
-        Config,
-    },
-};
-use erars_compiler::{parse_body, parse_expr, parse_function, parse_program, ParserResult};
-use serde::de::DeserializeOwned;
+mod test_util;
+mod body {
+    use crate::test_util::do_test;
+    use erars_compiler::parse_body;
 
-#[test]
-fn parse_test() {
-    run_test_set(parse_expr, "tests/parse_tests/exprs/*.erb");
-    run_test_set(parse_body, "tests/parse_tests/bodys/*.erb");
-    run_test_set(parse_function, "tests/parse_tests/functions/*.erb");
-    run_test_set(parse_program, "tests/parse_tests/programs/*.erb");
-}
+    #[test]
+    fn test_alignment() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/alignment.erb", parse_body),
+            "
+[
+    Alignment(
+        Left,
+    ),
+    Alignment(
+        Center,
+    ),
+    Alignment(
+        Right,
+    ),
+]
+"
+        );
+    }
 
-fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
-    path: &str,
-    f: fn(&str) -> ParserResult<T>,
-    source: &str,
-    expected: &str,
-) {
-    let expected: T = ron::from_str(expected).unwrap();
+    #[test]
+    fn test_assign() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign.erb", parse_body),
+            "
+[
+    Assign(
+        Variable {
+            var_idx: VariableIndex(
+                0,
+            ),
+            args: [
+                BinopExpr(
+                    IntLit(
+                        1,
+                    ),
+                    Add,
+                    IntLit(
+                        3,
+                    ),
+                ),
+            ],
+        },
+        None,
+        BinopExpr(
+            IntLit(
+                23,
+            ),
+            Add,
+            IntLit(
+                45,
+            ),
+        ),
+    ),
+]
+"
+        );
+    }
 
-    let mut files = SimpleFiles::new();
-    let file_id = files.add(path, source);
+    #[test]
+    fn test_assign_add() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign_add.erb", parse_body),
+            "
+[
+    Assign(
+        Variable {
+            var_idx: VariableIndex(
+                21,
+            ),
+            args: [
+                IntLit(
+                    13,
+                ),
+            ],
+        },
+        Some(
+            BitOr,
+        ),
+        IntLit(
+            2,
+        ),
+    ),
+]
+"
+        );
+    }
 
-    match f(source) {
-        Ok(ret) => {
-            k9::assert_equal!(ret, expected);
-        }
-        Err((err, span)) => {
-            let diagnostic = Diagnostic::error()
-                .with_code("E0001")
-                .with_message("Compile ERROR")
-                .with_labels(vec![
-                    Label::primary(file_id, span).with_message(format!("{}", err))
-                ]);
-            let writer = StandardStream::stderr(ColorChoice::Always);
-            let config = Config::default();
-            codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
-                .unwrap();
-            panic!("Test failed");
-        }
+    #[test]
+    fn test_assign_str() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign_str.erb", parse_body),
+            r#"
+[
+    Assign(
+        Variable {
+            var_idx: VariableIndex(
+                6,
+            ),
+            args: [],
+        },
+        None,
+        FormText(
+            {IntLit(123)}456,
+        ),
+    ),
+    Assign(
+        Variable {
+            var_idx: VariableIndex(
+                6,
+            ),
+            args: [],
+        },
+        None,
+        FormText(
+            {Var(Variable { var_idx: VariableIndex(5), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(5), args: [IntLit(1)] }), StringLit("00")])},
+        ),
+    ),
+    Assign(
+        Variable {
+            var_idx: VariableIndex(
+                26,
+            ),
+            args: [
+                Var(
+                    Variable {
+                        var_idx: VariableIndex(
+                            2,
+                        ),
+                        args: [],
+                    },
+                ),
+            ],
+        },
+        None,
+        FormText(
+            {CondExpr(Var(Variable { var_idx: VariableIndex(24), args: [Var(Variable { var_idx: VariableIndex(2), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
+        ),
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_call() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/call.erb", parse_body),
+            r#"
+[
+    Call(
+        "FOO",
+        [
+            IntLit(
+                123,
+            ),
+            Var(
+                Variable {
+                    var_idx: VariableIndex(
+                        14,
+                    ),
+                    args: [
+                        IntLit(
+                            634,
+                        ),
+                    ],
+                },
+            ),
+            StringLit(
+                "123",
+            ),
+        ],
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_hello() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/hello.erb", parse_body),
+            r#"
+[
+    Print(
+        NEWLINE,
+        "Hello, world!",
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_if() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/if.erb", parse_body),
+            r#"
+[
+    If(
+        [
+            (
+                BinopExpr(
+                    Var(
+                        Variable {
+                            var_idx: VariableIndex(
+                                14,
+                            ),
+                            args: [],
+                        },
+                    ),
+                    Greater,
+                    IntLit(
+                        1,
+                    ),
+                ),
+                [
+                    Print(
+                        (empty),
+                        "A > 1",
+                    ),
+                ],
+            ),
+            (
+                BinopExpr(
+                    Var(
+                        Variable {
+                            var_idx: VariableIndex(
+                                14,
+                            ),
+                            args: [],
+                        },
+                    ),
+                    Equal,
+                    IntLit(
+                        1,
+                    ),
+                ),
+                [
+                    Print(
+                        (empty),
+                        "A == 1",
+                    ),
+                ],
+            ),
+        ],
+        Some(
+            [
+                Print(
+                    (empty),
+                    "A < 1",
+                ),
+            ],
+        ),
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_print_simple() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/print_simple.erb", parse_body),
+            "
+[
+    PrintForm(
+        NEWLINE,
+        1 + 1 = {BinopExpr(IntLit(1), Add, IntLit(1))},
+    ),
+]
+"
+        );
+    }
+
+    #[test]
+    fn test_sif() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/sif.erb", parse_body),
+            r#"
+[
+    Sif(
+        IntLit(
+            12,
+        ),
+        Print(
+            (empty),
+            "45",
+        ),
+    ),
+    Print(
+        (empty),
+        "32",
+    ),
+]
+"#
+        );
     }
 }
+mod expr {
+    use crate::test_util::do_test;
+    use erars_compiler::parse_expr;
 
-fn run_test_set<T: std::fmt::Debug + Eq + DeserializeOwned>(
-    f: fn(&str) -> ParserResult<T>,
-    pattern: &str,
-) {
-    let erb_files = glob::glob(pattern).unwrap();
+    #[test]
+    fn test_boolean() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/boolean.erb", parse_expr),
+            "
+BinopExpr(
+    BinopExpr(
+        Var(
+            Variable {
+                var_idx: VariableIndex(
+                    3,
+                ),
+                args: [],
+            },
+        ),
+        Equal,
+        IntLit(
+            0,
+        ),
+    ),
+    And,
+    BinopExpr(
+        Var(
+            Variable {
+                var_idx: VariableIndex(
+                    24,
+                ),
+                args: [
+                    Var(
+                        Variable {
+                            var_idx: VariableIndex(
+                                2,
+                            ),
+                            args: [],
+                        },
+                    ),
+                    IntLit(
+                        998,
+                    ),
+                ],
+            },
+        ),
+        Equal,
+        IntLit(
+            0,
+        ),
+    ),
+)
+"
+        );
+    }
 
-    for erb_file in erb_files {
-        let erb_file = erb_file.unwrap();
-        let ron_file = erb_file.parent().unwrap().join(format!(
-            "{}.ron",
-            erb_file.file_stem().unwrap().to_str().unwrap()
-        ));
+    #[test]
+    fn test_cond() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/cond.erb", parse_expr),
+            "
+CondExpr(
+    IntLit(
+        1,
+    ),
+    IntLit(
+        2,
+    ),
+    IntLit(
+        3,
+    ),
+)
+"
+        );
+    }
 
-        eprintln!("Check {}", erb_file.display());
+    #[test]
+    fn test_method() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/method.erb", parse_expr),
+            r#"
+Method(
+    "FOO",
+    [
+        IntLit(
+            123,
+        ),
+        StringLit(
+            "BAR",
+        ),
+        Var(
+            Variable {
+                var_idx: VariableIndex(
+                    5,
+                ),
+                args: [
+                    IntLit(
+                        123,
+                    ),
+                ],
+            },
+        ),
+    ],
+)
+"#
+        );
+    }
 
-        let erb_source = std::fs::read_to_string(&erb_file).unwrap();
-        let ron_source = std::fs::read_to_string(ron_file).unwrap();
+    #[test]
+    fn test_plus() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/plus.erb", parse_expr),
+            "
+BinopExpr(
+    IntLit(
+        1,
+    ),
+    Add,
+    IntLit(
+        1,
+    ),
+)
+"
+        );
+    }
 
-        do_test(
-            erb_file.as_os_str().to_str().unwrap(),
-            f,
-            &erb_source,
-            &ron_source,
+    #[test]
+    fn test_plus_mul() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/plus_mul.erb", parse_expr),
+            "
+BinopExpr(
+    IntLit(
+        1,
+    ),
+    Add,
+    BinopExpr(
+        IntLit(
+            2,
+        ),
+        Mul,
+        IntLit(
+            3,
+        ),
+    ),
+)
+"
+        );
+    }
+
+    #[test]
+    fn test_plus_mul_paran() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/plus_mul_paran.erb", parse_expr),
+            "
+BinopExpr(
+    BinopExpr(
+        IntLit(
+            1,
+        ),
+        Add,
+        IntLit(
+            2,
+        ),
+    ),
+    Mul,
+    IntLit(
+        3,
+    ),
+)
+"
+        );
+    }
+
+    #[test]
+    fn test_str_literal() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/str_literal.erb", parse_expr),
+            r#"
+StringLit(
+    "123",
+)
+"#
+        );
+    }
+
+    #[test]
+    fn test_var_arg() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/var_arg.erb", parse_expr),
+            "
+Var(
+    Variable {
+        var_idx: VariableIndex(
+            0,
+        ),
+        args: [
+            IntLit(
+                123,
+            ),
+        ],
+    },
+)
+"
+        );
+    }
+
+    #[test]
+    fn test_var_complex() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/var_complex.erb", parse_expr),
+            "
+Var(
+    Variable {
+        var_idx: VariableIndex(
+            0,
+        ),
+        args: [
+            Var(
+                Variable {
+                    var_idx: VariableIndex(
+                        14,
+                    ),
+                    args: [],
+                },
+            ),
+            IntLit(
+                123,
+            ),
+        ],
+    },
+)
+"
+        );
+    }
+
+    #[test]
+    fn test_var_empty() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/var_empty.erb", parse_expr),
+            "
+Var(
+    Variable {
+        var_idx: VariableIndex(
+            0,
+        ),
+        args: [],
+    },
+)
+"
+        );
+    }
+}
+mod function {
+    use crate::test_util::do_test;
+    use erars_compiler::parse_function;
+
+    #[test]
+    fn test_function() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/functions/function.erb", parse_function),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "FOO",
+        args: [],
+        infos: [
+            EventFlag(
+                Pre,
+            ),
+        ],
+    },
+    body: [
+        Print(
+            NEWLINE,
+            "Hello",
+        ),
+        PrintForm(
+            NEWLINE,
+            {IntLit(123)},
+        ),
+    ],
+}
+"#
+        );
+    }
+}
+mod program {
+    use crate::test_util::do_test;
+    use erars_compiler::parse_program;
+
+    #[test]
+    fn test_simple() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/programs/simple.erb", parse_program),
+            r#"
+[
+    Function {
+        header: FunctionHeader {
+            name: "FOO",
+            args: [],
+            infos: [],
+        },
+        body: [
+            Print(
+                (empty),
+                "foo",
+            ),
+        ],
+    },
+    Function {
+        header: FunctionHeader {
+            name: "FOO",
+            args: [],
+            infos: [],
+        },
+        body: [
+            Print(
+                (empty),
+                "foo",
+            ),
+        ],
+    },
+    Function {
+        header: FunctionHeader {
+            name: "BAR",
+            args: [],
+            infos: [],
+        },
+        body: [
+            Print(
+                (empty),
+                "bar",
+            ),
+        ],
+    },
+]
+"#
         );
     }
 }

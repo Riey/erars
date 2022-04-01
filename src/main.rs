@@ -49,7 +49,7 @@ fn main() {
         let mut diagnostic = Diagnostic::error()
             .with_code("E0001")
             .with_message("Compile ERROR");
-        let mut var = VariableInterner::new();
+        let var = VariableInterner::with_default_variables();
 
         for erb in erbs {
             let erb = erb.unwrap();

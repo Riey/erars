@@ -42,6 +42,7 @@ pub enum KnownVariables {
     Gamebase_Year,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct VariableInterner {
     name_idxs: HashMap<SmartString<LazyCompact>, VariableIndex>,
     names: Vec<SmartString<LazyCompact>>,
@@ -62,6 +63,25 @@ impl VariableInterner {
             let idx = ret.intern(<&str>::from(known));
             ret.known_idxs[known] = idx;
         }
+
+        ret
+    }
+
+    pub fn with_default_variables() -> Self {
+        let mut ret = Self::new();
+
+        macro_rules! interns {
+            ($($name:literal)+) => {
+                $(ret.intern($name);)+
+            };
+        }
+
+        interns!(
+            "A" "B" "C" "D" "E" "F"
+            "MASTER" "TARGET" "ASSI"
+            "FLAG" "STR"
+            "CFLAG" "TALENT" "NAME" "NICKNAME" "MASTERNAME"
+        );
 
         ret
     }
