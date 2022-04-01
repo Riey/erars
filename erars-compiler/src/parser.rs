@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::{
     ast::FormText, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionHeader,
-    FunctionInfo, ParserError, ParserResult, Stmt, Variable,
+    FunctionInfo, ParserError, ParserResult, Stmt, Variable, VariableIndex, VariableInterner,
 };
 use bitflags::bitflags;
 use ordered_float::NotNan;
@@ -58,16 +58,17 @@ struct BanState {
 }
 
 #[derive(Clone)]
-pub struct Parser<'s> {
+pub struct Parser<'s, 'v> {
     text: &'s str,
+    var: &'v VariableInterner,
     form_status: Option<FormStatus>,
     cond_status: Option<CondStatus>,
     begin_loc: usize,
     ban_state: BanState,
 }
 
-impl<'s> Parser<'s> {
-    pub fn new(text: &'s str) -> Self {
+impl<'s, 'v> Parser<'s, 'v> {
+    pub fn new(text: &'s str, var: &'v VariableInterner) -> Self {
         let begin_loc = text.as_ptr() as usize;
 
         // BOM
@@ -75,6 +76,7 @@ impl<'s> Parser<'s> {
 
         Self {
             text,
+            var,
             form_status: None,
             cond_status: None,
             begin_loc,
@@ -716,6 +718,8 @@ impl<'s> Parser<'s> {
     fn read_term(&mut self) -> ParserResult<Expr> {
         self.skip_ws();
 
+        let start_idx = self.current_loc();
+
         if self.try_get_char('(') {
             let inner = self.next_expr()?;
             self.ensure_get_char(')')?;
@@ -734,16 +738,17 @@ impl<'s> Parser<'s> {
                 Ok(Expr::Method(ident.into(), args))
             } else {
                 // variable
+                let var_idx = self.get_var_idx(ident, self.from_prev_loc_span(start_idx))?;
 
                 // eliminate nested variable
                 let var = if self.ban_state.arg {
                     Variable {
-                        name: ident.into(),
+                        var_idx,
                         args: Vec::new(),
                     }
                 } else {
                     self.ban_state.arg = true;
-                    let var = self.next_var(ident)?;
+                    let var = self.next_var(var_idx)?;
                     self.ban_state.arg = false;
                     var
                 };
@@ -761,20 +766,17 @@ impl<'s> Parser<'s> {
 
     fn ensure_get_var(&mut self) -> ParserResult<Variable> {
         self.ensure_ident(|| format!("Variable"))
-            .and_then(|i| self.next_var(i))
+            .and_then(|i| self.next_var(self.var.get(i).unwrap()))
     }
 
-    fn next_var(&mut self, ident: &'s str) -> ParserResult<Variable> {
+    fn next_var(&mut self, var_idx: VariableIndex) -> ParserResult<Variable> {
         let mut args = Vec::new();
 
         while self.try_get_char(':') {
             args.push(self.read_term()?);
         }
 
-        Ok(Variable {
-            name: ident.into(),
-            args,
-        })
+        Ok(Variable { var_idx, args })
     }
 
     fn next_expr(&mut self) -> ParserResult<Expr> {
@@ -834,6 +836,12 @@ impl<'s> Parser<'s> {
         Ok(body)
     }
 
+    fn get_var_idx(&self, ident: &str, span: Range<usize>) -> ParserResult<VariableIndex> {
+        self.var
+            .get(ident)
+            .ok_or_else(|| (ParserError::UnknownVariable(ident.into()), span))
+    }
+
     fn next_stmt(&mut self) -> ParserResult<Stmt> {
         self.skip_ws_newline();
 
@@ -846,7 +854,8 @@ impl<'s> Parser<'s> {
             }
 
             // assign
-            let var = self.next_var(ident)?;
+            let var =
+                self.next_var(self.get_var_idx(ident, self.from_prev_loc_span(ident_start))?)?;
 
             self.skip_ws();
             let symbol_start = self.current_loc();
@@ -909,8 +918,10 @@ impl<'s> Parser<'s> {
 
         loop {
             self.skip_ws();
+            let ident_start = self.current_loc();
             let ident = self.ensure_ident(|| "Argument ident")?;
-            let var = self.next_var(ident)?;
+            let var =
+                self.next_var(self.get_var_idx(ident, self.from_prev_loc_span(ident_start))?)?;
             self.skip_ws();
             let default_arg = if self.try_get_char('=') {
                 Some(self.next_expr()?)
@@ -1091,20 +1102,20 @@ fn calculate_binop_expr(first: Expr, stack: &mut Vec<(BinaryOperator, Expr)>) ->
     ret
 }
 
-pub fn parse_program(s: &str) -> ParserResult<Vec<Function>> {
-    Parser::new(s).next_program()
+pub fn parse_program(s: &str, var: &VariableInterner) -> ParserResult<Vec<Function>> {
+    Parser::new(s, var).next_program()
 }
 
-pub fn parse_function(s: &str) -> ParserResult<Function> {
-    Parser::new(s).next_function()
+pub fn parse_function(s: &str, var: &VariableInterner) -> ParserResult<Function> {
+    Parser::new(s, var).next_function()
 }
 
-pub fn parse_expr(s: &str) -> ParserResult<Expr> {
-    Parser::new(s).next_expr()
+pub fn parse_expr(s: &str, var: &VariableInterner) -> ParserResult<Expr> {
+    Parser::new(s, var).next_expr()
 }
 
-pub fn parse_body(s: &str) -> ParserResult<Vec<Stmt>> {
-    Parser::new(s).next_body()
+pub fn parse_body(s: &str, var: &VariableInterner) -> ParserResult<Vec<Stmt>> {
+    Parser::new(s, var).next_body()
 }
 
 #[test]

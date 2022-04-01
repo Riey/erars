@@ -1,5 +1,4 @@
 use std::iter;
-use std::ops::Range;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -306,8 +305,7 @@ pub struct VmContext {
     var: VariableStorage,
     begin: Option<BeginType>,
     stack: Vec<Value>,
-    list_stack: Vec<Range<usize>>,
-    list_begin_stack: Vec<usize>,
+    call_stack: Vec<usize>,
 }
 
 impl VmContext {
@@ -316,29 +314,25 @@ impl VmContext {
             var: VariableStorage::new(infos),
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
-            list_begin_stack: Vec::with_capacity(16),
-            list_stack: Vec::with_capacity(32),
+            call_stack: Vec::with_capacity(512),
         }
     }
 
-    fn set_list_begin(&mut self) {
-        self.list_begin_stack.push(self.stack.len());
+    pub fn new_func(&mut self) {
+        self.call_stack.push(self.stack.len());
     }
 
-    fn set_list_end(&mut self) {
-        self.list_stack
-            .push(self.list_begin_stack.pop().unwrap()..self.stack.len());
+    pub fn return_func(&mut self) -> impl Iterator<Item = Value> + '_ {
+        let base = self.call_stack.pop().unwrap();
+        self.stack.drain(base..)
     }
 
-    fn take_arg_list(&mut self) -> Result<ArrayVec<usize, 4>> {
-        self.stack
-            .drain(self.list_stack.pop().unwrap())
-            .map(usize::try_from)
-            .collect()
+    fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
+        self.take_list(count).map(usize::try_from).collect()
     }
 
-    fn take_list(&mut self) -> ArrayVec<Value, 8> {
-        self.stack.drain(self.list_stack.pop().unwrap()).collect()
+    fn take_list(&mut self, count: u32) -> impl Iterator<Item = Value> + '_ {
+        self.stack.drain(self.stack.len() - count as usize..)
     }
 
     fn push(&mut self, value: impl Into<Value>) {
@@ -382,9 +376,7 @@ impl TerminalVm {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
             Instruction::Nop => {}
-            Instruction::ListBegin => ctx.set_list_begin(),
-            Instruction::ListEnd => ctx.set_list_end(),
-            Instruction::StoreVar => {
+            Instruction::StoreVar(var, c) => {
                 let target = ctx.var.target()?;
 
                 let name = ctx.pop_str()?;
@@ -392,7 +384,7 @@ impl TerminalVm {
                 if name.parse::<BulitinVariable>().is_ok() {
                     bail!("Can't edit builtin variable");
                 } else {
-                    let mut args = ctx.take_arg_list()?.into_iter();
+                    let mut args = ctx.take_arg_list(*c)?.into_iter();
                     let value = ctx.pop();
 
                     let (info, var) = ctx.var.get_var(&name)?;
@@ -412,7 +404,7 @@ impl TerminalVm {
                     }
                 };
             }
-            Instruction::LoadVar => {
+            Instruction::LoadVar(var, c) => {
                 let target = ctx.var.target()?;
 
                 let name = ctx.pop_str()?;
@@ -426,7 +418,7 @@ impl TerminalVm {
                         BulitinVariable::GamebaseInfo => "Info".into(),
                     }
                 } else {
-                    let mut args = ctx.take_arg_list()?.into_iter();
+                    let mut args = ctx.take_arg_list(*c)?.into_iter();
 
                     let (info, var) = ctx.var.get_var(&name)?;
 
@@ -458,7 +450,7 @@ impl TerminalVm {
             }
             Instruction::ReturnF => return Ok(Some(Workflow::Return)),
             Instruction::Return => {
-                let values = ctx.take_list();
+                let values = ctx.return_func().collect::<ArrayVec<_, 16>>();
 
                 let mut result_idx = 0usize;
                 let mut results_idx = 0usize;
@@ -484,13 +476,12 @@ impl TerminalVm {
 
                 return Ok(Some(Workflow::Return));
             }
-            Instruction::CallMethod => {
+            Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
-                let args = ctx.take_list();
+                let mut args = ctx.take_list(*c);
 
                 match func.as_str() {
                     "TOSTR" => {
-                        let mut args = args.into_iter();
                         let value = args.next().unwrap().try_into_int()?;
                         let format = args.next();
 
@@ -500,14 +491,16 @@ impl TerminalVm {
                             value.to_string()
                         };
 
+                        drop(args);
+
                         ctx.push(ret);
                     }
                     other => bail!("TODO: CallMethod {}", other),
                 }
             }
-            Instruction::Call => {
+            Instruction::Call(c) => {
                 let func = ctx.pop_str()?;
-                let args = ctx.take_list();
+                let args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>();
 
                 match func.as_str() {
                     _ => {
@@ -520,11 +513,11 @@ impl TerminalVm {
                 chan.send_msg(ConsoleMessage::Exit);
                 return Ok(Some(Workflow::Exit));
             }
-            Instruction::ConcatString => {
-                let args = ctx.take_list();
+            Instruction::ConcatString(c) => {
+                let args = ctx.take_list(*c);
                 let ret = args
                     .into_iter()
-                    .fold(String::new(), |s, l| s + &l.into_str());
+                    .fold(String::new(), |s, l| s + l.into_str().as_str());
                 ctx.push(ret);
             }
             Instruction::Times(t) => {
@@ -545,7 +538,7 @@ impl TerminalVm {
                 let ret = match op {
                     BinaryOperator::Add => match lhs {
                         Value::Int(i) => Value::Int(i + rhs.try_into_int()?),
-                        Value::String(s) => Value::String(s + &rhs.into_str()),
+                        Value::String(s) => Value::String(s + rhs.into_str().as_str()),
                     },
                     BinaryOperator::Sub => Value::Int(lhs.try_into_int()? - rhs.try_into_int()?),
                     BinaryOperator::Div => Value::Int(lhs.try_into_int()? / rhs.try_into_int()?),
@@ -582,9 +575,9 @@ impl TerminalVm {
             Instruction::SetAlignment(align) => {
                 chan.send_msg(ConsoleMessage::Alignment(*align));
             }
-            Instruction::Command => {
+            Instruction::Command(c) => {
                 let name = ctx.pop_str()?;
-                let args = ctx.take_list();
+                let args = ctx.take_list(*c).collect::<ArrayVec<_, 4>>();
 
                 match name.as_str() {
                     "DRAWLINE" => {

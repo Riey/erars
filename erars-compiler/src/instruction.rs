@@ -1,4 +1,4 @@
-use crate::{Alignment, BinaryOperator, PrintFlags, UnaryOperator};
+use crate::{Alignment, BinaryOperator, PrintFlags, UnaryOperator, VariableIndex};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
@@ -22,20 +22,22 @@ pub enum Instruction {
     Nop,
     Pop,
     Duplicate,
-    ListBegin,
-    ListEnd,
     LoadInt(i64),
     LoadStr(String),
-    LoadVar,
-    StoreVar,
-    Varset,
-    CallMethod,
-    Call,
+    LoadVar(VariableIndex, u32),
+    StoreVar(VariableIndex, u32),
+    Varset {
+        code: VariableIndex,
+        args: u32,
+        varset_args: u32,
+    },
+    CallMethod(u32),
+    Call(u32),
     Begin(BeginType),
     Print(PrintFlags),
     ReuseLastLine,
-    ConcatString,
-    Command,
+    ConcatString(u32),
+    Command(u32),
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
     SetAlignment(Alignment),

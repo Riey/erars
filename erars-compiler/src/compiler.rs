@@ -1,6 +1,6 @@
 use crate::{
     ast::FormText, BinaryOperator, CompileError, CompileResult, Expr, Function, FunctionHeader,
-    Instruction, Stmt, Variable,
+    Instruction, KnownVariables, Stmt, Variable, VariableInterner,
 };
 use arrayvec::ArrayVec;
 use hashbrown::HashMap;
@@ -12,8 +12,8 @@ pub struct CompiledFunction {
     pub body: Vec<Instruction>,
 }
 
-#[derive(Default)]
-struct Compiler {
+struct Compiler<'v> {
+    var: &'v VariableInterner,
     out: Vec<Instruction>,
     marks: HashMap<String, u32>,
     goto_marks: HashMap<String, Vec<u32>>,
@@ -21,7 +21,18 @@ struct Compiler {
     break_marks: Vec<Vec<u32>>,
 }
 
-impl Compiler {
+impl<'v> Compiler<'v> {
+    pub fn new(var: &'v VariableInterner) -> Self {
+        Self {
+            var,
+            out: Vec::new(),
+            marks: HashMap::new(),
+            goto_marks: HashMap::new(),
+            continue_marks: Vec::new(),
+            break_marks: Vec::new(),
+        }
+    }
+
     fn mark(&mut self) -> u32 {
         let ret = self.current_no();
         self.out.push(Instruction::Nop);
@@ -39,21 +50,16 @@ impl Compiler {
             .unwrap_or_else(|| unreachable!("Invalid mark {}", mark)) = inst;
     }
 
-    fn push_list(&mut self, args: impl IntoIterator<Item = Expr>) -> CompileResult<()> {
-        self.push_list_begin();
+    fn push_list(
+        &mut self,
+        args: impl IntoIterator<IntoIter = impl ExactSizeIterator + IntoIterator<Item = Expr>>,
+    ) -> CompileResult<u32> {
+        let args = args.into_iter();
+        let len = args.len();
         for arg in args {
             self.push_expr(arg)?;
         }
-        self.push_list_end();
-        Ok(())
-    }
-
-    fn push_list_begin(&mut self) {
-        self.out.push(Instruction::ListBegin);
-    }
-
-    fn push_list_end(&mut self) {
-        self.out.push(Instruction::ListEnd);
+        Ok(len as u32)
     }
 
     fn push_expr(&mut self, expr: Expr) -> CompileResult<()> {
@@ -82,9 +88,9 @@ impl Compiler {
                 self.insert(true_end, Instruction::Goto(self.current_no()));
             }
             Expr::Method(name, args) => {
-                self.push_list(args)?;
+                let count = self.push_list(args)?;
                 self.out.push(Instruction::LoadStr(name));
-                self.out.push(Instruction::CallMethod);
+                self.out.push(Instruction::CallMethod(count));
             }
             Expr::Var(var) => {
                 self.push_var(var)?;
@@ -94,36 +100,28 @@ impl Compiler {
         Ok(())
     }
 
-    fn get_var(&mut self, var: Variable) -> CompileResult<()> {
-        self.push_list(var.args)?;
-        self.out.push(Instruction::LoadStr(var.name));
-
-        Ok(())
-    }
-
     fn store_var(&mut self, var: Variable) -> CompileResult<()> {
-        self.get_var(var)?;
-        self.out.push(Instruction::StoreVar);
+        let count = self.push_list(var.args)?;
+        self.out.push(Instruction::StoreVar(var.var_idx, count));
 
         Ok(())
     }
 
     fn push_var(&mut self, var: Variable) -> CompileResult<()> {
-        self.get_var(var)?;
-        self.out.push(Instruction::LoadVar);
+        let count = self.push_list(var.args)?;
+        self.out.push(Instruction::LoadVar(var.var_idx, count));
 
         Ok(())
     }
 
     fn push_form(&mut self, form: FormText) -> CompileResult<()> {
-        self.push_list_begin();
+        let count = 1 + form.other.len() as u32 * 2;
         self.out.push(Instruction::LoadStr(form.first));
         for (expr, text) in form.other {
             self.push_expr(expr)?;
             self.out.push(Instruction::LoadStr(text));
         }
-        self.push_list_end();
-        self.out.push(Instruction::ConcatString);
+        self.out.push(Instruction::ConcatString(count));
 
         Ok(())
     }
@@ -164,8 +162,10 @@ impl Compiler {
             self.push_stmt(stmt)?;
         }
 
-        self.get_var(var.clone())?;
+        self.push_var(var.clone())?;
         self.push_expr(step)?;
+        self.out
+            .push(Instruction::BinaryOperator(BinaryOperator::Add));
         self.store_var(var)?;
         self.out.push(Instruction::Goto(loop_mark));
 
@@ -214,7 +214,7 @@ impl Compiler {
             }
             Stmt::Repeat(end, body) => self.push_for(
                 Variable {
-                    name: "COUNT".into(),
+                    var_idx: self.var.get_known(KnownVariables::Count),
                     args: Vec::new(),
                 },
                 Expr::int(0),
@@ -271,9 +271,9 @@ impl Compiler {
                 self.out.push(Instruction::ReturnF);
             }
             Stmt::Call(name, args) => {
-                self.push_list(args)?;
+                let count = self.push_list(args)?;
                 self.out.push(Instruction::LoadStr(name));
-                self.out.push(Instruction::Call);
+                self.out.push(Instruction::Call(count));
             }
             Stmt::Begin(ty) => {
                 self.out.push(Instruction::Begin(ty));
@@ -282,9 +282,9 @@ impl Compiler {
                 self.out.push(Instruction::SetAlignment(align));
             }
             Stmt::Command(name, args) => {
-                self.push_list(args)?;
+                let count = self.push_list(args)?;
                 self.out.push(Instruction::LoadStr(name));
-                self.out.push(Instruction::Command);
+                self.out.push(Instruction::Command(count));
             }
             Stmt::Label(label) => {
                 if self.marks.insert(label, self.current_no()).is_some() {
@@ -296,9 +296,13 @@ impl Compiler {
                 self.goto_marks.entry(label.into()).or_default().push(mark);
             }
             Stmt::Varset(var, args) => {
-                self.push_list(args)?;
-                self.get_var(var)?;
-                self.out.push(Instruction::Varset);
+                let varset_count = self.push_list(args)?;
+                let arg_count = self.push_list(var.args)?;
+                self.out.push(Instruction::Varset {
+                    code: var.var_idx,
+                    args: arg_count,
+                    varset_args: varset_count,
+                });
             }
             Stmt::Times(var, ratio) => {
                 self.push_var(var.clone())?;
@@ -338,8 +342,8 @@ impl Compiler {
     }
 }
 
-pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
-    let mut compiler = Compiler::default();
+pub fn compile(func: Function, var: &VariableInterner) -> CompileResult<CompiledFunction> {
+    let mut compiler = Compiler::new(var);
 
     for stmt in func.body {
         compiler.push_stmt(stmt)?;

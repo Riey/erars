@@ -3,11 +3,13 @@ use std::fmt;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
-use crate::{Alignment, BeginType, BinaryOperator, EventFlags, PrintFlags, UnaryOperator};
+use crate::{
+    Alignment, BeginType, BinaryOperator, EventFlags, PrintFlags, UnaryOperator, VariableIndex,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Variable {
-    pub name: String,
+    pub var_idx: VariableIndex,
     pub args: Vec<Expr>,
 }
 
@@ -104,13 +106,6 @@ impl Expr {
 
     pub fn str(s: impl Into<String>) -> Self {
         Self::StringLit(s.into())
-    }
-
-    pub fn var(n: impl Into<String>, args: Vec<Self>) -> Self {
-        Self::Var(Variable {
-            name: n.into(),
-            args,
-        })
     }
 
     pub fn unary(op1: Self, op: UnaryOperator) -> Self {

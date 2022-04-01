@@ -5,6 +5,7 @@ mod event;
 mod instruction;
 mod operator;
 mod parser;
+mod variable;
 
 pub use crate::{
     ast::{Expr, Function, FunctionHeader, FunctionInfo, Stmt, Variable},
@@ -16,4 +17,5 @@ pub use crate::{
     parser::{
         parse_body, parse_expr, parse_function, parse_program, Alignment, Parser, PrintFlags,
     },
+    variable::*,
 };

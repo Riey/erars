@@ -14,6 +14,7 @@ use erars::{
     ui::{ConsoleChannel, EraApp},
     vm::{TerminalVm, VariableInfo, VmContext},
 };
+use erars_compiler::VariableInterner;
 use hashbrown::HashMap;
 
 fn main() {
@@ -48,12 +49,13 @@ fn main() {
         let mut diagnostic = Diagnostic::error()
             .with_code("E0001")
             .with_message("Compile ERROR");
+        let mut var = VariableInterner::new();
 
         for erb in erbs {
             let erb = erb.unwrap();
 
             let source = std::fs::read_to_string(&erb).unwrap();
-            let program = erars_compiler::parse_program(&source);
+            let program = erars_compiler::parse_program(&source, &var);
             let file_id = files.add(erb.to_str().unwrap().to_string(), source);
 
             let program = match program {
@@ -67,7 +69,7 @@ fn main() {
             };
 
             for func in program {
-                let func = erars_compiler::compile(func).unwrap();
+                let func = erars_compiler::compile(func, &var).unwrap();
 
                 function_dic.insert_compiled_func(func);
             }

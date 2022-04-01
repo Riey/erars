@@ -5,6 +5,8 @@ pub type CompileResult<T> = Result<T, CompileError>;
 
 #[derive(thiserror::Error)]
 pub enum ParserError {
+    #[error("알수없는 변수가 발견되었습니다. `{0}`")]
+    UnknownVariable(String),
     #[error("잘못된 코드가 발견되었습니다. `{0}`")]
     InvalidCode(String),
     #[error("예상치 못 한 토큰 `{0}`가 발견되었습니다.")]
