@@ -29,17 +29,35 @@ pub enum KnownVariables {
     Count,
     Target,
     Master,
+    Money,
+    Item,
+    NoItem,
+    ItemSales,
+    ItemPrice,
+    No,
+    CharaNum,
     Result,
     ResultS,
     Local,
     LocalS,
     Arg,
     ArgS,
+    Exp,
+    Juel,
+    Param,
+    Base,
+    MaxBase,
+
+    Rand,
     Gamebase_Version,
     Gamebase_Author,
     Gamebase_Info,
     Gamebase_Title,
     Gamebase_Year,
+
+    FlagName,
+    TalentName,
+    ItemName,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -79,8 +97,9 @@ impl VariableInterner {
         interns!(
             "A" "B" "C" "D" "E" "F"
             "MASTER" "TARGET" "ASSI"
-            "FLAG" "STR"
-            "CFLAG" "TALENT" "NAME" "NICKNAME" "MASTERNAME"
+            "FLAG" "DAY" "TIME"
+            "STR"
+            "ABL" "CFLAG" "TALENT" "NAME" "CALLNAME" "NICKNAME" "MASTERNAME"
         );
 
         ret
