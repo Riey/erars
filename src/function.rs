@@ -150,6 +150,12 @@ impl FunctionDic {
 
         for info in header.infos {
             match info {
+                FunctionInfo::LocalSize(size) => {
+                    body.local_size = size;
+                }
+                FunctionInfo::LocalSSize(size) => {
+                    body.locals_size = size;
+                }
                 FunctionInfo::EventFlag(f) => {
                     flags = f;
                 }

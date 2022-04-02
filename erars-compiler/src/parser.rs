@@ -760,6 +760,15 @@ impl<'s, 'v> Parser<'s, 'v> {
         Ok(ret)
     }
 
+    fn ensure_number(&mut self) -> ParserResult<i64> {
+        self.try_read_number().ok_or_else(|| {
+            (
+                ParserError::MissingToken("숫자가 와야합니다.".into()),
+                self.current_loc_span(),
+            )
+        })?
+    }
+
     fn try_read_number(&mut self) -> Option<ParserResult<i64>> {
         let minus = self.try_get_char('-');
 
@@ -1135,6 +1144,16 @@ impl<'s, 'v> Parser<'s, 'v> {
                     }
                     "FUNCTIONS" => {
                         infos.push(FunctionInfo::FunctionS);
+                    }
+                    "LOCALSIZE" => {
+                        self.skip_ws();
+                        let size = self.ensure_number()?;
+                        infos.push(FunctionInfo::LocalSize(size as usize));
+                    }
+                    "LOCALSSIZE" => {
+                        self.skip_ws();
+                        let size = self.ensure_number()?;
+                        infos.push(FunctionInfo::LocalSSize(size as usize));
                     }
                     other => {
                         return Err((
