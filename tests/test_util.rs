@@ -9,6 +9,7 @@ use codespan_reporting::{
 use erars_compiler::{ParserResult, VariableInterner};
 use serde::de::DeserializeOwned;
 
+#[track_caller]
 pub fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     path: &str,
     f: fn(&str, &VariableInterner) -> ParserResult<T>,

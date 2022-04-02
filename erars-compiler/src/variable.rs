@@ -32,6 +32,9 @@ pub enum BulitinVariable {
     Gamebase_Year,
     Gamebase_Info,
     Gamebase_Version,
+
+    LastLoad_Version,
+
     Rand,
     IsAssi,
 
@@ -41,6 +44,7 @@ pub enum BulitinVariable {
     PalamName,
     FlagName,
     TalentName,
+    TrainName,
     ExName,
     ItemName,
 }
@@ -159,7 +163,7 @@ impl VariableInterner {
             "GLOBAL" "GLOBALS"
             "FLAG" "DAY" "TIME" "DITEMTYPE"
             "STR"
-            "ABL" "CFLAG" "TALENT" "MARK" "EQUIP" "STAIN"
+            "ABL" "CFLAG" "TALENT" "MARK" "EQUIP" "STAIN" "EJAC"
             "CSTR"
             "EX" "NOWEX"
             "NAME" "CALLNAME" "NICKNAME" "MASTERNAME"

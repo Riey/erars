@@ -32,7 +32,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                19,
+                21,
             ),
             args: [
                 BinopExpr(
@@ -71,7 +71,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                86,
+                88,
             ),
             args: [
                 IntLit(
@@ -100,7 +100,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                16,
+                18,
             ),
             args: [],
         },
@@ -112,25 +112,25 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                16,
+                18,
             ),
             args: [],
         },
         None,
         FormText(
-            {Var(Variable { var_idx: VariableIndex(15), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(15), args: [IntLit(1)] }), StringLit("00")])},
+            {Var(Variable { var_idx: VariableIndex(17), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(1)] }), StringLit("00")])},
         ),
     ),
     Assign(
         Variable {
             var_idx: VariableIndex(
-                102,
+                105,
             ),
             args: [
                 Var(
                     Variable {
                         var_idx: VariableIndex(
-                            21,
+                            23,
                         ),
                         args: [],
                     },
@@ -139,13 +139,13 @@ mod body {
         },
         None,
         FormText(
-            {CondExpr(Var(Variable { var_idx: VariableIndex(93), args: [Var(Variable { var_idx: VariableIndex(21), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
+            {CondExpr(Var(Variable { var_idx: VariableIndex(95), args: [Var(Variable { var_idx: VariableIndex(23), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
         ),
     ),
     Assign(
         Variable {
             var_idx: VariableIndex(
-                16,
+                18,
             ),
             args: [],
         },
@@ -174,7 +174,7 @@ mod body {
             Var(
                 Variable {
                     var_idx: VariableIndex(
-                        52,
+                        54,
                     ),
                     args: [
                         IntLit(
@@ -221,7 +221,7 @@ mod body {
                     Var(
                         Variable {
                             var_idx: VariableIndex(
-                                52,
+                                54,
                             ),
                             args: [],
                         },
@@ -243,7 +243,7 @@ mod body {
                     Var(
                         Variable {
                             var_idx: VariableIndex(
-                                52,
+                                54,
                             ),
                             args: [],
                         },
@@ -284,7 +284,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                15,
+                17,
             ),
             args: [],
         },
@@ -296,7 +296,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                15,
+                17,
             ),
             args: [],
         },
@@ -308,7 +308,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                15,
+                17,
             ),
             args: [],
         },
@@ -320,31 +320,31 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                15,
+                17,
             ),
             args: [],
         },
         None,
         IntLit(
-            1,
+            0,
         ),
     ),
     Assign(
         Variable {
             var_idx: VariableIndex(
-                15,
+                17,
             ),
             args: [],
         },
         None,
         IntLit(
-            2,
+            4,
         ),
     ),
     Assign(
         Variable {
             var_idx: VariableIndex(
-                15,
+                17,
             ),
             args: [],
         },
@@ -356,25 +356,25 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                15,
+                17,
             ),
             args: [],
         },
         None,
         IntLit(
-            -1,
+            0,
         ),
     ),
     Assign(
         Variable {
             var_idx: VariableIndex(
-                15,
+                17,
             ),
             args: [],
         },
         None,
         IntLit(
-            -2,
+            -4,
         ),
     ),
 ]
@@ -479,6 +479,28 @@ mod body {
 "#
         );
     }
+
+    #[test]
+    fn test_times() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/times.erb", parse_body),
+            "
+[
+    Times(
+        Variable {
+            var_idx: VariableIndex(
+                17,
+            ),
+            args: [],
+        },
+        NotNan(
+            123.33,
+        ),
+    ),
+]
+"
+        );
+    }
 }
 mod expr {
     use crate::test_util::do_test;
@@ -494,7 +516,7 @@ BinopExpr(
         Var(
             Variable {
                 var_idx: VariableIndex(
-                    35,
+                    37,
                 ),
                 args: [],
             },
@@ -509,13 +531,13 @@ BinopExpr(
         Var(
             Variable {
                 var_idx: VariableIndex(
-                    93,
+                    95,
                 ),
                 args: [
                     Var(
                         Variable {
                             var_idx: VariableIndex(
-                                21,
+                                23,
                             ),
                             args: [],
                         },
@@ -573,7 +595,7 @@ Method(
         Var(
             Variable {
                 var_idx: VariableIndex(
-                    15,
+                    17,
                 ),
                 args: [
                     IntLit(
@@ -674,7 +696,7 @@ StringLit(
 Var(
     Variable {
         var_idx: VariableIndex(
-            19,
+            21,
         ),
         args: [
             IntLit(
@@ -695,13 +717,13 @@ Var(
 Var(
     Variable {
         var_idx: VariableIndex(
-            19,
+            21,
         ),
         args: [
             Var(
                 Variable {
                     var_idx: VariableIndex(
-                        52,
+                        54,
                     ),
                     args: [
                         IntLit(
@@ -728,7 +750,7 @@ Var(
 Var(
     Variable {
         var_idx: VariableIndex(
-            19,
+            21,
         ),
         args: [],
     },
@@ -805,7 +827,7 @@ mod program {
                 (
                     Variable {
                         var_idx: VariableIndex(
-                            17,
+                            19,
                         ),
                         args: [],
                     },
@@ -817,7 +839,7 @@ mod program {
         body: [
             PrintForm(
                 (empty),
-                FOO_{Var(Variable { var_idx: VariableIndex(17), args: [] })},
+                FOO_{Var(Variable { var_idx: VariableIndex(19), args: [] })},
             ),
         ],
     },
@@ -842,7 +864,7 @@ mod program {
             Assign(
                 Variable {
                     var_idx: VariableIndex(
-                        52,
+                        54,
                     ),
                     args: [],
                 },

@@ -35,6 +35,22 @@ impl Default for Alignment {
     }
 }
 
+pub fn parse_program(s: &str, var: &VariableInterner) -> ParserResult<Vec<Function>> {
+    Parser::new(s, var).next_program()
+}
+
+pub fn parse_function(s: &str, var: &VariableInterner) -> ParserResult<Function> {
+    Parser::new(s, var).next_function()
+}
+
+pub fn parse_expr(s: &str, var: &VariableInterner) -> ParserResult<Expr> {
+    Parser::new(s, var).next_expr()
+}
+
+pub fn parse_body(s: &str, var: &VariableInterner) -> ParserResult<Vec<Stmt>> {
+    Parser::new(s, var).next_body()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum FormStatus {
     /// \@ ~ ?
@@ -90,7 +106,16 @@ impl<'s, 'v> Parser<'s, 'v> {
     fn is_str_var(&self, name: &str) -> bool {
         matches!(
             name,
-            "RESULTS" | "LOCALS" | "ARGS" | "STR" | "NAME" | "CALLNAME" | "NICKNAME" | "MASTERNAME"
+            "RESULTS"
+                | "LOCALS"
+                | "ARGS"
+                | "STR"
+                | "CSTR"
+                | "TSTR"
+                | "NAME"
+                | "CALLNAME"
+                | "NICKNAME"
+                | "MASTERNAME"
         )
     }
 
@@ -533,20 +558,23 @@ impl<'s, 'v> Parser<'s, 'v> {
                 let var = self.ensure_get_var()?;
                 self.skip_ws();
                 self.ensure_get_char(',')?;
+                self.skip_ws();
 
-                let start = self.current_loc();
                 let num = self
-                    .read_until_newline()
-                    .trim()
-                    .parse::<f32>()
-                    .map_err(|err| {
+                    .text
+                    .split_ascii_whitespace()
+                    .next()
+                    .and_then(|s| Some((s.parse::<f32>().ok()?, s)))
+                    .ok_or_else(|| {
                         (
-                            ParserError::InvalidCode(format!("Float parsing error: {}", err)),
-                            self.from_prev_loc_span(start),
+                            ParserError::MissingToken(format!("times factor")),
+                            self.current_loc_span(),
                         )
                     })?;
 
-                Ok(Some(Stmt::Times(var, NotNan::new(num).unwrap())))
+                self.consume(num.1);
+
+                Ok(Some(Stmt::Times(var, NotNan::new(num.0).unwrap())))
             }
             "GOTO" => {
                 self.skip_ws();
@@ -726,7 +754,7 @@ impl<'s, 'v> Parser<'s, 'v> {
             | "LOADGLOBAL" | "RESETCOLOR" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
             "STRLENS" | "ADDCHARA" | "DELCHARA" | "FINDCHARA" | "SWAPCHARA" | "CLEARLINE"
             | "CHKDATA" | "SETCOLOR" | "MIN" | "MAX" | "TINPUT" | "TINPUTS" | "GETEXPLV"
-            | "UNICODE" | "SPLIT" | "BAR" => {
+            | "UNICODE" | "SPLIT" | "BAR" | "SETBIT" | "RESET_STAIN" => {
                 Ok(Some(Stmt::Command(command.into(), self.read_args('\n')?)))
             }
             _ => Ok(None),
@@ -766,90 +794,79 @@ impl<'s, 'v> Parser<'s, 'v> {
                 ParserError::MissingToken("숫자가 와야합니다.".into()),
                 self.current_loc_span(),
             )
-        })?
+        })
     }
 
-    fn try_read_number(&mut self) -> Option<ParserResult<i64>> {
-        let minus = self.try_get_char('-');
-
-        let mut chars = self.text.chars();
-
-        let mut ret = match chars.next() {
-            Some(n @ '0'..='9') => (n as u32 - '0' as u32) as i64,
-            _ => return None,
+    fn try_read_number(&mut self) -> Option<i64> {
+        let (left, minus) = if let Some(left) = self.text.strip_prefix("-") {
+            (left, true)
+        } else {
+            (self.text.strip_prefix("+").unwrap_or(self.text), false)
         };
 
-        loop {
-            match chars.next() {
-                Some(n @ '0'..='9') => {
-                    ret = ret * 10 + (n as u32 - '0' as u32) as i64;
-                }
-                Some('p') => {
-                    let mut rhs = 0;
-                    loop {
-                        match chars.next() {
-                            Some(n @ '0'..='9') => {
-                                rhs = rhs * 10 + (n as u32 - '0' as u32) as i64;
-                            }
-                            _ => break,
-                        }
-                    }
-                    ret = rhs;
-                    break;
-                }
-                Some('b') if ret == 0 => {
-                    loop {
-                        match chars.next() {
-                            Some('0') => {
-                                ret *= 2;
-                            }
-                            Some('1') => {
-                                ret *= 2;
-                                ret += 1;
-                            }
-                            _ => break,
-                        }
-                    }
-                    break;
-                }
-                Some('x') if ret == 0 => {
-                    loop {
-                        match chars.next() {
-                            Some(n @ '0'..='9') => {
-                                ret = ret * 16 + (n as u32 - '0' as u32) as i64;
-                            }
-                            Some(n @ 'A'..='Z') => {
-                                ret = ret * 16 + (n as u32 - 'A' as u32 + 10) as i64;
-                            }
-                            _ => break,
-                        }
-                    }
-                    break;
-                }
-                Some(ch) => {
-                    if is_ident_char(ch) {
-                        return Some(Err((
-                            ParserError::InvalidCode(format!(
-                                "숫자안에 알수없는 글자 `{ch}`가 있습니다"
-                            )),
-                            self.current_loc_span(),
-                        )));
-                    }
+        let mut ret = 0;
+        let mut consume = 0;
 
-                    break;
-                }
-                None => {
-                    break;
+        if let Some(left) = left.strip_prefix("0x") {
+            consume += 2;
+            let mut chars = left.chars();
+
+            loop {
+                match chars.next() {
+                    Some(ch @ '0'..='9') => {
+                        ret = ret * 16 + (ch as u32 - '-' as u32) as i64;
+                        consume += 1;
+                    }
+                    Some(ch @ 'a'..='f') => {
+                        ret = ret * 16 + (ch as u32 - 'a' as u32 + 10) as i64;
+                        consume += 1;
+                    }
+                    Some(ch @ 'A'..='F') => {
+                        ret = ret * 16 + (ch as u32 - 'A' as u32 + 10) as i64;
+                        consume += 1;
+                    }
+                    _ => break,
                 }
             }
+        } else if let Some(left) = left.strip_prefix("0b") {
+            consume += 2;
+            let mut chars = left.chars();
+
+            loop {
+                match chars.next() {
+                    Some('0') => {
+                        ret *= 2;
+                        consume += 1;
+                    }
+                    Some('1') => {
+                        ret *= 2 + 1;
+                        consume += 1;
+                    }
+                    _ => break,
+                }
+            }
+        } else if matches!(left.as_bytes().get(..2), Some([b'0'..=b'9', b'p'])) {
+            ret = (left.as_bytes()[0] as u32 - b'0' as u32) as i64;
+            if ret >= 10 {
+                return None;
+            }
+
+            let (num, c) = read_digit(&left[2..]);
+
+            consume = c + 2;
+            ret = ret << num;
+        } else if matches!(left.as_bytes()[0], b'0'..=b'9') {
+            let (num, c) = read_digit(left);
+
+            consume = c;
+            ret = num;
+        } else {
+            return None;
         }
 
-        self.text = self
-            .text
-            .split_at(self.text.len() - chars.as_str().len() - 1)
-            .1;
+        self.text = &left[consume..];
 
-        Some(Ok(if minus { -ret } else { ret }))
+        Some(if minus { -ret } else { ret })
     }
 
     fn read_term(&mut self) -> ParserResult<Expr> {
@@ -895,7 +912,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                 Ok(Expr::Var(var))
             }
         } else if let Some(num) = self.try_read_number() {
-            num.map(Expr::IntLit)
+            Ok(Expr::IntLit(num))
         } else if self.try_get_char('!') {
             Ok(Expr::UnaryopExpr(
                 Box::new(self.read_term()?),
@@ -1282,20 +1299,22 @@ fn calculate_binop_expr(first: Expr, stack: &mut Vec<(BinaryOperator, Expr)>) ->
     ret
 }
 
-pub fn parse_program(s: &str, var: &VariableInterner) -> ParserResult<Vec<Function>> {
-    Parser::new(s, var).next_program()
-}
+fn read_digit(bytes: &str) -> (i64, usize) {
+    let mut ret = 0;
+    let mut consume = 0;
+    let mut chars = bytes.chars();
 
-pub fn parse_function(s: &str, var: &VariableInterner) -> ParserResult<Function> {
-    Parser::new(s, var).next_function()
-}
+    loop {
+        match chars.next() {
+            Some(ch @ '0'..='9') => {
+                consume += 1;
+                ret = ret * 10 + (ch as u32 - '0' as u32) as i64;
+            }
+            _ => break,
+        }
+    }
 
-pub fn parse_expr(s: &str, var: &VariableInterner) -> ParserResult<Expr> {
-    Parser::new(s, var).next_expr()
-}
-
-pub fn parse_body(s: &str, var: &VariableInterner) -> ParserResult<Vec<Stmt>> {
-    Parser::new(s, var).next_body()
+    (ret, consume)
 }
 
 #[test]
