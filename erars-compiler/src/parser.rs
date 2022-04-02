@@ -781,6 +781,47 @@ impl<'s, 'v> Parser<'s, 'v> {
                 Some(n @ '0'..='9') => {
                     ret = ret * 10 + (n as u32 - '0' as u32) as i64;
                 }
+                Some('p') => {
+                    let mut rhs = 0;
+                    loop {
+                        match chars.next() {
+                            Some(n @ '0'..='9') => {
+                                rhs = rhs * 10 + (n as u32 - '0' as u32) as i64;
+                            }
+                            _ => break,
+                        }
+                    }
+                    ret = rhs;
+                }
+                Some('b') if ret == 0 => {
+                    loop {
+                        match chars.next() {
+                            Some('0') => {
+                                ret *= 2;
+                            }
+                            Some('1') => {
+                                ret *= 2;
+                                ret += 1;
+                            }
+                            _ => break,
+                        }
+                    }
+                    break;
+                }
+                Some('x') if ret == 0 => {
+                    loop {
+                        match chars.next() {
+                            Some(n @ '0'..='9') => {
+                                ret = ret * 16 + (n as u32 - '0' as u32) as i64;
+                            }
+                            Some(n @ 'A'..='Z') => {
+                                ret = ret * 16 + (n as u32 - 'A' as u32 + 10) as i64;
+                            }
+                            _ => break,
+                        }
+                    }
+                    break;
+                }
                 Some(ch) => {
                     if is_ident_char(ch) {
                         return Some(Err((
@@ -789,19 +830,18 @@ impl<'s, 'v> Parser<'s, 'v> {
                         )));
                     }
 
-                    self.text = self
-                        .text
-                        .split_at(self.text.len() - chars.as_str().len() - 1)
-                        .1;
-
                     break;
                 }
                 None => {
-                    self.clear_text();
                     break;
                 }
             }
         }
+
+        self.text = self
+            .text
+            .split_at(self.text.len() - chars.as_str().len() - 1)
+            .1;
 
         Some(Ok(if minus { -ret } else { ret }))
     }
