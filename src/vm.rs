@@ -400,6 +400,7 @@ impl TerminalVm {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
             Instruction::Nop => {}
+            Instruction::Quit => return Ok(Some(Workflow::Exit)),
             Instruction::Pop => drop(ctx.pop()),
             Instruction::Duplicate => ctx.dup(),
             Instruction::DuplicatePrev => ctx.dup_prev(),
@@ -451,6 +452,8 @@ impl TerminalVm {
                         BulitinVariable::GamebaseTitle => "Title".into(),
                         BulitinVariable::GamebaseVersion => 1000.into(),
                         BulitinVariable::GamebaseInfo => "Info".into(),
+                        BulitinVariable::IsAssi => todo!("ISASSI"),
+                        BulitinVariable::Rand => todo!("RAND"),
                     }
                 } else {
                     let mut args = ctx.take_arg_list(*c)?.into_iter();

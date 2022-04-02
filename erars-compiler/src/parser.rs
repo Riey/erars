@@ -506,6 +506,7 @@ impl<'s, 'v> Parser<'s, 'v> {
         }
 
         match command {
+            "QUIT" => Ok(Some(Stmt::Quit)),
             "IF" => {
                 let mut else_ifs = Vec::new();
                 let else_body = self.read_if_block(&mut else_ifs)?;
@@ -640,7 +641,7 @@ impl<'s, 'v> Parser<'s, 'v> {
             | "WAITANYKEY" | "RESTART" | "FONTITALIC" | "FONTBOLD" | "FONTREGULAR" => {
                 Ok(Some(Stmt::Command(command.into(), Vec::new())))
             }
-            "STRLENS" | "ADDCHARA" | "DELCHARA" | "CLEARLINE" => {
+            "STRLENS" | "ADDCHARA" | "DELCHARA" | "CLEARLINE" | "CHKDATA" => {
                 Ok(Some(Stmt::Command(command.into(), self.read_args()?)))
             }
             _ => Ok(None),

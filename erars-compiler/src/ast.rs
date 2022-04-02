@@ -30,6 +30,7 @@ pub enum Stmt {
     Repeat(Expr, Vec<Stmt>),
     Do(Expr, Vec<Stmt>),
     For(Variable, Expr, Expr, Expr, Vec<Stmt>),
+    Quit,
     Continue,
     Break,
     Command(String, Vec<Expr>),

@@ -193,6 +193,7 @@ impl<'v> Compiler<'v> {
 
     pub fn push_stmt(&mut self, stmt: Stmt) -> CompileResult<()> {
         match stmt {
+            Stmt::Quit => self.out.push(Instruction::Quit),
             Stmt::Print(flags, text) => {
                 self.out.push(Instruction::LoadStr(text));
                 self.out.push(Instruction::Print(flags));

@@ -20,6 +20,7 @@ pub enum BeginType {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Instruction {
     Nop,
+    Quit,
     Pop,
     /// Duplicate first value in stack
     Duplicate,
