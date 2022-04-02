@@ -988,9 +988,15 @@ impl<'s, 'v> Parser<'s, 'v> {
                     "SINGLE" => {
                         infos.push(FunctionInfo::EventFlag(EventFlags::Single));
                     }
+                    "FUNCTION" => {
+                        infos.push(FunctionInfo::Function);
+                    }
+                    "FUNCTIONS" => {
+                        infos.push(FunctionInfo::FunctionS);
+                    }
                     other => {
                         return Err((
-                            ParserError::UnexpectedToken(other.into()),
+                            ParserError::UnknownFunctionHeader(other.into()),
                             self.from_prev_loc_span(start),
                         ))
                     }

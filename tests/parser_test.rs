@@ -595,10 +595,51 @@ mod program {
 
     #[test]
     fn test_method_call() {
-        k9::snapshot!(do_test(
-            "tests/parse_tests/programs/method_call.erb",
-            parse_program
-        ));
+        k9::snapshot!(
+            do_test("tests/parse_tests/programs/method_call.erb", parse_program),
+            r#"
+[
+    Function {
+        header: FunctionHeader {
+            name: "FOO",
+            args: [],
+            infos: [],
+        },
+        body: [
+            Assign(
+                Variable {
+                    var_idx: VariableIndex(
+                        48,
+                    ),
+                    args: [],
+                },
+                None,
+                Method(
+                    "BAR",
+                    [],
+                ),
+            ),
+        ],
+    },
+    Function {
+        header: FunctionHeader {
+            name: "BAR",
+            args: [],
+            infos: [
+                Function,
+            ],
+        },
+        body: [
+            ReturnF(
+                IntLit(
+                    123,
+                ),
+            ),
+        ],
+    },
+]
+"#
+        );
     }
 
     #[test]

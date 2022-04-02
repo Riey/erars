@@ -55,6 +55,8 @@ pub struct FunctionHeader {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FunctionInfo {
     EventFlag(EventFlags),
+    Function,
+    FunctionS,
 }
 
 #[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

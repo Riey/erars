@@ -131,6 +131,7 @@ impl FunctionDic {
                 FunctionInfo::EventFlag(f) => {
                     flags = f;
                 }
+                FunctionInfo::Function | FunctionInfo::FunctionS => {}
             }
         }
 
