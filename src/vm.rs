@@ -316,7 +316,11 @@ impl VmContext {
     }
 
     pub fn is_local_var(&self, idx: &VariableIndex) -> bool {
-        self.call_stack.last().unwrap().local_idxs.contains(idx)
+        self.call_stack
+            .last()
+            .expect("Call stack is empty")
+            .local_idxs
+            .contains(idx)
     }
 
     pub fn new_func(&mut self, label: &str, body: &FunctionBody) {
@@ -707,8 +711,9 @@ impl TerminalVm {
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         self.dic.get_event(ty).run(|body| {
             let label = ty.into();
-            ctx.var.init_local(label, body);
+            ctx.new_func(label, body);
             self.run_body(label, body, chan, ctx)?;
+            ctx.end_func();
 
             Ok(())
         })
