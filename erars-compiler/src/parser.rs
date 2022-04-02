@@ -884,6 +884,7 @@ impl<'s, 'v> Parser<'s, 'v> {
             self.ensure_get_char('"')?;
             Ok(Expr::str(inner))
         } else if let Some(ident) = self.try_get_ident() {
+            self.skip_ws();
             if self.try_get_char('(') {
                 // method
                 let b = self.ban_state.arg;
