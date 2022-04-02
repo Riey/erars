@@ -607,7 +607,7 @@ mod program {
         },
         body: [
             CallForm(
-                FOO_{IntLit(123)},,
+                FOO_{IntLit(123)},
                 [
                     IntLit(
                         345,

@@ -355,7 +355,6 @@ impl<'s, 'v> Parser<'s, 'v> {
                         break;
                     }
                     ',' if self.ban_state.comma => {
-                        skip_count = 0;
                         break;
                     }
                     '#' if self.cond_status == Some(CondStatus::CondFormer) => {
