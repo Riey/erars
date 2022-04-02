@@ -5,8 +5,8 @@ use hashbrown::HashMap;
 
 use crate::value::Value;
 use erars_compiler::{
-    CompiledFunction, Event, EventFlags, EventType, FunctionInfo, Instruction, KnownVariables,
-    VariableIndex, VariableInfo, VariableInterner,
+    CompiledFunction, Event, EventFlags, EventType, Expr, FunctionInfo, Instruction,
+    KnownVariables, VariableIndex, VariableInfo, VariableInterner,
 };
 use serde::{Deserialize, Serialize};
 
@@ -14,9 +14,8 @@ use serde::{Deserialize, Serialize};
 pub struct FunctionBody {
     local_size: usize,
     locals_size: usize,
-    default_arg: Option<Value>,
     body: Vec<Instruction>,
-    args: Vec<(VariableIndex, ArrayVec<usize, 4>)>,
+    args: Vec<(VariableIndex, Option<Value>, ArrayVec<usize, 4>)>,
     local_vars: HashMap<VariableIndex, VariableInfo>,
 }
 
@@ -31,25 +30,25 @@ impl FunctionBody {
             local_size,
             locals_size,
             body,
-            default_arg: None,
             args: Vec::new(),
             local_vars,
         }
     }
 
-    pub fn push_arg(&mut self, var_idx: VariableIndex, indices: ArrayVec<usize, 4>) {
-        self.args.push((var_idx, indices));
+    pub fn push_arg(
+        &mut self,
+        var_idx: VariableIndex,
+        default_value: Option<Value>,
+        indices: ArrayVec<usize, 4>,
+    ) {
+        self.args.push((var_idx, default_value, indices));
     }
 
     pub fn push_local(&mut self, var_idx: VariableIndex, info: VariableInfo) {
         self.local_vars.insert(var_idx, info);
     }
 
-    pub fn set_default_arg(&mut self, value: Value) {
-        self.default_arg = Some(value);
-    }
-
-    pub fn args(&self) -> &[(VariableIndex, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[(VariableIndex, Option<Value>, ArrayVec<usize, 4>)] {
         &self.args
     }
 
@@ -123,7 +122,30 @@ impl FunctionDic {
             body: func.body,
             ..Default::default()
         };
+
         let header = func.header;
+
+        for (var, default_value) in header.args {
+            body.push_arg(
+                var.var_idx,
+                default_value.map(|v| match v {
+                    Expr::IntLit(i) => i.into(),
+                    Expr::StringLit(s) => s.into(),
+                    _ => panic!("default arg must be constant"),
+                }),
+                var.args
+                    .into_iter()
+                    .map(|v| {
+                        if let Expr::IntLit(i) = v {
+                            i as usize
+                        } else {
+                            panic!("Variable index must be constant")
+                        }
+                    })
+                    .collect(),
+            );
+        }
+
         let mut flags = EventFlags::None;
 
         for info in header.infos {

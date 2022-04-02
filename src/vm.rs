@@ -693,14 +693,24 @@ impl TerminalVm {
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         let body = self.dic.get_func(label)?;
+        dbg!(body.args(), args);
 
         ctx.new_func(label, body);
 
-        for ((var_idx, arg_indices), arg) in body.args().iter().zip(args) {
-            let var = ctx.var.get_var(*var_idx).unwrap();
-            var.1
-                .resolve(0)
-                .set(arg_indices.iter().copied(), arg.clone())?;
+        let mut args = args.iter().cloned();
+
+        for (var_idx, default_value, arg_indices) in body.args().iter() {
+            let var = if ctx.is_local_var(var_idx) {
+                ctx.var.get_local_var(label, *var_idx)?
+            } else {
+                ctx.var.get_var(*var_idx)?
+            };
+
+            var.1.assume_normal().set(
+                arg_indices.iter().copied(),
+                args.next()
+                    .unwrap_or_else(|| default_value.clone().unwrap()),
+            )?;
         }
 
         let ret = self.run_body(label, body, chan, ctx);
