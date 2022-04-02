@@ -34,6 +34,10 @@ pub enum BulitinVariable {
     GamebaseInfo,
     #[strum(to_string = "GAMEBASE_VERSION")]
     GamebaseVersion,
+    #[strum(to_string = "RAND")]
+    Rand,
+    #[strum(to_string = "ISASSI")]
+    IsAssi,
 }
 
 #[derive(
@@ -71,13 +75,15 @@ pub enum KnownVariables {
     Result,
     ResultS,
     Exp,
+    ExpLv,
     Juel,
-    Param,
+    Palam,
     Base,
     MaxBase,
 
-    Rand,
+    Tflag,
 
+    PalamName,
     FlagName,
     TalentName,
     ItemName,
@@ -134,7 +140,8 @@ impl VariableInterner {
             "MASTER" "TARGET" "ASSI"
             "FLAG" "DAY" "TIME"
             "STR"
-            "ABL" "CFLAG" "TALENT" "NAME" "CALLNAME" "NICKNAME" "MASTERNAME"
+            "ABL" "CFLAG" "TALENT" "MARK"
+            "NAME" "CALLNAME" "NICKNAME" "MASTERNAME"
         );
 
         ret
