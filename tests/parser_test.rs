@@ -341,6 +341,42 @@ mod body {
             2,
         ),
     ),
+    Assign(
+        Variable {
+            var_idx: VariableIndex(
+                15,
+            ),
+            args: [],
+        },
+        None,
+        IntLit(
+            -65535,
+        ),
+    ),
+    Assign(
+        Variable {
+            var_idx: VariableIndex(
+                15,
+            ),
+            args: [],
+        },
+        None,
+        IntLit(
+            -1,
+        ),
+    ),
+    Assign(
+        Variable {
+            var_idx: VariableIndex(
+                15,
+            ),
+            args: [],
+        },
+        None,
+        IntLit(
+            -2,
+        ),
+    ),
 ]
 "
         );

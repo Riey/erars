@@ -761,18 +761,12 @@ impl<'s, 'v> Parser<'s, 'v> {
     }
 
     fn try_read_number(&mut self) -> Option<ParserResult<i64>> {
-        let start = self.current_loc();
+        let minus = self.try_get_char('-');
+
         let mut chars = self.text.chars();
 
-        let (mut ret, minus) = match chars.next() {
-            Some(n @ '0'..='9') => ((n as u32 - '0' as u32) as i64, false),
-            Some('-') => {
-                if let Some(n @ '0'..='9') = chars.next() {
-                    ((n as u32 - '0' as u32) as i64, true)
-                } else {
-                    return None;
-                }
-            }
+        let mut ret = match chars.next() {
+            Some(n @ '0'..='9') => (n as u32 - '0' as u32) as i64,
             _ => return None,
         };
 
@@ -792,6 +786,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                         }
                     }
                     ret = rhs;
+                    break;
                 }
                 Some('b') if ret == 0 => {
                     loop {
@@ -825,8 +820,10 @@ impl<'s, 'v> Parser<'s, 'v> {
                 Some(ch) => {
                     if is_ident_char(ch) {
                         return Some(Err((
-                            ParserError::InvalidCode(format!("식별자 앞에 숫자를 쓸 수 없습니다.")),
-                            self.from_prev_loc_span(start),
+                            ParserError::InvalidCode(format!(
+                                "숫자안에 알수없는 글자 `{ch}`가 있습니다"
+                            )),
+                            self.current_loc_span(),
                         )));
                     }
 
