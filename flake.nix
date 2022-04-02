@@ -13,12 +13,12 @@
                     pkgs = nixpkgs.legacyPackages.${system};
                     deps = with pkgs; [
                         libGL
-                        xlibs.libX11
-                        xlibs.libXcursor
-                        xlibs.libXrandr
-                        xlibs.libXxf86vm
-                        xlibs.libXi
-                        xlibs.libxcb
+                        xorg.libX11
+                        xorg.libXcursor
+                        xorg.libXrandr
+                        xorg.libXxf86vm
+                        xorg.libXi
+                        xorg.libxcb
                         wayland
                         libxkbcommon
                         vulkan-loader
