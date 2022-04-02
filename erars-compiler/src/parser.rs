@@ -90,7 +90,7 @@ impl<'s, 'v> Parser<'s, 'v> {
     fn is_str_var(&self, name: &str) -> bool {
         matches!(
             name,
-            "LOCALS" | "STR" | "NAME" | "CALLNAME" | "NICKNAME" | "MASTERNAME"
+            "RESULTS" | "LOCALS" | "ARGS" | "STR" | "NAME" | "CALLNAME" | "NICKNAME" | "MASTERNAME"
         )
     }
 
