@@ -2,7 +2,8 @@ use std::ops::Range;
 
 use crate::{
     ast::FormText, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionHeader,
-    FunctionInfo, ParserError, ParserResult, Stmt, Variable, VariableIndex, VariableInterner,
+    FunctionInfo, ParserError, ParserResult, Stmt, UnaryOperator, Variable, VariableIndex,
+    VariableInterner,
 };
 use bitflags::bitflags;
 use ordered_float::NotNan;
@@ -555,7 +556,7 @@ impl<'s, 'v> Parser<'s, 'v> {
             }
             "RETURN" => {
                 self.skip_ws();
-                Ok(Some(Stmt::Return(self.read_args()?)))
+                Ok(Some(Stmt::Return(self.read_args('\n')?)))
             }
             "RETURNF" => {
                 self.skip_ws();
@@ -578,7 +579,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                 let func = self.ensure_ident(|| "Function label")?;
 
                 let args = if self.try_get_char(',') {
-                    self.read_args()?
+                    self.read_args('\n')?
                 } else {
                     Vec::new()
                 };
@@ -628,7 +629,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                 self.skip_ws();
 
                 let args = if self.try_get_char(',') {
-                    self.read_args()?
+                    self.read_args('\n')?
                 } else {
                     Vec::new()
                 };
@@ -638,21 +639,20 @@ impl<'s, 'v> Parser<'s, 'v> {
             "CONTINUE" => Ok(Some(Stmt::Continue)),
             "BREAK" => Ok(Some(Stmt::Break)),
             "DRAWLINE" | "INPUT" | "INPUTS" | "RESETDATA" | "ADDDEFCHARA" | "WAIT"
-            | "WAITANYKEY" | "RESTART" | "FONTITALIC" | "FONTBOLD" | "FONTREGULAR" | "LOADGLOBAL"
-            | "RESETCOLOR" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
-            "STRLENS" | "ADDCHARA" | "DELCHARA" | "CLEARLINE" | "CHKDATA" | "SETCOLOR" | "MIN" | "MAX" => {
-                Ok(Some(Stmt::Command(command.into(), self.read_args()?)))
-            }
+            | "WAITANYKEY" | "RESTART" | "FONTITALIC" | "FONTBOLD" | "FONTREGULAR"
+            | "LOADGLOBAL" | "RESETCOLOR" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
+            "STRLENS" | "ADDCHARA" | "DELCHARA" | "CLEARLINE" | "CHKDATA" | "SETCOLOR" | "MIN"
+            | "MAX" => Ok(Some(Stmt::Command(command.into(), self.read_args('\n')?))),
             _ => Ok(None),
         }
     }
 
-    fn read_args(&mut self) -> ParserResult<Vec<Expr>> {
+    fn read_args(&mut self, end: char) -> ParserResult<Vec<Expr>> {
         self.skip_ws();
 
         let mut ret = Vec::new();
 
-        if self.try_get_char('\n') {
+        if self.try_get_char(end) {
             // empty
             return Ok(ret);
         }
@@ -665,6 +665,10 @@ impl<'s, 'v> Parser<'s, 'v> {
             if !self.try_get_char(',') {
                 break;
             }
+        }
+
+        if !self.text.is_empty() {
+            self.ensure_get_char(end)?;
         }
 
         Ok(ret)
@@ -733,9 +737,8 @@ impl<'s, 'v> Parser<'s, 'v> {
             if self.try_get_char('(') {
                 // method
                 let b = self.ban_state;
-                let args = self.read_args()?;
+                let args = self.read_args(')')?;
                 self.ban_state = b;
-                self.ensure_get_char(')')?;
                 Ok(Expr::Method(ident.into(), args))
             } else {
                 // variable
@@ -757,10 +760,15 @@ impl<'s, 'v> Parser<'s, 'v> {
             }
         } else if let Some(num) = self.try_read_number() {
             num.map(Expr::IntLit)
+        } else if self.try_get_char('!') {
+            Ok(Expr::UnaryopExpr(
+                Box::new(self.read_term()?),
+                UnaryOperator::Not,
+            ))
         } else {
             Err((
                 ParserError::InvalidCode(format!("표현식이 와야합니다.")),
-                self.current_loc_span(),
+                self.from_prev_loc_span(start_idx),
             ))
         }
     }
