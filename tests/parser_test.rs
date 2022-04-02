@@ -32,7 +32,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                0,
+                5,
             ),
             args: [
                 BinopExpr(
@@ -100,7 +100,7 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                13,
+                18,
             ),
             args: [],
         },
@@ -112,13 +112,13 @@ mod body {
     Assign(
         Variable {
             var_idx: VariableIndex(
-                13,
+                18,
             ),
             args: [],
         },
         None,
         FormText(
-            {Var(Variable { var_idx: VariableIndex(12), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(12), args: [IntLit(1)] }), StringLit("00")])},
+            {Var(Variable { var_idx: VariableIndex(17), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(1)] }), StringLit("00")])},
         ),
     ),
     Assign(
@@ -130,7 +130,7 @@ mod body {
                 Var(
                     Variable {
                         var_idx: VariableIndex(
-                            2,
+                            7,
                         ),
                         args: [],
                     },
@@ -139,7 +139,7 @@ mod body {
         },
         None,
         FormText(
-            {CondExpr(Var(Variable { var_idx: VariableIndex(43), args: [Var(Variable { var_idx: VariableIndex(2), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
+            {CondExpr(Var(Variable { var_idx: VariableIndex(43), args: [Var(Variable { var_idx: VariableIndex(7), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
         ),
     ),
 ]
@@ -316,7 +316,7 @@ BinopExpr(
         Var(
             Variable {
                 var_idx: VariableIndex(
-                    10,
+                    15,
                 ),
                 args: [],
             },
@@ -337,7 +337,7 @@ BinopExpr(
                     Var(
                         Variable {
                             var_idx: VariableIndex(
-                                2,
+                                7,
                             ),
                             args: [],
                         },
@@ -395,7 +395,7 @@ Method(
         Var(
             Variable {
                 var_idx: VariableIndex(
-                    12,
+                    17,
                 ),
                 args: [
                     IntLit(
@@ -496,7 +496,7 @@ StringLit(
 Var(
     Variable {
         var_idx: VariableIndex(
-            0,
+            5,
         ),
         args: [
             IntLit(
@@ -517,7 +517,7 @@ Var(
 Var(
     Variable {
         var_idx: VariableIndex(
-            0,
+            5,
         ),
         args: [
             Var(
@@ -546,7 +546,7 @@ Var(
 Var(
     Variable {
         var_idx: VariableIndex(
-            0,
+            5,
         ),
         args: [],
     },

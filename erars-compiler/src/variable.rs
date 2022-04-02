@@ -1,10 +1,41 @@
 use arrayvec::ArrayVec;
 use enum_map::{Enum, EnumMap};
 use hashbrown::HashMap;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
-use strum::IntoStaticStr;
+use strum::{EnumCount, IntoStaticStr};
 use strum::{EnumIter, IntoEnumIterator};
+
+#[derive(
+    Copy,
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    EnumIter,
+    Serialize,
+    Deserialize,
+    IntoStaticStr,
+    EnumCount,
+    FromPrimitive,
+)]
+pub enum BulitinVariable {
+    #[strum(to_string = "GAMEBASE_AUTHOR")]
+    GamebaseAuthor,
+    #[strum(to_string = "GAMEBASE_TITLE")]
+    GamebaseTitle,
+    #[strum(to_string = "GAMEBASE_YEAR")]
+    GamebaseYear,
+    #[strum(to_string = "GAMEBASE_INFO")]
+    GamebaseInfo,
+    #[strum(to_string = "GAMEBASE_VERSION")]
+    GamebaseVersion,
+}
 
 #[derive(
     Clone,
@@ -22,8 +53,6 @@ use strum::{EnumIter, IntoEnumIterator};
     IntoStaticStr,
 )]
 #[strum(serialize_all = "UPPERCASE")]
-#[allow(non_camel_case_types)]
-
 /// only contains variable required from either VM or compiler
 pub enum KnownVariables {
     Count,
@@ -49,11 +78,6 @@ pub enum KnownVariables {
     MaxBase,
 
     Rand,
-    Gamebase_Version,
-    Gamebase_Author,
-    Gamebase_Info,
-    Gamebase_Title,
-    Gamebase_Year,
 
     FlagName,
     TalentName,
@@ -77,12 +101,24 @@ impl VariableInterner {
             next: 0,
         };
 
+        for builtin in BulitinVariable::iter() {
+            ret.intern(<&str>::from(builtin));
+        }
+
         for known in KnownVariables::iter() {
             let idx = ret.intern(<&str>::from(known));
             ret.known_idxs[known] = idx;
         }
 
         ret
+    }
+
+    pub fn len(&self) -> u32 {
+        self.next
+    }
+
+    pub fn idxs_without_builtin(&self) -> impl Iterator<Item = VariableIndex> {
+        (BulitinVariable::COUNT as u32..self.next).map(VariableIndex)
     }
 
     pub fn with_default_variables() -> Self {
@@ -144,3 +180,25 @@ pub struct VariableInfo {
     Clone, Copy, Default, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
 )]
 pub struct VariableIndex(u32);
+
+impl VariableIndex {
+    #[inline]
+    pub fn as_usize(self) -> usize {
+        self.0 as usize
+    }
+
+    #[inline]
+    pub fn is_builtin(self) -> bool {
+        self.as_usize() < BulitinVariable::COUNT
+    }
+
+    pub fn to_builtin(self) -> Option<BulitinVariable> {
+        FromPrimitive::from_u32(self.0)
+    }
+}
+
+impl std::fmt::Display for VariableIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Var[{}]", self.0)
+    }
+}

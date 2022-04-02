@@ -2,14 +2,15 @@ use std::iter;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
-use either::Either;
-use strum::{Display, EnumIter, EnumString};
+use smartstring::{LazyCompact, SmartString};
+use strum::Display;
 
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use erars_compiler::{
-    BeginType, BinaryOperator, EventType, Instruction, PrintFlags, UnaryOperator, VariableInterner,
+    BeginType, BinaryOperator, BulitinVariable, EventType, Instruction, KnownVariables, PrintFlags,
+    UnaryOperator, VariableIndex, VariableInterner,
 };
 
 use crate::function::{FunctionBody, FunctionDic};
@@ -21,6 +22,7 @@ use crate::value::Value;
 pub struct VariableInfo {
     is_chara: bool,
     is_str: bool,
+    is_local: bool,
     default_int: i64,
     size: Vec<usize>,
 }
@@ -29,33 +31,6 @@ impl VariableInfo {
     pub fn arg_len(&self) -> usize {
         self.size.len() + self.is_chara as usize
     }
-}
-
-#[derive(
-    Copy,
-    Clone,
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    EnumIter,
-    EnumString,
-    Serialize,
-    Deserialize,
-)]
-pub enum BulitinVariable {
-    #[strum(to_string = "GAMEBASE_AUTHOR")]
-    GamebaseAuthor,
-    #[strum(to_string = "GAMEBASE_TITLE")]
-    GamebaseTitle,
-    #[strum(to_string = "GAMEBASE_YEAR")]
-    GamebaseYear,
-    #[strum(to_string = "GAMEBASE_INFO")]
-    GamebaseInfo,
-    #[strum(to_string = "GAMEBASE_VERSION")]
-    GamebaseVersion,
 }
 
 #[derive(Clone, Debug)]
@@ -164,134 +139,208 @@ impl Variable {
     }
 }
 
+enum UniformVariable {
+    Normal(Variable),
+    Character(Vec<Variable>),
+    Local(HashMap<String, Variable>),
+    LocalCharacter(HashMap<String, Vec<Variable>>),
+}
+
+impl UniformVariable {
+    pub fn new(info: &VariableInfo) -> Self {
+        match (info.is_local, info.is_chara) {
+            (false, false) => UniformVariable::Normal(Variable::new(info)),
+            (false, true) => UniformVariable::Character(Vec::new()),
+            (true, false) => UniformVariable::Local(HashMap::new()),
+            (true, true) => UniformVariable::LocalCharacter(HashMap::new()),
+        }
+    }
+
+    pub fn assume_normal(&mut self) -> &mut Variable {
+        match self {
+            Self::Normal(v) => v,
+            _ => panic!("Variable is not normal variable"),
+        }
+    }
+
+    pub fn resolve(&mut self, name: &str, target: usize) -> &mut Variable {
+        match self {
+            UniformVariable::Normal(v) => v,
+            UniformVariable::Character(c) => c.get_mut(target).unwrap(),
+            UniformVariable::Local(l) => l.get_mut(name).unwrap(),
+            UniformVariable::LocalCharacter(lc) => {
+                lc.get_mut(name).unwrap().get_mut(target).unwrap()
+            }
+        }
+    }
+
+    pub fn add_chara(&mut self, name: &str, info: &VariableInfo) {
+        match self {
+            UniformVariable::Character(c) => c.push(Variable::new(info)),
+            UniformVariable::LocalCharacter(c) => {
+                c.get_mut(name).unwrap().push(Variable::new(info))
+            }
+            _ => {}
+        }
+    }
+}
+
 struct VariableStorage {
     character_len: usize,
-    variables: HashMap<String, (VariableInfo, Either<Variable, Vec<Variable>>)>,
+    variable_interner: VariableInterner,
+    variables: Vec<(VariableInfo, UniformVariable)>,
+    inited_functions: HashSet<SmartString<LazyCompact>>,
 }
 
 impl VariableStorage {
-    pub fn new(infos: &HashMap<String, VariableInfo>) -> Self {
-        let variables = infos
-            .iter()
-            .map(|(name, info)| {
-                let var = if info.is_chara {
-                    Either::Right(Vec::new())
-                } else {
-                    Either::Left(Variable::new(info))
-                };
+    pub fn new(infos: &HashMap<String, VariableInfo>, variable_interner: VariableInterner) -> Self {
+        let variables = variable_interner
+            .idxs_without_builtin()
+            .map(|idx| {
+                let name = variable_interner.resolve(idx).unwrap();
+                let info = infos
+                    .get(name.as_str())
+                    .cloned()
+                    .unwrap_or_else(|| VariableInfo {
+                        default_int: 0,
+                        is_chara: false,
+                        is_local: false,
+                        is_str: false,
+                        size: vec![1000],
+                    });
 
-                (name.clone(), (info.clone(), var))
+                let var = UniformVariable::new(&info);
+
+                (info, var)
             })
             .collect();
 
         Self {
             character_len: 0,
+            variable_interner,
             variables,
+            inited_functions: HashSet::new(),
         }
     }
 
     fn init_local(&mut self, name: &str, body: &FunctionBody) {
-        self.variables
-            .entry(format!("ARG@{}", name))
-            .or_insert_with(|| {
-                let arg_info = VariableInfo {
-                    default_int: 0,
-                    size: vec![1000],
-                    is_str: false,
-                    is_chara: false,
-                };
-                let arg = Variable::new(&arg_info);
-                (arg_info, Either::Left(arg))
-            });
-        self.variables
-            .entry(format!("ARGS@{}", name))
-            .or_insert_with(|| {
-                let args_info = VariableInfo {
-                    default_int: 0,
-                    size: vec![100],
-                    is_str: true,
-                    is_chara: false,
-                };
-                let args = Variable::new(&args_info);
-                (args_info, Either::Left(args))
-            });
-        self.variables
-            .entry(format!("LOCAL@{}", name))
-            .or_insert_with(|| {
-                let local_info = VariableInfo {
-                    default_int: 0,
-                    size: vec![body.local_size()],
-                    is_str: false,
-                    is_chara: false,
-                };
-                let local = Variable::new(&local_info);
-                (local_info, Either::Left(local))
-            });
-        self.variables
-            .entry(format!("LOCALS@{}", name))
-            .or_insert_with(|| {
-                let locals_info = VariableInfo {
-                    default_int: 0,
-                    size: vec![body.locals_size()],
-                    is_str: true,
-                    is_chara: false,
-                };
-                let locals = Variable::new(&locals_info);
-                (locals_info, Either::Left(locals))
-            });
+        self.inited_functions.get_or_insert_with(name, |name| {
+            self.variable_interner.intern(format!("ARG@{}", name));
+            let arg_info = VariableInfo {
+                default_int: 0,
+                size: vec![1000],
+                is_local: true,
+                is_str: false,
+                is_chara: false,
+            };
+            let arg = UniformVariable::new(&arg_info);
+            self.variables.push((arg_info, arg));
+
+            self.variable_interner.intern(format!("ARGS@{}", name));
+            let arg_info = VariableInfo {
+                default_int: 0,
+                size: vec![100],
+                is_local: true,
+                is_str: true,
+                is_chara: false,
+            };
+            let arg = UniformVariable::new(&arg_info);
+            self.variables.push((arg_info, arg));
+
+            self.variable_interner.intern(format!("LOCAL@{}", name));
+            let arg_info = VariableInfo {
+                default_int: 0,
+                size: vec![body.local_size()],
+                is_local: true,
+                is_str: false,
+                is_chara: false,
+            };
+            let arg = UniformVariable::new(&arg_info);
+            self.variables.push((arg_info, arg));
+
+            self.variable_interner.intern(format!("LOCALS@{}", name));
+            let arg_info = VariableInfo {
+                default_int: 0,
+                size: vec![body.locals_size()],
+                is_local: true,
+                is_str: true,
+                is_chara: false,
+            };
+            let arg = UniformVariable::new(&arg_info);
+            self.variables.push((arg_info, arg));
+
+            name.into()
+        });
     }
 
-    pub fn target(&mut self) -> Result<usize> {
-        Ok((*self
-            .get_global("TARGET")
-            .ok_or_else(|| anyhow!("TARGET variable is not exists"))?
-            .get_int(iter::empty())?)
-        .try_into()?)
+    fn get_var(&mut self, idx: VariableIndex) -> Result<&mut (VariableInfo, UniformVariable)> {
+        self.variables
+            .get_mut(idx.as_usize())
+            .ok_or_else(|| anyhow!("Variable {} is not exists", idx))
     }
 
-    fn get_var(
+    fn get_var2(
         &mut self,
-        name: &str,
-    ) -> Result<&mut (VariableInfo, Either<Variable, Vec<Variable>>)> {
-        self.variables
-            .get_mut(name)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", name))
+        l: VariableIndex,
+        r: VariableIndex,
+    ) -> Result<(
+        &mut (VariableInfo, UniformVariable),
+        &mut (VariableInfo, UniformVariable),
+    )> {
+        assert_ne!(l, r);
+
+        if l.as_usize() >= self.variables.len() {
+            bail!("Variable {} is not exists", l);
+        }
+
+        if r.as_usize() >= self.variables.len() {
+            bail!("Variable {} is not exists", r);
+        }
+
+        unsafe {
+            let ptr = self.variables.as_mut_ptr();
+
+            let l = ptr.add(l.as_usize());
+            let r = ptr.add(r.as_usize());
+
+            Ok((l.as_mut().unwrap_unchecked(), r.as_mut().unwrap_unchecked()))
+        }
     }
 
     pub fn reset_data(&mut self) {
         self.character_len = 0;
-        self.variables
-            .values_mut()
-            .for_each(|(info, var)| match var {
-                Either::Left(v) => *v = Variable::new(info),
-                Either::Right(cvar) => cvar.clear(),
-            });
+        for var in self.variables.iter_mut() {
+            var.1 = UniformVariable::new(&var.0);
+        }
     }
 
-    pub fn add_chara(&mut self) {
+    pub fn add_chara(&mut self, name: &str) {
         self.character_len += 1;
-        self.variables.values_mut().for_each(|(info, var)| {
-            if let Either::Right(cvar) = var {
-                cvar.push(Variable::new(info));
-            }
+        self.variables.iter_mut().for_each(|(info, var)| {
+            var.add_chara(name, info);
         });
     }
 
-    pub fn get_global(&mut self, name: &str) -> Option<&mut Variable> {
-        if let Either::Left(ref mut gvar) = self.variables.get_mut(name)?.1 {
-            Some(gvar)
-        } else {
-            None
-        }
+    pub fn get_known2(
+        &mut self,
+        l: KnownVariables,
+        r: KnownVariables,
+    ) -> (&mut UniformVariable, &mut UniformVariable) {
+        let (l, r) = self
+            .get_var2(
+                self.variable_interner.get_known(l),
+                self.variable_interner.get_known(r),
+            )
+            .unwrap();
+
+        (&mut l.1, &mut r.1)
     }
 
-    #[allow(unused)]
-    pub fn get_chara(&mut self, name: &str, no: usize) -> Option<&mut Variable> {
-        if let Either::Right(ref mut cvar) = self.variables.get_mut(name)?.1 {
-            cvar.get_mut(no)
-        } else {
-            None
-        }
+    pub fn get_known(&mut self, known: KnownVariables) -> &mut UniformVariable {
+        &mut self
+            .get_var(self.variable_interner.get_known(known))
+            .unwrap()
+            .1
     }
 }
 
@@ -309,9 +358,9 @@ pub struct VmContext {
 }
 
 impl VmContext {
-    pub fn new(infos: &HashMap<String, VariableInfo>) -> Self {
+    pub fn new(infos: &HashMap<String, VariableInfo>, variable_interner: VariableInterner) -> Self {
         Self {
-            var: VariableStorage::new(infos),
+            var: VariableStorage::new(infos, variable_interner),
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
@@ -362,19 +411,16 @@ impl VmContext {
 
 pub struct TerminalVm {
     dic: FunctionDic,
-    var: VariableInterner,
 }
 
 impl TerminalVm {
-    pub fn new(function_dic: FunctionDic, var: VariableInterner) -> Self {
-        Self {
-            dic: function_dic,
-            var,
-        }
+    pub fn new(function_dic: FunctionDic) -> Self {
+        Self { dic: function_dic }
     }
 
     fn run_instruction(
         &self,
+        func_name: &str,
         inst: &Instruction,
         cursor: &mut usize,
         chan: &ConsoleChannel,
@@ -384,40 +430,44 @@ impl TerminalVm {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
             Instruction::Nop => {}
-            Instruction::StoreVar(var, c) => {
-                let target = ctx.var.target()?;
-
-                let name = self.var.resolve(*var).unwrap();
-
-                if name.parse::<BulitinVariable>().is_ok() {
+            Instruction::StoreVar(var_idx, c) => {
+                if var_idx.is_builtin() {
                     bail!("Can't edit builtin variable");
+                }
+
+                let target = *ctx
+                    .var
+                    .get_known(KnownVariables::Target)
+                    .assume_normal()
+                    .get_int(iter::empty())?;
+
+                let mut args = ctx.take_arg_list(*c)?.into_iter();
+                let value = ctx.pop();
+
+                let (info, var) = ctx.var.get_var(*var_idx)?;
+
+                let var = if info.is_chara {
+                    let no = if args.len() < info.arg_len() {
+                        target as usize
+                    } else {
+                        args.next().unwrap()
+                    };
+
+                    var.resolve(func_name, no)
                 } else {
-                    let mut args = ctx.take_arg_list(*c)?.into_iter();
-                    let value = ctx.pop();
-
-                    let (info, var) = ctx.var.get_var(&name)?;
-
-                    match var {
-                        Either::Left(gvar) => {
-                            gvar.set(args, value)?;
-                        }
-                        Either::Right(cvar) => {
-                            let no = if args.len() < info.arg_len() {
-                                target
-                            } else {
-                                args.next().unwrap()
-                            };
-                            cvar[no].set(args, value)?
-                        }
-                    }
+                    var.resolve(func_name, 0)
                 };
+
+                var.set(args, value)?;
             }
-            Instruction::LoadVar(var, c) => {
-                let target = ctx.var.target()?;
+            Instruction::LoadVar(var_idx, c) => {
+                let target = *ctx
+                    .var
+                    .get_known(KnownVariables::Target)
+                    .assume_normal()
+                    .get_int(iter::empty())?;
 
-                let name = self.var.resolve(*var).unwrap();
-
-                let value = if let Ok(builtin) = name.parse() {
+                let value = if let Some(builtin) = var_idx.to_builtin() {
                     match builtin {
                         BulitinVariable::GamebaseAuthor => "Empty".into(),
                         BulitinVariable::GamebaseYear => 2022i64.into(),
@@ -428,19 +478,21 @@ impl TerminalVm {
                 } else {
                     let mut args = ctx.take_arg_list(*c)?.into_iter();
 
-                    let (info, var) = ctx.var.get_var(&name)?;
+                    let (info, var) = ctx.var.get_var(*var_idx)?;
 
-                    match var {
-                        Either::Left(gvar) => gvar.get(args)?,
-                        Either::Right(cvar) => {
-                            let no = if args.len() < info.arg_len() {
-                                target
-                            } else {
-                                args.next().unwrap()
-                            };
-                            cvar[no].get(args)?
-                        }
-                    }
+                    let var = if info.is_chara {
+                        let no = if args.len() < info.arg_len() {
+                            target as usize
+                        } else {
+                            args.next().unwrap()
+                        };
+
+                        var.resolve(func_name, no)
+                    } else {
+                        var.resolve(func_name, 0)
+                    };
+
+                    var.get(args)?
                 };
 
                 ctx.push(value);
@@ -463,20 +515,20 @@ impl TerminalVm {
                 let mut result_idx = 0usize;
                 let mut results_idx = 0usize;
 
+                let (result, results) = ctx
+                    .var
+                    .get_known2(KnownVariables::Result, KnownVariables::ResultS);
+                let result = result.assume_normal();
+                let results = results.assume_normal();
+
                 for value in values {
                     match value {
                         Value::Int(_) => {
-                            ctx.var
-                                .get_global("RESULT")
-                                .unwrap()
-                                .set(iter::once(result_idx), value)?;
+                            result.set(iter::once(result_idx), value)?;
                             result_idx += 1;
                         }
                         Value::String(_) => {
-                            ctx.var
-                                .get_global("RESULTS")
-                                .unwrap()
-                                .set(iter::once(results_idx), value)?;
+                            results.set(iter::once(results_idx), value)?;
                             results_idx += 1;
                         }
                     }
@@ -597,8 +649,8 @@ impl TerminalVm {
                             ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
                             ConsoleResult::Value(ret) => {
                                 ctx.var
-                                    .get_global("RESULT")
-                                    .unwrap()
+                                    .get_known(KnownVariables::Result)
+                                    .assume_normal()
                                     .set(iter::empty(), ret)?;
                             }
                         }
@@ -608,7 +660,7 @@ impl TerminalVm {
                         return Ok(Some(Workflow::Exit));
                     }
                     "ADDDEFCHARA" => {
-                        ctx.var.add_chara();
+                        ctx.var.add_chara(func_name);
                     }
                     "RESETDATA" => {
                         ctx.var.reset_data();
@@ -626,6 +678,7 @@ impl TerminalVm {
 
     fn run_body(
         &self,
+        func_name: &str,
         body: &FunctionBody,
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
@@ -636,7 +689,7 @@ impl TerminalVm {
 
         while let Some(inst) = insts.get(cursor) {
             cursor += 1;
-            match self.run_instruction(inst, &mut cursor, chan, ctx) {
+            match self.run_instruction(func_name, inst, &mut cursor, chan, ctx) {
                 Ok(None) => {}
                 Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
                 Ok(Some(Workflow::Return)) => break,
@@ -662,20 +715,23 @@ impl TerminalVm {
 
         ctx.new_func();
 
-        for ((arg_name, arg_indices), arg) in body.args().iter().zip(args) {
-            let var = ctx.var.get_global(arg_name).unwrap();
-            var.set(arg_indices.iter().copied(), arg.clone())?;
+        for ((var_idx, arg_indices), arg) in body.args().iter().zip(args) {
+            let var = ctx.var.get_var(*var_idx).unwrap();
+            var.1
+                .resolve(label, 0)
+                .set(arg_indices.iter().copied(), arg.clone())?;
         }
 
         ctx.end_func();
 
-        self.run_body(body, chan, ctx)
+        self.run_body(label, body, chan, ctx)
     }
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         self.dic.get_event(ty).run(|body| {
-            ctx.var.init_local(ty.into(), body);
-            self.run_body(body, chan, ctx)?;
+            let label = ty.into();
+            ctx.var.init_local(label, body);
+            self.run_body(label, body, chan, ctx)?;
 
             Ok(())
         })

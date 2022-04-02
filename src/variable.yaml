@@ -1,25 +1,13 @@
-DAY:
+# DAY:
   # is_chara: false
   # is_str: false
   # is_global: false
-  size: [1000]
+  # size: [1000]
 
-TARGET:
-  size: [1000]
-ASSI:
-  size: [1000]
-MONEY:
-  size: [1000]
-RESULT:
-  size: [1000]
-FLAG:
-  size: [10000]
-
-LOCAL:
-  size: [1000]
-LOCALS:
+NAME:
+  size: []
+  is_chara: true
   is_str: true
-  size: [100]
 
 # GLOBAL:
 #   is_global: true

@@ -4,7 +4,9 @@ use enum_map::EnumMap;
 use hashbrown::HashMap;
 
 use crate::value::Value;
-use erars_compiler::{CompiledFunction, Event, EventFlags, EventType, FunctionInfo, Instruction};
+use erars_compiler::{
+    CompiledFunction, Event, EventFlags, EventType, FunctionInfo, Instruction, VariableIndex,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -13,7 +15,7 @@ pub struct FunctionBody {
     locals_size: usize,
     default_arg: Option<Value>,
     body: Vec<Instruction>,
-    args: Vec<(String, ArrayVec<usize, 4>)>,
+    args: Vec<(VariableIndex, ArrayVec<usize, 4>)>,
 }
 
 impl FunctionBody {
@@ -27,15 +29,15 @@ impl FunctionBody {
         }
     }
 
-    pub fn push_arg(&mut self, name: impl Into<String>, indices: ArrayVec<usize, 4>) {
-        self.args.push((name.into(), indices));
+    pub fn push_arg(&mut self, var_idx: VariableIndex, indices: ArrayVec<usize, 4>) {
+        self.args.push((var_idx, indices));
     }
 
     pub fn set_default_arg(&mut self, value: Value) {
         self.default_arg = Some(value);
     }
 
-    pub fn args(&self) -> &[(String, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[(VariableIndex, ArrayVec<usize, 4>)] {
         &self.args
     }
 

@@ -32,8 +32,8 @@ fn run_test() {
 
 fn test_runner(dic: FunctionDic, var: VariableInterner) -> Vec<ConsoleMessage> {
     let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
-    let mut ctx = VmContext::new(&infos);
-    let vm = TerminalVm::new(dic, var);
+    let mut ctx = VmContext::new(&infos, var);
+    let vm = TerminalVm::new(dic);
     let chan = ConsoleChannel::new();
 
     vm.start(&chan, &mut ctx).unwrap();
