@@ -525,7 +525,11 @@ Var(
                     var_idx: VariableIndex(
                         48,
                     ),
-                    args: [],
+                    args: [
+                        IntLit(
+                            123,
+                        ),
+                    ],
                 },
             ),
             IntLit(

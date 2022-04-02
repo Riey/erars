@@ -741,7 +741,10 @@ impl<'s, 'v> Parser<'s, 'v> {
         let start_idx = self.current_loc();
 
         if self.try_get_char('(') {
+            let b = self.ban_state.arg;
+            self.ban_state.arg = false;
             let inner = self.next_expr()?;
+            self.ban_state.arg = b;
             self.ensure_get_char(')')?;
             Ok(inner)
         } else if self.try_get_char('"') {
@@ -751,9 +754,10 @@ impl<'s, 'v> Parser<'s, 'v> {
         } else if let Some(ident) = self.try_get_ident() {
             if self.try_get_char('(') {
                 // method
-                let b = self.ban_state;
+                let b = self.ban_state.arg;
+                self.ban_state.arg = false;
                 let args = self.read_args(')')?;
-                self.ban_state = b;
+                self.ban_state.arg = b;
                 Ok(Expr::Method(ident.into(), args))
             } else {
                 // variable
