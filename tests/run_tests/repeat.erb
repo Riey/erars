@@ -1,6 +1,10 @@
 @SYSTEM_TITLE
-REPEAT 10
-    LOCAL += COUNT
+LOCAL:3 = 10
+REPEAT LOCAL:3
+    LOCAL += 1
+    LOCAL:1 += COUNT
+    ; Shouldn't be affected to loop
+    LOCAL:3 = 2
 REND
 
-PRINTFORM {COUNT}
+PRINTFORM {LOCAL}/{LOCAL:1}

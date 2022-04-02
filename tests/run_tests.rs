@@ -14,6 +14,9 @@ fn run_test() {
             "{}.ron",
             erb_file.file_stem().unwrap().to_str().unwrap()
         ));
+
+        eprintln!("Run {}", erb_file.display());
+
         let erb_source = std::fs::read_to_string(&erb_file).unwrap();
         let ron_source = std::fs::read_to_string(ron_file).unwrap();
         let program = parse_program(&erb_source, &var).unwrap();

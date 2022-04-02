@@ -344,6 +344,16 @@ impl VmContext {
         self.stack.drain(self.stack.len() - count as usize..)
     }
 
+    fn dup(&mut self) {
+        let last = self.stack.last().unwrap().clone();
+        self.push(last);
+    }
+
+    fn dup_prev(&mut self) {
+        let prev = self.stack[self.stack.len() - 2].clone();
+        self.push(prev);
+    }
+
     fn push(&mut self, value: impl Into<Value>) {
         self.stack.push(value.into());
     }
@@ -386,6 +396,9 @@ impl TerminalVm {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
             Instruction::Nop => {}
+            Instruction::Pop => drop(ctx.pop()),
+            Instruction::Duplicate => ctx.dup(),
+            Instruction::DuplicatePrev => ctx.dup_prev(),
             Instruction::StoreVar(var_idx, c) => {
                 if var_idx.is_builtin() {
                     bail!("Can't edit builtin variable");

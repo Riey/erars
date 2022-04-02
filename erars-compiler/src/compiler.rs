@@ -134,9 +134,14 @@ impl<'v> Compiler<'v> {
         step: Expr,
         body: Vec<Stmt>,
     ) -> CompileResult<()> {
-        // var = int
-        // LOOP:
-        // if var > end {
+        // var = init;
+        //
+        // NOTE: These values are immutable
+        //
+        // let step = step;
+        // let end = end;
+        //
+        // while var > end {
         //     body
         //     var += step;
         //     goto LOOP;
@@ -144,14 +149,16 @@ impl<'v> Compiler<'v> {
 
         self.push_expr(init)?;
         self.store_var(var.clone())?;
+        self.push_expr(step)?;
+        self.push_expr(end)?;
 
-        let loop_mark = self.mark();
+        let loop_mark = self.current_no();
 
-        self.push_expr(Expr::binary(
-            Expr::Var(var.clone()),
-            BinaryOperator::Greater,
-            end,
-        ))?;
+        // compare var with end
+        self.push_var(var.clone())?;
+        self.out.push(Instruction::DuplicatePrev);
+        self.out
+            .push(Instruction::BinaryOperator(BinaryOperator::Less));
 
         let start_mark = self.mark();
 
@@ -162,8 +169,9 @@ impl<'v> Compiler<'v> {
             self.push_stmt(stmt)?;
         }
 
+        // add step to var
+        self.out.push(Instruction::DuplicatePrev);
         self.push_var(var.clone())?;
-        self.push_expr(step)?;
         self.out
             .push(Instruction::BinaryOperator(BinaryOperator::Add));
         self.store_var(var)?;
@@ -175,6 +183,10 @@ impl<'v> Compiler<'v> {
         }
 
         self.insert(start_mark, Instruction::GotoIfNot(self.current_no()));
+
+        // remove pinned values
+        self.out.push(Instruction::Pop);
+        self.out.push(Instruction::Pop);
 
         Ok(())
     }

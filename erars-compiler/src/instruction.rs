@@ -21,7 +21,10 @@ pub enum BeginType {
 pub enum Instruction {
     Nop,
     Pop,
+    /// Duplicate first value in stack
     Duplicate,
+    /// Duplicate second value in stack
+    DuplicatePrev,
     LoadInt(i64),
     LoadStr(String),
     LoadVar(VariableIndex, u32),
