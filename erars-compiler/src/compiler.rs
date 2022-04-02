@@ -194,7 +194,6 @@ impl<'v> Compiler<'v> {
 
     pub fn push_stmt(&mut self, stmt: Stmt) -> CompileResult<()> {
         match stmt {
-            Stmt::Quit => self.out.push(Instruction::Quit),
             Stmt::Print(flags, text) => {
                 self.out.push(Instruction::LoadStr(text));
                 self.out.push(Instruction::Print(flags));
@@ -364,10 +363,9 @@ impl<'v> Compiler<'v> {
             Stmt::Alignment(align) => {
                 self.out.push(Instruction::SetAlignment(align));
             }
-            Stmt::Command(name, args) => {
+            Stmt::Command(command, args) => {
                 let count = self.push_list(args)?;
-                self.out.push(Instruction::LoadStr(name));
-                self.out.push(Instruction::Command(count));
+                self.out.push(Instruction::Command(command, count));
             }
             Stmt::Label(label) => {
                 if self.marks.insert(label, self.current_no()).is_some() {

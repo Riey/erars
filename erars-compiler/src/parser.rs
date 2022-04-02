@@ -2,8 +2,9 @@ use std::ops::Range;
 
 use crate::{
     ast::{FormText, SelectCaseCond},
-    BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionHeader, FunctionInfo,
-    ParserError, ParserResult, Stmt, UnaryOperator, Variable, VariableIndex, VariableInterner,
+    BeginType, BinaryOperator, BuiltinCommand, EventFlags, Expr, Function, FunctionHeader,
+    FunctionInfo, ParserError, ParserResult, Stmt, UnaryOperator, Variable, VariableIndex,
+    VariableInterner,
 };
 use bitflags::bitflags;
 use ordered_float::NotNan;
@@ -540,7 +541,6 @@ impl<'s, 'v> Parser<'s, 'v> {
         }
 
         match command {
-            "QUIT" => Ok(Some(Stmt::Quit)),
             "IF" => {
                 let mut else_ifs = Vec::new();
                 let else_body = self.read_if_block(&mut else_ifs)?;
@@ -749,15 +749,13 @@ impl<'s, 'v> Parser<'s, 'v> {
             }
             "CONTINUE" => Ok(Some(Stmt::Continue)),
             "BREAK" => Ok(Some(Stmt::Break)),
-            "DRAWLINE" | "INPUT" | "INPUTS" | "RESETDATA" | "ADDDEFCHARA" | "WAIT"
-            | "WAITANYKEY" | "RESTART" | "FONTITALIC" | "FONTBOLD" | "FONTREGULAR"
-            | "LOADGLOBAL" | "RESETCOLOR" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
-            "STRLENS" | "ADDCHARA" | "DELCHARA" | "FINDCHARA" | "SWAPCHARA" | "CLEARLINE"
-            | "CHKDATA" | "SETCOLOR" | "MIN" | "MAX" | "TINPUT" | "TINPUTS" | "GETEXPLV"
-            | "UNICODE" | "SPLIT" | "BAR" | "SETBIT" | "RESET_STAIN" => {
-                Ok(Some(Stmt::Command(command.into(), self.read_args('\n')?)))
+            other => {
+                if let Ok(com) = other.parse::<BuiltinCommand>() {
+                    Ok(Some(Stmt::Command(com, self.read_args('\n')?)))
+                } else {
+                    Ok(None)
+                }
             }
-            _ => Ok(None),
         }
     }
 

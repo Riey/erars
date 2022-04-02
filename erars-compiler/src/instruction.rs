@@ -1,4 +1,4 @@
-use crate::{Alignment, BinaryOperator, PrintFlags, UnaryOperator, VariableIndex};
+use crate::{Alignment, BinaryOperator, BuiltinCommand, PrintFlags, UnaryOperator, VariableIndex};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
@@ -20,7 +20,6 @@ pub enum BeginType {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Instruction {
     Nop,
-    Quit,
     Pop,
     /// Duplicate first value in stack
     Duplicate,
@@ -41,7 +40,7 @@ pub enum Instruction {
     Print(PrintFlags),
     ReuseLastLine,
     ConcatString(u32),
-    Command(u32),
+    Command(BuiltinCommand, u32),
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
     SetAlignment(Alignment),

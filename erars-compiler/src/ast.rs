@@ -4,7 +4,8 @@ use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Alignment, BeginType, BinaryOperator, EventFlags, PrintFlags, UnaryOperator, VariableIndex,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, PrintFlags, UnaryOperator,
+    VariableIndex,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,10 +44,9 @@ pub enum Stmt {
     Repeat(Expr, Vec<Stmt>),
     Do(Expr, Vec<Stmt>),
     For(Variable, Expr, Expr, Expr, Vec<Stmt>),
-    Quit,
     Continue,
     Break,
-    Command(String, Vec<Expr>),
+    Command(BuiltinCommand, Vec<Expr>),
     Return(Vec<Expr>),
     ReturnF(Expr),
     Alignment(Alignment),

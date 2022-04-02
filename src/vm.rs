@@ -8,8 +8,8 @@ use strum::Display;
 use hashbrown::{HashMap, HashSet};
 
 use erars_compiler::{
-    BeginType, BinaryOperator, BulitinVariable, EventType, Instruction, KnownVariables, PrintFlags,
-    UnaryOperator, VariableIndex, VariableInfo, VariableInterner,
+    BeginType, BinaryOperator, BuiltinCommand, BulitinVariable, EventType, Instruction,
+    KnownVariables, PrintFlags, UnaryOperator, VariableIndex, VariableInfo, VariableInterner,
 };
 
 use crate::function::{FunctionBody, FunctionDic};
@@ -402,7 +402,6 @@ impl TerminalVm {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
             Instruction::Nop => {}
-            Instruction::Quit => return Ok(Some(Workflow::Exit)),
             Instruction::Pop => drop(ctx.pop()),
             Instruction::Duplicate => ctx.dup(),
             Instruction::DuplicatePrev => ctx.dup_prev(),
@@ -623,15 +622,14 @@ impl TerminalVm {
             Instruction::SetAlignment(align) => {
                 chan.send_msg(ConsoleMessage::Alignment(*align));
             }
-            Instruction::Command(c) => {
-                let name = ctx.pop_str()?;
+            Instruction::Command(com, c) => {
                 let args = ctx.take_list(*c).collect::<ArrayVec<_, 4>>();
 
-                match name.as_str() {
-                    "DRAWLINE" => {
+                match com {
+                    BuiltinCommand::DrawLine => {
                         chan.send_msg(ConsoleMessage::DrawLine);
                     }
-                    "INPUT" => {
+                    BuiltinCommand::Input => {
                         chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
                         match chan.recv_ret() {
                             ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
@@ -643,18 +641,18 @@ impl TerminalVm {
                             }
                         }
                     }
-                    "QUIT" => {
+                    BuiltinCommand::Quit => {
                         chan.send_msg(ConsoleMessage::Exit);
                         return Ok(Some(Workflow::Exit));
                     }
-                    "ADDDEFCHARA" => {
+                    BuiltinCommand::AddDefChara => {
                         ctx.var.add_chara();
                     }
-                    "RESETDATA" => {
+                    BuiltinCommand::ResetData => {
                         ctx.var.reset_data();
                     }
                     _ => {
-                        bail!("{}({:?})", name, args)
+                        bail!("{}({:?})", com, args)
                     }
                 }
             }
