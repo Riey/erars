@@ -41,6 +41,7 @@ pub enum BulitinVariable {
     PalamName,
     FlagName,
     TalentName,
+    ExName,
     ItemName,
 }
 
@@ -93,6 +94,7 @@ pub enum KnownVariables {
     Palam,
     PalamLv,
     Base,
+    DownBase,
     MaxBase,
 
     Source,
@@ -100,6 +102,8 @@ pub enum KnownVariables {
     Down,
     Tflag,
     Tequip,
+    Tstr,
+    Tcvar,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -149,7 +153,10 @@ impl VariableInterner {
         }
 
         interns!(
-            "A" "B" "C" "D" "E" "F"
+            "A" "B" "C" "D" "E" "F" "G" "H" "I" "J" "K" "L" "M" "N" "O" "P" "Q"
+            "R" "S" "T" "U" "V" "W" "X" "Y" "Z"
+            "DA" "DB" "DC" "DD" "DE" "DF"
+            "GLOBAL" "GLOBALS"
             "FLAG" "DAY" "TIME" "DITEMTYPE"
             "STR"
             "ABL" "CFLAG" "TALENT" "MARK" "EQUIP" "STAIN"
