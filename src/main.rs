@@ -12,9 +12,9 @@ use eframe::NativeOptions;
 use erars::{
     function::FunctionDic,
     ui::{ConsoleChannel, EraApp},
-    vm::{TerminalVm, VariableInfo, VmContext},
+    vm::{TerminalVm, VmContext},
 };
-use erars_compiler::VariableInterner;
+use erars_compiler::{VariableInfo, VariableInterner};
 use hashbrown::HashMap;
 
 fn main() {
@@ -71,7 +71,7 @@ fn main() {
             for func in program {
                 let func = erars_compiler::compile(func, &var).unwrap();
 
-                function_dic.insert_compiled_func(func);
+                function_dic.insert_compiled_func(&var, func);
             }
         }
 

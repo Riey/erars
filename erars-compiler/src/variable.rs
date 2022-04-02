@@ -1,4 +1,3 @@
-use arrayvec::ArrayVec;
 use enum_map::{Enum, EnumMap};
 use hashbrown::HashMap;
 use num_derive::FromPrimitive;
@@ -55,6 +54,10 @@ pub enum BulitinVariable {
 #[strum(serialize_all = "UPPERCASE")]
 /// only contains variable required from either VM or compiler
 pub enum KnownVariables {
+    Local,
+    LocalS,
+    Arg,
+    ArgS,
     Count,
     Target,
     Master,
@@ -67,10 +70,6 @@ pub enum KnownVariables {
     CharaNum,
     Result,
     ResultS,
-    Local,
-    LocalS,
-    Arg,
-    ArgS,
     Exp,
     Juel,
     Param,
@@ -102,11 +101,11 @@ impl VariableInterner {
         };
 
         for builtin in BulitinVariable::iter() {
-            ret.intern(<&str>::from(builtin));
+            ret.get_or_intern(<&str>::from(builtin));
         }
 
         for known in KnownVariables::iter() {
-            let idx = ret.intern(<&str>::from(known));
+            let idx = ret.get_or_intern(<&str>::from(known));
             ret.known_idxs[known] = idx;
         }
 
@@ -126,7 +125,7 @@ impl VariableInterner {
 
         macro_rules! interns {
             ($($name:literal)+) => {
-                $(ret.intern($name);)+
+                $(ret.get_or_intern($name);)+
             };
         }
 
@@ -141,7 +140,7 @@ impl VariableInterner {
         ret
     }
 
-    pub fn intern(&mut self, name: impl Into<SmartString<LazyCompact>>) -> VariableIndex {
+    pub fn get_or_intern(&mut self, name: impl Into<SmartString<LazyCompact>>) -> VariableIndex {
         *self.name_idxs.entry(name.into()).or_insert_with_key(|k| {
             let ret = self.next;
             self.names.push(k.clone());
@@ -167,13 +166,19 @@ impl VariableInterner {
     }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(default)]
 pub struct VariableInfo {
-    is_chara: bool,
-    is_str: bool,
-    default_int: i64,
-    size: ArrayVec<u32, 4>,
+    pub is_chara: bool,
+    pub is_str: bool,
+    pub default_int: i64,
+    pub size: Vec<usize>,
+}
+
+impl VariableInfo {
+    pub fn arg_len(&self) -> usize {
+        self.size.len() + self.is_chara as usize
+    }
 }
 
 #[derive(

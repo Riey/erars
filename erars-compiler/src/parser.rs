@@ -57,9 +57,9 @@ struct BanState {
     arg: bool,
 }
 
-#[derive(Clone)]
 pub struct Parser<'s, 'v> {
     text: &'s str,
+    current_label: &'s str,
     var: &'v VariableInterner,
     form_status: Option<FormStatus>,
     cond_status: Option<CondStatus>,
@@ -76,6 +76,7 @@ impl<'s, 'v> Parser<'s, 'v> {
 
         Self {
             text,
+            current_label: "",
             var,
             form_status: None,
             cond_status: None,
@@ -85,10 +86,10 @@ impl<'s, 'v> Parser<'s, 'v> {
     }
 
     fn is_str_var(&self, name: &str) -> bool {
-        match name {
-            "LOCALS" | "STR" | "NAME" | "CALLNAME" | "NICKNAME" | "MASTERNAME" => true,
-            _ => false,
-        }
+        matches!(
+            name,
+            "LOCALS" | "STR" | "NAME" | "CALLNAME" | "NICKNAME" | "MASTERNAME"
+        )
     }
 
     fn current_loc(&self) -> usize {
@@ -943,6 +944,8 @@ impl<'s, 'v> Parser<'s, 'v> {
         self.skip_ws_newline();
         self.ensure_get_char('@')?;
         let label = self.ensure_ident(|| "Function label")?;
+
+        self.current_label = label;
 
         self.skip_ws();
 

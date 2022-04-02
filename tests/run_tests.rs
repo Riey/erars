@@ -20,7 +20,7 @@ fn run_test() {
         let mut dic = FunctionDic::new();
 
         for func in program {
-            dic.insert_compiled_func(compile(func, &var).unwrap());
+            dic.insert_compiled_func(&var, compile(func, &var).unwrap());
         }
 
         let ret = test_runner(dic, var.clone());

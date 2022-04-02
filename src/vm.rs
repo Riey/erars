@@ -6,32 +6,15 @@ use smartstring::{LazyCompact, SmartString};
 use strum::Display;
 
 use hashbrown::{HashMap, HashSet};
-use serde::{Deserialize, Serialize};
 
 use erars_compiler::{
     BeginType, BinaryOperator, BulitinVariable, EventType, Instruction, KnownVariables, PrintFlags,
-    UnaryOperator, VariableIndex, VariableInterner,
+    UnaryOperator, VariableIndex, VariableInfo, VariableInterner,
 };
 
 use crate::function::{FunctionBody, FunctionDic};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 use crate::value::Value;
-
-#[derive(Clone, Default, Debug, Serialize, Deserialize)]
-#[serde(default)]
-pub struct VariableInfo {
-    is_chara: bool,
-    is_str: bool,
-    is_local: bool,
-    default_int: i64,
-    size: Vec<usize>,
-}
-
-impl VariableInfo {
-    pub fn arg_len(&self) -> usize {
-        self.size.len() + self.is_chara as usize
-    }
-}
 
 #[derive(Clone, Debug)]
 enum Variable {
@@ -142,17 +125,13 @@ impl Variable {
 enum UniformVariable {
     Normal(Variable),
     Character(Vec<Variable>),
-    Local(HashMap<String, Variable>),
-    LocalCharacter(HashMap<String, Vec<Variable>>),
 }
 
 impl UniformVariable {
     pub fn new(info: &VariableInfo) -> Self {
-        match (info.is_local, info.is_chara) {
-            (false, false) => UniformVariable::Normal(Variable::new(info)),
-            (false, true) => UniformVariable::Character(Vec::new()),
-            (true, false) => UniformVariable::Local(HashMap::new()),
-            (true, true) => UniformVariable::LocalCharacter(HashMap::new()),
+        match info.is_chara {
+            false => UniformVariable::Normal(Variable::new(info)),
+            true => UniformVariable::Character(Vec::new()),
         }
     }
 
@@ -163,23 +142,16 @@ impl UniformVariable {
         }
     }
 
-    pub fn resolve(&mut self, name: &str, target: usize) -> &mut Variable {
+    pub fn resolve(&mut self, target: usize) -> &mut Variable {
         match self {
             UniformVariable::Normal(v) => v,
             UniformVariable::Character(c) => c.get_mut(target).unwrap(),
-            UniformVariable::Local(l) => l.get_mut(name).unwrap(),
-            UniformVariable::LocalCharacter(lc) => {
-                lc.get_mut(name).unwrap().get_mut(target).unwrap()
-            }
         }
     }
 
-    pub fn add_chara(&mut self, name: &str, info: &VariableInfo) {
+    pub fn add_chara(&mut self, info: &VariableInfo) {
         match self {
             UniformVariable::Character(c) => c.push(Variable::new(info)),
-            UniformVariable::LocalCharacter(c) => {
-                c.get_mut(name).unwrap().push(Variable::new(info))
-            }
             _ => {}
         }
     }
@@ -189,7 +161,8 @@ struct VariableStorage {
     character_len: usize,
     variable_interner: VariableInterner,
     variables: Vec<(VariableInfo, UniformVariable)>,
-    inited_functions: HashSet<SmartString<LazyCompact>>,
+    local_variables:
+        HashMap<SmartString<LazyCompact>, HashMap<VariableIndex, (VariableInfo, UniformVariable)>>,
 }
 
 impl VariableStorage {
@@ -204,7 +177,6 @@ impl VariableStorage {
                     .unwrap_or_else(|| VariableInfo {
                         default_int: 0,
                         is_chara: false,
-                        is_local: false,
                         is_str: false,
                         size: vec![1000],
                     });
@@ -219,58 +191,29 @@ impl VariableStorage {
             character_len: 0,
             variable_interner,
             variables,
-            inited_functions: HashSet::new(),
+            local_variables: HashMap::new(),
         }
     }
 
     fn init_local(&mut self, name: &str, body: &FunctionBody) {
-        self.inited_functions.get_or_insert_with(name, |name| {
-            self.variable_interner.intern(format!("ARG@{}", name));
-            let arg_info = VariableInfo {
-                default_int: 0,
-                size: vec![1000],
-                is_local: true,
-                is_str: false,
-                is_chara: false,
-            };
-            let arg = UniformVariable::new(&arg_info);
-            self.variables.push((arg_info, arg));
-
-            self.variable_interner.intern(format!("ARGS@{}", name));
-            let arg_info = VariableInfo {
-                default_int: 0,
-                size: vec![100],
-                is_local: true,
-                is_str: true,
-                is_chara: false,
-            };
-            let arg = UniformVariable::new(&arg_info);
-            self.variables.push((arg_info, arg));
-
-            self.variable_interner.intern(format!("LOCAL@{}", name));
-            let arg_info = VariableInfo {
-                default_int: 0,
-                size: vec![body.local_size()],
-                is_local: true,
-                is_str: false,
-                is_chara: false,
-            };
-            let arg = UniformVariable::new(&arg_info);
-            self.variables.push((arg_info, arg));
-
-            self.variable_interner.intern(format!("LOCALS@{}", name));
-            let arg_info = VariableInfo {
-                default_int: 0,
-                size: vec![body.locals_size()],
-                is_local: true,
-                is_str: true,
-                is_chara: false,
-            };
-            let arg = UniformVariable::new(&arg_info);
-            self.variables.push((arg_info, arg));
-
-            name.into()
+        self.local_variables.entry(name.into()).or_insert_with(|| {
+            body.local_vars()
+                .iter()
+                .map(|(idx, info)| (*idx, (info.clone(), UniformVariable::new(info))))
+                .collect()
         });
+    }
+
+    fn get_local_var(
+        &mut self,
+        name: &str,
+        idx: VariableIndex,
+    ) -> Result<&mut (VariableInfo, UniformVariable)> {
+        self.local_variables
+            .get_mut(name)
+            .unwrap()
+            .get_mut(&idx)
+            .ok_or_else(|| anyhow!("Variable {} is not exists", idx))
     }
 
     fn get_var(&mut self, idx: VariableIndex) -> Result<&mut (VariableInfo, UniformVariable)> {
@@ -314,10 +257,10 @@ impl VariableStorage {
         }
     }
 
-    pub fn add_chara(&mut self, name: &str) {
+    pub fn add_chara(&mut self) {
         self.character_len += 1;
         self.variables.iter_mut().for_each(|(info, var)| {
-            var.add_chara(name, info);
+            var.add_chara(info);
         });
     }
 
@@ -350,11 +293,16 @@ enum Workflow {
     Exit,
 }
 
+struct Callstack {
+    stack_base: usize,
+    local_idxs: HashSet<VariableIndex>,
+}
+
 pub struct VmContext {
     var: VariableStorage,
     begin: Option<BeginType>,
     stack: Vec<Value>,
-    call_stack: Vec<usize>,
+    call_stack: Vec<Callstack>,
 }
 
 impl VmContext {
@@ -367,8 +315,16 @@ impl VmContext {
         }
     }
 
-    pub fn new_func(&mut self) {
-        self.call_stack.push(self.stack.len());
+    pub fn is_local_var(&self, idx: &VariableIndex) -> bool {
+        self.call_stack.last().unwrap().local_idxs.contains(idx)
+    }
+
+    pub fn new_func(&mut self, label: &str, body: &FunctionBody) {
+        self.var.init_local(label, body);
+        self.call_stack.push(Callstack {
+            stack_base: self.stack.len(),
+            local_idxs: body.local_vars().keys().copied().collect(),
+        });
     }
 
     pub fn end_func(&mut self) {
@@ -376,8 +332,8 @@ impl VmContext {
     }
 
     pub fn return_func(&mut self) -> impl Iterator<Item = Value> + '_ {
-        let base = self.call_stack.last().unwrap();
-        self.stack.drain(*base..)
+        let call_stack = self.call_stack.last().unwrap();
+        self.stack.drain(call_stack.stack_base..)
     }
 
     fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
@@ -444,7 +400,11 @@ impl TerminalVm {
                 let mut args = ctx.take_arg_list(*c)?.into_iter();
                 let value = ctx.pop();
 
-                let (info, var) = ctx.var.get_var(*var_idx)?;
+                let (info, var) = if ctx.is_local_var(var_idx) {
+                    ctx.var.get_local_var(func_name, *var_idx)?
+                } else {
+                    ctx.var.get_var(*var_idx)?
+                };
 
                 let var = if info.is_chara {
                     let no = if args.len() < info.arg_len() {
@@ -453,9 +413,9 @@ impl TerminalVm {
                         args.next().unwrap()
                     };
 
-                    var.resolve(func_name, no)
+                    var.resolve(no)
                 } else {
-                    var.resolve(func_name, 0)
+                    var.assume_normal()
                 };
 
                 var.set(args, value)?;
@@ -478,7 +438,11 @@ impl TerminalVm {
                 } else {
                     let mut args = ctx.take_arg_list(*c)?.into_iter();
 
-                    let (info, var) = ctx.var.get_var(*var_idx)?;
+                    let (info, var) = if ctx.is_local_var(var_idx) {
+                        ctx.var.get_local_var(func_name, *var_idx)?
+                    } else {
+                        ctx.var.get_var(*var_idx)?
+                    };
 
                     let var = if info.is_chara {
                         let no = if args.len() < info.arg_len() {
@@ -487,9 +451,9 @@ impl TerminalVm {
                             args.next().unwrap()
                         };
 
-                        var.resolve(func_name, no)
+                        var.resolve(no)
                     } else {
-                        var.resolve(func_name, 0)
+                        var.assume_normal()
                     };
 
                     var.get(args)?
@@ -660,7 +624,7 @@ impl TerminalVm {
                         return Ok(Some(Workflow::Exit));
                     }
                     "ADDDEFCHARA" => {
-                        ctx.var.add_chara(func_name);
+                        ctx.var.add_chara();
                     }
                     "RESETDATA" => {
                         ctx.var.reset_data();
@@ -711,20 +675,20 @@ impl TerminalVm {
     ) -> Result<Workflow> {
         let body = self.dic.get_func(label)?;
 
-        ctx.var.init_local(label, body);
-
-        ctx.new_func();
+        ctx.new_func(label, body);
 
         for ((var_idx, arg_indices), arg) in body.args().iter().zip(args) {
             let var = ctx.var.get_var(*var_idx).unwrap();
             var.1
-                .resolve(label, 0)
+                .resolve(0)
                 .set(arg_indices.iter().copied(), arg.clone())?;
         }
 
+        let ret = self.run_body(label, body, chan, ctx);
+
         ctx.end_func();
 
-        self.run_body(label, body, chan, ctx)
+        ret
     }
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
