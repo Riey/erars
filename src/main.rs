@@ -81,6 +81,7 @@ fn main() {
             codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                 .unwrap();
             inner_chan.send_msg(erars::ui::ConsoleMessage::Exit);
+            eprintln!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
             return;
         }
 
