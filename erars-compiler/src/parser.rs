@@ -1,9 +1,9 @@
 use std::ops::Range;
 
 use crate::{
-    ast::FormText, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionHeader,
-    FunctionInfo, ParserError, ParserResult, Stmt, UnaryOperator, Variable, VariableIndex,
-    VariableInterner,
+    ast::{FormText, SelectCaseCond},
+    BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionHeader, FunctionInfo,
+    ParserError, ParserResult, Stmt, UnaryOperator, Variable, VariableIndex, VariableInterner,
 };
 use bitflags::bitflags;
 use ordered_float::NotNan;
@@ -294,6 +294,10 @@ impl<'s, 'v> Parser<'s, 'v> {
         self.try_get_char(' ');
     }
 
+    fn check_prefix(&self, prefix: &str) -> bool {
+        self.text.starts_with(prefix)
+    }
+
     fn try_get_prefix(&mut self, prefix: &str) -> bool {
         if let Some(text) = self.text.strip_prefix(prefix) {
             self.text = text;
@@ -552,6 +556,70 @@ impl<'s, 'v> Parser<'s, 'v> {
             "REUSELASTLINE" => {
                 self.skip_blank();
                 Ok(Some(Stmt::ReuseLastLine(self.read_until_newline().into())))
+            }
+            "SELECTCASE" => {
+                self.skip_ws();
+                let cond = self.next_expr()?;
+
+                self.skip_ws_newline();
+
+                let mut cases = Vec::new();
+                let mut case_else = None;
+
+                loop {
+                    let start = self.current_loc();
+
+                    if self.try_get_prefix("ENDSELECT") {
+                        break;
+                    } else if self.try_get_prefix("CASEELSE") {
+                        case_else = Some(self.read_block_until("ENDSELECT")?);
+                        break;
+                    } else if self.try_get_prefix("CASE") {
+                        let mut current_case = Vec::new();
+                        loop {
+                            self.skip_ws();
+
+                            if self.try_get_char('\n') {
+                                break;
+                            } else if self.try_get_prefix("IS") {
+                                self.skip_ws();
+                                let symbol_start = self.current_loc();
+                                let symbol = self.get_symbol();
+                                let op = symbol.parse::<BinaryOperator>().map_err(|_| {
+                                    (
+                                        ParserError::InvalidCode(format!("연산자가 와야합니다.")),
+                                        self.from_prev_loc_span(symbol_start),
+                                    )
+                                })?;
+                                let expr = self.next_expr()?;
+                                current_case.push(SelectCaseCond::Is(op, expr));
+                            } else {
+                                let first = self.next_expr()?;
+                                if self.try_get_prefix("TO") {
+                                    let second = self.next_expr()?;
+                                    self.skip_ws();
+                                    current_case.push(SelectCaseCond::To(first, second));
+                                } else {
+                                    current_case.push(SelectCaseCond::Single(first));
+                                }
+                            }
+
+                            self.skip_ws();
+                            self.try_get_char(',');
+                        }
+
+                        let body = self.read_block_check_many(&["CASE", "ENDSELECT"])?;
+
+                        cases.push((current_case, body))
+                    } else {
+                        return Err((
+                            ParserError::InvalidCode(format!("CASE 또는 CASEELSE이 와야합니다.")),
+                            self.from_prev_loc_span(start),
+                        ));
+                    }
+                }
+
+                Ok(Some(Stmt::SelectCase(cond, cases, case_else)))
             }
             "SIF" => {
                 let cond = self.next_expr()?;
@@ -849,6 +917,21 @@ impl<'s, 'v> Parser<'s, 'v> {
         }
 
         Ok(calculate_binop_expr(term, &mut operand_stack))
+    }
+
+    fn read_block_check_many(&mut self, ends: &[&str]) -> ParserResult<Vec<Stmt>> {
+        let mut body = Vec::new();
+
+        loop {
+            self.skip_ws_newline();
+            for end in ends {
+                if self.check_prefix(end) {
+                    return Ok(body);
+                }
+            }
+
+            body.push(self.next_stmt()?);
+        }
     }
 
     fn read_block_until(&mut self, end: &str) -> ParserResult<Vec<Stmt>> {

@@ -396,6 +396,8 @@ impl TerminalVm {
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
+        // eprintln!("stack: {:?}, inst: {:?}", ctx.stack, inst);
+
         match inst {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
@@ -601,6 +603,9 @@ impl TerminalVm {
                     }
                     BinaryOperator::Equal => Value::Int(i64::from(lhs == rhs)),
                     BinaryOperator::NotEqual => Value::Int(i64::from(lhs != rhs)),
+                    BinaryOperator::And => Value::Int(i64::from(lhs.as_bool() && rhs.as_bool())),
+                    BinaryOperator::Or => Value::Int(i64::from(lhs.as_bool() || rhs.as_bool())),
+                    BinaryOperator::Xor => Value::Int(i64::from(lhs.as_bool() ^ rhs.as_bool())),
                     _ => todo!("{:?}", op),
                 };
 
@@ -693,7 +698,6 @@ impl TerminalVm {
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         let body = self.dic.get_func(label)?;
-        dbg!(body.args(), args);
 
         ctx.new_func(label, body);
 

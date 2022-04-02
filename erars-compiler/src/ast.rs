@@ -14,8 +14,20 @@ pub struct Variable {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SelectCaseCond {
+    Single(Expr),
+    To(Expr, Expr),
+    Is(BinaryOperator, Expr),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stmt {
     Label(String),
+    SelectCase(
+        Expr,
+        Vec<(Vec<SelectCaseCond>, Vec<Stmt>)>,
+        Option<Vec<Stmt>>,
+    ),
     Goto(String),
     Print(PrintFlags, String),
     PrintForm(PrintFlags, FormText),

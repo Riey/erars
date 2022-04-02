@@ -279,6 +279,65 @@ mod body {
     }
 
     #[test]
+    fn test_selectcase() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/selectcase.erb", parse_body),
+            r#"
+[
+    SelectCase(
+        IntLit(
+            1,
+        ),
+        [
+            (
+                [
+                    Single(
+                        IntLit(
+                            0,
+                        ),
+                    ),
+                ],
+                [
+                    Print(
+                        (empty),
+                        "FOO",
+                    ),
+                ],
+            ),
+            (
+                [
+                    To(
+                        IntLit(
+                            1,
+                        ),
+                        IntLit(
+                            2,
+                        ),
+                    ),
+                ],
+                [
+                    Print(
+                        (empty),
+                        "BAR",
+                    ),
+                ],
+            ),
+        ],
+        Some(
+            [
+                Print(
+                    (empty),
+                    "BAZ",
+                ),
+            ],
+        ),
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
     fn test_sif() {
         k9::snapshot!(
             do_test("tests/parse_tests/bodys/sif.erb", parse_body),

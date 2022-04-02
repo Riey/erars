@@ -1,6 +1,7 @@
 use crate::{
-    ast::FormText, BinaryOperator, CompileError, CompileResult, Expr, Function, FunctionHeader,
-    Instruction, KnownVariables, Stmt, Variable, VariableInterner,
+    ast::{FormText, SelectCaseCond},
+    BinaryOperator, CompileError, CompileResult, Expr, Function, FunctionHeader, Instruction,
+    KnownVariables, Stmt, Variable, VariableInterner,
 };
 use arrayvec::ArrayVec;
 use hashbrown::HashMap;
@@ -211,6 +212,70 @@ impl<'v> Compiler<'v> {
                 let mark = self.mark();
                 self.push_stmt(*body)?;
                 self.insert(mark, Instruction::GotoIfNot(self.current_no()));
+            }
+            Stmt::SelectCase(cond, cases, case_else) => {
+                self.push_expr(cond)?;
+
+                let mut ends = Vec::new();
+                let mut nexts = Vec::new();
+                for (conds, body) in cases {
+                    for next in nexts.drain(..) {
+                        self.insert(next, Instruction::GotoIfNot(self.current_no()));
+                    }
+
+                    for cond in conds {
+                        match cond {
+                            SelectCaseCond::Single(e) => {
+                                self.out.push(Instruction::Duplicate);
+                                self.push_expr(e)?;
+                                self.out
+                                    .push(Instruction::BinaryOperator(BinaryOperator::Equal));
+                            }
+                            SelectCaseCond::Is(op, e) => {
+                                self.out.push(Instruction::Duplicate);
+                                self.push_expr(e)?;
+                                self.out.push(Instruction::BinaryOperator(op));
+                            }
+                            SelectCaseCond::To(from, to) => {
+                                self.out.push(Instruction::Duplicate);
+                                self.push_expr(from)?;
+                                self.out.push(Instruction::BinaryOperator(
+                                    BinaryOperator::GreaterOrEqual,
+                                ));
+                                self.out.push(Instruction::DuplicatePrev);
+                                self.push_expr(to)?;
+                                self.out
+                                    .push(Instruction::BinaryOperator(BinaryOperator::LessOrEqual));
+                                self.out
+                                    .push(Instruction::BinaryOperator(BinaryOperator::And));
+                            }
+                        }
+
+                        nexts.push(self.mark());
+                    }
+
+                    for stmt in body {
+                        self.push_stmt(stmt)?;
+                    }
+
+                    ends.push(self.mark());
+
+                    for next in nexts.drain(..) {
+                        self.insert(next, Instruction::GotoIfNot(self.current_no()));
+                    }
+                }
+
+                self.out.push(Instruction::Pop);
+
+                if let Some(case_else) = case_else {
+                    for stmt in case_else {
+                        self.push_stmt(stmt)?;
+                    }
+                }
+
+                for end in ends {
+                    self.insert(end, Instruction::Goto(self.current_no()));
+                }
             }
             Stmt::Continue => self.out.push(Instruction::Goto(
                 *self
