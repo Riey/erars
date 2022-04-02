@@ -4,7 +4,7 @@ use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
-use strum::{EnumCount, IntoStaticStr};
+use strum::{Display, EnumCount, IntoStaticStr};
 use strum::{EnumIter, IntoEnumIterator};
 
 #[derive(
@@ -22,22 +22,26 @@ use strum::{EnumIter, IntoEnumIterator};
     IntoStaticStr,
     EnumCount,
     FromPrimitive,
+    Display,
 )]
+#[strum(serialize_all = "UPPERCASE")]
+#[allow(non_camel_case_types)]
 pub enum BulitinVariable {
-    #[strum(to_string = "GAMEBASE_AUTHOR")]
-    GamebaseAuthor,
-    #[strum(to_string = "GAMEBASE_TITLE")]
-    GamebaseTitle,
-    #[strum(to_string = "GAMEBASE_YEAR")]
-    GamebaseYear,
-    #[strum(to_string = "GAMEBASE_INFO")]
-    GamebaseInfo,
-    #[strum(to_string = "GAMEBASE_VERSION")]
-    GamebaseVersion,
-    #[strum(to_string = "RAND")]
+    Gamebase_Author,
+    Gamebase_Title,
+    Gamebase_Year,
+    Gamebase_Info,
+    Gamebase_Version,
     Rand,
-    #[strum(to_string = "ISASSI")]
     IsAssi,
+
+    AblName,
+    ExpName,
+    MarkName,
+    PalamName,
+    FlagName,
+    TalentName,
+    ItemName,
 }
 
 #[derive(
@@ -65,11 +69,20 @@ pub enum KnownVariables {
     Count,
     Target,
     Master,
+    Assi,
+    AssiPlay,
+    Player,
     Money,
+
+    SelectCom,
+    PrevCom,
+    NextCom,
+
     Item,
     NoItem,
     ItemSales,
     ItemPrice,
+
     No,
     CharaNum,
     Result,
@@ -78,15 +91,15 @@ pub enum KnownVariables {
     ExpLv,
     Juel,
     Palam,
+    PalamLv,
     Base,
     MaxBase,
 
+    Source,
+    Up,
+    Down,
     Tflag,
-
-    PalamName,
-    FlagName,
-    TalentName,
-    ItemName,
+    Tequip,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -137,11 +150,13 @@ impl VariableInterner {
 
         interns!(
             "A" "B" "C" "D" "E" "F"
-            "MASTER" "TARGET" "ASSI"
-            "FLAG" "DAY" "TIME"
+            "FLAG" "DAY" "TIME" "DITEMTYPE"
             "STR"
-            "ABL" "CFLAG" "TALENT" "MARK"
+            "ABL" "CFLAG" "TALENT" "MARK" "EQUIP" "STAIN"
+            "CSTR"
+            "EX" "NOWEX"
             "NAME" "CALLNAME" "NICKNAME" "MASTERNAME"
+            "RELATION"
         );
 
         ret

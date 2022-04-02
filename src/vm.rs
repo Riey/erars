@@ -447,13 +447,12 @@ impl TerminalVm {
 
                 let value = if let Some(builtin) = var_idx.to_builtin() {
                     match builtin {
-                        BulitinVariable::GamebaseAuthor => "Empty".into(),
-                        BulitinVariable::GamebaseYear => 2022i64.into(),
-                        BulitinVariable::GamebaseTitle => "Title".into(),
-                        BulitinVariable::GamebaseVersion => 1000.into(),
-                        BulitinVariable::GamebaseInfo => "Info".into(),
-                        BulitinVariable::IsAssi => todo!("ISASSI"),
-                        BulitinVariable::Rand => todo!("RAND"),
+                        BulitinVariable::Gamebase_Author => "Empty".into(),
+                        BulitinVariable::Gamebase_Year => 2022i64.into(),
+                        BulitinVariable::Gamebase_Title => "Title".into(),
+                        BulitinVariable::Gamebase_Version => 1000.into(),
+                        BulitinVariable::Gamebase_Info => "Info".into(),
+                        other => todo!("{other}"),
                     }
                 } else {
                     let mut args = ctx.take_arg_list(*c)?.into_iter();

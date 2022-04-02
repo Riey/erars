@@ -9,7 +9,27 @@ STR:
   is_chara: false
   is_str: true
 
+CSTR:
+  size: [1000]
+  is_chara: true
+  is_str: true
+
 NAME:
+  size: []
+  is_chara: true
+  is_str: true
+
+CALLNAME:
+  size: []
+  is_chara: true
+  is_str: true
+
+NICKNAME:
+  size: []
+  is_chara: true
+  is_str: true
+
+MASTERNAME:
   size: []
   is_chara: true
   is_str: true

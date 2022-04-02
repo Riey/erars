@@ -638,10 +638,9 @@ impl<'s, 'v> Parser<'s, 'v> {
             "CONTINUE" => Ok(Some(Stmt::Continue)),
             "BREAK" => Ok(Some(Stmt::Break)),
             "DRAWLINE" | "INPUT" | "INPUTS" | "RESETDATA" | "ADDDEFCHARA" | "WAIT"
-            | "WAITANYKEY" | "RESTART" | "FONTITALIC" | "FONTBOLD" | "FONTREGULAR" => {
-                Ok(Some(Stmt::Command(command.into(), Vec::new())))
-            }
-            "STRLENS" | "ADDCHARA" | "DELCHARA" | "CLEARLINE" | "CHKDATA" => {
+            | "WAITANYKEY" | "RESTART" | "FONTITALIC" | "FONTBOLD" | "FONTREGULAR" | "LOADGLOBAL"
+            | "RESETCOLOR" => Ok(Some(Stmt::Command(command.into(), Vec::new()))),
+            "STRLENS" | "ADDCHARA" | "DELCHARA" | "CLEARLINE" | "CHKDATA" | "SETCOLOR" | "MIN" | "MAX" => {
                 Ok(Some(Stmt::Command(command.into(), self.read_args()?)))
             }
             _ => Ok(None),
