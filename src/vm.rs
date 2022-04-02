@@ -125,6 +125,7 @@ impl Variable {
 enum UniformVariable {
     Normal(Variable),
     Character(Vec<Variable>),
+    Bulitin(BulitinVariable),
 }
 
 impl UniformVariable {
@@ -139,13 +140,6 @@ impl UniformVariable {
         match self {
             Self::Normal(v) => v,
             _ => panic!("Variable is not normal variable"),
-        }
-    }
-
-    pub fn resolve(&mut self, target: usize) -> &mut Variable {
-        match self {
-            UniformVariable::Normal(v) => v,
-            UniformVariable::Character(c) => c.get_mut(target).unwrap(),
         }
     }
 
@@ -168,22 +162,25 @@ struct VariableStorage {
 impl VariableStorage {
     pub fn new(infos: &HashMap<String, VariableInfo>, variable_interner: VariableInterner) -> Self {
         let variables = variable_interner
-            .idxs_without_builtin()
+            .idxs()
             .map(|idx| {
                 let name = variable_interner.resolve(idx).unwrap();
-                let info = infos
-                    .get(name.as_str())
-                    .cloned()
-                    .unwrap_or_else(|| VariableInfo {
-                        default_int: 0,
-                        is_chara: false,
-                        is_str: false,
-                        size: vec![1000],
-                    });
+                if let Some(builtin) = idx.to_builtin() {
+                    (VariableInfo::default(), UniformVariable::Bulitin(builtin))
+                } else {
+                    let info = infos
+                        .get(name.as_str())
+                        .cloned()
+                        .unwrap_or_else(|| VariableInfo {
+                            default_int: 0,
+                            is_chara: false,
+                            is_str: false,
+                            size: vec![1000],
+                        });
+                    let var = UniformVariable::new(&info);
 
-                let var = UniformVariable::new(&info);
-
-                (info, var)
+                    (info, var)
+                }
             })
             .collect();
 
@@ -406,10 +403,6 @@ impl TerminalVm {
             Instruction::Duplicate => ctx.dup(),
             Instruction::DuplicatePrev => ctx.dup_prev(),
             Instruction::StoreVar(var_idx, c) => {
-                if var_idx.is_builtin() {
-                    bail!("Can't edit builtin variable");
-                }
-
                 let target = *ctx
                     .var
                     .get_known(KnownVariables::Target)
@@ -425,19 +418,21 @@ impl TerminalVm {
                     ctx.var.get_var(*var_idx)?
                 };
 
-                let var = if info.is_chara {
-                    let no = if args.len() < info.arg_len() {
-                        target as usize
-                    } else {
-                        args.next().unwrap()
-                    };
+                match var {
+                    UniformVariable::Bulitin(_) => bail!("Builtin variables are immutable"),
+                    UniformVariable::Character(c) => {
+                        let no = if args.len() < info.arg_len() {
+                            target as usize
+                        } else {
+                            args.next().unwrap()
+                        };
 
-                    var.resolve(no)
-                } else {
-                    var.assume_normal()
-                };
-
-                var.set(args, value)?;
+                        c[no].set(args, value)?;
+                    }
+                    UniformVariable::Normal(v) => {
+                        v.set(args, value)?;
+                    }
+                }
             }
             Instruction::LoadVar(var_idx, c) => {
                 let target = *ctx
@@ -446,37 +441,32 @@ impl TerminalVm {
                     .assume_normal()
                     .get_int(iter::empty())?;
 
-                let value = if let Some(builtin) = var_idx.to_builtin() {
-                    match builtin {
+                let mut args = ctx.take_arg_list(*c)?.into_iter();
+
+                let (info, var) = if ctx.is_local_var(var_idx) {
+                    ctx.var.get_local_var(func_name, *var_idx)?
+                } else {
+                    ctx.var.get_var(*var_idx)?
+                };
+
+                let value = match var {
+                    UniformVariable::Bulitin(builtin) => match builtin {
                         BulitinVariable::Gamebase_Author => "Empty".into(),
                         BulitinVariable::Gamebase_Year => 2022i64.into(),
                         BulitinVariable::Gamebase_Title => "Title".into(),
                         BulitinVariable::Gamebase_Version => 1000.into(),
                         BulitinVariable::Gamebase_Info => "Info".into(),
                         other => todo!("{other}"),
-                    }
-                } else {
-                    let mut args = ctx.take_arg_list(*c)?.into_iter();
-
-                    let (info, var) = if ctx.is_local_var(var_idx) {
-                        ctx.var.get_local_var(func_name, *var_idx)?
-                    } else {
-                        ctx.var.get_var(*var_idx)?
-                    };
-
-                    let var = if info.is_chara {
+                    },
+                    UniformVariable::Character(c) => {
                         let no = if args.len() < info.arg_len() {
                             target as usize
                         } else {
                             args.next().unwrap()
                         };
-
-                        var.resolve(no)
-                    } else {
-                        var.assume_normal()
-                    };
-
-                    var.get(args)?
+                        c[no].get(args)?
+                    }
+                    UniformVariable::Normal(v) => v.get(args)?,
                 };
 
                 ctx.push(value);

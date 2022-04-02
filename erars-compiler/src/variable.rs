@@ -143,8 +143,8 @@ impl VariableInterner {
         self.next
     }
 
-    pub fn idxs_without_builtin(&self) -> impl Iterator<Item = VariableIndex> {
-        (BulitinVariable::COUNT as u32..self.next).map(VariableIndex)
+    pub fn idxs(&self) -> impl Iterator<Item = VariableIndex> {
+        (0..self.next).map(VariableIndex)
     }
 
     pub fn with_default_variables() -> Self {
