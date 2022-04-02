@@ -766,8 +766,10 @@ impl<'s, 'v> Parser<'s, 'v> {
     }
 
     fn ensure_get_var(&mut self) -> ParserResult<Variable> {
-        self.ensure_ident(|| format!("Variable"))
-            .and_then(|i| self.next_var(self.var.get(i).unwrap()))
+        let start = self.current_loc();
+        let ident = self.ensure_ident(|| format!("Variable"))?;
+        let idx = self.get_var_idx(ident, self.from_prev_loc_span(start))?;
+        self.next_var(idx)
     }
 
     fn next_var(&mut self, var_idx: VariableIndex) -> ParserResult<Variable> {
