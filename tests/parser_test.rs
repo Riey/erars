@@ -594,6 +594,57 @@ mod program {
     use erars_compiler::parse_program;
 
     #[test]
+    fn test_call_form() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/programs/call_form.erb", parse_program),
+            r#"
+[
+    Function {
+        header: FunctionHeader {
+            name: "SYSTEM_TITLE",
+            args: [],
+            infos: [],
+        },
+        body: [
+            CallForm(
+                FOO_{IntLit(123)},,
+                [
+                    IntLit(
+                        345,
+                    ),
+                ],
+            ),
+        ],
+    },
+    Function {
+        header: FunctionHeader {
+            name: "FOO_123",
+            args: [
+                (
+                    Variable {
+                        var_idx: VariableIndex(
+                            16,
+                        ),
+                        args: [],
+                    },
+                    None,
+                ),
+            ],
+            infos: [],
+        },
+        body: [
+            PrintForm(
+                (empty),
+                FOO_{Var(Variable { var_idx: VariableIndex(16), args: [] })},
+            ),
+        ],
+    },
+]
+"#
+        );
+    }
+
+    #[test]
     fn test_method_call() {
         k9::snapshot!(
             do_test("tests/parse_tests/programs/method_call.erb", parse_program),

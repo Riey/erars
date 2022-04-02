@@ -56,6 +56,7 @@ enum CondStatus {
 struct BanState {
     percent: bool,
     arg: bool,
+    comma: bool,
 }
 
 pub struct Parser<'s, 'v> {
@@ -353,6 +354,10 @@ impl<'s, 'v> Parser<'s, 'v> {
                         self.form_status = Some(FormStatus::FormIntExpr);
                         break;
                     }
+                    ',' if self.ban_state.comma => {
+                        skip_count = 0;
+                        break;
+                    }
                     '#' if self.cond_status == Some(CondStatus::CondFormer) => {
                         self.cond_status = Some(CondStatus::CondLater);
                         break;
@@ -585,6 +590,17 @@ impl<'s, 'v> Parser<'s, 'v> {
                 };
 
                 Ok(Some(Stmt::Call(func.into(), args)))
+            }
+            "CALLFORM" => {
+                self.skip_ws();
+
+                self.ban_state.comma = true;
+                let label = self.read_form_text()?;
+                self.ban_state.comma = false;
+
+                let args = self.read_args('\n')?;
+
+                Ok(Some(Stmt::CallForm(label, args)))
             }
             "ALIGNMENT" => {
                 self.skip_ws();

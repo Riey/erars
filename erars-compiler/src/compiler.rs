@@ -288,6 +288,11 @@ impl<'v> Compiler<'v> {
                 self.out.push(Instruction::LoadStr(name));
                 self.out.push(Instruction::Call(count));
             }
+            Stmt::CallForm(name, args) => {
+                let count = self.push_list(args)?;
+                self.push_form(name)?;
+                self.out.push(Instruction::Call(count));
+            }
             Stmt::Begin(ty) => {
                 self.out.push(Instruction::Begin(ty));
             }

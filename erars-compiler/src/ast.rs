@@ -25,6 +25,7 @@ pub enum Stmt {
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
     Times(Variable, NotNan<f32>),
     Call(String, Vec<Expr>),
+    CallForm(FormText, Vec<Expr>),
     Begin(BeginType),
     Varset(Variable, Vec<Expr>),
     Repeat(Expr, Vec<Stmt>),
