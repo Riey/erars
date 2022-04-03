@@ -537,6 +537,11 @@ impl<'s, 'v> Parser<'s, 'v> {
                 let flags = self.read_print_flags(postfix)?;
                 self.skip_blank();
                 return Ok(Some(Stmt::Print(flags, self.next_expr()?)));
+            } else if let Some(postfix) = postfix.strip_prefix("V") {
+                let flags = self.read_print_flags(postfix)?;
+                self.skip_blank();
+                let args = self.read_args('\n')?;
+                return Ok(Some(Stmt::PrintList(flags, args)));
             } else {
                 let flags = self.read_print_flags(postfix)?;
                 self.skip_blank();

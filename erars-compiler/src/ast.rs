@@ -31,6 +31,7 @@ pub enum Stmt {
     ),
     Goto(String),
     Print(PrintFlags, Expr),
+    PrintList(PrintFlags, Vec<Expr>),
     PrintForm(PrintFlags, FormText),
     ReuseLastLine(String),
     Assign(Variable, Option<BinaryOperator>, Expr),

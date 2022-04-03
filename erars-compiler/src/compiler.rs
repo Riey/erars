@@ -198,6 +198,11 @@ impl<'v> Compiler<'v> {
                 self.push_expr(text)?;
                 self.out.push(Instruction::Print(flags));
             }
+            Stmt::PrintList(flags, args) => {
+                let count = self.push_list(args)?;
+                self.out.push(Instruction::ConcatString(count));
+                self.out.push(Instruction::Print(flags));
+            }
             Stmt::PrintForm(flags, form) => {
                 self.push_form(form)?;
                 self.out.push(Instruction::Print(flags));
