@@ -1039,24 +1039,26 @@ impl<'s, 'v> Parser<'s, 'v> {
             let symbol_start = self.current_loc();
             match self.try_get_symbol() {
                 Some(symbol) => {
-                    if self.is_str_var(ident) {
-                        if symbol == "=" {
-                            self.skip_blank();
-                            return Ok(Stmt::Assign(
-                                var,
-                                None,
-                                Expr::FormText(self.read_form_text()?),
-                            ));
-                        }
-                    } else if let Some(left) = symbol.strip_suffix("=") {
+                    if let Some(left) = symbol.strip_suffix("=") {
                         let additional_op = left.parse().ok();
-                        return Ok(Stmt::Assign(var, additional_op, self.next_expr()?));
+                        
+                        if self.is_str_var(ident) {
+                            Ok(Stmt::Assign(
+                                var,
+                                additional_op,
+                                Expr::FormText(self.read_form_text()?),
+                            ))
+                        } else {
+                            Ok(Stmt::Assign(var, additional_op, self.next_expr()?))
+                        }
+                    } else {
+                        Err((
+                            ParserError::InvalidCode(format!(
+                                "식별자뒤에 알수없는 연산자가 왔습니다"
+                            )),
+                            self.from_prev_loc_span(symbol_start),
+                        ))
                     }
-
-                    Err((
-                        ParserError::InvalidCode(format!("식별자뒤에 알수없는 연산자가 왔습니다")),
-                        self.from_prev_loc_span(symbol_start),
-                    ))
                 }
                 None => Err((
                     ParserError::InvalidCode(format!("알수없는 식별자 {}", ident)),
