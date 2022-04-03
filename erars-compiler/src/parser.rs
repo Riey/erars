@@ -474,7 +474,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                     expr
                 }
                 Some(FormStatus::FormCondExpr) => {
-                    let cond = self.read_term()?;
+                    let cond = self.next_expr()?;
                     self.skip_ws();
                     self.ensure_get_char('?')?;
                     self.skip_blank();
@@ -864,11 +864,7 @@ impl<'s, 'v> Parser<'s, 'v> {
 
         self.text = &left[consume..];
 
-        Some(if minus {
-            ret.wrapping_neg()
-        } else {
-            ret
-        })
+        Some(if minus { ret.wrapping_neg() } else { ret })
     }
 
     fn read_term(&mut self) -> ParserResult<Expr> {
@@ -977,7 +973,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                 if let Ok(binop) = symbol.parse::<BinaryOperator>() {
                     operand_stack.push((binop, self.read_term()?));
                     self.skip_ws();
-                } else if symbol == "?" {
+                } else if symbol == "?" && self.form_status != Some(FormStatus::FormCondExpr) {
                     let cond = calculate_binop_expr(term, &mut operand_stack);
                     let if_true = self.next_expr()?;
                     self.skip_ws();
