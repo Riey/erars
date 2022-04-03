@@ -201,7 +201,9 @@ mod body {
 [
     Print(
         NEWLINE,
-        "Hello, world!",
+        StringLit(
+            "Hello, world!",
+        ),
     ),
 ]
 "#
@@ -234,7 +236,9 @@ mod body {
                 [
                     Print(
                         (empty),
-                        "A > 1",
+                        StringLit(
+                            "A > 1",
+                        ),
                     ),
                 ],
             ),
@@ -256,7 +260,9 @@ mod body {
                 [
                     Print(
                         (empty),
-                        "A == 1",
+                        StringLit(
+                            "A == 1",
+                        ),
                     ),
                 ],
             ),
@@ -265,7 +271,9 @@ mod body {
             [
                 Print(
                     (empty),
-                    "A < 1",
+                    StringLit(
+                        "A < 1",
+                    ),
                 ),
             ],
         ),
@@ -419,7 +427,9 @@ mod body {
                 [
                     Print(
                         (empty),
-                        "FOO",
+                        StringLit(
+                            "FOO",
+                        ),
                     ),
                 ],
             ),
@@ -437,7 +447,9 @@ mod body {
                 [
                     Print(
                         (empty),
-                        "BAR",
+                        StringLit(
+                            "BAR",
+                        ),
                     ),
                 ],
             ),
@@ -446,7 +458,9 @@ mod body {
             [
                 Print(
                     (empty),
-                    "BAZ",
+                    StringLit(
+                        "BAZ",
+                    ),
                 ),
             ],
         ),
@@ -468,12 +482,16 @@ mod body {
         ),
         Print(
             (empty),
-            "45",
+            StringLit(
+                "45",
+            ),
         ),
     ),
     Print(
         (empty),
-        "32",
+        StringLit(
+            "32",
+        ),
     ),
 ]
 "#
@@ -781,7 +799,9 @@ Function {
     body: [
         Print(
             NEWLINE,
-            "Hello",
+            StringLit(
+                "Hello",
+            ),
         ),
         PrintForm(
             NEWLINE,
@@ -795,10 +815,385 @@ Function {
 
     #[test]
     fn test_juel() {
-        k9::snapshot!(do_test(
-            "tests/parse_tests/functions/juel.erb",
-            parse_function
-        ));
+        k9::snapshot!(
+            do_test("tests/parse_tests/functions/juel.erb", parse_function),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "COMMON_MOVE_JUEL",
+        args: [
+            (
+                Variable {
+                    var_idx: VariableIndex(
+                        19,
+                    ),
+                    args: [],
+                },
+                None,
+            ),
+            (
+                Variable {
+                    var_idx: VariableIndex(
+                        19,
+                    ),
+                    args: [
+                        IntLit(
+                            1,
+                        ),
+                    ],
+                },
+                None,
+            ),
+            (
+                Variable {
+                    var_idx: VariableIndex(
+                        19,
+                    ),
+                    args: [
+                        IntLit(
+                            2,
+                        ),
+                    ],
+                },
+                None,
+            ),
+            (
+                Variable {
+                    var_idx: VariableIndex(
+                        19,
+                    ),
+                    args: [
+                        IntLit(
+                            3,
+                        ),
+                    ],
+                },
+                None,
+            ),
+            (
+                Variable {
+                    var_idx: VariableIndex(
+                        19,
+                    ),
+                    args: [
+                        IntLit(
+                            4,
+                        ),
+                    ],
+                },
+                None,
+            ),
+        ],
+        infos: [],
+    },
+    body: [
+        Assign(
+            Variable {
+                var_idx: VariableIndex(
+                    17,
+                ),
+                args: [
+                    IntLit(
+                        1,
+                    ),
+                ],
+            },
+            None,
+            Method(
+                "LIMIT",
+                [
+                    BinopExpr(
+                        Var(
+                            Variable {
+                                var_idx: VariableIndex(
+                                    41,
+                                ),
+                                args: [
+                                    Var(
+                                        Variable {
+                                            var_idx: VariableIndex(
+                                                19,
+                                            ),
+                                            args: [],
+                                        },
+                                    ),
+                                    Var(
+                                        Variable {
+                                            var_idx: VariableIndex(
+                                                19,
+                                            ),
+                                            args: [
+                                                IntLit(
+                                                    1,
+                                                ),
+                                            ],
+                                        },
+                                    ),
+                                ],
+                            },
+                        ),
+                        Add,
+                        Var(
+                            Variable {
+                                var_idx: VariableIndex(
+                                    19,
+                                ),
+                                args: [
+                                    IntLit(
+                                        2,
+                                    ),
+                                ],
+                            },
+                        ),
+                    ),
+                    IntLit(
+                        0,
+                    ),
+                    BinopExpr(
+                        IntLit(
+                            -9223372036854775808,
+                        ),
+                        Sub,
+                        IntLit(
+                            1,
+                        ),
+                    ),
+                ],
+            ),
+        ),
+        Assign(
+            Variable {
+                var_idx: VariableIndex(
+                    17,
+                ),
+                args: [
+                    IntLit(
+                        2,
+                    ),
+                ],
+            },
+            None,
+            BinopExpr(
+                Var(
+                    Variable {
+                        var_idx: VariableIndex(
+                            17,
+                        ),
+                        args: [
+                            IntLit(
+                                1,
+                            ),
+                        ],
+                    },
+                ),
+                Sub,
+                Var(
+                    Variable {
+                        var_idx: VariableIndex(
+                            41,
+                        ),
+                        args: [
+                            Var(
+                                Variable {
+                                    var_idx: VariableIndex(
+                                        19,
+                                    ),
+                                    args: [],
+                                },
+                            ),
+                            Var(
+                                Variable {
+                                    var_idx: VariableIndex(
+                                        19,
+                                    ),
+                                    args: [
+                                        IntLit(
+                                            1,
+                                        ),
+                                    ],
+                                },
+                            ),
+                        ],
+                    },
+                ),
+            ),
+        ),
+        Assign(
+            Variable {
+                var_idx: VariableIndex(
+                    18,
+                ),
+                args: [],
+            },
+            None,
+            FormText(
+                 {Var(Variable { var_idx: VariableIndex(11), args: [Var(Variable { var_idx: VariableIndex(19), args: [IntLit(1)] })] })}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var_idx: VariableIndex(19), args: [IntLit(4)] }), Sub, BinopExpr(Var(Variable { var_idx: VariableIndex(19), args: [] }), NotEqual, Var(Variable { var_idx: VariableIndex(22), args: [] }))), LessOrEqual, IntLit(0)), FormText(({Var(Variable { var_idx: VariableIndex(104), args: [Var(Variable { var_idx: VariableIndex(19), args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(2)] })]), Equal, IntLit(1)), FormText(＋), FormText(－ ))} {Method("ABS", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(2)] })])},
+            ),
+        ),
+        Assign(
+            Variable {
+                var_idx: VariableIndex(
+                    41,
+                ),
+                args: [
+                    Var(
+                        Variable {
+                            var_idx: VariableIndex(
+                                19,
+                            ),
+                            args: [
+                                Var(
+                                    Variable {
+                                        var_idx: VariableIndex(
+                                            19,
+                                        ),
+                                        args: [
+                                            IntLit(
+                                                1,
+                                            ),
+                                        ],
+                                    },
+                                ),
+                            ],
+                        },
+                    ),
+                ],
+            },
+            None,
+            Var(
+                Variable {
+                    var_idx: VariableIndex(
+                        17,
+                    ),
+                    args: [
+                        IntLit(
+                            1,
+                        ),
+                    ],
+                },
+            ),
+        ),
+        If(
+            [
+                (
+                    BinopExpr(
+                        Method(
+                            "ABS",
+                            [
+                                Var(
+                                    Variable {
+                                        var_idx: VariableIndex(
+                                            17,
+                                        ),
+                                        args: [
+                                            IntLit(
+                                                2,
+                                            ),
+                                        ],
+                                    },
+                                ),
+                            ],
+                        ),
+                        Greater,
+                        IntLit(
+                            0,
+                        ),
+                    ),
+                    [
+                        SelectCase(
+                            Var(
+                                Variable {
+                                    var_idx: VariableIndex(
+                                        19,
+                                    ),
+                                    args: [
+                                        IntLit(
+                                            3,
+                                        ),
+                                    ],
+                                },
+                            ),
+                            [
+                                (
+                                    [
+                                        Single(
+                                            IntLit(
+                                                0,
+                                            ),
+                                        ),
+                                    ],
+                                    [
+                                        Print(
+                                            NEWLINE,
+                                            Var(
+                                                Variable {
+                                                    var_idx: VariableIndex(
+                                                        18,
+                                                    ),
+                                                    args: [],
+                                                },
+                                            ),
+                                        ),
+                                        Return(
+                                            [
+                                                IntLit(
+                                                    1,
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                                (
+                                    [
+                                        Single(
+                                            IntLit(
+                                                1,
+                                            ),
+                                        ),
+                                    ],
+                                    [
+                                        Print(
+                                            NEWLINE | WAIT,
+                                            Var(
+                                                Variable {
+                                                    var_idx: VariableIndex(
+                                                        18,
+                                                    ),
+                                                    args: [],
+                                                },
+                                            ),
+                                        ),
+                                        Return(
+                                            [
+                                                IntLit(
+                                                    1,
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                            Some(
+                                [
+                                    Return(
+                                        [
+                                            IntLit(
+                                                0,
+                                            ),
+                                        ],
+                                    ),
+                                ],
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+            None,
+        ),
+    ],
+}
+"#
+        );
     }
 }
 mod program {
@@ -920,7 +1315,9 @@ mod program {
         body: [
             Print(
                 (empty),
-                "foo",
+                StringLit(
+                    "foo",
+                ),
             ),
         ],
     },
@@ -933,7 +1330,9 @@ mod program {
         body: [
             Print(
                 (empty),
-                "foo",
+                StringLit(
+                    "foo",
+                ),
             ),
         ],
     },
@@ -946,7 +1345,9 @@ mod program {
         body: [
             Print(
                 (empty),
-                "bar",
+                StringLit(
+                    "bar",
+                ),
             ),
         ],
     },

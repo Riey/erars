@@ -30,7 +30,7 @@ pub enum Stmt {
         Option<Vec<Stmt>>,
     ),
     Goto(String),
-    Print(PrintFlags, String),
+    Print(PrintFlags, Expr),
     PrintForm(PrintFlags, FormText),
     ReuseLastLine(String),
     Assign(Variable, Option<BinaryOperator>, Expr),

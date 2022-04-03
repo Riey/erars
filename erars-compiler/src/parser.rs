@@ -533,10 +533,17 @@ impl<'s, 'v> Parser<'s, 'v> {
                 let flags = self.read_print_flags(postfix)?;
                 self.skip_blank();
                 return Ok(Some(Stmt::PrintForm(flags, self.read_form_text()?)));
+            } else if let Some(postfix) = postfix.strip_prefix("S") {
+                let flags = self.read_print_flags(postfix)?;
+                self.skip_blank();
+                return Ok(Some(Stmt::Print(flags, self.next_expr()?)));
             } else {
                 let flags = self.read_print_flags(postfix)?;
                 self.skip_blank();
-                return Ok(Some(Stmt::Print(flags, self.read_until_newline().into())));
+                return Ok(Some(Stmt::Print(
+                    flags,
+                    Expr::StringLit(self.read_until_newline().to_string()),
+                )));
             }
         }
 

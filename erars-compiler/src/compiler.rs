@@ -195,7 +195,7 @@ impl<'v> Compiler<'v> {
     pub fn push_stmt(&mut self, stmt: Stmt) -> CompileResult<()> {
         match stmt {
             Stmt::Print(flags, text) => {
-                self.out.push(Instruction::LoadStr(text));
+                self.push_expr(text)?;
                 self.out.push(Instruction::Print(flags));
             }
             Stmt::PrintForm(flags, form) => {
