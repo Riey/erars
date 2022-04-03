@@ -27,6 +27,7 @@ pub enum Instruction {
     DuplicatePrev,
     LoadInt(i64),
     LoadStr(String),
+    PadStr(Alignment),
     LoadVar(VariableIndex, u32),
     StoreVar(VariableIndex, u32),
     Varset {

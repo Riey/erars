@@ -18,6 +18,14 @@ mod body {
     Alignment(
         Right,
     ),
+    PrintForm(
+        NEWLINE,
+        {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+    ),
+    PrintForm(
+        NEWLINE,
+        {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+    ),
 ]
 "
         );

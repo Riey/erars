@@ -23,6 +23,7 @@ pub enum BuiltinCommand {
 
     Restart,
     Quit,
+    Throw,
 
     LoadGlobal,
 

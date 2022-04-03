@@ -1,7 +1,7 @@
 use crate::{
     ast::{FormText, SelectCaseCond},
-    BinaryOperator, CompileError, CompileResult, Expr, Function, FunctionHeader, Instruction,
-    KnownVariables, Stmt, Variable, VariableInterner,
+    BinaryOperator, CompileError, CompileResult, Expr, FormExpr, Function, FunctionHeader,
+    Instruction, KnownVariables, Stmt, Variable, VariableInterner,
 };
 use arrayvec::ArrayVec;
 use hashbrown::HashMap;
@@ -118,8 +118,21 @@ impl<'v> Compiler<'v> {
     fn push_form(&mut self, form: FormText) -> CompileResult<()> {
         let count = 1 + form.other.len() as u32 * 2;
         self.out.push(Instruction::LoadStr(form.first));
-        for (expr, text) in form.other {
+        for (
+            FormExpr {
+                expr,
+                align,
+                padding,
+            },
+            text,
+        ) in form.other
+        {
             self.push_expr(expr)?;
+            if let Some(padding) = padding {
+                self.push_expr(padding)?;
+                self.out
+                    .push(Instruction::PadStr(align.unwrap_or_default()));
+            }
             self.out.push(Instruction::LoadStr(text));
         }
         self.out.push(Instruction::ConcatString(count));

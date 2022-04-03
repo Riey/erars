@@ -37,6 +37,8 @@
                             rustc
                             cargo
                         ];
+                        RUST_BACKTRACE=1;
+                        RUST_TEST_THREADS=1;
                     };
                 }
             );

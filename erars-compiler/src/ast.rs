@@ -9,19 +9,6 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Variable {
-    pub var_idx: VariableIndex,
-    pub args: Vec<Expr>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SelectCaseCond {
-    Single(Expr),
-    To(Expr, Expr),
-    Is(BinaryOperator, Expr),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stmt {
     Label(String),
     SelectCase(
@@ -75,37 +62,6 @@ pub enum FunctionInfo {
     FunctionS,
 }
 
-#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct FormText {
-    pub first: String,
-    pub other: Vec<(Expr, String)>,
-}
-
-impl FormText {
-    pub fn new(first: String) -> Self {
-        Self {
-            first,
-            other: Vec::new(),
-        }
-    }
-
-    pub fn push(&mut self, expr: Expr, text: String) {
-        self.other.push((expr, text));
-    }
-}
-
-impl fmt::Debug for FormText {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.first)?;
-
-        for (expr, text) in self.other.iter() {
-            write!(f, "{{{:?}}}{}", expr, text)?;
-        }
-
-        Ok(())
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Expr {
     StringLit(String),
@@ -137,5 +93,75 @@ impl Expr {
 
     pub fn cond(op1: Self, op2: Self, op3: Self) -> Self {
         Self::CondExpr(Box::new(op1), Box::new(op2), Box::new(op3))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Variable {
+    pub var_idx: VariableIndex,
+    pub args: Vec<Expr>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SelectCaseCond {
+    Single(Expr),
+    To(Expr, Expr),
+    Is(BinaryOperator, Expr),
+}
+
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FormExpr {
+    pub expr: Expr,
+    pub padding: Option<Expr>,
+    pub align: Option<Alignment>,
+}
+
+impl fmt::Debug for FormExpr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.expr)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct FormText {
+    pub first: String,
+    pub other: Vec<(FormExpr, String)>,
+}
+
+impl FormText {
+    pub fn new(first: String) -> Self {
+        Self {
+            first,
+            other: Vec::new(),
+        }
+    }
+
+    pub fn push(
+        &mut self,
+        expr: Expr,
+        padding: Option<Expr>,
+        align: Option<Alignment>,
+        text: String,
+    ) {
+        self.other.push((
+            FormExpr {
+                expr,
+                padding,
+                align,
+            },
+            text,
+        ));
+    }
+}
+
+impl fmt::Debug for FormText {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.first)?;
+
+        for (expr, text) in self.other.iter() {
+            write!(f, "{{{:?}}}{}", expr, text)?;
+        }
+
+        Ok(())
     }
 }

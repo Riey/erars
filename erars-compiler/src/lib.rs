@@ -9,7 +9,7 @@ mod parser;
 mod variable;
 
 pub use crate::{
-    ast::{Expr, Function, FunctionHeader, FunctionInfo, Stmt, Variable},
+    ast::{Expr, FormExpr, Function, FunctionHeader, FunctionInfo, Stmt, Variable},
     command::BuiltinCommand,
     compiler::{compile, CompiledFunction},
     error::{CompileError, CompileResult, ParserError, ParserResult},

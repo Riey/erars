@@ -474,20 +474,51 @@ impl<'s, 'v> Parser<'s, 'v> {
         let mut form_text = FormText::new(self.read_normal_text()?.into());
 
         loop {
+            let mut padding = None;
+            let mut align = None;
+
             let expr = match self.form_status {
                 None => break,
                 Some(FormStatus::FormIntExpr) => {
                     let expr = self.next_expr()?;
                     self.skip_ws();
-                    self.ensure_get_char('}')?;
+
+                    if !self.try_get_char('}') {
+                        self.ensure_get_char(',')?;
+                        padding = Some(self.next_expr()?);
+                        self.skip_ws();
+                        if !self.try_get_char('}') {
+                            self.ensure_get_char(',')?;
+                            self.skip_ws();
+                            align = Some(self.read_align()?);
+                            self.skip_ws();
+                            self.ensure_get_char('}')?;
+                        }
+                    }
+
                     expr
                 }
                 Some(FormStatus::FormStrExpr) => {
                     self.ban_state.percent = true;
                     let expr = self.next_expr()?;
-                    self.ban_state.percent = false;
                     self.skip_ws();
-                    self.ensure_get_char('%')?;
+
+                    if !self.try_get_char('%') {
+                        self.ensure_get_char(',')?;
+                        padding = Some(self.next_expr()?);
+                        self.skip_ws();
+                        if !self.try_get_char('%') {
+                            self.skip_ws();
+                            self.ensure_get_char(',')?;
+                            self.skip_ws();
+                            align = Some(self.read_align()?);
+                            self.skip_ws();
+                            self.ensure_get_char('%')?;
+                        }
+                    }
+
+                    self.ban_state.percent = false;
+
                     expr
                 }
                 Some(FormStatus::FormCondExpr) => {
@@ -504,7 +535,7 @@ impl<'s, 'v> Parser<'s, 'v> {
             };
 
             self.form_status = None;
-            form_text.push(expr, self.read_normal_text()?.into());
+            form_text.push(expr, padding, align, self.read_normal_text()?.into());
         }
 
         Ok(form_text)
@@ -728,15 +759,7 @@ impl<'s, 'v> Parser<'s, 'v> {
             }
             "ALIGNMENT" => {
                 self.skip_ws();
-                let start = self.current_loc();
-                let align = self.get_ident().parse::<Alignment>().map_err(|_| {
-                    (
-                        ParserError::MissingToken(format!("ALIGNMENT")),
-                        self.from_prev_loc_span(start),
-                    )
-                })?;
-
-                Ok(Some(Stmt::Alignment(align)))
+                Ok(Some(Stmt::Alignment(self.read_align()?)))
             }
             "REPEAT" => {
                 self.skip_ws();
@@ -813,6 +836,16 @@ impl<'s, 'v> Parser<'s, 'v> {
         }
 
         Ok(ret)
+    }
+
+    fn read_align(&mut self) -> ParserResult<Alignment> {
+        let start = self.current_loc();
+        self.get_ident().parse::<Alignment>().map_err(|_| {
+            (
+                ParserError::MissingToken(format!("ALIGNMENT")),
+                self.from_prev_loc_span(start),
+            )
+        })
     }
 
     fn ensure_number(&mut self) -> ParserResult<i64> {
