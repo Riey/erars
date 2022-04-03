@@ -67,6 +67,8 @@ pub enum BulitinVariable {
 #[strum(serialize_all = "UPPERCASE")]
 /// only contains variable required from either VM or compiler
 pub enum KnownVariables {
+    CustomDrawLine,
+    
     Local,
     LocalS,
     Arg,

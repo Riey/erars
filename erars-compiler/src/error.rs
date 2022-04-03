@@ -15,6 +15,8 @@ pub enum ParserError {
     UnexpectedToken(String),
     #[error("토큰 `{0}`를 찾을 수 없습니다.")]
     MissingToken(String),
+    #[error("표현식이 와야합니다.")]
+    MissingExpr,
     #[error("코드가 끝났습니다")]
     Eof,
 }

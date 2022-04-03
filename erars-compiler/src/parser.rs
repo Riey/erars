@@ -117,6 +117,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                 | "CALLNAME"
                 | "NICKNAME"
                 | "MASTERNAME"
+                | "CUSTOMDRAWLINE"
         )
     }
 
@@ -548,7 +549,14 @@ impl<'s, 'v> Parser<'s, 'v> {
         self.skip_ws();
 
         let mut body = Vec::new();
-        let cond = self.next_expr()?;
+        let cond = match self.next_expr() {
+            Ok(c) => c,
+            Err((ParserError::MissingExpr, _)) => {
+                // TODO: print warnings
+                Expr::IntLit(0)
+            }
+            Err(err) => return Err(err),
+        };
 
         let else_body = loop {
             self.skip_ws_newline();
@@ -1010,10 +1018,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                 Ok(self.read_term()?)
             }
         } else {
-            Err((
-                ParserError::InvalidCode(format!("표현식이 와야합니다.")),
-                self.from_prev_loc_span(start_idx),
-            ))
+            Err((ParserError::MissingExpr, self.from_prev_loc_span(start_idx)))
         }
     }
 
