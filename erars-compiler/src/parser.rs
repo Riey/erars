@@ -211,6 +211,13 @@ impl<'s, 'v> Parser<'s, 'v> {
         ret
     }
 
+    fn get_op(&mut self) -> &'s str {
+        let pos = self.text.find(is_not_op_char).unwrap_or(self.text.len());
+        let (ret, text) = self.text.split_at(pos);
+        self.text = text;
+        ret
+    }
+
     fn get_symbol(&mut self) -> &'s str {
         let pos = self
             .text
@@ -221,10 +228,10 @@ impl<'s, 'v> Parser<'s, 'v> {
         ret
     }
 
-    fn get_non_percent_symbol(&mut self) -> &'s str {
+    fn get_non_percent_op(&mut self) -> &'s str {
         let pos = self
             .text
-            .find(is_not_non_percent_symbol_char)
+            .find(is_not_non_percent_op_char)
             .unwrap_or(self.text.len());
         let (ret, text) = self.text.split_at(pos);
         self.text = text;
@@ -260,13 +267,23 @@ impl<'s, 'v> Parser<'s, 'v> {
         }
     }
 
-    fn try_get_non_percent_symbol(&mut self) -> Option<&'s str> {
-        let symbol = self.get_non_percent_symbol();
+    fn try_get_op(&mut self) -> Option<&'s str> {
+        let op = self.get_op();
 
-        if symbol.is_empty() {
+        if op.is_empty() {
             None
         } else {
-            Some(symbol)
+            Some(op)
+        }
+    }
+
+    fn try_get_non_percent_op(&mut self) -> Option<&'s str> {
+        let op = self.get_non_percent_op();
+
+        if op.is_empty() {
+            None
+        } else {
+            Some(op)
         }
     }
 
@@ -935,10 +952,8 @@ impl<'s, 'v> Parser<'s, 'v> {
                 UnaryOperator::Minus,
             ))
         } else if self.try_get_char('+') {
-            Ok(Expr::UnaryopExpr(
-                Box::new(self.read_term()?),
-                UnaryOperator::Plus,
-            ))
+            // unary plus is no-op
+            Ok(self.read_term()?)
         } else {
             Err((
                 ParserError::InvalidCode(format!("표현식이 와야합니다.")),
@@ -975,17 +990,17 @@ impl<'s, 'v> Parser<'s, 'v> {
 
         loop {
             let backup = self.text;
-            let symbol = if self.ban_state.percent {
-                self.try_get_non_percent_symbol()
+            let op = if self.ban_state.percent {
+                self.try_get_non_percent_op()
             } else {
-                self.try_get_symbol()
+                self.try_get_op()
             };
 
-            if let Some(symbol) = symbol {
-                if let Ok(binop) = symbol.parse::<BinaryOperator>() {
+            if let Some(op) = op {
+                if let Ok(binop) = op.parse::<BinaryOperator>() {
                     operand_stack.push((binop, self.read_term()?));
                     self.skip_ws();
-                } else if symbol == "?" && self.form_status != Some(FormStatus::FormCondExpr) {
+                } else if op == "?" && self.form_status != Some(FormStatus::FormCondExpr) {
                     let cond = calculate_binop_expr(term, &mut operand_stack);
                     let if_true = self.next_expr()?;
                     self.skip_ws();
@@ -1281,8 +1296,19 @@ fn is_not_symbol_char(c: char) -> bool {
     !is_symbol_char(c)
 }
 
-fn is_not_non_percent_symbol_char(c: char) -> bool {
-    c == '%' || !is_symbol_char(c)
+fn is_not_non_percent_op_char(c: char) -> bool {
+    c == '%' || !is_op_char(c)
+}
+
+fn is_op_char(c: char) -> bool {
+    matches!(
+        c,
+        '!' | '=' | '%' | '^' | '&' | '*' | '+' | '-' | '/' | '?' | ':' | '<' | '>' | '|'
+    )
+}
+
+fn is_not_op_char(c: char) -> bool {
+    !is_op_char(c)
 }
 
 fn calculate_binop_expr(first: Expr, stack: &mut Vec<(BinaryOperator, Expr)>) -> Expr {

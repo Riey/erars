@@ -577,6 +577,68 @@ BinopExpr(
     }
 
     #[test]
+    fn test_complex_op() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/complex_op.erb", parse_expr),
+            "
+BinopExpr(
+    BinopExpr(
+        IntLit(
+            50,
+        ),
+        Mul,
+        BinopExpr(
+            IntLit(
+                6,
+            ),
+            Sub,
+            Var(
+                Variable {
+                    var_idx: VariableIndex(
+                        93,
+                    ),
+                    args: [
+                        Var(
+                            Variable {
+                                var_idx: VariableIndex(
+                                    19,
+                                ),
+                                args: [],
+                            },
+                        ),
+                        IntLit(
+                            10,
+                        ),
+                    ],
+                },
+            ),
+        ),
+    ),
+    Add,
+    BinopExpr(
+        Var(
+            Variable {
+                var_idx: VariableIndex(
+                    6,
+                ),
+                args: [
+                    IntLit(
+                        10,
+                    ),
+                ],
+            },
+        ),
+        Mul,
+        IntLit(
+            5,
+        ),
+    ),
+)
+"
+        );
+    }
+
+    #[test]
     fn test_cond() {
         k9::snapshot!(
             do_test("tests/parse_tests/exprs/cond.erb", parse_expr),

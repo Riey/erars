@@ -11,9 +11,6 @@ pub enum UnaryOperator {
     /// -
     #[strum(to_string = "-")]
     Minus,
-    /// +
-    #[strum(to_string = "+")]
-    Plus,
 }
 
 #[derive(
