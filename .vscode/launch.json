@@ -25,6 +25,24 @@
         {
             "type": "lldb",
             "request": "launch",
+            "name": "Debug executable 'erars' with eraYM",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=erars",
+                    "--package=erars"
+                ],
+                "filter": {
+                    "name": "erars",
+                    "kind": "bin"
+                }
+            },
+            "args": ["../eraTHYMKR"],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
             "name": "Debug unit tests in executable 'erars'",
             "cargo": {
                 "args": [

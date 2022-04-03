@@ -106,7 +106,7 @@ mod body {
         },
         None,
         FormText(
-            {IntLit(123)}456,
+             {IntLit(123)}456,
         ),
     ),
     Assign(
@@ -118,7 +118,7 @@ mod body {
         },
         None,
         FormText(
-            {Var(Variable { var_idx: VariableIndex(17), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(1)] }), StringLit("00")])},
+             {Var(Variable { var_idx: VariableIndex(17), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(1)] }), StringLit("00")])},
         ),
     ),
     Assign(
@@ -139,7 +139,7 @@ mod body {
         },
         None,
         FormText(
-            {CondExpr(Var(Variable { var_idx: VariableIndex(95), args: [Var(Variable { var_idx: VariableIndex(23), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
+             {CondExpr(Var(Variable { var_idx: VariableIndex(95), args: [Var(Variable { var_idx: VariableIndex(23), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
         ),
     ),
     Assign(
@@ -151,7 +151,7 @@ mod body {
         },
         None,
         FormText(
-            ,
+             ,
         ),
     ),
 ]
@@ -791,6 +791,14 @@ Function {
 }
 "#
         );
+    }
+
+    #[test]
+    fn test_juel() {
+        k9::snapshot!(do_test(
+            "tests/parse_tests/functions/juel.erb",
+            parse_function
+        ));
     }
 }
 mod program {

@@ -560,21 +560,21 @@ impl<'s, 'v> Parser<'s, 'v> {
                 self.ensure_get_char(',')?;
                 self.skip_ws();
 
-                let num = self
+                let (num, left) = self
                     .text
-                    .split_ascii_whitespace()
-                    .next()
-                    .and_then(|s| Some((s.parse::<f32>().ok()?, s)))
-                    .ok_or_else(|| {
-                        (
-                            ParserError::MissingToken(format!("times factor")),
-                            self.current_loc_span(),
-                        )
-                    })?;
+                    .find(|c| !matches!(c, '0'..='9' | '.'))
+                    .map(|pos| self.text.split_at(pos))
+                    .unwrap_or(("", self.text));
 
-                self.consume(num.1);
+                let num = num.parse::<f32>().map_err(|err| {
+                    (
+                        ParserError::MissingToken(format!("times factor: {}", err)),
+                        self.current_loc_span(),
+                    )
+                })?;
+                self.text = left;
 
-                Ok(Some(Stmt::Times(var, NotNan::new(num.0).unwrap())))
+                Ok(Some(Stmt::Times(var, NotNan::new(num).unwrap())))
             }
             "GOTO" => {
                 self.skip_ws();
@@ -852,7 +852,7 @@ impl<'s, 'v> Parser<'s, 'v> {
             let (num, c) = read_digit(&left[2..]);
 
             consume = c + 2;
-            ret = ret << num;
+            ret = ret.wrapping_shl(num.try_into().ok()?);
         } else if matches!(left.as_bytes()[0], b'0'..=b'9') {
             let (num, c) = read_digit(left);
 
@@ -864,7 +864,11 @@ impl<'s, 'v> Parser<'s, 'v> {
 
         self.text = &left[consume..];
 
-        Some(if minus { -ret } else { ret })
+        Some(if minus {
+            ret.wrapping_neg()
+        } else {
+            ret
+        })
     }
 
     fn read_term(&mut self) -> ParserResult<Expr> {
@@ -916,6 +920,16 @@ impl<'s, 'v> Parser<'s, 'v> {
             Ok(Expr::UnaryopExpr(
                 Box::new(self.read_term()?),
                 UnaryOperator::Not,
+            ))
+        } else if self.try_get_char('-') {
+            Ok(Expr::UnaryopExpr(
+                Box::new(self.read_term()?),
+                UnaryOperator::Minus,
+            ))
+        } else if self.try_get_char('+') {
+            Ok(Expr::UnaryopExpr(
+                Box::new(self.read_term()?),
+                UnaryOperator::Plus,
             ))
         } else {
             Err((
@@ -1041,7 +1055,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                 Some(symbol) => {
                     if let Some(left) = symbol.strip_suffix("=") {
                         let additional_op = left.parse().ok();
-                        
+
                         if self.is_str_var(ident) {
                             Ok(Stmt::Assign(
                                 var,

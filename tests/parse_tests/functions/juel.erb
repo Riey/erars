@@ -1,0 +1,31 @@
+;-------------------------------------------------
+;보주 변동 범용 처리
+;-------------------------------------------------
+@COMMON_MOVE_JUEL, ARG, ARG:1, ARG:2, ARG:3, ARG:4
+;変動後の珠の数を計算
+;-1p63-1は符号付き64ビットの2進数で表すことが出来る最大の数のはず
+LOCAL:1 = LIMIT(JUEL:ARG:(ARG:1)+ARG:2, 0, -1p63-1)
+;変動差分を計算
+LOCAL:2 = LOCAL:1-JUEL:ARG:(ARG:1)
+;表示する文字列を計算
+;ARG:4は0以下、１、2以上で分岐
+;SIGN(LOCAL:2) == 1により差分の正負で＋と－を分岐
+LOCALS = %PALAMNAME:(ARG:1)%의 구슬\@ ARG:4 - (ARG != TARGET) <= 0 ? (%CALLNAME:ARG%) # \@ \@ SIGN(LOCAL:2) == 1 ? ＋ # － \@ {ABS(LOCAL:2)}
+;구슬 변동을 반영
+JUEL:ARG:(ARG:1) = LOCAL:1
+;変動差分の絶対値が0でないなら表示
+IF ABS(LOCAL:2) > 0
+    SELECTCASE ARG:3
+        ;WAITを掛けない
+        CASE 0
+            PRINTSL LOCALS
+            RETURN 1
+        ;WAITを掛ける
+        CASE 1
+            PRINTSW LOCALS
+            RETURN 1
+        ;표시하지 않음
+        CASEELSE
+            RETURN 0
+    ENDSELECT
+ENDIF
