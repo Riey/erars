@@ -65,6 +65,31 @@ impl<'v> Compiler<'v> {
 
     fn push_expr(&mut self, expr: Expr) -> CompileResult<()> {
         match expr {
+            Expr::IncOpExpr {
+                var,
+                is_inc,
+                is_pre,
+            } => {
+                let op = if is_inc {
+                    BinaryOperator::Add
+                } else {
+                    BinaryOperator::Sub
+                };
+
+                if is_pre {
+                    self.push_var(var.clone())?;
+                    self.out.push(Instruction::LoadInt(1));
+                    self.out.push(Instruction::BinaryOperator(op));
+                    self.out.push(Instruction::Duplicate);
+                    self.store_var(var.clone())?;
+                } else {
+                    self.push_var(var.clone())?;
+                    self.out.push(Instruction::Duplicate);
+                    self.out.push(Instruction::LoadInt(1));
+                    self.out.push(Instruction::BinaryOperator(op));
+                    self.store_var(var.clone())?;
+                }
+            }
             Expr::StringLit(s) => self.out.push(Instruction::LoadStr(s)),
             Expr::IntLit(i) => self.out.push(Instruction::LoadInt(i)),
             Expr::BinopExpr(lhs, op, rhs) => {

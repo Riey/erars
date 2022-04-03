@@ -980,13 +980,35 @@ impl<'s, 'v> Parser<'s, 'v> {
                 UnaryOperator::Not,
             ))
         } else if self.try_get_char('-') {
-            Ok(Expr::UnaryopExpr(
-                Box::new(self.read_term()?),
-                UnaryOperator::Minus,
-            ))
+            // dec
+            if self.try_get_char('-') {
+                self.skip_ws();
+                let var = self.ensure_get_var()?;
+                Ok(Expr::IncOpExpr {
+                    var,
+                    is_pre: true,
+                    is_inc: false,
+                })
+            } else {
+                Ok(Expr::UnaryopExpr(
+                    Box::new(self.read_term()?),
+                    UnaryOperator::Minus,
+                ))
+            }
         } else if self.try_get_char('+') {
-            // unary plus is no-op
-            Ok(self.read_term()?)
+            // inc
+            if self.try_get_char('+') {
+                self.skip_ws();
+                let var = self.ensure_get_var()?;
+                Ok(Expr::IncOpExpr {
+                    var,
+                    is_pre: true,
+                    is_inc: true,
+                })
+            } else {
+                // unary plus is no-op
+                Ok(self.read_term()?)
+            }
         } else {
             Err((
                 ParserError::InvalidCode(format!("표현식이 와야합니다.")),
@@ -1033,6 +1055,24 @@ impl<'s, 'v> Parser<'s, 'v> {
                 if let Ok(binop) = op.parse::<BinaryOperator>() {
                     operand_stack.push((binop, self.read_term()?));
                     self.skip_ws();
+                } else if op == "++" || op == "--" {
+                    let var = match term {
+                        Expr::Var(var) => var,
+                        _ => {
+                            return Err((
+                                ParserError::InvalidCode(format!(
+                                    "연산자 {}앞에는 변수가 와야합니다.",
+                                    op
+                                )),
+                                self.current_loc_span(),
+                            ))
+                        }
+                    };
+                    term = Expr::IncOpExpr {
+                        var,
+                        is_inc: op == "++",
+                        is_pre: false,
+                    };
                 } else if op == "?" && self.form_status != Some(FormStatus::FormCondExpr) {
                     let cond = calculate_binop_expr(term, &mut operand_stack);
                     let if_true = self.next_expr()?;
@@ -1121,6 +1161,17 @@ impl<'s, 'v> Parser<'s, 'v> {
                         } else {
                             Ok(Stmt::Assign(var, additional_op, self.next_expr()?))
                         }
+                    } else if symbol == "++" || symbol == "--" {
+                        // inc / dec expr can be a stmt
+                        Ok(Stmt::Assign(
+                            var,
+                            Some(if symbol == "++" {
+                                BinaryOperator::Add
+                            } else {
+                                BinaryOperator::Sub
+                            }),
+                            Expr::IntLit(1),
+                        ))
                     } else {
                         Err((
                             ParserError::InvalidCode(format!(
@@ -1135,6 +1186,20 @@ impl<'s, 'v> Parser<'s, 'v> {
                     ident_start..ident_end,
                 )),
             }
+        } else if self.try_get_prefix("++") {
+            self.skip_ws();
+            Ok(Stmt::Assign(
+                self.ensure_get_var()?,
+                Some(BinaryOperator::Add),
+                Expr::IntLit(1),
+            ))
+        } else if self.try_get_prefix("--") {
+            self.skip_ws();
+            Ok(Stmt::Assign(
+                self.ensure_get_var()?,
+                Some(BinaryOperator::Sub),
+                Expr::IntLit(1),
+            ))
         } else if self.try_get_char('$') {
             let label = self.ensure_ident(|| "GOTO label")?;
             Ok(Stmt::Label(label.into()))

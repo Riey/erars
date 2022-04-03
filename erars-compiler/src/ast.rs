@@ -70,6 +70,12 @@ pub enum Expr {
     Var(Variable),
     Method(String, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),
+    /// ++/-- var ++/--
+    IncOpExpr {
+        var: Variable,
+        is_pre: bool,
+        is_inc: bool,
+    },
     BinopExpr(Box<Self>, BinaryOperator, Box<Self>),
     CondExpr(Box<Self>, Box<Self>, Box<Self>),
 }
