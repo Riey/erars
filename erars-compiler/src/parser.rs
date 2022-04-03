@@ -469,6 +469,14 @@ impl<'s, 'v> Parser<'s, 'v> {
         Ok(ret)
     }
 
+    fn read_form_and_args(&mut self) -> ParserResult<(Expr, Vec<Expr>)> {
+        self.ban_state.comma = true;
+        let name = self.read_form_text()?;
+        self.ban_state.comma = false;
+        let args = self.read_args('\n')?;
+        Ok((Expr::FormText(name), args))
+    }
+
     fn read_form_text(&mut self) -> ParserResult<FormText> {
         debug_assert!(self.form_status.is_none());
 
@@ -644,10 +652,93 @@ impl<'s, 'v> Parser<'s, 'v> {
 
                 Ok(Some(Stmt::Times(var, NotNan::new(num).unwrap())))
             }
-            "GOTO" => {
+            "GOTO" | "GOTOFORM" | "TRYGOTO" | "TRYCGOTO" | "TRYGOTOFORM" | "TRYCGOTOFORM"
+            | "JUMP" | "JUMPFORM" | "TRYJUMP" | "TRYCJUMP" | "TRYJUMPFORM" | "TRYCJUMPFORM"
+            | "CALL" | "CALLFORM" | "TRYCALL" | "TRYCCALL" | "TRYCALLFORM" | "TRYCCALLFORM" => {
+                let mut left = command;
+
+                let catch = if let Some(l) = left.strip_prefix("TRY") {
+                    if let Some(nl) = l.strip_prefix("C") {
+                        // TRYCALL..
+                        if nl.starts_with("ALL") {
+                            left = l;
+                            Some(false)
+                        } else {
+                            left = nl;
+                            Some(true)
+                        }
+                    } else {
+                        left = l;
+                        Some(false)
+                    }
+                } else {
+                    None
+                };
+
+                let (ty, left) = left.split_at(4);
+
+                let (label, args) = if left == "FORM" {
+                    self.skip_blank();
+                    if ty == "GOTO" {
+                        (Expr::FormText(self.read_form_text()?), Vec::new())
+                    } else {
+                        self.read_form_and_args()?
+                    }
+                } else {
+                    debug_assert!(left.is_empty());
+                    self.skip_ws();
+                    if ty == "GOTO" {
+                        (Expr::str(self.read_until_newline()), Vec::new())
+                    } else {
+                        let name = self.ensure_ident(|| "function label")?;
+                        self.skip_ws();
+                        let args = if self.try_get_char(',') {
+                            self.read_args('\n')?
+                        } else {
+                            Vec::new()
+                        };
+                        (Expr::str(name), args)
+                    }
+                };
+
+                let catch = match catch {
+                    Some(true) => {
+                        self.skip_ws_newline();
+                        self.ensure_get_prefix("CATCH")?;
+                        Some(self.read_block_until("ENDCATCH")?)
+                    }
+                    Some(false) => Some(Vec::new()),
+                    None => None,
+                };
+
+                if ty == "GOTO" {
+                    Ok(Some(Stmt::Goto { label, catch }))
+                } else {
+                    Ok(Some(Stmt::Call {
+                        name: label,
+                        args,
+                        catch,
+                        jump: ty == "JUMP",
+                    }))
+                }
+            }
+            "CALLF" => {
                 self.skip_ws();
 
-                Ok(Some(Stmt::Goto(self.ensure_ident(|| "label name")?.into())))
+                let func = self.ensure_ident(|| "Function label")?;
+
+                let args = if self.try_get_char(',') {
+                    self.read_args('\n')?
+                } else {
+                    Vec::new()
+                };
+
+                Ok(Some(Stmt::Call {
+                    name: Expr::str(func),
+                    args,
+                    jump: false,
+                    catch: None,
+                }))
             }
             "REUSELASTLINE" => {
                 self.skip_blank();
@@ -740,30 +831,6 @@ impl<'s, 'v> Parser<'s, 'v> {
                     )
                 })?;
                 Ok(Some(Stmt::Begin(ty)))
-            }
-            "CALL" | "CALLF" => {
-                self.skip_ws();
-
-                let func = self.ensure_ident(|| "Function label")?;
-
-                let args = if self.try_get_char(',') {
-                    self.read_args('\n')?
-                } else {
-                    Vec::new()
-                };
-
-                Ok(Some(Stmt::Call(func.into(), args)))
-            }
-            "CALLFORM" => {
-                self.skip_ws();
-
-                self.ban_state.comma = true;
-                let label = self.read_form_text()?;
-                self.ban_state.comma = false;
-
-                let args = self.read_args('\n')?;
-
-                Ok(Some(Stmt::CallForm(label, args)))
             }
             "CUSTOMDRAWLINE" => {
                 self.skip_blank();

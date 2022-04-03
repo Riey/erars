@@ -388,6 +388,7 @@ impl TerminalVm {
     fn run_instruction(
         &self,
         func_name: &str,
+        goto_labels: &HashMap<SmartString<LazyCompact>, u32>,
         inst: &Instruction,
         cursor: &mut usize,
         chan: &ConsoleChannel,
@@ -402,6 +403,9 @@ impl TerminalVm {
             Instruction::Pop => drop(ctx.pop()),
             Instruction::Duplicate => ctx.dup(),
             Instruction::DuplicatePrev => ctx.dup_prev(),
+            Instruction::GotoLabel => {
+                *cursor = goto_labels[ctx.pop_str()?.as_str()] as usize;
+            }
             Instruction::StoreVar(var_idx, c) => {
                 let target = *ctx
                     .var
@@ -659,6 +663,7 @@ impl TerminalVm {
     fn run_body(
         &self,
         func_name: &str,
+        goto_labels: &HashMap<SmartString<LazyCompact>, u32>,
         body: &FunctionBody,
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
@@ -669,7 +674,7 @@ impl TerminalVm {
 
         while let Some(inst) = insts.get(cursor) {
             cursor += 1;
-            match self.run_instruction(func_name, inst, &mut cursor, chan, ctx) {
+            match self.run_instruction(func_name, goto_labels, inst, &mut cursor, chan, ctx) {
                 Ok(None) => {}
                 Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
                 Ok(Some(Workflow::Return)) => break,
@@ -709,7 +714,7 @@ impl TerminalVm {
             )?;
         }
 
-        let ret = self.run_body(label, body, chan, ctx);
+        let ret = self.run_body(label, body.goto_labels(), body, chan, ctx);
 
         ctx.end_func();
 
@@ -720,7 +725,7 @@ impl TerminalVm {
         self.dic.get_event(ty).run(|body| {
             let label = ty.into();
             ctx.new_func(label, body);
-            self.run_body(label, body, chan, ctx)?;
+            self.run_body(label, body.goto_labels(), body, chan, ctx)?;
             ctx.end_func();
 
             Ok(())

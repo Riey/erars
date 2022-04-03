@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use arrayvec::ArrayVec;
 use enum_map::EnumMap;
 use hashbrown::HashMap;
+use smartstring::{LazyCompact, SmartString};
 
 use crate::value::Value;
 use erars_compiler::{
@@ -15,6 +16,7 @@ pub struct FunctionBody {
     local_size: usize,
     locals_size: usize,
     body: Vec<Instruction>,
+    goto_labels: HashMap<SmartString<LazyCompact>, u32>,
     args: Vec<(VariableIndex, Option<Value>, ArrayVec<usize, 4>)>,
     local_vars: HashMap<VariableIndex, VariableInfo>,
 }
@@ -24,12 +26,14 @@ impl FunctionBody {
         local_size: usize,
         locals_size: usize,
         local_vars: HashMap<VariableIndex, VariableInfo>,
+        goto_labels: HashMap<SmartString<LazyCompact>, u32>,
         body: Vec<Instruction>,
     ) -> Self {
         Self {
             local_size,
             locals_size,
             body,
+            goto_labels,
             args: Vec::new(),
             local_vars,
         }
@@ -46,6 +50,10 @@ impl FunctionBody {
 
     pub fn push_local(&mut self, var_idx: VariableIndex, info: VariableInfo) {
         self.local_vars.insert(var_idx, info);
+    }
+
+    pub fn goto_labels(&self) -> &HashMap<SmartString<LazyCompact>, u32> {
+        &self.goto_labels
     }
 
     pub fn args(&self) -> &[(VariableIndex, Option<Value>, ArrayVec<usize, 4>)] {
@@ -120,6 +128,7 @@ impl FunctionDic {
     ) {
         let mut body = FunctionBody {
             body: func.body,
+            goto_labels: func.goto_labels,
             ..Default::default()
         };
 

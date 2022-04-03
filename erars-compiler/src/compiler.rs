@@ -6,18 +6,19 @@ use crate::{
 use arrayvec::ArrayVec;
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledFunction {
     pub header: FunctionHeader,
+    pub goto_labels: HashMap<SmartString<LazyCompact>, u32>,
     pub body: Vec<Instruction>,
 }
 
 struct Compiler<'v> {
     var: &'v VariableInterner,
     out: Vec<Instruction>,
-    marks: HashMap<String, u32>,
-    goto_marks: HashMap<String, Vec<u32>>,
+    goto_labels: HashMap<SmartString<LazyCompact>, u32>,
     continue_marks: Vec<u32>,
     break_marks: Vec<Vec<u32>>,
 }
@@ -27,8 +28,7 @@ impl<'v> Compiler<'v> {
         Self {
             var,
             out: Vec::new(),
-            marks: HashMap::new(),
-            goto_marks: HashMap::new(),
+            goto_labels: HashMap::new(),
             continue_marks: Vec::new(),
             break_marks: Vec::new(),
         }
@@ -390,15 +390,52 @@ impl<'v> Compiler<'v> {
                 self.push_expr(expr)?;
                 self.out.push(Instruction::ReturnF);
             }
-            Stmt::Call(name, args) => {
+            Stmt::Call {
+                name,
+                args,
+                catch,
+                jump,
+            } => {
                 let count = self.push_list(args)?;
-                self.out.push(Instruction::LoadStr(name));
-                self.out.push(Instruction::Call(count));
+                self.push_expr(name)?;
+
+                if let Some(catch) = catch {
+                    if jump {
+                        self.out.push(Instruction::TryJump(count));
+                    } else {
+                        self.out.push(Instruction::TryCall(count));
+                    }
+                    let catch_top = self.mark();
+                    for stmt in catch {
+                        self.push_stmt(stmt)?;
+                    }
+                    self.insert(catch_top, Instruction::GotoIfNot(self.current_no()));
+                } else {
+                    if jump {
+                        self.out.push(Instruction::Jump(count));
+                    } else {
+                        self.out.push(Instruction::Call(count));
+                    }
+                }
             }
-            Stmt::CallForm(name, args) => {
-                let count = self.push_list(args)?;
-                self.push_form(name)?;
-                self.out.push(Instruction::Call(count));
+            Stmt::Goto { label, catch } => {
+                self.push_expr(label)?;
+
+                if let Some(catch) = catch {
+                    self.out.push(Instruction::TryGotoLabel);
+                    let catch_top = self.mark();
+                    for stmt in catch {
+                        self.push_stmt(stmt)?;
+                    }
+                    self.insert(catch_top, Instruction::GotoIfNot(self.current_no()));
+                } else {
+                    self.out.push(Instruction::GotoLabel);
+                }
+            }
+            Stmt::Label(label) => {
+                if self.goto_labels.insert(label, self.current_no()).is_some() {
+                    return Err(CompileError::DuplicatedGotoLabel);
+                }
             }
             Stmt::Begin(ty) => {
                 self.out.push(Instruction::Begin(ty));
@@ -409,15 +446,6 @@ impl<'v> Compiler<'v> {
             Stmt::Command(command, args) => {
                 let count = self.push_list(args)?;
                 self.out.push(Instruction::Command(command, count));
-            }
-            Stmt::Label(label) => {
-                if self.marks.insert(label, self.current_no()).is_some() {
-                    return Err(CompileError::DuplicatedGotoLabel);
-                }
-            }
-            Stmt::Goto(label) => {
-                let mark = self.mark();
-                self.goto_marks.entry(label.into()).or_default().push(mark);
             }
             Stmt::Varset(var, args) => {
                 let varset_count = self.push_list(args)?;
@@ -449,21 +477,6 @@ impl<'v> Compiler<'v> {
 
         Ok(())
     }
-
-    pub fn finish(mut self) -> Vec<Instruction> {
-        for (label, marks) in self.goto_marks {
-            match self.marks.get(&label) {
-                Some(label_pos) => {
-                    for goto_pos in marks {
-                        self.out[goto_pos as usize] = Instruction::Goto(*label_pos);
-                    }
-                }
-                None => unreachable!("Unknown goto label ${}", label),
-            }
-        }
-
-        self.out
-    }
 }
 
 pub fn compile(func: Function, var: &VariableInterner) -> CompileResult<CompiledFunction> {
@@ -475,6 +488,7 @@ pub fn compile(func: Function, var: &VariableInterner) -> CompileResult<Compiled
 
     Ok(CompiledFunction {
         header: func.header,
-        body: compiler.finish(),
+        goto_labels: compiler.goto_labels,
+        body: compiler.out,
     })
 }

@@ -37,6 +37,11 @@ pub enum Instruction {
     },
     CallMethod(u32),
     Call(u32),
+    /// if name is not exists, push 1
+    TryCall(u32),
+    Jump(u32),
+    /// if name is not exists, push 1
+    TryJump(u32),
     Begin(BeginType),
     Print(PrintFlags),
     ReuseLastLine,
@@ -48,6 +53,9 @@ pub enum Instruction {
     Times(NotNan<f32>),
     Return,
     ReturnF,
+    GotoLabel,
+    /// if name is not exists, push 1
+    TryGotoLabel,
     Goto(u32),
     GotoIfNot(u32),
 }

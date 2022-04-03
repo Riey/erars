@@ -2,6 +2,7 @@ use std::fmt;
 
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
+use smartstring::{LazyCompact, SmartString};
 
 use crate::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, PrintFlags, UnaryOperator,
@@ -10,13 +11,12 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stmt {
-    Label(String),
+    Label(SmartString<LazyCompact>),
     SelectCase(
         Expr,
         Vec<(Vec<SelectCaseCond>, Vec<Stmt>)>,
         Option<Vec<Stmt>>,
     ),
-    Goto(String),
     Print(PrintFlags, Expr),
     PrintList(PrintFlags, Vec<Expr>),
     PrintForm(PrintFlags, FormText),
@@ -25,8 +25,16 @@ pub enum Stmt {
     Sif(Expr, Box<Stmt>),
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
     Times(Variable, NotNan<f32>),
-    Call(String, Vec<Expr>),
-    CallForm(FormText, Vec<Expr>),
+    Goto {
+        label: Expr,
+        catch: Option<Vec<Stmt>>,
+    },
+    Call {
+        name: Expr,
+        args: Vec<Expr>,
+        jump: bool,
+        catch: Option<Vec<Stmt>>,
+    },
     Begin(BeginType),
     Varset(Variable, Vec<Expr>),
     Repeat(Expr, Vec<Stmt>),

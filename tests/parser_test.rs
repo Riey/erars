@@ -173,9 +173,11 @@ mod body {
             do_test("tests/parse_tests/bodys/call.erb", parse_body),
             r#"
 [
-    Call(
-        "FOO",
-        [
+    Call {
+        name: StringLit(
+            "FOO",
+        ),
+        args: [
             IntLit(
                 123,
             ),
@@ -195,7 +197,9 @@ mod body {
                 "123",
             ),
         ],
-    ),
+        jump: false,
+        catch: None,
+    },
 ]
 "#
         );
@@ -871,6 +875,14 @@ mod function {
     use erars_compiler::parse_function;
 
     #[test]
+    fn test_call() {
+        k9::snapshot!(do_test(
+            "tests/parse_tests/functions/call.erb",
+            parse_function
+        ));
+    }
+
+    #[test]
     fn test_function() {
         k9::snapshot!(
             do_test("tests/parse_tests/functions/function.erb", parse_function),
@@ -1302,14 +1314,18 @@ mod program {
             infos: [],
         },
         body: [
-            CallForm(
-                FOO_{IntLit(123)},
-                [
+            Call {
+                name: FormText(
+                    FOO_{IntLit(123)},
+                ),
+                args: [
                     IntLit(
                         345,
                     ),
                 ],
-            ),
+                jump: false,
+                catch: None,
+            },
         ],
     },
     Function {
