@@ -159,7 +159,7 @@ mod body {
         },
         None,
         FormText(
-             ,
+            ,
         ),
     ),
 ]
@@ -193,6 +193,25 @@ mod body {
             ),
             StringLit(
                 "123",
+            ),
+        ],
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_command() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/command.erb", parse_body),
+            r#"
+[
+    Command(
+        CustomDrawLine,
+        [
+            StringLit(
+                "=",
             ),
         ],
     ),

@@ -765,6 +765,13 @@ impl<'s, 'v> Parser<'s, 'v> {
 
                 Ok(Some(Stmt::CallForm(label, args)))
             }
+            "CUSTOMDRAWLINE" => {
+                self.skip_blank();
+                Ok(Some(Stmt::Command(
+                    BuiltinCommand::CustomDrawLine,
+                    vec![Expr::str(self.read_until_newline())],
+                )))
+            }
             "ALIGNMENT" => {
                 self.skip_ws();
                 Ok(Some(Stmt::Alignment(self.read_align()?)))
