@@ -390,6 +390,7 @@ impl<'s, 'v> Parser<'s, 'v> {
     fn read_normal_text(&mut self) -> ParserResult<&'s str> {
         let mut chars = self.text.chars();
         let mut pad = 1;
+        let mut strip_blank = false;
 
         loop {
             if let Some(ch) = chars.next() {
@@ -406,7 +407,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                         break;
                     }
                     '#' if self.cond_status == Some(CondStatus::CondFormer) => {
-                        pad = 2;
+                        strip_blank = true;
                         self.cond_status = Some(CondStatus::CondLater);
                         break;
                     }
@@ -457,7 +458,11 @@ impl<'s, 'v> Parser<'s, 'v> {
             .split_at(self.text.len() - chars.as_str().len() - pad);
         self.text = left;
 
-        Ok(ret)
+        Ok(if strip_blank {
+            ret.strip_suffix(' ').unwrap_or(ret)
+        } else {
+            ret
+        })
     }
 
     fn read_form_and_args(&mut self) -> ParserResult<(Expr, Vec<Expr>)> {
@@ -536,7 +541,6 @@ impl<'s, 'v> Parser<'s, 'v> {
                     self.form_status = None;
                     self.cond_status = Some(CondStatus::CondFormer);
                     let if_true = self.read_form_text()?;
-                    self.skip_blank();
                     self.ensure_get_char('#')?;
                     self.skip_blank();
                     let or_false = self.read_form_text()?;
