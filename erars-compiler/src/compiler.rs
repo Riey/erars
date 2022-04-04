@@ -3,7 +3,6 @@ use crate::{
     BinaryOperator, CompileError, CompileResult, Expr, FormExpr, Function, FunctionHeader,
     Instruction, KnownVariables, Stmt, Variable, VariableInterner,
 };
-use arrayvec::ArrayVec;
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
@@ -354,7 +353,7 @@ impl<'v> Compiler<'v> {
             }
             Stmt::For(var, init, end, step, body) => self.push_for(var, init, end, step, body)?,
             Stmt::If(else_ifs, else_part) => {
-                let mut end_stack = ArrayVec::<u32, 120>::new();
+                let mut end_stack = Vec::with_capacity(32);
 
                 for (cond, body) in else_ifs {
                     self.push_if(cond, body)?;

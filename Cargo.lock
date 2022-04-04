@@ -742,7 +742,6 @@ dependencies = [
 name = "erars-compiler"
 version = "0.1.0"
 dependencies = [
- "arrayvec",
  "bitflags",
  "either",
  "enum-map",

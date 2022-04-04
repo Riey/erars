@@ -338,10 +338,6 @@ impl<'s, 'v> Parser<'s, 'v> {
         self.try_get_char(' ');
     }
 
-    fn check_char(&self, c: char) -> bool {
-        self.text.chars().next() == Some(c)
-    }
-
     fn check_prefix(&self, prefix: &str) -> bool {
         self.text.starts_with(prefix)
     }
@@ -473,11 +469,8 @@ impl<'s, 'v> Parser<'s, 'v> {
         self.ban_state.comma = true;
         let name = self.read_form_text()?;
         self.ban_state.comma = false;
-        let args = if self.try_get_char(',') {
-            self.read_args('\n')?
-        } else {
-            Vec::new()
-        };
+
+        let args = self.read_comma_or_paran_args()?;
         Ok((Expr::FormText(name), args))
     }
 
@@ -702,11 +695,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                     } else {
                         let name = self.ensure_ident(|| "function label")?;
                         self.skip_ws();
-                        let args = if self.try_get_char(',') {
-                            self.read_args('\n')?
-                        } else {
-                            Vec::new()
-                        };
+                        let args = self.read_comma_or_paran_args()?;
                         (Expr::str(name), args)
                     }
                 };
@@ -737,11 +726,7 @@ impl<'s, 'v> Parser<'s, 'v> {
 
                 let func = self.ensure_ident(|| "Function label")?;
 
-                let args = if self.try_get_char(',') {
-                    self.read_args('\n')?
-                } else {
-                    Vec::new()
-                };
+                let args = self.read_comma_or_paran_args()?;
 
                 Ok(Some(Stmt::Call {
                     name: Expr::str(func),
@@ -903,6 +888,16 @@ impl<'s, 'v> Parser<'s, 'v> {
         }
     }
 
+    fn read_comma_or_paran_args(&mut self) -> ParserResult<Vec<Expr>> {
+        if self.try_get_char('(') {
+            self.read_args(')')
+        } else if self.try_get_char(',') {
+            self.read_args('\n')
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
     fn read_args(&mut self, end: char) -> ParserResult<Vec<Expr>> {
         self.skip_ws();
 
@@ -919,18 +914,17 @@ impl<'s, 'v> Parser<'s, 'v> {
             self.skip_ws();
 
             if !self.try_get_char(',') {
+                if !self.text.is_empty() {
+                    self.ensure_get_char(end)?;
+                }
                 break;
             }
 
             self.skip_ws();
 
-            if self.check_char(end) {
+            if self.try_get_char(end) {
                 break;
             }
-        }
-
-        if !self.text.is_empty() {
-            self.ensure_get_char(end)?;
         }
 
         Ok(ret)
