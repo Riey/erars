@@ -338,6 +338,10 @@ impl<'s, 'v> Parser<'s, 'v> {
         self.try_get_char(' ');
     }
 
+    fn check_char(&self, c: char) -> bool {
+        self.text.chars().next() == Some(c)
+    }
+
     fn check_prefix(&self, prefix: &str) -> bool {
         self.text.starts_with(prefix)
     }
@@ -915,6 +919,12 @@ impl<'s, 'v> Parser<'s, 'v> {
             self.skip_ws();
 
             if !self.try_get_char(',') {
+                break;
+            }
+
+            self.skip_ws();
+
+            if self.check_char(end) {
                 break;
             }
         }
