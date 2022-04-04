@@ -876,10 +876,119 @@ mod function {
 
     #[test]
     fn test_call() {
-        k9::snapshot!(do_test(
-            "tests/parse_tests/functions/call.erb",
-            parse_function
-        ));
+        k9::snapshot!(
+            do_test("tests/parse_tests/functions/call.erb", parse_function),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "FOO",
+        args: [],
+        infos: [],
+    },
+    body: [
+        Assign(
+            Variable {
+                var_idx: VariableIndex(
+                    18,
+                ),
+                args: [],
+            },
+            None,
+            FormText(
+                 LABEL,
+            ),
+        ),
+        Goto {
+            label: StringLit(
+                "LABEL",
+            ),
+            catch: None,
+        },
+        Goto {
+            label: FormText(
+                {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+            ),
+            catch: None,
+        },
+        Goto {
+            label: FormText(
+                {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+            ),
+            catch: Some(
+                [],
+            ),
+        },
+        Goto {
+            label: FormText(
+                {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+            ),
+            catch: Some(
+                [],
+            ),
+        },
+        Call {
+            name: StringLit(
+                "BAR",
+            ),
+            args: [],
+            jump: false,
+            catch: None,
+        },
+        Call {
+            name: StringLit(
+                "BAR",
+            ),
+            args: [],
+            jump: false,
+            catch: Some(
+                [],
+            ),
+        },
+        Call {
+            name: StringLit(
+                "BAR",
+            ),
+            args: [],
+            jump: false,
+            catch: Some(
+                [],
+            ),
+        },
+        Call {
+            name: StringLit(
+                "BAR",
+            ),
+            args: [],
+            jump: true,
+            catch: None,
+        },
+        Call {
+            name: StringLit(
+                "BAR",
+            ),
+            args: [],
+            jump: true,
+            catch: Some(
+                [],
+            ),
+        },
+        Call {
+            name: FormText(
+                BAR,
+            ),
+            args: [],
+            jump: true,
+            catch: Some(
+                [],
+            ),
+        },
+        Label(
+            "LABEL",
+        ),
+    ],
+}
+"#
+        );
     }
 
     #[test]

@@ -389,7 +389,7 @@ impl<'s, 'v> Parser<'s, 'v> {
 
     fn read_normal_text(&mut self) -> ParserResult<&'s str> {
         let mut chars = self.text.chars();
-        let mut skip_count = 1;
+        let mut pad = 1;
 
         loop {
             if let Some(ch) = chars.next() {
@@ -406,23 +406,23 @@ impl<'s, 'v> Parser<'s, 'v> {
                         break;
                     }
                     '#' if self.cond_status == Some(CondStatus::CondFormer) => {
+                        pad = 2;
                         self.cond_status = Some(CondStatus::CondLater);
                         break;
                     }
                     '\\' => {
                         match chars.next() {
                             Some('@') => {
+                                pad = 2;
                                 match self.cond_status {
                                     Some(CondStatus::CondLater) => {
                                         self.cond_status = None;
-                                        skip_count = 2;
                                     }
                                     Some(_) => {
                                         return Err((ParserError::UnexpectedToken("\\@".into()), self.current_loc_span()));
                                     }
                                     None => {
                                         self.form_status = Some(FormStatus::FormCondExpr);
-                                        skip_count = 2;
                                     }
                                 }
                                 break;
@@ -434,7 +434,6 @@ impl<'s, 'v> Parser<'s, 'v> {
                         }
                     }
                     '\r' => {
-                        skip_count += 1;
                         chars.next();
                         self.form_status = None;
                         break;
@@ -453,18 +452,10 @@ impl<'s, 'v> Parser<'s, 'v> {
             }
         }
 
-        let ret = if self.cond_status == Some(CondStatus::CondLater) {
-            let (ret, left) = self.text.split_at(self.text.len() - chars.as_str().len());
-            let ret = &ret[..ret.len() - skip_count];
-            let ret = ret.strip_suffix(' ').unwrap_or(ret);
-            self.text = left;
-            self.skip_blank();
-            ret
-        } else {
-            let (ret, left) = self.text.split_at(self.text.len() - chars.as_str().len());
-            self.text = left;
-            &ret[..ret.len() - skip_count]
-        };
+        let (ret, left) = self
+            .text
+            .split_at(self.text.len() - chars.as_str().len() - pad);
+        self.text = left;
 
         Ok(ret)
     }
@@ -473,7 +464,11 @@ impl<'s, 'v> Parser<'s, 'v> {
         self.ban_state.comma = true;
         let name = self.read_form_text()?;
         self.ban_state.comma = false;
-        let args = self.read_args('\n')?;
+        let args = if self.try_get_char(',') {
+            self.read_args('\n')?
+        } else {
+            Vec::new()
+        };
         Ok((Expr::FormText(name), args))
     }
 
@@ -489,6 +484,7 @@ impl<'s, 'v> Parser<'s, 'v> {
             let expr = match self.form_status {
                 None => break,
                 Some(FormStatus::FormIntExpr) => {
+                    self.ensure_get_char('{')?;
                     let expr = self.next_expr()?;
                     self.skip_ws();
 
@@ -508,6 +504,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                     expr
                 }
                 Some(FormStatus::FormStrExpr) => {
+                    self.ensure_get_char('%')?;
                     self.ban_state.percent = true;
                     let expr = self.next_expr()?;
                     self.skip_ws();
@@ -531,6 +528,7 @@ impl<'s, 'v> Parser<'s, 'v> {
                     expr
                 }
                 Some(FormStatus::FormCondExpr) => {
+                    self.ensure_get_prefix("\\@")?;
                     let cond = self.next_expr()?;
                     self.skip_ws();
                     self.ensure_get_char('?')?;
@@ -538,7 +536,11 @@ impl<'s, 'v> Parser<'s, 'v> {
                     self.form_status = None;
                     self.cond_status = Some(CondStatus::CondFormer);
                     let if_true = self.read_form_text()?;
+                    self.skip_blank();
+                    self.ensure_get_char('#')?;
+                    self.skip_blank();
                     let or_false = self.read_form_text()?;
+                    self.ensure_get_prefix("\\@")?;
                     Expr::cond(cond, Expr::FormText(if_true), Expr::FormText(or_false))
                 }
             };
