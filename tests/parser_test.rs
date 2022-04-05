@@ -992,6 +992,56 @@ Function {
     }
 
     #[test]
+    fn test_dim() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/functions/dim.erb", parse_function),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "SYSTEM_TITLE",
+        args: [],
+        infos: [
+            Dim(
+                LocalVariable {
+                    idx: VariableIndex(
+                        108,
+                    ),
+                    init: [
+                        IntLit(
+                            2,
+                        ),
+                    ],
+                    info: VariableInfo {
+                        is_chara: false,
+                        is_str: false,
+                        default_int: 0,
+                        size: [],
+                    },
+                },
+            ),
+        ],
+    },
+    body: [
+        PrintList(
+            (empty),
+            [
+                Var(
+                    Variable {
+                        var_idx: VariableIndex(
+                            108,
+                        ),
+                        args: [],
+                    },
+                ),
+            ],
+        ),
+    ],
+}
+"#
+        );
+    }
+
+    #[test]
     fn test_function() {
         k9::snapshot!(
             do_test("tests/parse_tests/functions/function.erb", parse_function),

@@ -196,7 +196,18 @@ impl VariableStorage {
         self.local_variables.entry(name.into()).or_insert_with(|| {
             body.local_vars()
                 .iter()
-                .map(|(idx, info)| (*idx, (info.clone(), UniformVariable::new(info))))
+                .map(|(idx, (info, init))| {
+                    let mut var = UniformVariable::new(info);
+
+                    if !init.is_empty() {
+                        let var = var.assume_normal();
+                        for (idx, init_var) in init.iter().enumerate() {
+                            var.set(iter::once(idx), init_var.clone()).unwrap();
+                        }
+                    }
+
+                    (*idx, (info.clone(), var))
+                })
                 .collect()
         });
     }

@@ -6,7 +6,7 @@ use erars_compiler::{compile, parse_program, VariableInterner};
 #[test]
 fn run_test() {
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
-    let var = VariableInterner::with_default_variables();
+    let mut var = VariableInterner::with_default_variables();
 
     for erb_file in erb_files {
         let erb_file = erb_file.unwrap();
@@ -19,7 +19,7 @@ fn run_test() {
 
         let erb_source = std::fs::read_to_string(&erb_file).unwrap();
         let ron_source = std::fs::read_to_string(ron_file).unwrap();
-        let program = parse_program(&erb_source, &var).unwrap();
+        let program = parse_program(&erb_source, &mut var).unwrap();
         let mut dic = FunctionDic::new();
 
         for func in program {

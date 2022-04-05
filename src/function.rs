@@ -13,32 +13,13 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {
-    local_size: usize,
-    locals_size: usize,
     body: Vec<Instruction>,
     goto_labels: HashMap<SmartString<LazyCompact>, u32>,
     args: Vec<(VariableIndex, Option<Value>, ArrayVec<usize, 4>)>,
-    local_vars: HashMap<VariableIndex, VariableInfo>,
+    local_vars: HashMap<VariableIndex, (VariableInfo, Vec<Value>)>,
 }
 
 impl FunctionBody {
-    pub fn new(
-        local_size: usize,
-        locals_size: usize,
-        local_vars: HashMap<VariableIndex, VariableInfo>,
-        goto_labels: HashMap<SmartString<LazyCompact>, u32>,
-        body: Vec<Instruction>,
-    ) -> Self {
-        Self {
-            local_size,
-            locals_size,
-            body,
-            goto_labels,
-            args: Vec::new(),
-            local_vars,
-        }
-    }
-
     pub fn push_arg(
         &mut self,
         var_idx: VariableIndex,
@@ -48,8 +29,8 @@ impl FunctionBody {
         self.args.push((var_idx, default_value, indices));
     }
 
-    pub fn push_local(&mut self, var_idx: VariableIndex, info: VariableInfo) {
-        self.local_vars.insert(var_idx, info);
+    pub fn push_local(&mut self, var_idx: VariableIndex, info: VariableInfo, init: Vec<Value>) {
+        self.local_vars.insert(var_idx, (info, init));
     }
 
     pub fn goto_labels(&self) -> &HashMap<SmartString<LazyCompact>, u32> {
@@ -60,16 +41,8 @@ impl FunctionBody {
         &self.args
     }
 
-    pub fn local_vars(&self) -> &HashMap<VariableIndex, VariableInfo> {
+    pub fn local_vars(&self) -> &HashMap<VariableIndex, (VariableInfo, Vec<Value>)> {
         &self.local_vars
-    }
-
-    pub fn local_size(&self) -> usize {
-        self.local_size
-    }
-
-    pub fn locals_size(&self) -> usize {
-        self.locals_size
     }
 
     pub fn body(&self) -> &[Instruction] {
@@ -156,19 +129,36 @@ impl FunctionDic {
         }
 
         let mut flags = EventFlags::None;
+        let mut local_size = 1000;
+        let mut locals_size = 100;
 
         for info in header.infos {
             match info {
                 FunctionInfo::LocalSize(size) => {
-                    body.local_size = size;
+                    local_size = size;
                 }
                 FunctionInfo::LocalSSize(size) => {
-                    body.locals_size = size;
+                    locals_size = size;
                 }
                 FunctionInfo::EventFlag(f) => {
                     flags = f;
                 }
                 FunctionInfo::Function | FunctionInfo::FunctionS => {}
+                FunctionInfo::Dim(local) => {
+                    body.push_local(
+                        local.idx,
+                        local.info,
+                        local
+                            .init
+                            .into_iter()
+                            .map(|v| match v {
+                                Expr::IntLit(i) => Value::Int(i),
+                                Expr::StringLit(s) => Value::String(s),
+                                _ => unreachable!(),
+                            })
+                            .collect(),
+                    );
+                }
             }
         }
 
@@ -180,8 +170,9 @@ impl FunctionDic {
                 default_int: 0,
                 is_chara: false,
                 is_str: false,
-                size: vec![1000],
+                size: vec![local_size],
             },
+            Vec::new(),
         );
 
         body.push_local(
@@ -190,8 +181,9 @@ impl FunctionDic {
                 default_int: 0,
                 is_chara: false,
                 is_str: true,
-                size: vec![100],
+                size: vec![locals_size],
             },
+            Vec::new(),
         );
 
         body.push_local(
@@ -202,6 +194,7 @@ impl FunctionDic {
                 is_str: false,
                 size: vec![1000],
             },
+            Vec::new(),
         );
 
         body.push_local(
@@ -212,6 +205,7 @@ impl FunctionDic {
                 is_str: true,
                 size: vec![100],
             },
+            Vec::new(),
         );
 
         if let Ok(ty) = header.name.parse::<EventType>() {

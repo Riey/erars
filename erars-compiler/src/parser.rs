@@ -1,10 +1,10 @@
 use std::ops::Range;
 
 use crate::{
-    ast::{FormText, SelectCaseCond},
+    ast::{FormText, LocalVariable, SelectCaseCond},
     BeginType, BinaryOperator, BuiltinCommand, EventFlags, Expr, Function, FunctionHeader,
     FunctionInfo, ParserError, ParserResult, Stmt, UnaryOperator, Variable, VariableIndex,
-    VariableInterner,
+    VariableInfo, VariableInterner,
 };
 use bitflags::bitflags;
 use ordered_float::NotNan;
@@ -36,19 +36,19 @@ impl Default for Alignment {
     }
 }
 
-pub fn parse_program(s: &str, var: &VariableInterner) -> ParserResult<Vec<Function>> {
+pub fn parse_program(s: &str, var: &mut VariableInterner) -> ParserResult<Vec<Function>> {
     Parser::new(s, var).next_program()
 }
 
-pub fn parse_function(s: &str, var: &VariableInterner) -> ParserResult<Function> {
+pub fn parse_function(s: &str, var: &mut VariableInterner) -> ParserResult<Function> {
     Parser::new(s, var).next_function()
 }
 
-pub fn parse_expr(s: &str, var: &VariableInterner) -> ParserResult<Expr> {
+pub fn parse_expr(s: &str, var: &mut VariableInterner) -> ParserResult<Expr> {
     Parser::new(s, var).next_expr()
 }
 
-pub fn parse_body(s: &str, var: &VariableInterner) -> ParserResult<Vec<Stmt>> {
+pub fn parse_body(s: &str, var: &mut VariableInterner) -> ParserResult<Vec<Stmt>> {
     Parser::new(s, var).next_body()
 }
 
@@ -79,7 +79,7 @@ struct BanState {
 pub struct Parser<'s, 'v> {
     text: &'s str,
     current_label: &'s str,
-    var: &'v VariableInterner,
+    var: &'v mut VariableInterner,
     form_status: Option<FormStatus>,
     cond_status: Option<CondStatus>,
     begin_loc: usize,
@@ -87,7 +87,7 @@ pub struct Parser<'s, 'v> {
 }
 
 impl<'s, 'v> Parser<'s, 'v> {
-    pub fn new(text: &'s str, var: &'v VariableInterner) -> Self {
+    pub fn new(text: &'s str, var: &'v mut VariableInterner) -> Self {
         let begin_loc = text.as_ptr() as usize;
 
         // BOM
@@ -1374,6 +1374,45 @@ impl<'s, 'v> Parser<'s, 'v> {
                 match info {
                     "PRI" => {
                         infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
+                    }
+                    "DIM" | "DIMS" => {
+                        self.skip_ws();
+                        let name = self.ensure_ident(|| "DIM ident")?;
+                        self.skip_ws();
+
+                        let mut var_info = VariableInfo::default();
+
+                        var_info.is_str = info == "DIMS";
+
+                        if self.try_get_prefix("CHARADATA") {
+                            var_info.is_chara = true;
+                            self.skip_ws();
+                        }
+
+                        if self.try_get_prefix("SAVEDATA") {
+                            // TODO
+                            self.skip_ws();
+                        }
+
+                        while self.try_get_char(',') {
+                            self.skip_ws();
+                            var_info.size.push(self.ensure_number()? as usize);
+                            self.skip_ws();
+                        }
+
+                        self.skip_ws();
+
+                        let init = if self.try_get_char('=') {
+                            self.read_args('\n')?
+                        } else {
+                            Vec::new()
+                        };
+
+                        infos.push(FunctionInfo::Dim(LocalVariable {
+                            idx: self.var.get_or_intern(name),
+                            init,
+                            info: var_info,
+                        }));
                     }
                     "LATER" => {
                         infos.push(FunctionInfo::EventFlag(EventFlags::Later));

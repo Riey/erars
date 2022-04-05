@@ -6,7 +6,7 @@ use smartstring::{LazyCompact, SmartString};
 
 use crate::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, PrintFlags, UnaryOperator,
-    VariableIndex,
+    VariableIndex, VariableInfo,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,6 +49,13 @@ pub enum Stmt {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalVariable {
+    pub idx: VariableIndex,
+    pub init: Vec<Expr>,
+    pub info: VariableInfo,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
     pub header: FunctionHeader,
     pub body: Vec<Stmt>,
@@ -66,6 +73,7 @@ pub enum FunctionInfo {
     EventFlag(EventFlags),
     LocalSize(usize),
     LocalSSize(usize),
+    Dim(LocalVariable),
     Function,
     FunctionS,
 }
