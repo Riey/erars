@@ -39,6 +39,7 @@ pub enum Stmt {
     Varset(Variable, Vec<Expr>),
     Repeat(Expr, Vec<Stmt>),
     Do(Expr, Vec<Stmt>),
+    While(Expr, Vec<Stmt>),
     For(Variable, Expr, Expr, Expr, Vec<Stmt>),
     Continue,
     Break,

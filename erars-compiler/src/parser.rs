@@ -632,6 +632,12 @@ impl<'s, 'v> Parser<'s, 'v> {
 
                 Ok(Some(Stmt::Do(cond, do_body)))
             }
+            "WHILE" => {
+                let cond = self.next_expr()?;
+                let while_body = self.read_block_until("WEND")?;
+
+                Ok(Some(Stmt::While(cond, while_body)))
+            }
             "TIMES" => {
                 self.skip_ws();
                 let var = self.ensure_get_var()?;
@@ -738,6 +744,13 @@ impl<'s, 'v> Parser<'s, 'v> {
             "REUSELASTLINE" => {
                 self.skip_blank();
                 Ok(Some(Stmt::ReuseLastLine(self.read_until_newline().into())))
+            }
+            "THROW" => {
+                self.skip_blank();
+                Ok(Some(Stmt::Command(
+                    BuiltinCommand::Throw,
+                    vec![Expr::str(self.read_until_newline())],
+                )))
             }
             "SELECTCASE" => {
                 self.skip_ws();
@@ -959,7 +972,7 @@ impl<'s, 'v> Parser<'s, 'v> {
         let mut ret = 0;
         let mut consume = 0;
 
-        if let Some(left) = left.strip_prefix("0x") {
+        if let Some(left) = left.strip_prefix("0x").or_else(|| left.strip_prefix("0X")) {
             consume += 2;
             let mut chars = left.chars();
 

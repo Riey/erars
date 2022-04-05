@@ -25,6 +25,7 @@ pub enum BuiltinCommand {
     Quit,
     Throw,
 
+    SaveGlobal,
     LoadGlobal,
 
     DrawLine,
@@ -36,6 +37,7 @@ pub enum BuiltinCommand {
 
     Reset_Stain,
     GetExpLv,
+    GetPalamLv,
 
     ResetData,
     ChkData,
@@ -54,4 +56,9 @@ pub enum BuiltinCommand {
     FontRegular,
 
     Bar,
+
+    SetBit,
+    GetBit,
+    ClearBit,
+    Power,
 }
