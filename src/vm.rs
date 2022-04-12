@@ -579,7 +579,7 @@ impl TerminalVm {
                     let operand = ctx.pop().as_bool();
                     ctx.push(!operand);
                 }
-                UnaryOperator::Minus => {
+                UnaryOperator::BitNot => {
                     let operand = ctx.pop_int()?;
                     ctx.push(-operand);
                 }
@@ -634,36 +634,6 @@ impl TerminalVm {
             Instruction::Command(com, c) => {
                 let args = ctx.take_list(*c).collect::<ArrayVec<_, 4>>();
 
-                match com {
-                    BuiltinCommand::DrawLine => {
-                        chan.send_msg(ConsoleMessage::DrawLine);
-                    }
-                    BuiltinCommand::Input => {
-                        chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
-                        match chan.recv_ret() {
-                            ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
-                            ConsoleResult::Value(ret) => {
-                                ctx.var
-                                    .get_known(KnownVariables::Result)
-                                    .assume_normal()
-                                    .set(iter::empty(), ret)?;
-                            }
-                        }
-                    }
-                    BuiltinCommand::Quit => {
-                        chan.send_msg(ConsoleMessage::Exit);
-                        return Ok(Some(Workflow::Exit));
-                    }
-                    BuiltinCommand::AddDefChara => {
-                        ctx.var.add_chara();
-                    }
-                    BuiltinCommand::ResetData => {
-                        ctx.var.reset_data();
-                    }
-                    _ => {
-                        bail!("{}({:?})", com, args)
-                    }
-                }
             }
             _ => bail!("TODO: {:?}", inst),
         }

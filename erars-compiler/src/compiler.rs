@@ -226,21 +226,14 @@ impl<'v> Compiler<'v> {
     pub fn push_stmt(&mut self, stmt: Stmt) -> CompileResult<()> {
         match stmt {
             Stmt::Print(flags, text) => {
+                for t in text {
+                    self.push_expr(t)?;
+                }
+                self.out.push(Instruction::Print(flags));
+            }
+            Stmt::PrintSingle(flags, text) => {
                 self.push_expr(text)?;
                 self.out.push(Instruction::Print(flags));
-            }
-            Stmt::PrintList(flags, args) => {
-                let count = self.push_list(args)?;
-                self.out.push(Instruction::ConcatString(count));
-                self.out.push(Instruction::Print(flags));
-            }
-            Stmt::PrintForm(flags, form) => {
-                self.push_form(form)?;
-                self.out.push(Instruction::Print(flags));
-            }
-            Stmt::ReuseLastLine(text) => {
-                self.out.push(Instruction::LoadStr(text));
-                self.out.push(Instruction::ReuseLastLine);
             }
             Stmt::Sif(cond, body) => {
                 self.push_expr(cond)?;

@@ -3,6 +3,23 @@ use std::{fmt, ops::Range};
 pub type ParserResult<T> = Result<T, (ParserError, Range<usize>)>;
 pub type CompileResult<T> = Result<T, CompileError>;
 
+impl<'a> nom::error::ContextError<&'a str> for ParserError {}
+
+impl<'a> nom::error::ParseError<&'a str> for ParserError {
+    fn from_error_kind(input: &'a str, kind: nom::error::ErrorKind) -> Self {
+        use nom::error::ErrorKind::*;
+
+        match kind {
+            Eof => Self::Eof,
+            _ => todo!(),
+        }
+    }
+
+    fn append(input: &'a str, kind: nom::error::ErrorKind, other: Self) -> Self {
+        todo!()
+    }
+}
+
 #[derive(thiserror::Error)]
 pub enum ParserError {
     #[error("알수없는 변수가 발견되었습니다. `{0}`")]

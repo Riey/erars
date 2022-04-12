@@ -17,10 +17,8 @@ pub enum Stmt {
         Vec<(Vec<SelectCaseCond>, Vec<Stmt>)>,
         Option<Vec<Stmt>>,
     ),
-    Print(PrintFlags, Expr),
-    PrintList(PrintFlags, Vec<Expr>),
-    PrintForm(PrintFlags, FormText),
-    ReuseLastLine(String),
+    PrintSingle(PrintFlags, Expr),
+    Print(PrintFlags, Vec<Expr>),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<Stmt>),
     If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
@@ -56,13 +54,13 @@ pub struct LocalVariable {
     pub info: VariableInfo,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
     pub header: FunctionHeader,
     pub body: Vec<Stmt>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
     pub name: String,
     pub args: Vec<(Variable, Option<Expr>)>,
