@@ -3,8 +3,8 @@ use strum::{Display, EnumString};
 use unicode_xid::UnicodeXID;
 
 use crate::{
-    BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionInfo, ParserError,
-    ParserResult, PrintFlags, Stmt, UnaryOperator,
+    BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionInfo,
+    ParserError, ParserResult, PrintFlags, Stmt, UnaryOperator,
 };
 use nom::{
     branch::alt,
@@ -319,43 +319,49 @@ fn cut_comment<'a>(i: &'a str) -> &'a str {
     }
 }
 
-mod arg_parser {
-    use crate::PrintFlags;
+fn print_flags<'a>(i: &'a str) -> IResult<&'a str, PrintFlags> {
+    let (i, line) = map(
+        opt(alt((
+            value(PrintFlags::WAIT | PrintFlags::NEWLINE, char('W')),
+            value(PrintFlags::NEWLINE, char('L')),
+        ))),
+        |l| l.unwrap_or_default(),
+    )(i)?;
+    let (i, align) = map(
+        opt(alt((
+            value(PrintFlags::LEFT_ALIGN, tag("LC")),
+            value(PrintFlags::RIGHT_ALIGN, char('C')),
+        ))),
+        |l| l.unwrap_or_default(),
+    )(i)?;
 
-    use super::*;
-
-    pub fn common<'a>(i: &'a str) -> IResult<&'a str, Vec<Expr>> {
-        expr_list(i)
-    }
-
-    pub fn raw_str<'a>(i: &'a str) -> IResult<&'a str, Vec<Expr>> {
-        let i = i.strip_prefix(' ').unwrap_or(i);
-        Ok(("", vec![Expr::str(i)]))
-    }
-
-    pub fn call<'a>(i: &'a str) -> IResult<&'a str, Vec<Expr>> {
-        let i = i.strip_prefix(' ').unwrap_or(i);
-        let (i, ident) = terminated(ident, sp)(i)?;
-
-        map(call_arg_list, move |mut args| {
-            args.insert(0, Expr::str(ident));
-            args
-        })(i)
-    }
+    Ok((i, line | align))
 }
 
-fn command_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
-    let i = i.trim_start();
-    let (com, left) = i.split_once(' ').unwrap_or((i, ""));
+fn print_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+    map(
+        preceded(
+            tag("PRINT"),
+            pair(print_flags, preceded(char(' '), take_while(|c| c != '\n'))),
+        ),
+        |(flag, s)| Stmt::PrintSingle(flag, Expr::str(s)),
+    )(i)
+}
 
-    if let Some(flag) = com.strip_prefix("PRINTFORM") {
-        todo!()
-    } else if let Some(flag) = com.strip_prefix("PRINT") {
-        let (i, text) = i.split_once('\n').unwrap_or(("", i));
-        let text = text.trim_end_matches('\r');
-        return Ok((i, Stmt::PrintSingle(PrintFlags::empty(), Expr::str(text))));
-    }
+fn call_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+    map(
+        preceded(terminated(tag("CALL"), sp), pair(ident, call_arg_list)),
+        |(ident, args)| Stmt::Call {
+            name: Expr::str(ident),
+            args,
+            jump: false,
+            catch: None,
+        },
+    )(i)
+}
 
+fn builtin_com_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+    let (com, i) = i.split_once(' ').unwrap_or((i, ""));
     match com.parse::<BuiltinCommand>() {
         Ok(BuiltinCommand::ReuseLastLine) => {
             let (i, text) = i.split_once('\n').unwrap_or(("", i));
@@ -367,10 +373,16 @@ fn command_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
         }
         Ok(com) => {
             let (i, args) = expr_list(i)?;
-            Ok((i, Stmt::Command(BuiltinCommand::Limit, args)))
+            Ok((i, Stmt::Command(com, args)))
         }
         _ => Err(nom::Err::Error(make_error(i, ErrorKind::Tag))),
     }
+}
+
+fn command_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+    let i = i.trim_start();
+
+    alt((print_line, call_line, builtin_com_line))(i)
 }
 
 #[derive(Clone, Copy, Debug, EnumString, Display, Serialize, Deserialize, PartialEq, Eq)]
@@ -488,19 +500,21 @@ Ok(
     (
         "",
         [
-            FunctionLine(
-                "SYSTEM_TITLE",
-            ),
-            CommandLine(
-                Command {
-                    code: PrintL,
-                    args: [
+            Function {
+                header: FunctionHeader {
+                    name: "SYSTEM_TITLE",
+                    args: [],
+                    infos: [],
+                },
+                body: [
+                    PrintSingle(
+                        NEWLINE,
                         StringLit(
                             "Hello, world!",
                         ),
-                    ],
-                },
-            ),
+                    ),
+                ],
+            },
         ],
     ),
 )
@@ -511,18 +525,17 @@ Ok(
     #[test]
     fn lines() {
         k9::snapshot!(
-            era_line("CALL FOO, 2 + 3"),
+            body("CALL FOO, 2 + 3"),
             r#"
 Ok(
     (
         "",
-        CommandLine(
-            Command {
-                code: Call,
+        [
+            Call {
+                name: StringLit(
+                    "FOO",
+                ),
                 args: [
-                    StringLit(
-                        "FOO",
-                    ),
                     BinopExpr(
                         IntLit(
                             2,
@@ -533,23 +546,25 @@ Ok(
                         ),
                     ),
                 ],
+                jump: false,
+                catch: None,
             },
-        ),
+        ],
     ),
 )
 "#
         );
 
         k9::snapshot!(
-            era_line("LIMIT 1, 2, 3"),
+            body("LIMIT 1, 2, 3"),
             r#"
 Ok(
     (
         "",
-        CommandLine(
-            Command {
-                code: Limit,
-                args: [
+        [
+            Command(
+                Limit,
+                [
                     IntLit(
                         1,
                     ),
@@ -560,8 +575,8 @@ Ok(
                         3,
                     ),
                 ],
-            },
-        ),
+            ),
+        ],
     ),
 )
 "#

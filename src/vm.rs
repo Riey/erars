@@ -633,7 +633,6 @@ impl TerminalVm {
             }
             Instruction::Command(com, c) => {
                 let args = ctx.take_list(*c).collect::<ArrayVec<_, 4>>();
-
             }
             _ => bail!("TODO: {:?}", inst),
         }
