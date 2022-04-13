@@ -5,30 +5,28 @@ mod body {
 
     #[test]
     fn test_alignment() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/bodys/alignment.erb", parse_body)
-        );
+        k9::snapshot!(do_test("tests/parse_tests/bodys/alignment.erb", parse_body));
     }
 
     #[test]
     fn test_assign() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/bodys/assign.erb", parse_body)
-        );
+        k9::snapshot!(do_test("tests/parse_tests/bodys/assign.erb", parse_body));
     }
 
     #[test]
     fn test_assign_add() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/bodys/assign_add.erb", parse_body)
-        );
+        k9::snapshot!(do_test(
+            "tests/parse_tests/bodys/assign_add.erb",
+            parse_body
+        ));
     }
 
     #[test]
     fn test_assign_str() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/bodys/assign_str.erb", parse_body)
-        );
+        k9::snapshot!(do_test(
+            "tests/parse_tests/bodys/assign_str.erb",
+            parse_body
+        ));
     }
 
     #[test]

@@ -173,16 +173,38 @@ pub fn form_str<'a>(ty: FormStrType) -> impl Fn(&'a str) -> IResult<&'a str, Exp
         let mut form = FormText::new(normal.into());
 
         loop {
-            let (left, expr) = match ty {
-                Some(FormType::Percent) => terminated(np_expr, tag("%"))(i)?,
-                Some(FormType::Brace) => terminated(expr, tag("}"))(i)?,
+            let (left, expr, padding, align) = match ty {
+                Some(FormType::Percent) => {
+                    let (i, ex) = np_expr(i)?;
+                    let (i, padding) = opt(preceded(preceded(sp, char(',')), np_expr))(i)?;
+                    let (i, align) = if padding.is_some() {
+                        opt(preceded(preceded(sp, char(',')), alignment))(i)?
+                    } else {
+                        (i, None)
+                    };
+                    let (i, _) = preceded(sp, char('%'))(i)?;
+
+                    (i, ex, padding, align)
+                }
+                Some(FormType::Brace) => {
+                    let (i, ex) = expr(i)?;
+                    let (i, padding) = opt(preceded(preceded(sp, char(',')), expr))(i)?;
+                    let (i, align) = if padding.is_some() {
+                        opt(preceded(preceded(sp, char(',')), alignment))(i)?
+                    } else {
+                        (i, None)
+                    };
+                    let (i, _) = preceded(sp, char('}'))(i)?;
+
+                    (i, ex, padding, align)
+                }
                 Some(FormType::At) => {
                     let (i, cond) = bin_expr(i)?;
                     let (i, _) = de_sp(tag("?"))(i)?;
                     let (i, if_true) = form_str(FormStrType::FirstCond)(i)?;
                     let (i, or_false) = preceded(sp, form_str(FormStrType::SecondCond))(i)?;
 
-                    (i, Expr::cond(cond, if_true, or_false))
+                    (i, Expr::cond(cond, if_true, or_false), None, None)
                 }
                 None => break,
             };
@@ -193,7 +215,7 @@ pub fn form_str<'a>(ty: FormStrType) -> impl Fn(&'a str) -> IResult<&'a str, Exp
             i = left;
             ty = next_ty;
 
-            form.push(expr, None, None, normal.into());
+            form.push(expr, padding, align, normal.into());
         }
 
         Ok((i, Expr::FormText(form)))
@@ -360,20 +382,19 @@ fn call_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     )(i)
 }
 
-fn align_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
-    let (i, alignment) = preceded(
-        de_sp(tag("ALIGNMENT")),
-        terminated(
-            alt((
-                value(Alignment::Left, tag("LEFT")),
-                value(Alignment::Center, tag("CENTER")),
-                value(Alignment::Right, tag("RIGHT")),
-            )),
-            sp,
-        ),
-    )(i)?;
+fn alignment<'a>(i: &'a str) -> IResult<&'a str, Alignment> {
+    alt((
+        value(Alignment::Left, tag("LEFT")),
+        value(Alignment::Center, tag("CENTER")),
+        value(Alignment::Right, tag("RIGHT")),
+    ))(i)
+}
 
-    Ok((i, Stmt::Alignment((alignment))))
+fn align_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+    map(
+        tuple((sp, tag("ALIGNMENT"), sp, alignment, sp)),
+        |(_, _, _, align, _)| Stmt::Alignment(align),
+    )(i)
 }
 
 fn builtin_com_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
