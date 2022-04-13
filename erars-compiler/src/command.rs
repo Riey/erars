@@ -3,8 +3,8 @@ use strum::{Display, EnumString};
 use unicode_xid::UnicodeXID;
 
 use crate::{
-    BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionInfo,
-    ParserError, ParserResult, PrintFlags, Stmt, UnaryOperator,
+    Alignment, BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionInfo, ParserError,
+    ParserResult, PrintFlags, Stmt, UnaryOperator,
 };
 use nom::{
     branch::alt,
@@ -360,6 +360,22 @@ fn call_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     )(i)
 }
 
+fn align_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+    let (i, alignment) = preceded(
+        de_sp(tag("ALIGNMENT")),
+        terminated(
+            alt((
+                value(Alignment::Left, tag("LEFT")),
+                value(Alignment::Center, tag("CENTER")),
+                value(Alignment::Right, tag("RIGHT")),
+            )),
+            sp,
+        ),
+    )(i)?;
+
+    Ok((i, Stmt::Alignment((alignment))))
+}
+
 fn builtin_com_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     let (com, i) = i.split_once(' ').unwrap_or((i, ""));
     match com.parse::<BuiltinCommand>() {
@@ -382,7 +398,7 @@ fn builtin_com_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
 fn command_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     let i = i.trim_start();
 
-    alt((print_line, call_line, builtin_com_line))(i)
+    alt((print_line, call_line, align_line, builtin_com_line))(i)
 }
 
 #[derive(Clone, Copy, Debug, EnumString, Display, Serialize, Deserialize, PartialEq, Eq)]

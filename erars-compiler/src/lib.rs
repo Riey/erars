@@ -16,6 +16,6 @@ pub use crate::{
     event::{Event, EventFlags, EventType},
     instruction::{BeginType, Instruction},
     operator::{BinaryOperator, UnaryOperator},
-    parser::{parse_expr, parse_function, parse_program, Alignment, PrintFlags},
+    parser::{parse_body, parse_expr, parse_function, parse_program, Alignment, PrintFlags},
     variable::*,
 };

@@ -1,0 +1,399 @@
+mod test_util;
+mod body {
+    use crate::test_util::do_test;
+    use erars_compiler::parse_body;
+
+    #[test]
+    fn test_alignment() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/alignment.erb", parse_body)
+        );
+    }
+
+    #[test]
+    fn test_assign() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign.erb", parse_body)
+        );
+    }
+
+    #[test]
+    fn test_assign_add() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign_add.erb", parse_body)
+        );
+    }
+
+    #[test]
+    fn test_assign_str() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign_str.erb", parse_body)
+        );
+    }
+
+    #[test]
+    fn test_call() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/call.erb", parse_body),
+            r#"
+[
+    Call {
+        name: StringLit(
+            "FOO",
+        ),
+        args: [
+            IntLit(
+                123,
+            ),
+        ],
+        jump: false,
+        catch: None,
+    },
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_command() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/command.erb", parse_body),
+            "
+[
+    Command(
+        CustomDrawLine,
+        [],
+    ),
+]
+"
+        );
+    }
+
+    #[test]
+    fn test_hello() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/hello.erb", parse_body),
+            r#"
+[
+    PrintSingle(
+        NEWLINE,
+        StringLit(
+            "Hello, world!",
+        ),
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_if() {
+        k9::snapshot!(do_test("tests/parse_tests/bodys/if.erb", parse_body), "[]");
+    }
+
+    #[test]
+    fn test_number() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/number.erb", parse_body),
+            "[]"
+        );
+    }
+
+    #[test]
+    fn test_print_simple() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/print_simple.erb", parse_body),
+            "[]"
+        );
+    }
+
+    #[test]
+    fn test_selectcase() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/selectcase.erb", parse_body),
+            "[]"
+        );
+    }
+
+    #[test]
+    fn test_sif() {
+        k9::snapshot!(do_test("tests/parse_tests/bodys/sif.erb", parse_body), "[]");
+    }
+
+    #[test]
+    fn test_times() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/times.erb", parse_body),
+            "[]"
+        );
+    }
+}
+mod expr {
+    use crate::test_util::do_test;
+    use erars_compiler::parse_expr;
+
+    #[test]
+    fn test_boolean() {
+        k9::snapshot!(do_test("tests/parse_tests/exprs/boolean.erb", parse_expr));
+    }
+
+    #[test]
+    fn test_complex_op() {
+        k9::snapshot!(do_test(
+            "tests/parse_tests/exprs/complex_op.erb",
+            parse_expr
+        ));
+    }
+
+    #[test]
+    fn test_cond() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/cond.erb", parse_expr),
+            "
+CondExpr(
+    IntLit(
+        1,
+    ),
+    IntLit(
+        2,
+    ),
+    IntLit(
+        3,
+    ),
+)
+"
+        );
+    }
+
+    #[test]
+    fn test_method() {
+        k9::snapshot!(do_test("tests/parse_tests/exprs/method.erb", parse_expr));
+    }
+
+    #[test]
+    fn test_plus() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/plus.erb", parse_expr),
+            "
+BinopExpr(
+    IntLit(
+        1,
+    ),
+    Add,
+    IntLit(
+        1,
+    ),
+)
+"
+        );
+    }
+
+    #[test]
+    fn test_plus_mul() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/plus_mul.erb", parse_expr),
+            "
+BinopExpr(
+    IntLit(
+        1,
+    ),
+    Add,
+    BinopExpr(
+        IntLit(
+            2,
+        ),
+        Mul,
+        IntLit(
+            3,
+        ),
+    ),
+)
+"
+        );
+    }
+
+    #[test]
+    fn test_plus_mul_paran() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/plus_mul_paran.erb", parse_expr),
+            "
+BinopExpr(
+    BinopExpr(
+        IntLit(
+            1,
+        ),
+        Add,
+        IntLit(
+            2,
+        ),
+    ),
+    Mul,
+    IntLit(
+        3,
+    ),
+)
+"
+        );
+    }
+
+    #[test]
+    fn test_str_literal() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/str_literal.erb", parse_expr),
+            r#"
+StringLit(
+    "123",
+)
+"#
+        );
+    }
+
+    #[test]
+    fn test_var_arg() {
+        k9::snapshot!(do_test("tests/parse_tests/exprs/var_arg.erb", parse_expr));
+    }
+
+    #[test]
+    fn test_var_complex() {
+        k9::snapshot!(do_test(
+            "tests/parse_tests/exprs/var_complex.erb",
+            parse_expr
+        ));
+    }
+
+    #[test]
+    fn test_var_empty() {
+        k9::snapshot!(do_test("tests/parse_tests/exprs/var_empty.erb", parse_expr));
+    }
+}
+mod function {
+    use crate::test_util::do_test;
+    use erars_compiler::parse_function;
+
+    #[test]
+    fn test_call() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/functions/call.erb", parse_function),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "FOO",
+        args: [],
+        infos: [],
+    },
+    body: [],
+}
+"#
+        );
+    }
+
+    #[test]
+    fn test_dim() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/functions/dim.erb", parse_function),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "SYSTEM_TITLE",
+        args: [],
+        infos: [],
+    },
+    body: [],
+}
+"#
+        );
+    }
+
+    #[test]
+    fn test_function() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/functions/function.erb", parse_function),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "FOO",
+        args: [],
+        infos: [],
+    },
+    body: [],
+}
+"#
+        );
+    }
+
+    #[test]
+    fn test_juel() {
+        k9::snapshot!(do_test(
+            "tests/parse_tests/functions/juel.erb",
+            parse_function
+        ));
+    }
+}
+mod program {
+    use crate::test_util::do_test;
+    use erars_compiler::parse_program;
+
+    #[test]
+    fn test_call_form() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/programs/call_form.erb", parse_program),
+            r#"
+[
+    Function {
+        header: FunctionHeader {
+            name: "SYSTEM_TITLE",
+            args: [],
+            infos: [],
+        },
+        body: [],
+    },
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_method_call() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/programs/method_call.erb", parse_program),
+            r#"
+[
+    Function {
+        header: FunctionHeader {
+            name: "FOO",
+            args: [],
+            infos: [],
+        },
+        body: [],
+    },
+]
+"#
+        );
+    }
+
+    #[test]
+    fn test_simple() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/programs/simple.erb", parse_program),
+            r#"
+[
+    Function {
+        header: FunctionHeader {
+            name: "FOO",
+            args: [],
+            infos: [],
+        },
+        body: [
+            PrintSingle(
+                (empty),
+                StringLit(
+                    "foo",
+                ),
+            ),
+        ],
+    },
+]
+"#
+        );
+    }
+}
