@@ -168,15 +168,12 @@ impl VariableStorage {
                 if let Some(builtin) = idx.to_builtin() {
                     (VariableInfo::default(), UniformVariable::Bulitin(builtin))
                 } else {
-                    let info = infos
-                        .get(name.as_str())
-                        .cloned()
-                        .unwrap_or_else(|| VariableInfo {
-                            default_int: 0,
-                            is_chara: false,
-                            is_str: false,
-                            size: vec![1000],
-                        });
+                    let info = infos.get(name).cloned().unwrap_or_else(|| VariableInfo {
+                        default_int: 0,
+                        is_chara: false,
+                        is_str: false,
+                        size: vec![1000],
+                    });
                     let var = UniformVariable::new(&info);
 
                     (info, var)

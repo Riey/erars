@@ -1,11 +1,12 @@
 use enum_map::{Enum, EnumMap};
-use hashbrown::HashMap;
+use lasso::{Key, Resolver, Spur, ThreadedRodeo};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use serde::{Deserialize, Serialize};
-use smartstring::{LazyCompact, SmartString};
 use strum::{Display, EnumCount, IntoStaticStr};
 use strum::{EnumIter, IntoEnumIterator};
+
+type Interner = ThreadedRodeo<Spur>;
 
 #[derive(
     Copy,
@@ -110,41 +111,37 @@ pub enum KnownVariables {
     Tcvar,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct VariableInterner {
-    name_idxs: HashMap<SmartString<LazyCompact>, VariableIndex>,
-    names: Vec<SmartString<LazyCompact>>,
+    interner: Interner,
     known_idxs: EnumMap<KnownVariables, VariableIndex>,
-    next: u32,
 }
 
 impl VariableInterner {
     pub fn new() -> Self {
         let mut ret = Self {
-            name_idxs: HashMap::with_capacity(128),
-            names: Vec::with_capacity(128),
+            interner: Interner::new(),
             known_idxs: EnumMap::default(),
-            next: 0,
         };
 
         for builtin in BulitinVariable::iter() {
-            ret.get_or_intern(<&str>::from(builtin));
+            ret.interner.get_or_intern_static(<&str>::from(builtin));
         }
 
         for known in KnownVariables::iter() {
-            let idx = ret.get_or_intern(<&str>::from(known));
-            ret.known_idxs[known] = idx;
+            let idx = ret.interner.get_or_intern_static(<&str>::from(known));
+            ret.known_idxs[known] = VariableIndex(idx);
         }
 
         ret
     }
 
-    pub fn len(&self) -> u32 {
-        self.next
+    pub fn len(&self) -> usize {
+        self.interner.len()
     }
 
-    pub fn idxs(&self) -> impl Iterator<Item = VariableIndex> {
-        (0..self.next).map(VariableIndex)
+    pub fn idxs(&self) -> impl Iterator<Item = VariableIndex> + ExactSizeIterator {
+        (0..self.len()).map(|n| VariableIndex(Spur::try_from_usize(n).unwrap()))
     }
 
     pub fn with_default_variables() -> Self {
@@ -152,7 +149,7 @@ impl VariableInterner {
 
         macro_rules! interns {
             ($($name:literal)+) => {
-                $(ret.get_or_intern($name);)+
+                $(ret.interner.get_or_intern_static($name);)+
             };
         }
 
@@ -173,29 +170,26 @@ impl VariableInterner {
         ret
     }
 
-    pub fn get_or_intern(&mut self, name: impl Into<SmartString<LazyCompact>>) -> VariableIndex {
-        *self.name_idxs.entry(name.into()).or_insert_with_key(|k| {
-            let ret = self.next;
-            self.names.push(k.clone());
-            self.next += 1;
-            VariableIndex(ret)
-        })
+    #[inline]
+    pub fn get_or_intern(&self, name: impl AsRef<str>) -> VariableIndex {
+        VariableIndex(self.interner.get_or_intern(name))
     }
 
+    #[inline]
     pub fn get(&self, name: &str) -> Option<VariableIndex> {
-        self.name_idxs.get(name).copied()
+        self.interner.get(name).map(VariableIndex)
     }
 
     pub fn get_known(&self, known: KnownVariables) -> VariableIndex {
         self.known_idxs[known]
     }
 
-    pub fn resolve(&self, idx: VariableIndex) -> Option<&SmartString<LazyCompact>> {
-        self.names.get(idx.0 as usize)
+    pub fn resolve(&self, idx: VariableIndex) -> Option<&str> {
+        self.interner.try_resolve(&idx.0)
     }
 
-    pub fn resolve_known(&self, known: KnownVariables) -> &SmartString<LazyCompact> {
-        unsafe { self.names.get_unchecked(self.get_known(known).0 as usize) }
+    pub fn resolve_known(&self, known: KnownVariables) -> &str {
+        unsafe { self.interner.resolve_unchecked(&self.get_known(known).0) }
     }
 }
 
@@ -217,26 +211,27 @@ impl VariableInfo {
 #[derive(
     Clone, Copy, Default, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
 )]
-pub struct VariableIndex(u32);
+#[repr(transparent)]
+pub struct VariableIndex(Spur);
 
 impl VariableIndex {
     #[inline]
     pub fn as_usize(self) -> usize {
-        self.0 as usize
+        self.0.into_inner().get() as usize
     }
 
     #[inline]
     pub fn is_builtin(self) -> bool {
-        self.as_usize() < BulitinVariable::COUNT
+        self.as_usize() <= BulitinVariable::COUNT
     }
 
     pub fn to_builtin(self) -> Option<BulitinVariable> {
-        FromPrimitive::from_u32(self.0)
+        FromPrimitive::from_u32(self.0.into_inner().get() - 1)
     }
 }
 
 impl std::fmt::Display for VariableIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Var[{}]", self.0)
+        write!(f, "Var[{}]", self.0.into_inner())
     }
 }
