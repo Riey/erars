@@ -35,18 +35,18 @@ impl Default for Alignment {
     }
 }
 
-pub fn parse_program(s: &str, var: &mut VariableInterner) -> ParserResult<Vec<Function>> {
+pub fn parse_program(s: &str, var: &VariableInterner) -> ParserResult<Vec<Function>> {
     Ok(crate::command::era_program(s).unwrap().1)
 }
 
-pub fn parse_body(s: &str, var: &mut VariableInterner) -> ParserResult<Vec<Stmt>> {
+pub fn parse_body(s: &str, var: &VariableInterner) -> ParserResult<Vec<Stmt>> {
     Ok(crate::command::body(s).unwrap().1)
 }
 
-pub fn parse_function(s: &str, var: &mut VariableInterner) -> ParserResult<Function> {
+pub fn parse_function(s: &str, var: &VariableInterner) -> ParserResult<Function> {
     parse_program(s, var).map(|v| v.into_iter().next().unwrap())
 }
 
-pub fn parse_expr(s: &str, var: &mut VariableInterner) -> ParserResult<Expr> {
+pub fn parse_expr(s: &str, var: &VariableInterner) -> ParserResult<Expr> {
     Ok(crate::command::expr(s).unwrap().1)
 }

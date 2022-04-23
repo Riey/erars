@@ -3,6 +3,7 @@ use std::iter;
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use smartstring::{LazyCompact, SmartString};
+use std::sync::Arc;
 use strum::Display;
 
 use hashbrown::{HashMap, HashSet};
@@ -153,14 +154,17 @@ impl UniformVariable {
 
 struct VariableStorage {
     character_len: usize,
-    variable_interner: VariableInterner,
+    variable_interner: Arc<VariableInterner>,
     variables: Vec<(VariableInfo, UniformVariable)>,
     local_variables:
         HashMap<SmartString<LazyCompact>, HashMap<VariableIndex, (VariableInfo, UniformVariable)>>,
 }
 
 impl VariableStorage {
-    pub fn new(infos: &HashMap<String, VariableInfo>, variable_interner: VariableInterner) -> Self {
+    pub fn new(
+        infos: &HashMap<String, VariableInfo>,
+        variable_interner: Arc<VariableInterner>,
+    ) -> Self {
         let variables = variable_interner
             .idxs()
             .map(|idx| {
@@ -311,7 +315,10 @@ pub struct VmContext {
 }
 
 impl VmContext {
-    pub fn new(infos: &HashMap<String, VariableInfo>, variable_interner: VariableInterner) -> Self {
+    pub fn new(
+        infos: &HashMap<String, VariableInfo>,
+        variable_interner: Arc<VariableInterner>,
+    ) -> Self {
         Self {
             var: VariableStorage::new(infos, variable_interner),
             begin: Some(BeginType::Title),

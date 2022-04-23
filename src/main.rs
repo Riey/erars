@@ -49,13 +49,13 @@ fn main() {
         let mut diagnostic = Diagnostic::error()
             .with_code("E0001")
             .with_message("Compile ERROR");
-        let mut var = VariableInterner::with_default_variables();
+        let var = Arc::new(VariableInterner::with_default_variables());
 
         for erb in erbs {
             let erb = erb.unwrap();
 
             let source = std::fs::read_to_string(&erb).unwrap();
-            let program = erars_compiler::parse_program(&source, &mut var);
+            let program = erars_compiler::parse_program(&source, &var);
             let file_id = files.add(erb.to_str().unwrap().to_string(), source);
 
             let program = match program {
