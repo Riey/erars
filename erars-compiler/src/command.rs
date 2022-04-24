@@ -158,15 +158,16 @@ fn parse_form_normal_str<'a>(
     }
 }
 
-pub fn normal_form_str<'a>(i: &'a str) -> IResult<&'a str, Expr> {
-    form_str(FormStrType::Normal)(i)
+pub fn normal_form_str<'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+    move |i| form_str(FormStrType::Normal, ctx)(i)
 }
 
-pub fn arg_form_str<'a>(i: &'a str) -> IResult<&'a str, Expr> {
-    form_str(FormStrType::Arg)(i)
-}
-
-pub fn form_str<'a>(ty: FormStrType) -> impl Fn(&'a str) -> IResult<&'a str, Expr> {
+pub fn form_str<'c, 'a>(
+    ty: FormStrType,
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
     move |i: &'a str| {
         let normal_str = parse_form_normal_str(ty);
         let (mut i, (normal, mut ty)) = normal_str(i)?;
@@ -176,8 +177,8 @@ pub fn form_str<'a>(ty: FormStrType) -> impl Fn(&'a str) -> IResult<&'a str, Exp
         loop {
             let (left, expr, padding, align) = match ty {
                 Some(FormType::Percent) => {
-                    let (i, ex) = np_expr(i)?;
-                    let (i, padding) = opt(preceded(preceded(sp, char(',')), np_expr))(i)?;
+                    let (i, ex) = np_expr(ctx)(i)?;
+                    let (i, padding) = opt(preceded(preceded(sp, char(',')), np_expr(ctx)))(i)?;
                     let (i, align) = if padding.is_some() {
                         opt(preceded(preceded(sp, char(',')), alignment))(i)?
                     } else {
@@ -188,8 +189,8 @@ pub fn form_str<'a>(ty: FormStrType) -> impl Fn(&'a str) -> IResult<&'a str, Exp
                     (i, ex, padding, align)
                 }
                 Some(FormType::Brace) => {
-                    let (i, ex) = expr(i)?;
-                    let (i, padding) = opt(preceded(preceded(sp, char(',')), expr))(i)?;
+                    let (i, ex) = expr(ctx)(i)?;
+                    let (i, padding) = opt(preceded(preceded(sp, char(',')), expr(ctx)))(i)?;
                     let (i, align) = if padding.is_some() {
                         opt(preceded(preceded(sp, char(',')), alignment))(i)?
                     } else {
@@ -200,10 +201,10 @@ pub fn form_str<'a>(ty: FormStrType) -> impl Fn(&'a str) -> IResult<&'a str, Exp
                     (i, ex, padding, align)
                 }
                 Some(FormType::At) => {
-                    let (i, cond) = bin_expr(i)?;
+                    let (i, cond) = bin_expr(ctx)(i)?;
                     let (i, _) = de_sp(tag("?"))(i)?;
-                    let (i, if_true) = form_str(FormStrType::FirstCond)(i)?;
-                    let (i, or_false) = preceded(sp, form_str(FormStrType::SecondCond))(i)?;
+                    let (i, if_true) = form_str(FormStrType::FirstCond, ctx)(i)?;
+                    let (i, or_false) = preceded(sp, form_str(FormStrType::SecondCond, ctx))(i)?;
 
                     (i, Expr::cond(cond, if_true, or_false), None, None)
                 }
@@ -229,24 +230,28 @@ fn string<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     context("string", delimited(char('\"'), parse_str, char('\"')))(i)
 }
 
-fn single_expr<'a>(i: &'a str) -> IResult<&'a str, Expr> {
-    let expr = de_sp(alt((
-        map(string, Expr::str),
-        map(i64, Expr::IntLit),
-        delimited(tag("("), expr, tag(")")),
-    )));
+fn single_expr<'c, 'a>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+    move |i| {
+        let expr = de_sp(alt((
+            map(string, Expr::str),
+            map(i64, Expr::IntLit),
+            delimited(tag("("), expr(ctx), tag(")")),
+        )));
 
-    let op = de_sp(alt((
-        value(UnaryOperator::Not, tag("!")),
-        value(UnaryOperator::BitNot, tag("~")),
-    )));
+        let op = de_sp(alt((
+            value(UnaryOperator::Not, tag("!")),
+            value(UnaryOperator::BitNot, tag("~")),
+        )));
 
-    let mut expr = map(tuple((opt(op), expr)), |(op, expr)| match op {
-        Some(op) => Expr::unary(expr, op),
-        None => expr,
-    });
+        let mut expr = map(tuple((opt(op), expr)), |(op, expr)| match op {
+            Some(op) => Expr::unary(expr, op),
+            None => expr,
+        });
 
-    expr(i)
+        expr(i)
+    }
 }
 
 macro_rules! define_bin_expr {
@@ -254,38 +259,41 @@ macro_rules! define_bin_expr {
             $name:ident
             $(($mul_op:expr, $mul_tag:expr))?
         ) => {
-            fn $name<'a>(i: &'a str) -> IResult<&'a str, Expr> {
+            fn $name<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
                 fn merge_binop((lhs, op, rhs): (Expr, BinaryOperator, Expr)) -> Expr {
                     Expr::binary(lhs, op, rhs)
                 }
 
-                fn expr1<'a>(i: &'a str) -> IResult<&'a str, Expr> {
-                    let op = alt((
-                        value(BinaryOperator::Mul, tag("*")),
-                        value(BinaryOperator::Div, tag("/")),
-                        $(
-                            value($mul_op, tag($mul_tag)),
-                        )?
-                    ));
+                fn expr1<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
 
-                    de_sp(
-                        alt((
-                            map(tuple((single_expr, op, expr1)), merge_binop),
-                            single_expr,
-                        )),
-                    )(i)
+                    move |i| {
+                        let op = alt((
+                            value(BinaryOperator::Mul, tag("*")),
+                            value(BinaryOperator::Div, tag("/")),
+                            $(
+                                value($mul_op, tag($mul_tag)),
+                            )?
+                        ));
+                        de_sp(
+                            alt((
+                                map(tuple((single_expr(ctx), op, expr1(ctx))), merge_binop),
+                                single_expr(ctx),
+                            )),
+                        )(i)
+                    }
                 }
 
-                fn expr2<'a>(i: &'a str) -> IResult<&'a str, Expr> {
-                    let op = alt((
-                        value(BinaryOperator::Add, tag("+")),
-                        value(BinaryOperator::Sub, tag("-")),
-                    ));
-
-                    de_sp(alt((map(tuple((expr1, op, expr2)), merge_binop), expr1)))(i)
+                fn expr2<'a, 'c>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+                    move |i| {
+                        let op = alt((
+                            value(BinaryOperator::Add, tag("+")),
+                            value(BinaryOperator::Sub, tag("-")),
+                        ));
+                        de_sp(alt((map(tuple((expr1(ctx), op, expr2(ctx))), merge_binop), expr1(ctx))))(i)
+                    }
                 }
 
-                de_sp(expr2)(i)
+                move |i| de_sp(expr2(ctx))(i)
             }
         };
     }
@@ -293,45 +301,59 @@ macro_rules! define_bin_expr {
 define_bin_expr!(bin_expr(BinaryOperator::Rem, "%"));
 define_bin_expr!(np_bin_expr);
 
-pub fn expr<'a>(i: &'a str) -> IResult<&'a str, Expr> {
-    let cond = map(
-        tuple((
-            bin_expr,
-            delimited(de_sp(tag("?")), bin_expr, de_sp(tag("#"))),
-            bin_expr,
-        )),
-        |(cond, if_true, or_false)| Expr::cond(cond, if_true, or_false),
-    );
+pub fn expr<'c, 'a>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+    move |i| {
+        let cond = map(
+            tuple((
+                bin_expr(ctx),
+                delimited(de_sp(tag("?")), bin_expr(ctx), de_sp(tag("#"))),
+                bin_expr(ctx),
+            )),
+            |(cond, if_true, or_false)| Expr::cond(cond, if_true, or_false),
+        );
 
-    alt((cond, bin_expr))(i)
+        alt((cond, bin_expr(ctx)))(i)
+    }
 }
 
-pub fn expr_list<'a>(i: &'a str) -> IResult<&'a str, Vec<Expr>> {
-    separated_list0(de_sp(tag(",")), expr)(i)
+pub fn expr_list<'c, 'a>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Expr>> + 'c {
+    move |i| separated_list0(de_sp(tag(",")), expr(ctx))(i)
 }
 
-pub fn call_arg_list<'a>(i: &'a str) -> IResult<&'a str, Vec<Expr>> {
-    preceded(
-        sp,
-        alt((
-            delimited(char('('), expr_list, char(')')),
-            preceded(char(','), expr_list),
-            value(Vec::new(), eof),
-        )),
-    )(i)
+pub fn call_arg_list<'c, 'a>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Expr>> + 'c {
+    move |i| {
+        preceded(
+            sp,
+            alt((
+                delimited(char('('), expr_list(ctx), char(')')),
+                preceded(char(','), expr_list(ctx)),
+                value(Vec::new(), eof),
+            )),
+        )(i)
+    }
 }
 
-pub fn np_expr<'a>(i: &'a str) -> IResult<&'a str, Expr> {
-    let cond = map(
-        tuple((
-            np_bin_expr,
-            delimited(de_sp(tag("?")), np_bin_expr, de_sp(tag("#"))),
-            np_bin_expr,
-        )),
-        |(cond, if_true, or_false)| Expr::cond(cond, if_true, or_false),
-    );
+pub fn np_expr<'c, 'a>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+    move |i| {
+        let cond = map(
+            tuple((
+                np_bin_expr(ctx),
+                delimited(de_sp(tag("?")), np_bin_expr(ctx), de_sp(tag("#"))),
+                np_bin_expr(ctx),
+            )),
+            |(cond, if_true, or_false)| Expr::cond(cond, if_true, or_false),
+        );
 
-    alt((cond, np_bin_expr))(i)
+        alt((cond, np_bin_expr(ctx)))(i)
+    }
 }
 
 fn cut_comment<'a>(i: &'a str) -> &'a str {
@@ -347,7 +369,7 @@ fn variable<'c, 'a>(
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Variable> + 'c {
     move |i| {
         let (i, name) = ident(i)?;
-        let (i, args) = many0(preceded(de_sp(char(':')), expr))(i)?;
+        let (i, args) = many0(preceded(de_sp(char(':')), expr(ctx)))(i)?;
         let idx = ctx.var.get_var(name, ctx.current_func).unwrap();
 
         Ok((i, Variable { var_idx: idx, args }))
@@ -383,16 +405,20 @@ fn print_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     )(i)
 }
 
-fn call_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
-    map(
-        preceded(terminated(tag("CALL"), sp), pair(ident, call_arg_list)),
-        |(ident, args)| Stmt::Call {
-            name: Expr::str(ident),
-            args,
-            jump: false,
-            catch: None,
-        },
-    )(i)
+fn call_line<'a, 'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+    move |i| {
+        map(
+            preceded(terminated(tag("CALL"), sp), pair(ident, call_arg_list(ctx))),
+            |(ident, args)| Stmt::Call {
+                name: Expr::str(ident),
+                args,
+                jump: false,
+                catch: None,
+            },
+        )(i)
+    }
 }
 
 fn alignment<'a>(i: &'a str) -> IResult<&'a str, Alignment> {
@@ -410,29 +436,42 @@ fn align_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     )(i)
 }
 
-fn builtin_com_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
-    let (com, i) = i.split_once(' ').unwrap_or((i, ""));
-    match com.parse::<BuiltinCommand>() {
-        Ok(BuiltinCommand::ReuseLastLine) => {
-            let (i, text) = i.split_once('\n').unwrap_or(("", i));
-            let text = text.trim_end_matches('\r');
-            Ok((
-                i,
-                Stmt::Command(BuiltinCommand::ReuseLastLine, vec![Expr::str(text)]),
-            ))
+fn builtin_com_line<'a, 'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+    move |i| {
+        let (com, i) = i.split_once(' ').unwrap_or((i, ""));
+        match com.parse::<BuiltinCommand>() {
+            Ok(BuiltinCommand::ReuseLastLine) => {
+                let (i, text) = i.split_once('\n').unwrap_or(("", i));
+                let text = text.trim_end_matches('\r');
+                Ok((
+                    i,
+                    Stmt::Command(BuiltinCommand::ReuseLastLine, vec![Expr::str(text)]),
+                ))
+            }
+            Ok(com) => {
+                let (i, args) = expr_list(ctx)(i)?;
+                Ok((i, Stmt::Command(com, args)))
+            }
+            _ => Err(nom::Err::Error(make_error(i, ErrorKind::Tag))),
         }
-        Ok(com) => {
-            let (i, args) = expr_list(i)?;
-            Ok((i, Stmt::Command(com, args)))
-        }
-        _ => Err(nom::Err::Error(make_error(i, ErrorKind::Tag))),
     }
 }
 
-fn command_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
-    let i = i.trim_start();
+fn command_line<'a, 'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+    move |i| {
+        let i = i.trim_start();
 
-    alt((print_line, call_line, align_line, builtin_com_line))(i)
+        alt((
+            print_line,
+            call_line(ctx),
+            align_line,
+            builtin_com_line(ctx),
+        ))(i)
+    }
 }
 
 fn label_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
@@ -449,10 +488,10 @@ fn assign_line<'a, 'c>(
         let (name, info) = ctx.var.resolve_var(var.var_idx).unwrap();
 
         if info.is_str {
-            let (i, form) = normal_form_str(i)?;
+            let (i, form) = normal_form_str(ctx)(i)?;
             Ok((i, Stmt::Assign(var, None, form)))
         } else {
-            let (i, expr) = expr(i)?;
+            let (i, expr) = expr(ctx)(i)?;
             Ok((i, Stmt::Assign(var, None, expr)))
         }
     }
@@ -474,7 +513,7 @@ pub fn stmt<'a, 'c>(
             i = cut_comment(i);
         }
 
-        alt((label_line, command_line, assign_line(ctx)))(i)
+        alt((label_line, command_line(ctx), assign_line(ctx)))(i)
     }
 }
 

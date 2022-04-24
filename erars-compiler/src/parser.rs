@@ -52,5 +52,9 @@ pub fn parse_function(s: &str, var: &VariableDic) -> ParserResult<Function> {
 }
 
 pub fn parse_expr(s: &str, var: &VariableDic) -> ParserResult<Expr> {
-    Ok(crate::command::expr(s).unwrap().1)
+    Ok(
+        crate::command::expr(&ParseContext::new(var, var.insert_func("TEMP")))(s)
+            .unwrap()
+            .1,
+    )
 }
