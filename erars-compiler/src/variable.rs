@@ -161,13 +161,15 @@ impl VariableDic {
 
     pub fn insert_global_var(&self, name: impl Into<SmolStr>, info: VariableInfo) -> GlobalIndex {
         let name = name.into();
-        // must be locked before push data
-        let mut data = self.global_datas.write();
-        let next = self.next_var_idx();
-        debug_assert_eq!(next.as_usize(), data.len());
-        data.push((info, name.clone()));
-        self.var_names.insert(name, next);
-        next
+
+        *self.var_names.entry(name.clone()).or_insert_with(|| {
+            // must be locked before push data
+            let mut data = self.global_datas.write();
+            let next = self.next_var_idx();
+            debug_assert_eq!(next.as_usize(), data.len());
+            data.push((info, name));
+            next
+        })
     }
 
     pub fn insert_local_var(
@@ -178,16 +180,20 @@ impl VariableDic {
     ) -> LocalIndex {
         let name = name.into();
 
-        // must be locked before push data
-        let mut local_data = self.local_datas.lock();
-        let var_idx = self.next_local_idx();
+        *self
+            .local_names
+            .entry((func, name.clone()))
+            .or_insert_with(|| {
+                // must be locked before push data
+                let mut local_data = self.local_datas.lock();
+                let var_idx = self.next_local_idx();
 
-        self.local_names.insert((func, name.clone()), var_idx);
-        let locals = local_data.get_mut(func.as_usize()).unwrap();
-        debug_assert_eq!(var_idx.as_usize(), locals.len());
-        locals.push((info, name));
+                let locals = local_data.get_mut(func.as_usize()).unwrap();
+                debug_assert_eq!(var_idx.as_usize(), locals.len());
+                locals.push((info, name));
 
-        var_idx
+                var_idx
+            })
     }
 
     pub fn insert_func(&self, name: impl Into<SmolStr>) -> FunctionIndex {
@@ -198,7 +204,6 @@ impl VariableDic {
             let mut local = self.local_datas.lock();
             let mut func = self.func_datas.lock();
             let idx = self.next_func_idx();
-            self.func_names.insert(name.clone(), idx);
             debug_assert_eq!(idx.as_usize(), local.len());
             local.push(Vec::with_capacity(4));
             debug_assert_eq!(idx.as_usize(), func.len());

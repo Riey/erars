@@ -630,7 +630,6 @@ Ok(
                     1,
                 ),
                 header: FunctionHeader {
-                    name: "SYSTEM_TITLE",
                     args: [],
                     infos: [],
                 },
