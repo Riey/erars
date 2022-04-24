@@ -166,9 +166,11 @@ impl VariableDic {
     }
 
     pub fn insert_global_var(&self, name: impl Into<SmolStr>, info: VariableInfo) -> VariableIndex {
-        let next = self.next_var_idx();
         let name = name.into();
-        self.global_datas.write().push((info, name.clone()));
+        // must be locked before push data
+        let mut data = self.global_datas.write();
+        let next = self.next_var_idx();
+        data.push((info, name.clone()));
         self.var_names.insert(name, next);
         next
     }
@@ -180,22 +182,26 @@ impl VariableDic {
         info: VariableInfo,
     ) -> LocalIndex {
         let name = name.into();
-        let var_idx = self
-            .local_names
-            .entry((func, name.clone()))
-            .or_insert_with(|| self.next_local_idx());
+        // must be locked before push data
         let mut local_data = self.local_datas.lock();
+        let var_idx = self.next_local_idx();
+
+        self.local_names.insert((func, name.clone()), var_idx);
         let locals = local_data.get_mut(func.as_usize()).unwrap();
         locals.push((info, name));
-        *var_idx
+
+        var_idx
     }
 
     pub fn insert_func(&self, name: impl Into<SmolStr>) -> FunctionIndex {
-        let idx = self.next_func_idx();
         let name = name.into();
+        // must be locked before push data
+        let mut local = self.local_datas.lock();
+        let mut func = self.func_datas.lock();
+        let idx = self.next_func_idx();
         self.func_names.insert(name.clone(), idx);
-        self.local_datas.lock().push(Vec::with_capacity(4));
-        self.func_datas.lock().push(name);
+        local.push(Vec::with_capacity(4));
+        func.push(name);
         idx
     }
 

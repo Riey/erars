@@ -4,7 +4,8 @@ use unicode_xid::UnicodeXID;
 
 use crate::{
     Alignment, BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionIndex,
-    FunctionInfo, ParserError, ParserResult, PrintFlags, Stmt, UnaryOperator, VariableDic,
+    FunctionInfo, ParserError, ParserResult, PrintFlags, Stmt, UnaryOperator, Variable,
+    VariableDic,
 };
 use nom::{
     branch::alt,
@@ -503,11 +504,24 @@ fn assign_line<'a, 'c>(
                 todo!("LOCAL")
             }
             None => {
-                let info = ctx
-                    .var
-                    .resolve_global_var(ctx.var.get_var(ident).unwrap())
-                    .unwrap();
-                todo!("GLOBAL")
+                let idx = ctx.var.get_var(ident).expect("Variable not found");
+                let info = ctx.var.resolve_global_var(idx).unwrap().1;
+                if info.is_str {
+                    todo!("assign form str")
+                } else {
+                    let (i, expr) = expr(i)?;
+                    Ok((
+                        i,
+                        Stmt::Assign(
+                            Variable {
+                                var_idx: idx,
+                                args: vec![],
+                            },
+                            None,
+                            expr,
+                        ),
+                    ))
+                }
             }
         }
     }
@@ -628,7 +642,30 @@ Ok(
     #[test]
     fn assign() {
         let var = VariableDic::default();
-        k9::snapshot!(body(&dummy_ctx(&var))("A = 123"));
+        k9::snapshot!(
+            body(&dummy_ctx(&var))("A = 123"),
+            r#"
+Ok(
+    (
+        "",
+        [
+            Assign(
+                Variable {
+                    var_idx: VariableIndex(
+                        65,
+                    ),
+                    args: [],
+                },
+                None,
+                IntLit(
+                    123,
+                ),
+            ),
+        ],
+    ),
+)
+"#
+        );
         k9::snapshot!(body(&dummy_ctx(&var))("STR = 123"));
     }
 
