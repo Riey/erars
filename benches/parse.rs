@@ -1,9 +1,9 @@
 use criterion::*;
 use erars::erars_compiler::{compile, parse_program};
-use erars_compiler::VariableInterner;
+use erars_compiler::VariableDic;
 
 fn parse_small(c: &mut Criterion) {
-    let mut var = VariableInterner::with_default_variables();
+    let mut var = VariableDic::with_default_variables();
     c.bench_function("small 5", |b| {
         let code = "@FUNC\nPRINTL Hello, world!\n".repeat(5);
         b.iter(|| parse_program(&code, &mut var).unwrap());
@@ -23,7 +23,7 @@ fn parse_small(c: &mut Criterion) {
 }
 
 fn parse_real(c: &mut Criterion) {
-    let mut var = VariableInterner::with_default_variables();
+    let mut var = VariableDic::with_default_variables();
 
     c.bench_function("parse title", |b| {
         b.iter(|| parse_program(include_str!("../ERB/TITLE.ERB"), &mut var));
@@ -35,7 +35,7 @@ fn parse_real(c: &mut Criterion) {
 }
 
 fn compile_real(c: &mut Criterion) {
-    let mut var = VariableInterner::with_default_variables();
+    let mut var = VariableDic::with_default_variables();
 
     c.bench_function("compile title", |b| {
         b.iter(|| {

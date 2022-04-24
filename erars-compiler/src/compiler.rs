@@ -1,7 +1,7 @@
 use crate::{
     ast::{FormText, SelectCaseCond},
     BinaryOperator, CompileError, CompileResult, Expr, FormExpr, Function, FunctionHeader,
-    Instruction, KnownVariables, Stmt, Variable, VariableInterner,
+    Instruction, KnownVariables, Stmt, Variable, VariableDic,
 };
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ pub struct CompiledFunction {
 }
 
 struct Compiler<'v> {
-    var: &'v VariableInterner,
+    var: &'v VariableDic,
     out: Vec<Instruction>,
     goto_labels: HashMap<SmartString<LazyCompact>, u32>,
     continue_marks: Vec<u32>,
@@ -23,7 +23,7 @@ struct Compiler<'v> {
 }
 
 impl<'v> Compiler<'v> {
-    pub fn new(var: &'v VariableInterner) -> Self {
+    pub fn new(var: &'v VariableDic) -> Self {
         Self {
             var,
             out: Vec::new(),
@@ -492,7 +492,7 @@ impl<'v> Compiler<'v> {
     }
 }
 
-pub fn compile(func: Function, var: &VariableInterner) -> CompileResult<CompiledFunction> {
+pub fn compile(func: Function, var: &VariableDic) -> CompileResult<CompiledFunction> {
     let mut compiler = Compiler::new(var);
 
     for stmt in func.body {

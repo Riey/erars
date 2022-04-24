@@ -3,8 +3,8 @@ use strum::{Display, EnumString};
 use unicode_xid::UnicodeXID;
 
 use crate::{
-    Alignment, BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionInfo, ParserError,
-    ParserResult, PrintFlags, Stmt, UnaryOperator,
+    Alignment, BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionIndex,
+    FunctionInfo, ParserError, ParserResult, PrintFlags, Stmt, UnaryOperator, VariableDic,
 };
 use nom::{
     branch::alt,
@@ -490,48 +490,114 @@ fn label_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     map(preceded(tag("$"), ident), |s| Stmt::Label(s.into()))(i)
 }
 
+fn assign_line<'a, 'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+    move |i| {
+        let (i, ident) = de_sp(ident)(i)?;
+        let (i, _assign) = terminated(char('='), sp)(i)?;
+
+        match ctx.var.get_local(ident, ctx.current_func) {
+            Some(local) => {
+                let info = ctx.var.resolve_local_var(ctx.current_func, local).unwrap();
+                todo!("LOCAL")
+            }
+            None => {
+                let info = ctx
+                    .var
+                    .resolve_global_var(ctx.var.get_var(ident).unwrap())
+                    .unwrap();
+                todo!("GLOBAL")
+            }
+        }
+    }
+}
+
 fn function_label<'a>(i: &'a str) -> IResult<&'a str, String> {
     map(de_sp(preceded(char('@'), ident)), Into::into)(i)
 }
 
-pub fn stmt<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
-    let mut i = i.trim_start_matches(' ');
+pub fn stmt<'a, 'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+    move |i| {
+        let mut i = i.trim_start_matches(' ');
 
-    if !i.starts_with("PRINTFORM") && i.starts_with("PRINT") || i.starts_with("REUSELASTLINE") {
-        // don't strip comment
-    } else {
-        i = cut_comment(i);
-    }
-
-    alt((label_line, command_line))(i)
-}
-
-pub fn body<'a>(i: &'a str) -> IResult<&'a str, Vec<Stmt>> {
-    separated_list0(many1(newline), stmt)(i)
-}
-
-pub fn era_program<'a>(i: &'a str) -> IResult<&'a str, Vec<Function>> {
-    let functions = many0(map(tuple((function_label, body)), |(label, body)| {
-        Function {
-            header: FunctionHeader {
-                name: label,
-                ..Default::default()
-            },
-            body,
+        if !i.starts_with("PRINTFORM") && i.starts_with("PRINT") || i.starts_with("REUSELASTLINE") {
+            // don't strip comment
+        } else {
+            i = cut_comment(i);
         }
-    }));
 
-    preceded(opt(tag("\u{feff}")), functions)(i)
+        alt((label_line, command_line, assign_line(ctx)))(i)
+    }
+}
+
+pub fn body<'a, 'r, 'c>(
+    ctx: &'r ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Stmt>> + 'r {
+    move |i| separated_list0(many1(newline), stmt(ctx))(i)
+}
+
+pub fn function<'a, 'c>(
+    var: &'c VariableDic,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Function> + 'c {
+    move |i| {
+        let (i, label) = function_label(i)?;
+        let ctx = ParseContext {
+            current_func: var.insert_func(&label),
+            var,
+        };
+        let (i, body) = body(&ctx)(i)?;
+        Ok((
+            i,
+            Function {
+                header: FunctionHeader {
+                    name: label,
+                    ..Default::default()
+                },
+                body,
+            },
+        ))
+    }
+}
+
+pub fn era_program<'a, 'c>(
+    var: &'c VariableDic,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Function>> + 'c {
+    move |i| preceded(opt(tag("\u{feff}")), many0(function(var)))(i)
+}
+
+pub struct ParseContext<'c> {
+    var: &'c VariableDic,
+    current_func: FunctionIndex,
+}
+
+impl<'c> ParseContext<'c> {
+    pub fn new(var: &'c VariableDic, func_idx: FunctionIndex) -> Self {
+        Self {
+            var,
+            current_func: func_idx,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    fn dummy_ctx<'c>(var: &'c VariableDic) -> ParseContext<'c> {
+        let func = var.insert_func("TEST");
+        ParseContext {
+            var,
+            current_func: func,
+        }
+    }
+
     use super::*;
 
     #[test]
     fn program() {
         k9::snapshot!(
-            era_program("@SYSTEM_TITLE\nPRINTL Hello, world!"),
+            era_program(&VariableDic::default())("@SYSTEM_TITLE\nPRINTL Hello, world!"),
             r#"
 Ok(
     (
@@ -560,9 +626,17 @@ Ok(
     }
 
     #[test]
+    fn assign() {
+        let var = VariableDic::default();
+        k9::snapshot!(body(&dummy_ctx(&var))("A = 123"));
+        k9::snapshot!(body(&dummy_ctx(&var))("STR = 123"));
+    }
+
+    #[test]
     fn lines() {
+        let var = VariableDic::default();
         k9::snapshot!(
-            body("CALL FOO, 2 + 3"),
+            body(&dummy_ctx(&var))("CALL FOO, 2 + 3"),
             r#"
 Ok(
     (
@@ -593,7 +667,7 @@ Ok(
         );
 
         k9::snapshot!(
-            body("LIMIT 1, 2, 3"),
+            body(&dummy_ctx(&var))("LIMIT 1, 2, 3"),
             r#"
 Ok(
     (

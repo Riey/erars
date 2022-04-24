@@ -10,7 +10,7 @@ use hashbrown::{HashMap, HashSet};
 
 use erars_compiler::{
     BeginType, BinaryOperator, BuiltinCommand, BulitinVariable, EventType, Instruction,
-    KnownVariables, PrintFlags, UnaryOperator, VariableIndex, VariableInfo, VariableInterner,
+    KnownVariables, PrintFlags, UnaryOperator, VariableIndex, VariableInfo, VariableDic,
 };
 
 use crate::function::{FunctionBody, FunctionDic};
@@ -154,7 +154,7 @@ impl UniformVariable {
 
 struct VariableStorage {
     character_len: usize,
-    variable_interner: Arc<VariableInterner>,
+    variable_interner: Arc<VariableDic>,
     variables: Vec<(VariableInfo, UniformVariable)>,
     local_variables:
         HashMap<SmartString<LazyCompact>, HashMap<VariableIndex, (VariableInfo, UniformVariable)>>,
@@ -163,12 +163,12 @@ struct VariableStorage {
 impl VariableStorage {
     pub fn new(
         infos: &HashMap<String, VariableInfo>,
-        variable_interner: Arc<VariableInterner>,
+        variable_interner: Arc<VariableDic>,
     ) -> Self {
         let variables = variable_interner
             .idxs()
             .map(|idx| {
-                let name = variable_interner.resolve(idx).unwrap();
+                let name = variable_interner.resolve_global_var(idx).unwrap();
                 if let Some(builtin) = idx.to_builtin() {
                     (VariableInfo::default(), UniformVariable::Bulitin(builtin))
                 } else {
@@ -317,7 +317,7 @@ pub struct VmContext {
 impl VmContext {
     pub fn new(
         infos: &HashMap<String, VariableInfo>,
-        variable_interner: Arc<VariableInterner>,
+        variable_interner: Arc<VariableDic>,
     ) -> Self {
         Self {
             var: VariableStorage::new(infos, variable_interner),

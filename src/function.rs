@@ -7,7 +7,7 @@ use smartstring::{LazyCompact, SmartString};
 use crate::value::Value;
 use erars_compiler::{
     CompiledFunction, Event, EventFlags, EventType, Expr, FunctionInfo, Instruction,
-    KnownVariables, VariableIndex, VariableInfo, VariableInterner,
+    KnownVariables, VariableIndex, VariableInfo, VariableDic,
 };
 use serde::{Deserialize, Serialize};
 
@@ -96,7 +96,7 @@ impl FunctionDic {
 
     pub fn insert_compiled_func(
         &mut self,
-        variable_interner: &VariableInterner,
+        variable_interner: &VariableDic,
         func: CompiledFunction,
     ) {
         let mut body = FunctionBody {

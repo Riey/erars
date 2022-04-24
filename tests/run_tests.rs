@@ -1,13 +1,13 @@
 use erars::function::FunctionDic;
 use erars::ui::{ConsoleChannel, ConsoleMessage};
 use erars::vm::*;
-use erars_compiler::{compile, parse_program, VariableInterner};
+use erars_compiler::{compile, parse_program, VariableDic};
 use std::sync::Arc;
 
 #[test]
 fn run_test() {
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
-    let var = Arc::new(VariableInterner::with_default_variables());
+    let var = Arc::new(VariableDic::with_default_variables());
 
     for erb_file in erb_files {
         let erb_file = erb_file.unwrap();
@@ -34,7 +34,7 @@ fn run_test() {
     }
 }
 
-fn test_runner(dic: FunctionDic, var: Arc<VariableInterner>) -> Vec<ConsoleMessage> {
+fn test_runner(dic: FunctionDic, var: Arc<VariableDic>) -> Vec<ConsoleMessage> {
     let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
     let mut ctx = VmContext::new(&infos, var);
     let vm = TerminalVm::new(dic);

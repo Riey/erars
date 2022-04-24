@@ -1,3 +1,8 @@
+macro_rules! arrvec {
+    [] => { ArrayVec::new() };
+    [$e:expr; $c:expr] => { ArrayVec::try_from(&[$e; $c] as &[usize]).unwrap() };
+}
+
 mod ast;
 mod command;
 mod compiler;

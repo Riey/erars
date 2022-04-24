@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use crate::{
-    Expr, Function, FunctionHeader, FunctionInfo, ParserError, ParserResult, Stmt, UnaryOperator,
-    Variable, VariableIndex, VariableInfo, VariableInterner,
+    command::ParseContext, Expr, Function, FunctionHeader, FunctionInfo, ParserError, ParserResult,
+    Stmt, UnaryOperator, Variable, VariableDic, VariableIndex, VariableInfo,
 };
 use bitflags::bitflags;
 use either::Either;
@@ -35,18 +35,22 @@ impl Default for Alignment {
     }
 }
 
-pub fn parse_program(s: &str, var: &VariableInterner) -> ParserResult<Vec<Function>> {
-    Ok(crate::command::era_program(s).unwrap().1)
+pub fn parse_program(s: &str, var: &VariableDic) -> ParserResult<Vec<Function>> {
+    Ok(crate::command::era_program(var)(s).unwrap().1)
 }
 
-pub fn parse_body(s: &str, var: &VariableInterner) -> ParserResult<Vec<Stmt>> {
-    Ok(crate::command::body(s).unwrap().1)
+pub fn parse_body(s: &str, var: &VariableDic) -> ParserResult<Vec<Stmt>> {
+    Ok(
+        crate::command::body(&ParseContext::new(var, var.insert_func("TEMP")))(s)
+            .unwrap()
+            .1,
+    )
 }
 
-pub fn parse_function(s: &str, var: &VariableInterner) -> ParserResult<Function> {
-    parse_program(s, var).map(|v| v.into_iter().next().unwrap())
+pub fn parse_function(s: &str, var: &VariableDic) -> ParserResult<Function> {
+    Ok(crate::command::function(var)(s).unwrap().1)
 }
 
-pub fn parse_expr(s: &str, var: &VariableInterner) -> ParserResult<Expr> {
+pub fn parse_expr(s: &str, var: &VariableDic) -> ParserResult<Expr> {
     Ok(crate::command::expr(s).unwrap().1)
 }

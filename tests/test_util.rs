@@ -6,15 +6,15 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_compiler::{ParserResult, VariableInterner};
+use erars_compiler::{ParserResult, VariableDic};
 use serde::de::DeserializeOwned;
 
 #[track_caller]
 pub fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     path: &str,
-    f: fn(&str, &VariableInterner) -> ParserResult<T>,
+    f: fn(&str, &VariableDic) -> ParserResult<T>,
 ) -> T {
-    let var = &VariableInterner::with_default_variables();
+    let var = &VariableDic::with_default_variables();
     let source = std::fs::read_to_string(path).unwrap();
     let mut files = SimpleFiles::new();
     let file_id = files.add(path, &source);

@@ -14,7 +14,7 @@ use erars::{
     ui::{ConsoleChannel, EraApp},
     vm::{TerminalVm, VmContext},
 };
-use erars_compiler::{VariableInfo, VariableInterner};
+use erars_compiler::{VariableInfo, VariableDic};
 use hashbrown::HashMap;
 
 fn main() {
@@ -49,7 +49,7 @@ fn main() {
         let mut diagnostic = Diagnostic::error()
             .with_code("E0001")
             .with_message("Compile ERROR");
-        let var = Arc::new(VariableInterner::with_default_variables());
+        let var = Arc::new(VariableDic::with_default_variables());
 
         for erb in erbs {
             let erb = erb.unwrap();
