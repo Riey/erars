@@ -131,7 +131,7 @@ fn parse_form_normal_str<'a>(
                     match left.as_bytes().get(0).copied() {
                         Some(b'%') => break Some(FormType::Percent),
                         Some(b'{') => break Some(FormType::Brace),
-                        None => break None,
+                        Some(b'\n') | None => break None,
                         Some(b'\\') => {
                             match left.as_bytes().get(1).copied() {
                                 Some(b'@') => {
@@ -590,6 +590,7 @@ pub fn era_program<'a, 'c>(
     move |i| preceded(opt(tag("\u{feff}")), many0(function(var)))(i)
 }
 
+#[derive(Clone, Copy)]
 pub struct ParseContext<'c> {
     var: &'c VariableDic,
     current_func: FunctionIndex,

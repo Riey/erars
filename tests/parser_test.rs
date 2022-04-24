@@ -23,10 +23,27 @@ mod body {
 
     #[test]
     fn test_assign_str() {
-        k9::snapshot!(do_test(
-            "tests/parse_tests/bodys/assign_str.erb",
-            parse_body
-        ));
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign_str.erb", parse_body),
+            "
+[
+    Assign(
+        Variable {
+            var_idx: Global(
+                GlobalIndex(
+                    87,
+                ),
+            ),
+            args: [],
+        },
+        None,
+        FormText(
+            {IntLit(123)}456,
+        ),
+    ),
+]
+"
+        );
     }
 
     #[test]
@@ -272,16 +289,18 @@ mod function {
     fn test_call() {
         k9::snapshot!(
             do_test("tests/parse_tests/functions/call.erb", parse_function),
-            r#"
+            "
 Function {
+    idx: FunctionIndex(
+        1,
+    ),
     header: FunctionHeader {
-        name: "FOO",
         args: [],
         infos: [],
     },
     body: [],
 }
-"#
+"
         );
     }
 
@@ -289,16 +308,18 @@ Function {
     fn test_dim() {
         k9::snapshot!(
             do_test("tests/parse_tests/functions/dim.erb", parse_function),
-            r#"
+            "
 Function {
+    idx: FunctionIndex(
+        1,
+    ),
     header: FunctionHeader {
-        name: "SYSTEM_TITLE",
         args: [],
         infos: [],
     },
     body: [],
 }
-"#
+"
         );
     }
 
@@ -306,16 +327,18 @@ Function {
     fn test_function() {
         k9::snapshot!(
             do_test("tests/parse_tests/functions/function.erb", parse_function),
-            r#"
+            "
 Function {
+    idx: FunctionIndex(
+        1,
+    ),
     header: FunctionHeader {
-        name: "FOO",
         args: [],
         infos: [],
     },
     body: [],
 }
-"#
+"
         );
     }
 
@@ -335,18 +358,20 @@ mod program {
     fn test_call_form() {
         k9::snapshot!(
             do_test("tests/parse_tests/programs/call_form.erb", parse_program),
-            r#"
+            "
 [
     Function {
+        idx: FunctionIndex(
+            1,
+        ),
         header: FunctionHeader {
-            name: "SYSTEM_TITLE",
             args: [],
             infos: [],
         },
         body: [],
     },
 ]
-"#
+"
         );
     }
 
@@ -354,18 +379,20 @@ mod program {
     fn test_method_call() {
         k9::snapshot!(
             do_test("tests/parse_tests/programs/method_call.erb", parse_program),
-            r#"
+            "
 [
     Function {
+        idx: FunctionIndex(
+            1,
+        ),
         header: FunctionHeader {
-            name: "FOO",
             args: [],
             infos: [],
         },
         body: [],
     },
 ]
-"#
+"
         );
     }
 
@@ -376,8 +403,10 @@ mod program {
             r#"
 [
     Function {
+        idx: FunctionIndex(
+            1,
+        ),
         header: FunctionHeader {
-            name: "FOO",
             args: [],
             infos: [],
         },
