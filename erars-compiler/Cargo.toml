@@ -15,7 +15,6 @@ memchr = "2.4.1"
 nom = "7.1.1"
 num-derive = "0.3.3"
 num-traits = "0.2.14"
-once_cell = "1.10.0"
 option_set = "0.1.4"
 ordered-float = { version = "2.10.0", features = ["serde"] }
 parking_lot = { version = "0.12.0", features = ["serde"] }

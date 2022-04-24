@@ -1,10 +1,10 @@
+use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
 use arrayvec::ArrayVec;
 use dashmap::DashMap;
 use enum_map::{Enum, EnumMap};
-use hashbrown::HashMap;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 use parking_lot::{Mutex, RwLock};
@@ -22,10 +22,10 @@ pub struct VariableDic {
     next_local: AtomicU32,
     next_func: AtomicU32,
 
-    var_names: DashMap<SmolStr, VariableIndex, ahash::RandomState>,
+    var_names: DashMap<SmolStr, GlobalIndex, ahash::RandomState>,
     local_names: DashMap<(FunctionIndex, SmolStr), LocalIndex, ahash::RandomState>,
     func_names: DashMap<SmolStr, FunctionIndex, ahash::RandomState>,
-    known_idxs: EnumMap<KnownVariables, VariableIndex>,
+    known_idxs: EnumMap<KnownVariables, GlobalIndex>,
 }
 
 pub fn default_infos() -> BTreeMap<String, VariableInfo> {
@@ -110,12 +110,11 @@ impl VariableDic {
             var_names: Default::default(),
             func_names: Default::default(),
             local_names: Default::default(),
-            known_idxs: enum_map::enum_map! { _ => VariableIndex(NonZeroU32::new(1).unwrap()) },
+            known_idxs: enum_map::enum_map! { _ => GlobalIndex(NonZeroU32::new(1).unwrap()) },
         };
 
         for builtin in BulitinVariable::iter() {
-            // builtin var doesn't have info
-            ret.insert_var_name(<&str>::from(builtin));
+            ret.insert_global_var(<&str>::from(builtin), VariableInfo::default());
         }
 
         let mut known_visit = EnumMap::default();
@@ -143,33 +142,27 @@ impl VariableDic {
         self.next_var.load(Relaxed) as usize
     }
 
-    fn next_var_idx(&self) -> VariableIndex {
+    fn next_var_idx(&self) -> GlobalIndex {
         let ret = self.next_var.fetch_add(1, Relaxed);
-        unsafe { VariableIndex(NonZeroU32::new_unchecked(ret)) }
+        GlobalIndex::from_usize(ret as usize)
     }
 
     fn next_local_idx(&self) -> LocalIndex {
         let ret = self.next_local.fetch_add(1, Relaxed);
-        unsafe { LocalIndex(NonZeroU32::new_unchecked(ret)) }
+        LocalIndex::from_usize(ret as usize)
     }
 
     fn next_func_idx(&self) -> FunctionIndex {
         let ret = self.next_func.fetch_add(1, Relaxed);
-        unsafe { FunctionIndex(NonZeroU32::new_unchecked(ret)) }
+        FunctionIndex::from_usize(ret as usize)
     }
 
-    pub fn insert_var_name(&self, name: impl Into<SmolStr>) -> VariableIndex {
-        let next = self.next_var_idx();
-        let name = name.into();
-        self.var_names.insert(name, next);
-        next
-    }
-
-    pub fn insert_global_var(&self, name: impl Into<SmolStr>, info: VariableInfo) -> VariableIndex {
+    pub fn insert_global_var(&self, name: impl Into<SmolStr>, info: VariableInfo) -> GlobalIndex {
         let name = name.into();
         // must be locked before push data
         let mut data = self.global_datas.write();
         let next = self.next_var_idx();
+        debug_assert_eq!(next.as_usize(), data.len());
         data.push((info, name.clone()));
         self.var_names.insert(name, next);
         next
@@ -188,6 +181,7 @@ impl VariableDic {
 
         self.local_names.insert((func, name.clone()), var_idx);
         let locals = local_data.get_mut(func.as_usize()).unwrap();
+        debug_assert_eq!(var_idx.as_usize(), locals.len());
         locals.push((info, name));
 
         var_idx
@@ -200,13 +194,20 @@ impl VariableDic {
         let mut func = self.func_datas.lock();
         let idx = self.next_func_idx();
         self.func_names.insert(name.clone(), idx);
+        debug_assert_eq!(idx.as_usize(), local.len());
         local.push(Vec::with_capacity(4));
+        debug_assert_eq!(idx.as_usize(), func.len());
         func.push(name);
         idx
     }
 
-    pub fn get_var(&self, name: impl AsRef<str>) -> Option<VariableIndex> {
+    pub fn get_global(&self, name: impl AsRef<str>) -> Option<GlobalIndex> {
         self.var_names.get(name.as_ref()).map(|i| *i)
+    }
+
+    pub fn get_var(&self, name: impl Into<SmolStr>, func: FunctionIndex) -> Option<VariableIndex> {
+        let name = name.into();
+        self.get_local(name.clone(), func).map(|i| VariableIndex::Local(func, i)).or_else(|| self.get_global(name.as_str()).map(VariableIndex::Global))
     }
 
     pub fn get_local(&self, name: impl Into<SmolStr>, func: FunctionIndex) -> Option<LocalIndex> {
@@ -217,11 +218,18 @@ impl VariableDic {
         self.func_names.get(name.as_ref()).map(|i| *i)
     }
 
-    pub fn get_known(&self, known: KnownVariables) -> VariableIndex {
+    pub fn get_known(&self, known: KnownVariables) -> GlobalIndex {
         self.known_idxs[known]
     }
 
-    pub fn resolve_global_var(&self, idx: VariableIndex) -> Option<(SmolStr, VariableInfo)> {
+    pub fn resolve_var(&self, var: VariableIndex) -> Option<(SmolStr, VariableInfo)> {
+        match var {
+            VariableIndex::Global(global) => self.resolve_global_var(global),
+            VariableIndex::Local(func, local) => self.resolve_local_var(func, local),
+        }
+    }
+
+    pub fn resolve_global_var(&self, idx: GlobalIndex) -> Option<(SmolStr, VariableInfo)> {
         let data = self.global_datas.read();
         let (info, name) = data.get(idx.as_usize())?;
 
@@ -248,6 +256,42 @@ impl VariableDic {
 
     pub fn resolve_func(&self, idx: FunctionIndex) -> Option<SmolStr> {
         self.func_datas.lock().get(idx.as_usize()).cloned()
+    }
+
+    pub fn iter_global(
+        &self,
+        mut f: impl FnMut(GlobalIndex, &VariableInfo),
+    ) {
+        let datas = self.global_datas.read();
+
+        datas[BulitinVariable::COUNT..]
+            .iter()
+            .enumerate()
+            .for_each(|(c, (i, _))| f(GlobalIndex::from_usize(c), i));
+    }
+
+    pub fn iter_func(
+        &self,
+        mut f: impl FnMut(GlobalIndex, &VariableInfo),
+    ) {
+        let datas = self.global_datas.read();
+
+        datas[BulitinVariable::COUNT..]
+            .iter()
+            .enumerate()
+            .for_each(|(c, (i, _))| f(GlobalIndex::from_usize(c), i));
+    }
+
+    pub fn iter_local(
+        &self,
+        mut f: impl FnMut(GlobalIndex, &VariableInfo),
+    ) {
+        let datas = self.global_datas.read();
+
+        datas[BulitinVariable::COUNT..]
+            .iter()
+            .enumerate()
+            .for_each(|(c, (i, _))| f(GlobalIndex::from_usize(c), i));
     }
 }
 
@@ -277,50 +321,37 @@ impl VariableInfo {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[repr(transparent)]
-pub struct FunctionIndex(NonZeroU32);
+macro_rules! impl_index {
+    ($ty:ident) => {
+        #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[repr(transparent)]
+        pub struct $ty(NonZeroU32);
 
-impl FunctionIndex {
-    #[inline]
-    pub fn as_usize(self) -> usize {
-        self.0.get() as usize - 1
-    }
+        impl $ty {
+            #[inline]
+            pub fn as_usize(self) -> usize {
+                self.0.get() as usize - 1
+            }
+
+            #[inline]
+            fn from_usize(n: usize) -> Self {
+                Self(unsafe { NonZeroU32::new_unchecked(n.saturating_add(1) as u32) })
+            }
+        }
+
+        impl std::fmt::Display for $ty {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}[{}]", stringify!($ty), self.0)
+            }
+        }
+    };
 }
 
-impl std::fmt::Display for FunctionIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Func[{}]", self.0)
-    }
-}
+impl_index!(FunctionIndex);
+impl_index!(LocalIndex);
+impl_index!(GlobalIndex);
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[repr(transparent)]
-pub struct LocalIndex(NonZeroU32);
-
-impl LocalIndex {
-    #[inline]
-    pub fn as_usize(self) -> usize {
-        self.0.get() as usize - 1
-    }
-}
-
-impl std::fmt::Display for LocalIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Local[{}]", self.0)
-    }
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[repr(transparent)]
-pub struct VariableIndex(NonZeroU32);
-
-impl VariableIndex {
-    #[inline]
-    pub fn as_usize(self) -> usize {
-        self.0.get() as usize - 1
-    }
-
+impl GlobalIndex {
     #[inline]
     pub fn is_builtin(self) -> bool {
         self.as_usize() < BulitinVariable::COUNT
@@ -331,10 +362,10 @@ impl VariableIndex {
     }
 }
 
-impl std::fmt::Display for VariableIndex {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Var[{}]", self.0)
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VariableIndex {
+    Global(GlobalIndex),
+    Local(FunctionIndex, LocalIndex),
 }
 
 #[derive(

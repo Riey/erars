@@ -1,4 +1,4 @@
-use crate::{Alignment, BinaryOperator, BuiltinCommand, PrintFlags, UnaryOperator, VariableIndex};
+use crate::{Alignment, BinaryOperator, BuiltinCommand, PrintFlags, UnaryOperator, GlobalIndex, VariableIndex};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};

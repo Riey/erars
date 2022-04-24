@@ -7,42 +7,34 @@ use smartstring::{LazyCompact, SmartString};
 use crate::value::Value;
 use erars_compiler::{
     CompiledFunction, Event, EventFlags, EventType, Expr, FunctionInfo, Instruction,
-    KnownVariables, VariableIndex, VariableInfo, VariableDic,
+    KnownVariables, GlobalIndex, VariableInfo, VariableDic, FunctionIndex,
 };
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {
+    idx: FunctionIndex,
     body: Vec<Instruction>,
     goto_labels: HashMap<SmartString<LazyCompact>, u32>,
-    args: Vec<(VariableIndex, Option<Value>, ArrayVec<usize, 4>)>,
-    local_vars: HashMap<VariableIndex, (VariableInfo, Vec<Value>)>,
+    args: Vec<(GlobalIndex, Option<Value>, ArrayVec<usize, 4>)>,
 }
 
 impl FunctionBody {
     pub fn push_arg(
         &mut self,
-        var_idx: VariableIndex,
+        var_idx: GlobalIndex,
         default_value: Option<Value>,
         indices: ArrayVec<usize, 4>,
     ) {
         self.args.push((var_idx, default_value, indices));
     }
 
-    pub fn push_local(&mut self, var_idx: VariableIndex, info: VariableInfo, init: Vec<Value>) {
-        self.local_vars.insert(var_idx, (info, init));
-    }
-
     pub fn goto_labels(&self) -> &HashMap<SmartString<LazyCompact>, u32> {
         &self.goto_labels
     }
 
-    pub fn args(&self) -> &[(VariableIndex, Option<Value>, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[(GlobalIndex, Option<Value>, ArrayVec<usize, 4>)] {
         &self.args
-    }
-
-    pub fn local_vars(&self) -> &HashMap<VariableIndex, (VariableInfo, Vec<Value>)> {
-        &self.local_vars
     }
 
     pub fn body(&self) -> &[Instruction] {

@@ -2,7 +2,7 @@ use std::ops::Range;
 
 use crate::{
     command::ParseContext, Expr, Function, FunctionHeader, FunctionInfo, ParserError, ParserResult,
-    Stmt, UnaryOperator, Variable, VariableDic, VariableIndex, VariableInfo,
+    Stmt, UnaryOperator, Variable, VariableDic, GlobalIndex, VariableInfo,
 };
 use bitflags::bitflags;
 use either::Either;

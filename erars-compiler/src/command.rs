@@ -496,33 +496,41 @@ fn assign_line<'a, 'c>(
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
     move |i| {
         let (i, ident) = de_sp(ident)(i)?;
-        let (i, _assign) = terminated(char('='), sp)(i)?;
+        let (i, _) = terminated(char('='), sp)(i)?;
 
-        match ctx.var.get_local(ident, ctx.current_func) {
-            Some(local) => {
-                let info = ctx.var.resolve_local_var(ctx.current_func, local).unwrap();
-                todo!("LOCAL")
-            }
-            None => {
-                let idx = ctx.var.get_var(ident).expect("Variable not found");
-                let info = ctx.var.resolve_global_var(idx).unwrap().1;
-                if info.is_str {
-                    todo!("assign form str")
-                } else {
-                    let (i, expr) = expr(i)?;
-                    Ok((
-                        i,
-                        Stmt::Assign(
-                            Variable {
-                                var_idx: idx,
-                                args: vec![],
-                            },
-                            None,
-                            expr,
-                        ),
-                    ))
-                }
-            }
+        let idx = ctx
+            .var
+            .get_var(ident, ctx.current_func)
+            .expect("Variable not found");
+        let (name, info) = ctx.var.resolve_var(idx).unwrap();
+        debug_assert_eq!(name, ident);
+
+        if info.is_str {
+            let (i, form) = form_str(FormStrType::Normal)(i)?;
+            Ok((
+                i,
+                Stmt::Assign(
+                    Variable {
+                        var_idx: idx,
+                        args: vec![],
+                    },
+                    None,
+                    form,
+                ),
+            ))
+        } else {
+            let (i, expr) = expr(i)?;
+            Ok((
+                i,
+                Stmt::Assign(
+                    Variable {
+                        var_idx: idx,
+                        args: vec![],
+                    },
+                    None,
+                    expr,
+                ),
+            ))
         }
     }
 }
@@ -651,8 +659,10 @@ Ok(
         [
             Assign(
                 Variable {
-                    var_idx: VariableIndex(
-                        65,
+                    var_idx: Global(
+                        GlobalIndex(
+                            18,
+                        ),
                     ),
                     args: [],
                 },
@@ -666,7 +676,32 @@ Ok(
 )
 "#
         );
-        k9::snapshot!(body(&dummy_ctx(&var))("STR = 123"));
+        k9::snapshot!(
+            body(&dummy_ctx(&var))("STR = 123"),
+            r#"
+Ok(
+    (
+        "",
+        [
+            Assign(
+                Variable {
+                    var_idx: Global(
+                        GlobalIndex(
+                            87,
+                        ),
+                    ),
+                    args: [],
+                },
+                None,
+                FormText(
+                    123,
+                ),
+            ),
+        ],
+    ),
+)
+"#
+        );
     }
 
     #[test]

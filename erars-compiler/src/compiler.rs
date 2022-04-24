@@ -1,7 +1,7 @@
 use crate::{
     ast::{FormText, SelectCaseCond},
     BinaryOperator, CompileError, CompileResult, Expr, FormExpr, Function, FunctionHeader,
-    Instruction, KnownVariables, Stmt, Variable, VariableDic,
+    Instruction, KnownVariables, Stmt, Variable, VariableDic, VariableIndex,
 };
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
@@ -320,7 +320,7 @@ impl<'v> Compiler<'v> {
             }
             Stmt::Repeat(end, body) => self.push_for(
                 Variable {
-                    var_idx: self.var.get_known(KnownVariables::Count),
+                    var_idx: VariableIndex::Global(self.var.get_known(KnownVariables::Count)),
                     args: Vec::new(),
                 },
                 Expr::int(0),

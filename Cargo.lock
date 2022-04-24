@@ -767,7 +767,6 @@ dependencies = [
  "nom",
  "num-derive",
  "num-traits",
- "once_cell",
  "option_set",
  "ordered-float",
  "parking_lot 0.12.0",

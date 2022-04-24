@@ -10,7 +10,7 @@ use hashbrown::{HashMap, HashSet};
 
 use erars_compiler::{
     BeginType, BinaryOperator, BuiltinCommand, BulitinVariable, EventType, Instruction,
-    KnownVariables, PrintFlags, UnaryOperator, VariableIndex, VariableInfo, VariableDic,
+    KnownVariables, PrintFlags, UnaryOperator, GlobalIndex, VariableInfo, VariableDic,
 };
 
 use crate::function::{FunctionBody, FunctionDic};
@@ -157,18 +157,17 @@ struct VariableStorage {
     variable_interner: Arc<VariableDic>,
     variables: Vec<(VariableInfo, UniformVariable)>,
     local_variables:
-        HashMap<SmartString<LazyCompact>, HashMap<VariableIndex, (VariableInfo, UniformVariable)>>,
+        HashMap<SmartString<LazyCompact>, HashMap<GlobalIndex, (VariableInfo, UniformVariable)>>,
 }
 
 impl VariableStorage {
     pub fn new(
-        infos: &HashMap<String, VariableInfo>,
-        variable_interner: Arc<VariableDic>,
+        var_dic: Arc<VariableDic>,
     ) -> Self {
-        let variables = variable_interner
+        let variables = var_dic
             .idxs()
             .map(|idx| {
-                let name = variable_interner.resolve_global_var(idx).unwrap();
+                let name = var_dic.resolve_global_var(idx).unwrap();
                 if let Some(builtin) = idx.to_builtin() {
                     (VariableInfo::default(), UniformVariable::Bulitin(builtin))
                 } else {
@@ -187,7 +186,7 @@ impl VariableStorage {
 
         Self {
             character_len: 0,
-            variable_interner,
+            variable_interner: var_dic,
             variables,
             local_variables: HashMap::new(),
         }
@@ -216,7 +215,7 @@ impl VariableStorage {
     fn get_local_var(
         &mut self,
         name: &str,
-        idx: VariableIndex,
+        idx: GlobalIndex,
     ) -> Result<&mut (VariableInfo, UniformVariable)> {
         self.local_variables
             .get_mut(name)
@@ -225,7 +224,7 @@ impl VariableStorage {
             .ok_or_else(|| anyhow!("Variable {} is not exists", idx))
     }
 
-    fn get_var(&mut self, idx: VariableIndex) -> Result<&mut (VariableInfo, UniformVariable)> {
+    fn get_var(&mut self, idx: GlobalIndex) -> Result<&mut (VariableInfo, UniformVariable)> {
         self.variables
             .get_mut(idx.as_usize())
             .ok_or_else(|| anyhow!("Variable {} is not exists", idx))
@@ -233,8 +232,8 @@ impl VariableStorage {
 
     fn get_var2(
         &mut self,
-        l: VariableIndex,
-        r: VariableIndex,
+        l: GlobalIndex,
+        r: GlobalIndex,
     ) -> Result<(
         &mut (VariableInfo, UniformVariable),
         &mut (VariableInfo, UniformVariable),
@@ -304,7 +303,7 @@ enum Workflow {
 
 struct Callstack {
     stack_base: usize,
-    local_idxs: HashSet<VariableIndex>,
+    local_idxs: HashSet<GlobalIndex>,
 }
 
 pub struct VmContext {
@@ -327,7 +326,7 @@ impl VmContext {
         }
     }
 
-    pub fn is_local_var(&self, idx: &VariableIndex) -> bool {
+    pub fn is_local_var(&self, idx: &GlobalIndex) -> bool {
         self.call_stack
             .last()
             .expect("Call stack is empty")
