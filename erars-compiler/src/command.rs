@@ -1,11 +1,12 @@
+use std::cell::Cell;
+
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 use unicode_xid::UnicodeXID;
 
 use crate::{
-    Alignment, BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionIndex,
-    FunctionInfo, ParserError, ParserResult, PrintFlags, Stmt, UnaryOperator, Variable,
-    VariableDic,
+    Alignment, BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionIndex, PrintFlags,
+    Stmt, UnaryOperator, Variable, VariableDic,
 };
 use nom::{
     branch::alt,
@@ -17,28 +18,6 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult, Parser,
 };
-
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-struct ExprParser<'s> {
-    s: &'s str,
-    /// `,` is not allowed
-    ban_arg: bool,
-    /// `%` is not allowed
-    ban_percent: bool,
-    /// '#' is not allowed
-    ban_sharp: bool,
-}
-
-impl<'s> ExprParser<'s> {
-    fn new(s: &'s str) -> Self {
-        Self {
-            s,
-            ban_arg: false,
-            ban_percent: false,
-            ban_sharp: false,
-        }
-    }
-}
 
 pub enum FormType {
     Percent,
@@ -230,27 +209,52 @@ fn string<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
     context("string", delimited(char('\"'), parse_str, char('\"')))(i)
 }
 
+fn paran_expr<'c, 'a>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+    move |i| {
+        let is_arg = ctx.is_arg.get();
+        ctx.is_arg.set(false);
+
+        let (i, expr) = delimited(tag("("), expr(ctx), tag(")"))(i)?;
+
+        ctx.is_arg.set(is_arg);
+
+        Ok((i, expr))
+    }
+}
+
 fn single_expr<'c, 'a>(
     ctx: &'c ParseContext<'c>,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
     move |i| {
-        let expr = de_sp(alt((
-            map(string, Expr::str),
-            map(i64, Expr::IntLit),
-            delimited(tag("("), expr(ctx), tag(")")),
-        )));
+        let (i, expr) = if ctx.is_arg.get() {
+            de_sp(alt((
+                map(string, Expr::str),
+                map(i64, Expr::IntLit),
+                map(variable_no_arg(ctx), Expr::Var),
+                paran_expr(ctx),
+            )))(i)?
+        } else {
+            de_sp(alt((
+                map(string, Expr::str),
+                map(i64, Expr::IntLit),
+                map(variable(ctx), Expr::Var),
+                paran_expr(ctx),
+            )))(i)?
+        };
 
-        let op = de_sp(alt((
+        let (i, op) = opt(de_sp(alt((
             value(UnaryOperator::Not, tag("!")),
             value(UnaryOperator::BitNot, tag("~")),
-        )));
+        ))))(i)?;
 
-        let mut expr = map(tuple((opt(op), expr)), |(op, expr)| match op {
+        let expr = match op {
             Some(op) => Expr::unary(expr, op),
             None => expr,
-        });
+        };
 
-        expr(i)
+        Ok((i, expr))
     }
 }
 
@@ -364,12 +368,31 @@ fn cut_comment<'a>(i: &'a str) -> &'a str {
     }
 }
 
-fn variable<'c, 'a>(
+fn variable_no_arg<'c, 'a>(
     ctx: &'c ParseContext<'c>,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Variable> + 'c {
     move |i| {
         let (i, name) = ident(i)?;
+        let idx = ctx.var.get_var(name, ctx.current_func).unwrap();
+
+        Ok((
+            i,
+            Variable {
+                var_idx: idx,
+                args: Vec::new(),
+            },
+        ))
+    }
+}
+
+fn variable<'c, 'a>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Variable> + 'c {
+    move |i| {
+        ctx.is_arg.set(true);
+        let (i, name) = ident(i)?;
         let (i, args) = many0(preceded(de_sp(char(':')), expr(ctx)))(i)?;
+        ctx.is_arg.set(false);
         let idx = ctx.var.get_var(name, ctx.current_func).unwrap();
 
         Ok((i, Variable { var_idx: idx, args }))
@@ -485,7 +508,7 @@ fn assign_line<'a, 'c>(
         let (i, var) = variable(ctx)(i)?;
         let (i, _) = terminated(char('='), sp)(i)?;
 
-        let (name, info) = ctx.var.resolve_var(var.var_idx).unwrap();
+        let (_, info) = ctx.var.resolve_var(var.var_idx).unwrap();
 
         if info.is_str {
             let (i, form) = normal_form_str(ctx)(i)?;
@@ -528,10 +551,7 @@ pub fn function<'a, 'c>(
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Function> + 'c {
     move |i| {
         let (i, label) = function_label(i)?;
-        let ctx = ParseContext {
-            current_func: var.insert_func(&label),
-            var,
-        };
+        let ctx = ParseContext::new(var, var.insert_func(&label));
         let (i, body) = body(&ctx)(i)?;
         Ok((
             i,
@@ -552,10 +572,11 @@ pub fn era_program<'a, 'c>(
     move |i| preceded(opt(tag("\u{feff}")), many0(function(var)))(i)
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct ParseContext<'c> {
     var: &'c VariableDic,
     current_func: FunctionIndex,
+    is_arg: Cell<bool>,
 }
 
 impl<'c> ParseContext<'c> {
@@ -563,6 +584,7 @@ impl<'c> ParseContext<'c> {
         Self {
             var,
             current_func: func_idx,
+            is_arg: Cell::new(false),
         }
     }
 }
@@ -635,10 +657,7 @@ pub enum BuiltinCommand {
 mod tests {
     fn dummy_ctx<'c>(var: &'c VariableDic) -> ParseContext<'c> {
         let func = var.insert_func("TEST");
-        ParseContext {
-            var,
-            current_func: func,
-        }
+        ParseContext::new(var, func)
     }
 
     use super::*;

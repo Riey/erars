@@ -5,44 +5,78 @@ mod body {
 
     #[test]
     fn test_alignment() {
-        k9::snapshot!(do_test("tests/parse_tests/bodys/alignment.erb", parse_body));
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/alignment.erb", parse_body),
+            "
+[
+    Alignment(
+        Left,
+    ),
+    Alignment(
+        Center,
+    ),
+    Alignment(
+        Right,
+    ),
+]
+"
+        );
     }
 
     #[test]
     fn test_assign() {
-        k9::snapshot!(do_test("tests/parse_tests/bodys/assign.erb", parse_body));
-    }
-
-    #[test]
-    fn test_assign_add() {
-        k9::snapshot!(do_test(
-            "tests/parse_tests/bodys/assign_add.erb",
-            parse_body
-        ));
-    }
-
-    #[test]
-    fn test_assign_str() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/assign_str.erb", parse_body),
+            do_test("tests/parse_tests/bodys/assign.erb", parse_body),
             "
 [
     Assign(
         Variable {
             var_idx: Global(
                 GlobalIndex(
-                    87,
+                    28,
                 ),
             ),
-            args: [],
+            args: [
+                BinopExpr(
+                    IntLit(
+                        1,
+                    ),
+                    Add,
+                    IntLit(
+                        3,
+                    ),
+                ),
+            ],
         },
         None,
-        FormText(
-            {IntLit(123)}456,
+        BinopExpr(
+            IntLit(
+                23,
+            ),
+            Add,
+            IntLit(
+                45,
+            ),
         ),
     ),
 ]
 "
+        );
+    }
+
+    #[test]
+    fn test_assign_add() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign_add.erb", parse_body),
+            "[]"
+        );
+    }
+
+    #[test]
+    fn test_assign_str() {
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/assign_str.erb", parse_body),
+            "[]"
         );
     }
 
@@ -59,6 +93,23 @@ mod body {
         args: [
             IntLit(
                 123,
+            ),
+            Var(
+                Variable {
+                    var_idx: Global(
+                        GlobalIndex(
+                            18,
+                        ),
+                    ),
+                    args: [
+                        IntLit(
+                            634,
+                        ),
+                    ],
+                },
+            ),
+            StringLit(
+                "123",
             ),
         ],
         jump: false,
@@ -149,7 +200,21 @@ mod expr {
 
     #[test]
     fn test_boolean() {
-        k9::snapshot!(do_test("tests/parse_tests/exprs/boolean.erb", parse_expr));
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/boolean.erb", parse_expr),
+            "
+Var(
+    Variable {
+        var_idx: Global(
+            GlobalIndex(
+                82,
+            ),
+        ),
+        args: [],
+    },
+)
+"
+        );
     }
 
     #[test]
@@ -265,20 +330,81 @@ StringLit(
 
     #[test]
     fn test_var_arg() {
-        k9::snapshot!(do_test("tests/parse_tests/exprs/var_arg.erb", parse_expr));
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/var_arg.erb", parse_expr),
+            "
+Var(
+    Variable {
+        var_idx: Global(
+            GlobalIndex(
+                28,
+            ),
+        ),
+        args: [
+            IntLit(
+                123,
+            ),
+        ],
+    },
+)
+"
+        );
     }
 
     #[test]
     fn test_var_complex() {
-        k9::snapshot!(do_test(
-            "tests/parse_tests/exprs/var_complex.erb",
-            parse_expr
-        ));
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/var_complex.erb", parse_expr),
+            "
+Var(
+    Variable {
+        var_idx: Global(
+            GlobalIndex(
+                28,
+            ),
+        ),
+        args: [
+            Var(
+                Variable {
+                    var_idx: Global(
+                        GlobalIndex(
+                            18,
+                        ),
+                    ),
+                    args: [
+                        IntLit(
+                            123,
+                        ),
+                    ],
+                },
+            ),
+            IntLit(
+                123,
+            ),
+        ],
+    },
+)
+"
+        );
     }
 
     #[test]
     fn test_var_empty() {
-        k9::snapshot!(do_test("tests/parse_tests/exprs/var_empty.erb", parse_expr));
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/var_empty.erb", parse_expr),
+            "
+Var(
+    Variable {
+        var_idx: Global(
+            GlobalIndex(
+                28,
+            ),
+        ),
+        args: [],
+    },
+)
+"
+        );
     }
 }
 mod function {
