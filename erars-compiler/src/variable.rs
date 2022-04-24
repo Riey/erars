@@ -28,8 +28,8 @@ pub struct VariableDic {
     known_idxs: EnumMap<KnownVariables, VariableIndex>,
 }
 
-pub fn default_infos() -> HashMap<String, VariableInfo> {
-    let mut ret = HashMap::new();
+pub fn default_infos() -> BTreeMap<String, VariableInfo> {
+    let mut ret = BTreeMap::new();
 
     macro_rules! insert {
         (
@@ -98,7 +98,7 @@ impl Default for VariableDic {
 }
 
 impl VariableDic {
-    pub fn new(var_infos: &HashMap<String, VariableInfo>) -> Self {
+    pub fn new(var_infos: &BTreeMap<String, VariableInfo>) -> Self {
         let mut ret = Self {
             global_datas: Default::default(),
             local_datas: Default::default(),
