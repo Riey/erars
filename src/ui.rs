@@ -1,8 +1,7 @@
-use crate::value::Value;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use eframe::epi::{App, Frame};
 use egui::{Color32, CtxRef, FontData, FontDefinitions, FontFamily};
-use erars_compiler::Alignment;
+use erars_compiler::{Alignment, Value};
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
 use std::iter;

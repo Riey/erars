@@ -7,7 +7,7 @@ use std::sync::Arc;
 #[test]
 fn run_test() {
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
-    let var = Arc::new(VariableDic::with_default_variables());
+    let var = Arc::new(VariableDic::default());
 
     for erb_file in erb_files {
         let erb_file = erb_file.unwrap();
@@ -35,8 +35,7 @@ fn run_test() {
 }
 
 fn test_runner(dic: FunctionDic, var: Arc<VariableDic>) -> Vec<ConsoleMessage> {
-    let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
-    let mut ctx = VmContext::new(&infos, var);
+    let mut ctx = VmContext::new(var);
     let vm = TerminalVm::new(dic);
     let chan = ConsoleChannel::new();
 

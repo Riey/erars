@@ -4,10 +4,9 @@ use enum_map::EnumMap;
 use hashbrown::HashMap;
 use smartstring::{LazyCompact, SmartString};
 
-use crate::value::Value;
 use erars_compiler::{
-    CompiledFunction, Event, EventFlags, EventType, Expr, FunctionInfo, Instruction,
-    KnownVariables, GlobalIndex, VariableInfo, VariableDic, FunctionIndex,
+    CompiledFunction, Event, EventFlags, EventType, Expr, FunctionIndex, FunctionInfo, GlobalIndex,
+    Instruction, KnownVariables, LocalIndex, Value, VariableDic, VariableIndex, VariableInfo,
 };
 use serde::{Deserialize, Serialize};
 
@@ -16,27 +15,36 @@ pub struct FunctionBody {
     idx: FunctionIndex,
     body: Vec<Instruction>,
     goto_labels: HashMap<SmartString<LazyCompact>, u32>,
-    args: Vec<(GlobalIndex, Option<Value>, ArrayVec<usize, 4>)>,
+    args: Vec<(VariableIndex, Option<Value>, ArrayVec<usize, 4>)>,
 }
 
 impl FunctionBody {
+    #[inline]
     pub fn push_arg(
         &mut self,
-        var_idx: GlobalIndex,
+        var_idx: VariableIndex,
         default_value: Option<Value>,
         indices: ArrayVec<usize, 4>,
     ) {
         self.args.push((var_idx, default_value, indices));
     }
 
+    #[inline]
+    pub fn idx(&self) -> FunctionIndex {
+        self.idx
+    }
+
+    #[inline]
     pub fn goto_labels(&self) -> &HashMap<SmartString<LazyCompact>, u32> {
         &self.goto_labels
     }
 
-    pub fn args(&self) -> &[(GlobalIndex, Option<Value>, ArrayVec<usize, 4>)] {
+    #[inline]
+    pub fn args(&self) -> &[(VariableIndex, Option<Value>, ArrayVec<usize, 4>)] {
         &self.args
     }
 
+    #[inline]
     pub fn body(&self) -> &[Instruction] {
         &self.body
     }
@@ -74,7 +82,7 @@ impl EventCollection {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionDic {
-    normal: HashMap<String, FunctionBody>,
+    normal: HashMap<FunctionIndex, FunctionBody>,
     event: EnumMap<EventType, EventCollection>,
 }
 
@@ -136,79 +144,56 @@ impl FunctionDic {
                     flags = f;
                 }
                 FunctionInfo::Function | FunctionInfo::FunctionS => {}
-                FunctionInfo::Dim(local) => {
-                    body.push_local(
-                        local.idx,
-                        local.info,
-                        local
-                            .init
-                            .into_iter()
-                            .map(|v| match v {
-                                Expr::IntLit(i) => Value::Int(i),
-                                Expr::StringLit(s) => Value::String(s),
-                                _ => unreachable!(),
-                            })
-                            .collect(),
-                    );
-                }
+                FunctionInfo::Dim(_local) => {}
             }
         }
 
         // builtin locals
-
-        body.push_local(
-            variable_interner.get_known(KnownVariables::Local),
+        variable_interner.insert_local_var(
+            func.idx,
+            "LOCAL",
             VariableInfo {
-                default_int: 0,
-                is_chara: false,
-                is_str: false,
                 size: vec![local_size],
+                ..Default::default()
             },
-            Vec::new(),
         );
-
-        body.push_local(
-            variable_interner.get_known(KnownVariables::LocalS),
+        variable_interner.insert_local_var(
+            func.idx,
+            "LOCALS",
             VariableInfo {
-                default_int: 0,
-                is_chara: false,
-                is_str: true,
                 size: vec![locals_size],
-            },
-            Vec::new(),
-        );
-
-        body.push_local(
-            variable_interner.get_known(KnownVariables::Arg),
-            VariableInfo {
-                default_int: 0,
-                is_chara: false,
-                is_str: false,
-                size: vec![1000],
-            },
-            Vec::new(),
-        );
-
-        body.push_local(
-            variable_interner.get_known(KnownVariables::ArgS),
-            VariableInfo {
-                default_int: 0,
-                is_chara: false,
                 is_str: true,
-                size: vec![100],
+                ..Default::default()
             },
-            Vec::new(),
+        );
+        variable_interner.insert_local_var(
+            func.idx,
+            "ARG",
+            VariableInfo {
+                size: vec![1000],
+                ..Default::default()
+            },
+        );
+        variable_interner.insert_local_var(
+            func.idx,
+            "ARGS",
+            VariableInfo {
+                size: vec![100],
+                is_str: true,
+                ..Default::default()
+            },
         );
 
-        if let Ok(ty) = header.name.parse::<EventType>() {
+        let name = variable_interner.resolve_func(func.idx).unwrap();
+        if let Ok(ty) = name.parse::<EventType>() {
             self.insert_event(Event { ty, flags }, body);
         } else {
-            self.insert_func(header.name, body);
+            self.insert_func(func.idx, body);
         }
     }
 
-    pub fn insert_func(&mut self, name: String, body: FunctionBody) {
-        self.normal.insert(name, body);
+    pub fn insert_func(&mut self, idx: FunctionIndex, body: FunctionBody) {
+        self.normal.insert(idx, body);
     }
 
     pub fn insert_event(&mut self, event: Event, body: FunctionBody) {
@@ -225,9 +210,9 @@ impl FunctionDic {
         &self.event[ty]
     }
 
-    pub fn get_func(&self, name: &str) -> Result<&FunctionBody> {
+    pub fn get_func(&self, idx: FunctionIndex) -> Result<&FunctionBody> {
         self.normal
-            .get(name)
-            .ok_or_else(|| anyhow!("Function {} is not exists", name))
+            .get(&idx)
+            .ok_or_else(|| anyhow!("Function {} is not exists", idx))
     }
 }

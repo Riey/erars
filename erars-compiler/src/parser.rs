@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use crate::{
-    command::ParseContext, Expr, Function, FunctionHeader, FunctionInfo, ParserError, ParserResult,
-    Stmt, UnaryOperator, Variable, VariableDic, GlobalIndex, VariableInfo,
+    command::ParseContext, Expr, Function, FunctionHeader, FunctionInfo, GlobalIndex, ParserError,
+    ParserResult, Stmt, UnaryOperator, Variable, VariableDic, VariableInfo,
 };
 use bitflags::bitflags;
 use either::Either;

@@ -1,9 +1,3 @@
-#[macro_export]
-macro_rules! arrvec {
-    [] => { ArrayVec::new() };
-    [$e:expr; $c:expr] => { ArrayVec::try_from(&[$e; $c] as &[usize]).unwrap() };
-}
-
 mod ast;
 mod command;
 mod compiler;
@@ -12,6 +6,7 @@ mod event;
 mod instruction;
 mod operator;
 mod parser;
+mod value;
 mod variable;
 
 pub use crate::{
@@ -23,5 +18,6 @@ pub use crate::{
     instruction::{BeginType, Instruction},
     operator::{BinaryOperator, UnaryOperator},
     parser::{parse_body, parse_expr, parse_function, parse_program, Alignment, PrintFlags},
+    value::Value,
     variable::*,
 };

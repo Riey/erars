@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
 
 use crate::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, PrintFlags, UnaryOperator,
-    GlobalIndex, VariableInfo, VariableIndex,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, FunctionIndex, GlobalIndex,
+    LocalIndex, PrintFlags, UnaryOperator, VariableIndex, VariableInfo,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,20 +49,20 @@ pub enum Stmt {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocalVariable {
-    pub idx: GlobalIndex,
+    pub idx: LocalIndex,
     pub init: Vec<Expr>,
     pub info: VariableInfo,
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
+    pub idx: FunctionIndex,
     pub header: FunctionHeader,
     pub body: Vec<Stmt>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
-    pub name: String,
     pub args: Vec<(Variable, Option<Expr>)>,
     pub infos: Vec<FunctionInfo>,
 }

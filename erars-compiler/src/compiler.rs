@@ -1,7 +1,7 @@
 use crate::{
     ast::{FormText, SelectCaseCond},
     BinaryOperator, CompileError, CompileResult, Expr, FormExpr, Function, FunctionHeader,
-    Instruction, KnownVariables, Stmt, Variable, VariableDic, VariableIndex,
+    FunctionIndex, Instruction, KnownVariables, Stmt, Variable, VariableDic, VariableIndex,
 };
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
@@ -9,6 +9,7 @@ use smartstring::{LazyCompact, SmartString};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledFunction {
+    pub idx: FunctionIndex,
     pub header: FunctionHeader,
     pub goto_labels: HashMap<SmartString<LazyCompact>, u32>,
     pub body: Vec<Instruction>,
@@ -500,6 +501,7 @@ pub fn compile(func: Function, var: &VariableDic) -> CompileResult<CompiledFunct
     }
 
     Ok(CompiledFunction {
+        idx: func.idx,
         header: func.header,
         goto_labels: compiler.goto_labels,
         body: compiler.out,

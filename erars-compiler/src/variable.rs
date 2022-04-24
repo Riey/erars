@@ -13,6 +13,8 @@ use smol_str::SmolStr;
 use strum::{Display, EnumCount, EnumString, IntoStaticStr};
 use strum::{EnumIter, IntoEnumIterator};
 
+use crate::Value;
+
 #[derive(Serialize, Deserialize)]
 pub struct VariableDic {
     global_datas: RwLock<Vec<(VariableInfo, SmolStr)>>,
@@ -65,11 +67,11 @@ pub fn default_infos() -> BTreeMap<String, VariableInfo> {
 
     insert! {
         ("A") ("B") ("C") ("D") ("E") ("F") ("G") ("H") ("I") ("J") ("K") ("L") ("M") ("N") ("O") ("P") ("Q")
-        ("DA", size: arrvec!(1000usize; 2)), ("DB", size: arrvec!(1000usize; 2)) ("DC", size: arrvec!(1000usize; 2)) ("DD", size: arrvec!(1000usize; 2)) ("DE", size: arrvec!(1000usize; 2)) ("DF", size: arrvec!(1000usize; 2))
+        ("DA", size: vec!(1000usize; 2)), ("DB", size: vec!(1000usize; 2)) ("DC", size: vec!(1000usize; 2)) ("DD", size: vec!(1000usize; 2)) ("DE", size: vec!(1000usize; 2)) ("DF", size: vec!(1000usize; 2))
         ("GLOBAL"), ("GLOBALS", is_str: true)
         ("RESULT"), ("RESULTS", is_str: true)
         ("STR", is_str: true),
-        ("FLAG", size: arrvec!(10000usize; 1)) ("DAY") ("TIME") ("DITEMTYPE", size: arrvec!(1000usize; 2))
+        ("FLAG", size: vec!(10000usize; 1)) ("DAY") ("TIME") ("DITEMTYPE", size: vec!(1000usize; 2))
         ("CHARANUM") ("COUNT") ("TARGET") ("ASSI") ("MASTER") ("PLAYER") ("NO") ("ASSIPLAY")
         ("MONEY")
         ("SELECTCOM")("PREVCOM")("NEXTCOM")
@@ -85,7 +87,7 @@ pub fn default_infos() -> BTreeMap<String, VariableInfo> {
         ("RELATION")
         ("TCVAR")
         ("CSTR", is_str: true)
-        ("NAME", is_str: true, size: arrvec![]) ("CALLNAME", is_str: true, size: arrvec![]) ("NICKNAME", is_str: true, size: arrvec![]) ("MASTERNAME", is_str: true, size: arrvec![])
+        ("NAME", is_str: true, size: vec![]) ("CALLNAME", is_str: true, size: vec![]) ("NICKNAME", is_str: true, size: vec![]) ("MASTERNAME", is_str: true, size: vec![])
     }
 
     ret
@@ -175,6 +177,7 @@ impl VariableDic {
         info: VariableInfo,
     ) -> LocalIndex {
         let name = name.into();
+
         // must be locked before push data
         let mut local_data = self.local_datas.lock();
         let var_idx = self.next_local_idx();
@@ -189,16 +192,19 @@ impl VariableDic {
 
     pub fn insert_func(&self, name: impl Into<SmolStr>) -> FunctionIndex {
         let name = name.into();
-        // must be locked before push data
-        let mut local = self.local_datas.lock();
-        let mut func = self.func_datas.lock();
-        let idx = self.next_func_idx();
-        self.func_names.insert(name.clone(), idx);
-        debug_assert_eq!(idx.as_usize(), local.len());
-        local.push(Vec::with_capacity(4));
-        debug_assert_eq!(idx.as_usize(), func.len());
-        func.push(name);
-        idx
+
+        *self.func_names.entry(name.clone()).or_insert_with(|| {
+            // must be locked before push data
+            let mut local = self.local_datas.lock();
+            let mut func = self.func_datas.lock();
+            let idx = self.next_func_idx();
+            self.func_names.insert(name.clone(), idx);
+            debug_assert_eq!(idx.as_usize(), local.len());
+            local.push(Vec::with_capacity(4));
+            debug_assert_eq!(idx.as_usize(), func.len());
+            func.push(name);
+            idx
+        })
     }
 
     pub fn get_global(&self, name: impl AsRef<str>) -> Option<GlobalIndex> {
@@ -207,7 +213,9 @@ impl VariableDic {
 
     pub fn get_var(&self, name: impl Into<SmolStr>, func: FunctionIndex) -> Option<VariableIndex> {
         let name = name.into();
-        self.get_local(name.clone(), func).map(|i| VariableIndex::Local(func, i)).or_else(|| self.get_global(name.as_str()).map(VariableIndex::Global))
+        self.get_local(name.clone(), func)
+            .map(|i| VariableIndex::Local(func, i))
+            .or_else(|| self.get_global(name.as_str()).map(VariableIndex::Global))
     }
 
     pub fn get_local(&self, name: impl Into<SmolStr>, func: FunctionIndex) -> Option<LocalIndex> {
@@ -258,40 +266,22 @@ impl VariableDic {
         self.func_datas.lock().get(idx.as_usize()).cloned()
     }
 
-    pub fn iter_global(
-        &self,
-        mut f: impl FnMut(GlobalIndex, &VariableInfo),
-    ) {
+    pub fn iter_global(&self, mut f: impl FnMut(GlobalIndex, &VariableInfo)) {
         let datas = self.global_datas.read();
 
-        datas[BulitinVariable::COUNT..]
+        datas
             .iter()
             .enumerate()
             .for_each(|(c, (i, _))| f(GlobalIndex::from_usize(c), i));
     }
 
-    pub fn iter_func(
-        &self,
-        mut f: impl FnMut(GlobalIndex, &VariableInfo),
-    ) {
-        let datas = self.global_datas.read();
+    pub fn iter_local(&self, func: FunctionIndex, mut f: impl FnMut(LocalIndex, &VariableInfo)) {
+        let datas = self.local_datas.lock();
 
-        datas[BulitinVariable::COUNT..]
+        datas[func.as_usize()]
             .iter()
             .enumerate()
-            .for_each(|(c, (i, _))| f(GlobalIndex::from_usize(c), i));
-    }
-
-    pub fn iter_local(
-        &self,
-        mut f: impl FnMut(GlobalIndex, &VariableInfo),
-    ) {
-        let datas = self.global_datas.read();
-
-        datas[BulitinVariable::COUNT..]
-            .iter()
-            .enumerate()
-            .for_each(|(c, (i, _))| f(GlobalIndex::from_usize(c), i));
+            .for_each(|(c, (i, _))| f(LocalIndex::from_usize(c), i));
     }
 }
 
@@ -300,8 +290,8 @@ impl VariableDic {
 pub struct VariableInfo {
     pub is_chara: bool,
     pub is_str: bool,
-    pub default_int: i64,
-    pub size: ArrayVec<usize, 3>,
+    pub init: Vec<Value>,
+    pub size: Vec<usize>,
 }
 
 impl Default for VariableInfo {
@@ -309,8 +299,8 @@ impl Default for VariableInfo {
         Self {
             is_chara: false,
             is_str: false,
-            default_int: 0,
-            size: arrvec![1000usize; 1],
+            init: Vec::new(),
+            size: vec![1000usize; 1],
         }
     }
 }
@@ -323,9 +313,17 @@ impl VariableInfo {
 
 macro_rules! impl_index {
     ($ty:ident) => {
-        #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(
+            Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash,
+        )]
         #[repr(transparent)]
         pub struct $ty(NonZeroU32);
+
+        impl Default for $ty {
+            fn default() -> Self {
+                Self(NonZeroU32::new(1).unwrap())
+            }
+        }
 
         impl $ty {
             #[inline]

@@ -6,16 +6,16 @@ use smartstring::{LazyCompact, SmartString};
 use std::sync::Arc;
 use strum::Display;
 
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 
 use erars_compiler::{
-    BeginType, BinaryOperator, BuiltinCommand, BulitinVariable, EventType, Instruction,
-    KnownVariables, PrintFlags, UnaryOperator, GlobalIndex, VariableInfo, VariableDic,
+    BeginType, BinaryOperator, BuiltinCommand, BulitinVariable, EventType, FunctionIndex,
+    GlobalIndex, Instruction, KnownVariables, LocalIndex, PrintFlags, UnaryOperator, Value,
+    VariableDic, VariableIndex, VariableInfo,
 };
 
 use crate::function::{FunctionBody, FunctionDic};
-use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
-use crate::value::Value;
+use crate::ui::{ConsoleChannel, ConsoleMessage};
 
 #[derive(Clone, Debug)]
 enum Variable {
@@ -32,12 +32,20 @@ enum Variable {
 impl Variable {
     pub fn new(info: &VariableInfo) -> Self {
         match (info.is_str, info.size.as_slice()) {
-            (false, []) => Self::Int0D(info.default_int),
-            (false, [a]) => Self::Int1D(vec![info.default_int; *a]),
-            (false, [a, b]) => Self::Int2D(vec![vec![info.default_int; *a]; *b]),
-            (false, [a, b, c]) => Self::Int3D(vec![vec![vec![info.default_int; *a]; *b]; *c]),
-            (true, []) => Self::Str0D(String::new()),
-            (true, [a]) => Self::Str1D(vec![String::new(); *a]),
+            (false, []) => Self::Int0D(info.init.get(0).map(Value::expect_int).unwrap_or_default()),
+            (false, [a]) => Self::Int1D(
+                (0..*a)
+                    .map(|i| info.init.get(i).map(Value::expect_int).unwrap_or_default())
+                    .collect(),
+            ),
+            (false, [a, b]) => Self::Int2D(vec![vec![0; *a]; *b]),
+            (false, [a, b, c]) => Self::Int3D(vec![vec![vec![0; *a]; *b]; *c]),
+            (false, []) => Self::Str0D(info.init.get(0).map(Value::expect_str).unwrap_or_default()),
+            (false, [a]) => Self::Str1D(
+                (0..*a)
+                    .map(|i| info.init.get(i).map(Value::expect_str).unwrap_or_default())
+                    .collect(),
+            ),
             (true, [a, b]) => Self::Str2D(vec![vec![String::new(); *a]; *b]),
             (true, [a, b, c]) => Self::Str3D(vec![vec![vec![String::new(); *a]; *b]; *c]),
             _ => panic!("size length can't be greater than 3"),
@@ -49,11 +57,15 @@ impl Variable {
             Variable::Int0D(..)
             | Variable::Int1D(..)
             | Variable::Int2D(..)
-            | Variable::Int3D(..) => *self.get_int(args)? = value.try_into()?,
+            | Variable::Int3D(..) => {
+                *self.get_int(args)? = value.try_into().map_err(|msg| anyhow!("{}", msg))?
+            }
             Variable::Str0D(..)
             | Variable::Str1D(..)
             | Variable::Str2D(..)
-            | Variable::Str3D(..) => *self.get_str(args)? = value.try_into()?,
+            | Variable::Str3D(..) => {
+                *self.get_str(args)? = value.try_into().map_err(|msg| anyhow!("{}", msg))?
+            }
         }
 
         Ok(())
@@ -154,83 +166,67 @@ impl UniformVariable {
 
 struct VariableStorage {
     character_len: usize,
-    variable_interner: Arc<VariableDic>,
+    var_dic: Arc<VariableDic>,
     variables: Vec<(VariableInfo, UniformVariable)>,
-    local_variables:
-        HashMap<SmartString<LazyCompact>, HashMap<GlobalIndex, (VariableInfo, UniformVariable)>>,
+    local_variables: HashMap<FunctionIndex, Vec<(VariableInfo, UniformVariable)>>,
 }
 
 impl VariableStorage {
-    pub fn new(
-        var_dic: Arc<VariableDic>,
-    ) -> Self {
-        let variables = var_dic
-            .idxs()
-            .map(|idx| {
-                let name = var_dic.resolve_global_var(idx).unwrap();
-                if let Some(builtin) = idx.to_builtin() {
-                    (VariableInfo::default(), UniformVariable::Bulitin(builtin))
-                } else {
-                    let info = infos.get(name).cloned().unwrap_or_else(|| VariableInfo {
-                        default_int: 0,
-                        is_chara: false,
-                        is_str: false,
-                        size: vec![1000],
-                    });
-                    let var = UniformVariable::new(&info);
+    pub fn new(var_dic: Arc<VariableDic>) -> Self {
+        let mut variables = Vec::new();
 
-                    (info, var)
-                }
-            })
-            .collect();
+        var_dic.iter_global(|idx, info| {
+            let var = if let Some(builtin) = idx.to_builtin() {
+                UniformVariable::Bulitin(builtin)
+            } else {
+                UniformVariable::new(info)
+            };
+            variables.push((info.clone(), var));
+        });
 
         Self {
             character_len: 0,
-            variable_interner: var_dic,
+            var_dic,
             variables,
             local_variables: HashMap::new(),
         }
     }
 
-    fn init_local(&mut self, name: &str, body: &FunctionBody) {
-        self.local_variables.entry(name.into()).or_insert_with(|| {
-            body.local_vars()
-                .iter()
-                .map(|(idx, (info, init))| {
-                    let mut var = UniformVariable::new(info);
-
-                    if !init.is_empty() {
-                        let var = var.assume_normal();
-                        for (idx, init_var) in init.iter().enumerate() {
-                            var.set(iter::once(idx), init_var.clone()).unwrap();
-                        }
-                    }
-
-                    (*idx, (info.clone(), var))
-                })
-                .collect()
+    fn init_local(&mut self, body: &FunctionBody) {
+        let func_idx = body.idx();
+        self.local_variables.entry(func_idx).or_insert_with(|| {
+            let mut vars = Vec::new();
+            self.var_dic.iter_local(func_idx, |local_idx, info| {
+                vars.push((info.clone(), UniformVariable::new(info)));
+            });
+            vars
         });
+    }
+
+    fn get_var(&mut self, idx: VariableIndex) -> &mut (VariableInfo, UniformVariable) {
+        match idx {
+            VariableIndex::Global(g) => self.get_global_var(g),
+            VariableIndex::Local(f, l) => self.get_local_var(f, l),
+        }
     }
 
     fn get_local_var(
         &mut self,
-        name: &str,
-        idx: GlobalIndex,
-    ) -> Result<&mut (VariableInfo, UniformVariable)> {
+        func: FunctionIndex,
+        idx: LocalIndex,
+    ) -> &mut (VariableInfo, UniformVariable) {
         self.local_variables
-            .get_mut(name)
+            .get_mut(&func)
             .unwrap()
-            .get_mut(&idx)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", idx))
-    }
-
-    fn get_var(&mut self, idx: GlobalIndex) -> Result<&mut (VariableInfo, UniformVariable)> {
-        self.variables
             .get_mut(idx.as_usize())
-            .ok_or_else(|| anyhow!("Variable {} is not exists", idx))
+            .unwrap()
     }
 
-    fn get_var2(
+    fn get_global_var(&mut self, idx: GlobalIndex) -> &mut (VariableInfo, UniformVariable) {
+        self.variables.get_mut(idx.as_usize()).unwrap()
+    }
+
+    fn get_global_var2(
         &mut self,
         l: GlobalIndex,
         r: GlobalIndex,
@@ -278,20 +274,14 @@ impl VariableStorage {
         r: KnownVariables,
     ) -> (&mut UniformVariable, &mut UniformVariable) {
         let (l, r) = self
-            .get_var2(
-                self.variable_interner.get_known(l),
-                self.variable_interner.get_known(r),
-            )
+            .get_global_var2(self.var_dic.get_known(l), self.var_dic.get_known(r))
             .unwrap();
 
         (&mut l.1, &mut r.1)
     }
 
     pub fn get_known(&mut self, known: KnownVariables) -> &mut UniformVariable {
-        &mut self
-            .get_var(self.variable_interner.get_known(known))
-            .unwrap()
-            .1
+        &mut self.get_global_var(self.var_dic.get_known(known)).1
     }
 }
 
@@ -303,7 +293,6 @@ enum Workflow {
 
 struct Callstack {
     stack_base: usize,
-    local_idxs: HashSet<GlobalIndex>,
 }
 
 pub struct VmContext {
@@ -314,31 +303,19 @@ pub struct VmContext {
 }
 
 impl VmContext {
-    pub fn new(
-        infos: &HashMap<String, VariableInfo>,
-        variable_interner: Arc<VariableDic>,
-    ) -> Self {
+    pub fn new(variable_interner: Arc<VariableDic>) -> Self {
         Self {
-            var: VariableStorage::new(infos, variable_interner),
+            var: VariableStorage::new(variable_interner),
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
         }
     }
 
-    pub fn is_local_var(&self, idx: &GlobalIndex) -> bool {
-        self.call_stack
-            .last()
-            .expect("Call stack is empty")
-            .local_idxs
-            .contains(idx)
-    }
-
-    pub fn new_func(&mut self, label: &str, body: &FunctionBody) {
-        self.var.init_local(label, body);
+    pub fn new_func(&mut self, body: &FunctionBody) {
+        self.var.init_local(body);
         self.call_stack.push(Callstack {
             stack_base: self.stack.len(),
-            local_idxs: body.local_vars().keys().copied().collect(),
         });
     }
 
@@ -352,7 +329,9 @@ impl VmContext {
     }
 
     fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
-        self.take_list(count).map(usize::try_from).collect()
+        self.take_list(count)
+            .map(|v| Ok(usize::try_from(v)?))
+            .collect()
     }
 
     fn take_list(&mut self, count: u32) -> impl Iterator<Item = Value> + '_ {
@@ -381,12 +360,12 @@ impl VmContext {
     }
 
     fn pop_str(&mut self) -> Result<String> {
-        self.pop().try_into()
+        Ok(self.pop().try_into()?)
     }
 
     #[allow(unused)]
     fn pop_int(&mut self) -> Result<i64> {
-        self.pop().try_into()
+        Ok(self.pop().try_into()?)
     }
 }
 
@@ -401,7 +380,6 @@ impl TerminalVm {
 
     fn run_instruction(
         &self,
-        func_name: &str,
         goto_labels: &HashMap<SmartString<LazyCompact>, u32>,
         inst: &Instruction,
         cursor: &mut usize,
@@ -430,11 +408,7 @@ impl TerminalVm {
                 let mut args = ctx.take_arg_list(*c)?.into_iter();
                 let value = ctx.pop();
 
-                let (info, var) = if ctx.is_local_var(var_idx) {
-                    ctx.var.get_local_var(func_name, *var_idx)?
-                } else {
-                    ctx.var.get_var(*var_idx)?
-                };
+                let (info, var) = ctx.var.get_var(*var_idx);
 
                 match var {
                     UniformVariable::Bulitin(_) => bail!("Builtin variables are immutable"),
@@ -461,11 +435,7 @@ impl TerminalVm {
 
                 let mut args = ctx.take_arg_list(*c)?.into_iter();
 
-                let (info, var) = if ctx.is_local_var(var_idx) {
-                    ctx.var.get_local_var(func_name, *var_idx)?
-                } else {
-                    ctx.var.get_var(*var_idx)?
-                };
+                let (info, var) = ctx.var.get_var(*var_idx);
 
                 let value = match var {
                     UniformVariable::Bulitin(builtin) => match builtin {
@@ -552,13 +522,10 @@ impl TerminalVm {
             }
             Instruction::Call(c) => {
                 let func = ctx.pop_str()?;
+                let idx = ctx.var.var_dic.get_func(func).unwrap();
                 let args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>();
 
-                match func.as_str() {
-                    _ => {
-                        self.call(&func, &args, chan, ctx)?;
-                    }
-                }
+                self.call(idx, &args, chan, ctx)?;
             }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
@@ -645,7 +612,6 @@ impl TerminalVm {
 
     fn run_body(
         &self,
-        func_name: &str,
         goto_labels: &HashMap<SmartString<LazyCompact>, u32>,
         body: &FunctionBody,
         chan: &ConsoleChannel,
@@ -657,7 +623,7 @@ impl TerminalVm {
 
         while let Some(inst) = insts.get(cursor) {
             cursor += 1;
-            match self.run_instruction(func_name, goto_labels, inst, &mut cursor, chan, ctx) {
+            match self.run_instruction(goto_labels, inst, &mut cursor, chan, ctx) {
                 Ok(None) => {}
                 Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
                 Ok(Some(Workflow::Return)) => break,
@@ -672,32 +638,28 @@ impl TerminalVm {
 
     fn call(
         &self,
-        label: &str,
+        idx: FunctionIndex,
         args: &[Value],
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
-        let body = self.dic.get_func(label)?;
+        let body = self.dic.get_func(idx)?;
 
-        ctx.new_func(label, body);
+        ctx.new_func(body);
 
         let mut args = args.iter().cloned();
 
         for (var_idx, default_value, arg_indices) in body.args().iter() {
-            let var = if ctx.is_local_var(var_idx) {
-                ctx.var.get_local_var(label, *var_idx)?
-            } else {
-                ctx.var.get_var(*var_idx)?
-            };
+            let var = &mut ctx.var.get_var(*var_idx).1;
 
-            var.1.assume_normal().set(
+            var.assume_normal().set(
                 arg_indices.iter().copied(),
                 args.next()
                     .unwrap_or_else(|| default_value.clone().unwrap()),
             )?;
         }
 
-        let ret = self.run_body(label, body.goto_labels(), body, chan, ctx);
+        let ret = self.run_body(body.goto_labels(), body, chan, ctx);
 
         ctx.end_func();
 
@@ -706,9 +668,8 @@ impl TerminalVm {
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         self.dic.get_event(ty).run(|body| {
-            let label = ty.into();
-            ctx.new_func(label, body);
-            self.run_body(label, body.goto_labels(), body, chan, ctx)?;
+            ctx.new_func(body);
+            self.run_body(body.goto_labels(), body, chan, ctx)?;
             ctx.end_func();
 
             Ok(())
@@ -718,7 +679,12 @@ impl TerminalVm {
     fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         match ty {
             BeginType::Title => {
-                self.call("SYSTEM_TITLE", &[], chan, ctx)?;
+                self.call(
+                    ctx.var.var_dic.get_func("SYSTEM_TITLE").unwrap(),
+                    &[],
+                    chan,
+                    ctx,
+                )?;
                 Ok(())
             }
             BeginType::First => {

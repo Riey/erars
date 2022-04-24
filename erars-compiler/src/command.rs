@@ -535,8 +535,8 @@ fn assign_line<'a, 'c>(
     }
 }
 
-fn function_label<'a>(i: &'a str) -> IResult<&'a str, String> {
-    map(de_sp(preceded(char('@'), ident)), Into::into)(i)
+fn function_label<'a>(i: &'a str) -> IResult<&'a str, &'a str> {
+    de_sp(preceded(char('@'), ident))(i)
 }
 
 pub fn stmt<'a, 'c>(
@@ -574,8 +574,8 @@ pub fn function<'a, 'c>(
         Ok((
             i,
             Function {
+                idx: ctx.current_func,
                 header: FunctionHeader {
-                    name: label,
                     ..Default::default()
                 },
                 body,
@@ -626,6 +626,9 @@ Ok(
         "",
         [
             Function {
+                idx: FunctionIndex(
+                    1,
+                ),
                 header: FunctionHeader {
                     name: "SYSTEM_TITLE",
                     args: [],

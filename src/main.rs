@@ -14,8 +14,7 @@ use erars::{
     ui::{ConsoleChannel, EraApp},
     vm::{TerminalVm, VmContext},
 };
-use erars_compiler::{VariableInfo, VariableDic};
-use hashbrown::HashMap;
+use erars_compiler::VariableDic;
 
 fn main() {
     let chan = Arc::new(ConsoleChannel::new());
@@ -30,9 +29,6 @@ fn main() {
     let inner_chan = chan.clone();
 
     std::thread::spawn(move || {
-        let infos: HashMap<String, VariableInfo> =
-            serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
-
         let erbs = glob::glob_with(
             &format!("{}/ERB/**/*.ERB", target_path),
             glob::MatchOptions {
@@ -49,7 +45,7 @@ fn main() {
         let mut diagnostic = Diagnostic::error()
             .with_code("E0001")
             .with_message("Compile ERROR");
-        let var = Arc::new(VariableDic::with_default_variables());
+        let var = Arc::new(VariableDic::default());
 
         for erb in erbs {
             let erb = erb.unwrap();
@@ -87,7 +83,7 @@ fn main() {
             return;
         }
 
-        let mut ctx = VmContext::new(&infos, var);
+        let mut ctx = VmContext::new(var);
         let vm = TerminalVm::new(function_dic);
         let ret = vm.start(&inner_chan, &mut ctx);
 

@@ -14,7 +14,7 @@ pub fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     path: &str,
     f: fn(&str, &VariableDic) -> ParserResult<T>,
 ) -> T {
-    let var = &VariableDic::with_default_variables();
+    let var = &VariableDic::default();
     let source = std::fs::read_to_string(path).unwrap();
     let mut files = SimpleFiles::new();
     let file_id = files.add(path, &source);
