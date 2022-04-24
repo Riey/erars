@@ -40,8 +40,8 @@ impl Variable {
             ),
             (false, [a, b]) => Self::Int2D(vec![vec![0; *a]; *b]),
             (false, [a, b, c]) => Self::Int3D(vec![vec![vec![0; *a]; *b]; *c]),
-            (false, []) => Self::Str0D(info.init.get(0).map(Value::expect_str).unwrap_or_default()),
-            (false, [a]) => Self::Str1D(
+            (true, []) => Self::Str0D(info.init.get(0).map(Value::expect_str).unwrap_or_default()),
+            (true, [a]) => Self::Str1D(
                 (0..*a)
                     .map(|i| info.init.get(i).map(Value::expect_str).unwrap_or_default())
                     .collect(),
