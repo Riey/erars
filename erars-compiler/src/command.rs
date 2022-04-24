@@ -342,6 +342,18 @@ fn cut_comment<'a>(i: &'a str) -> &'a str {
     }
 }
 
+fn variable<'c, 'a>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Variable> + 'c {
+    move |i| {
+        let (i, name) = ident(i)?;
+        let (i, args) = many0(preceded(de_sp(char(':')), expr))(i)?;
+        let idx = ctx.var.get_var(name, ctx.current_func).unwrap();
+
+        Ok((i, Variable { var_idx: idx, args }))
+    }
+}
+
 fn print_flags<'a>(i: &'a str) -> IResult<&'a str, PrintFlags> {
     let (i, line) = map(
         opt(alt((
@@ -423,70 +435,6 @@ fn command_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     alt((print_line, call_line, align_line, builtin_com_line))(i)
 }
 
-#[derive(Clone, Copy, Debug, EnumString, Display, Serialize, Deserialize, PartialEq, Eq)]
-#[strum(serialize_all = "UPPERCASE")]
-#[serde(rename_all = "UPPERCASE")]
-#[allow(non_camel_case_types)]
-pub enum BuiltinCommand {
-    Limit,
-    Min,
-    Max,
-
-    ReuseLastLine,
-
-    StrLenS,
-    StrLenSU,
-    SubStringU,
-
-    Input,
-    InputS,
-    TInput,
-    TInputS,
-    Wait,
-    WaitAnykey,
-
-    Restart,
-    Quit,
-    Throw,
-
-    SaveGlobal,
-    LoadGlobal,
-
-    DrawLine,
-    CustomDrawLine,
-    ClearLine,
-
-    Split,
-    Unicode,
-
-    Reset_Stain,
-    GetExpLv,
-    GetPalamLv,
-
-    ResetData,
-    ChkData,
-
-    AddDefChara,
-    AddChara,
-    DelChara,
-    SwapChara,
-    FindChara,
-
-    SetColor,
-    ResetColor,
-
-    FontBold,
-    FontItalic,
-    FontRegular,
-
-    Bar,
-
-    SetBit,
-    GetBit,
-    ClearBit,
-    Power,
-}
-
 fn label_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     map(preceded(tag("$"), ident), |s| Stmt::Label(s.into()))(i)
 }
@@ -495,42 +443,17 @@ fn assign_line<'a, 'c>(
     ctx: &'c ParseContext<'c>,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
     move |i| {
-        let (i, ident) = de_sp(ident)(i)?;
+        let (i, var) = variable(ctx)(i)?;
         let (i, _) = terminated(char('='), sp)(i)?;
 
-        let idx = ctx
-            .var
-            .get_var(ident, ctx.current_func)
-            .expect("Variable not found");
-        let (name, info) = ctx.var.resolve_var(idx).unwrap();
-        debug_assert_eq!(name, ident);
+        let (name, info) = ctx.var.resolve_var(var.var_idx).unwrap();
 
         if info.is_str {
-            let (i, form) = form_str(FormStrType::Normal)(i)?;
-            Ok((
-                i,
-                Stmt::Assign(
-                    Variable {
-                        var_idx: idx,
-                        args: vec![],
-                    },
-                    None,
-                    form,
-                ),
-            ))
+            let (i, form) = normal_form_str(i)?;
+            Ok((i, Stmt::Assign(var, None, form)))
         } else {
             let (i, expr) = expr(i)?;
-            Ok((
-                i,
-                Stmt::Assign(
-                    Variable {
-                        var_idx: idx,
-                        args: vec![],
-                    },
-                    None,
-                    expr,
-                ),
-            ))
+            Ok((i, Stmt::Assign(var, None, expr)))
         }
     }
 }
@@ -603,6 +526,70 @@ impl<'c> ParseContext<'c> {
             current_func: func_idx,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, EnumString, Display, Serialize, Deserialize, PartialEq, Eq)]
+#[strum(serialize_all = "UPPERCASE")]
+#[serde(rename_all = "UPPERCASE")]
+#[allow(non_camel_case_types)]
+pub enum BuiltinCommand {
+    Limit,
+    Min,
+    Max,
+
+    ReuseLastLine,
+
+    StrLenS,
+    StrLenSU,
+    SubStringU,
+
+    Input,
+    InputS,
+    TInput,
+    TInputS,
+    Wait,
+    WaitAnykey,
+
+    Restart,
+    Quit,
+    Throw,
+
+    SaveGlobal,
+    LoadGlobal,
+
+    DrawLine,
+    CustomDrawLine,
+    ClearLine,
+
+    Split,
+    Unicode,
+
+    Reset_Stain,
+    GetExpLv,
+    GetPalamLv,
+
+    ResetData,
+    ChkData,
+
+    AddDefChara,
+    AddChara,
+    DelChara,
+    SwapChara,
+    FindChara,
+
+    SetColor,
+    ResetColor,
+
+    FontBold,
+    FontItalic,
+    FontRegular,
+
+    Bar,
+
+    SetBit,
+    GetBit,
+    ClearBit,
+    Power,
 }
 
 #[cfg(test)]
