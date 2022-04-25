@@ -393,7 +393,10 @@ fn variable<'c, 'a>(
         let (i, name) = ident(i)?;
         let (i, args) = many0(preceded(de_sp(char(':')), expr(ctx)))(i)?;
         ctx.is_arg.set(false);
-        let idx = ctx.var.get_var(name, ctx.current_func).unwrap();
+        let idx = ctx
+            .var
+            .get_var(name, ctx.current_func)
+            .expect("Variable not found");
 
         Ok((i, Variable { var_idx: idx, args }))
     }
@@ -506,7 +509,7 @@ fn assign_line<'a, 'c>(
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
     move |i| {
         let (i, var) = variable(ctx)(i)?;
-        let (i, _) = terminated(char('='), sp)(i)?;
+        let (i, _) = de_sp(char('='))(i)?;
 
         let (_, info) = ctx.var.resolve_var(var.var_idx).unwrap();
 
@@ -698,8 +701,9 @@ Ok(
     #[test]
     fn assign() {
         let var = VariableDic::default();
+        let ctx = &dummy_ctx(&var);
         k9::snapshot!(
-            body(&dummy_ctx(&var))("A = 123"),
+            body(ctx)("A = 123"),
             r#"
 Ok(
     (
@@ -725,7 +729,7 @@ Ok(
 "#
         );
         k9::snapshot!(
-            body(&dummy_ctx(&var))("STR = 123"),
+            body(ctx)("STR = 123"),
             r#"
 Ok(
     (
@@ -815,9 +819,11 @@ Ok(
     }
 
     #[test]
-    fn tests() {
+    fn expr_tests() {
+        let var = VariableDic::default();
+        let ctx = &dummy_ctx(&var);
         k9::snapshot!(
-            expr(" 1 + 3 * 3 "),
+            expr(ctx)(" 1 + 3 * 3 "),
             r#"
 Ok(
     (
@@ -843,7 +849,7 @@ Ok(
         );
 
         k9::snapshot!(
-            expr("1 + 2 ? 3 # 5432"),
+            expr(ctx)("1 + 2 ? 3 # 5432"),
             r#"
 Ok(
     (
@@ -873,8 +879,11 @@ Ok(
 
     #[test]
     fn form_str_test() {
+        let var = VariableDic::default();
+        let ctx = &dummy_ctx(&var);
+
         k9::snapshot!(
-            normal_form_str("%1235% \\@ 1 ? 23# 45\\@"),
+            normal_form_str(ctx)("%1235% \\@ 1 ? 23# 45\\@"),
             r#"
 Ok(
     (

@@ -76,7 +76,24 @@ mod body {
     fn test_assign_str() {
         k9::snapshot!(
             do_test("tests/parse_tests/bodys/assign_str.erb", parse_body),
-            "[]"
+            "
+[
+    Assign(
+        Variable {
+            var_idx: Global(
+                GlobalIndex(
+                    87,
+                ),
+            ),
+            args: [],
+        },
+        None,
+        FormText(
+            {IntLit(123)}456,
+        ),
+    ),
+]
+"
         );
     }
 
@@ -161,7 +178,52 @@ mod body {
     fn test_number() {
         k9::snapshot!(
             do_test("tests/parse_tests/bodys/number.erb", parse_body),
-            "[]"
+            "
+[
+    Assign(
+        Variable {
+            var_idx: Global(
+                GlobalIndex(
+                    18,
+                ),
+            ),
+            args: [],
+        },
+        None,
+        IntLit(
+            1,
+        ),
+    ),
+    Assign(
+        Variable {
+            var_idx: Global(
+                GlobalIndex(
+                    18,
+                ),
+            ),
+            args: [],
+        },
+        None,
+        IntLit(
+            1234,
+        ),
+    ),
+    Assign(
+        Variable {
+            var_idx: Global(
+                GlobalIndex(
+                    18,
+                ),
+            ),
+            args: [],
+        },
+        None,
+        IntLit(
+            0,
+        ),
+    ),
+]
+"
         );
     }
 
