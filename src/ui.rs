@@ -1,7 +1,7 @@
 use crate::value::Value;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use eframe::epi::{App, Frame};
-use egui::{Color32, CtxRef, FontData, FontDefinitions, FontFamily};
+use egui::{Color32, FontData, FontDefinitions, FontFamily};
 use erars_compiler::Alignment;
 use maplit::btreemap;
 use serde::{Deserialize, Serialize};
@@ -30,28 +30,45 @@ impl EraApp {
 }
 
 impl App for EraApp {
-    fn setup(&mut self, ctx: &CtxRef, _frame: &Frame, _storage: Option<&dyn eframe::epi::Storage>) {
+    fn setup(
+        &mut self,
+        ctx: &egui::Context,
+        _frame: &Frame,
+        _storage: Option<&dyn eframe::epi::Storage>,
+    ) {
         ctx.set_fonts(FontDefinitions {
             font_data: btreemap! {
                 "default".into() => FontData::from_static(FONT),
             },
-            fonts_for_family: btreemap! {
+            families: btreemap! {
                 FontFamily::Monospace => vec!["default".into()],
                 FontFamily::Proportional => vec!["default".into()],
             },
             ..Default::default()
         });
 
-        let mut style = (*ctx.style()).clone();
-        style.visuals.override_text_color = Some(Color32::WHITE);
-        ctx.set_style(style);
+        let mut widgets = egui::style::Widgets::dark();
+        widgets.noninteractive.fg_stroke.color = Color32::WHITE;
+        widgets.inactive.fg_stroke.color = Color32::WHITE;
+        widgets.hovered.fg_stroke.color = Color32::YELLOW;
+
+        ctx.set_visuals(egui::Visuals {
+            button_frame: false,
+            extreme_bg_color: Color32::BLACK,
+            widgets,
+            ..egui::Visuals::dark()
+        });
+    }
+
+    fn clear_color(&self) -> egui::Rgba {
+        egui::Rgba::BLACK
     }
 
     fn name(&self) -> &str {
         "erars"
     }
 
-    fn update(&mut self, ctx: &CtxRef, frame: &Frame) {
+    fn update(&mut self, ctx: &egui::Context, frame: &Frame) {
         if self.req.is_none() {
             while let Some(msg) = self.chan.recv_msg() {
                 match msg {
@@ -69,6 +86,12 @@ impl App for EraApp {
                 }
             }
         }
+
+        egui::TopBottomPanel::top("setting").show(ctx, |ui| {
+            ui.menu_button("Setting", |ui| {
+                ctx.style_ui(ui);
+            });
+        });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             let mut ret = |value: &Value| match (&self.req, value) {
@@ -136,7 +159,7 @@ impl ConsoleLinePart {
             }
             ConsoleLinePart::Line => {
                 let width = ui.available_width();
-                let char_width = ui.fonts().glyph_width(egui::TextStyle::Monospace, '=');
+                let char_width = ui.fonts().glyph_width(&egui::FontId::monospace(14.0), '=');
                 let s = "=".repeat((width / char_width) as usize);
                 ui.label(s);
             }
