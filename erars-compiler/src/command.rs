@@ -485,6 +485,17 @@ fn builtin_com_line<'a, 'c>(
     }
 }
 
+fn sif_line<'a, 'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+    move |i| {
+        let (i, _) = tag("SIF")(i)?;
+        let (i, cond) = expr(ctx)(i)?;
+        let (i, body) = stmt(ctx)(i)?;
+        Ok((i, Stmt::Sif(cond, Box::new(body))))
+    }
+}
+
 fn command_line<'a, 'c>(
     ctx: &'c ParseContext<'c>,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
@@ -494,6 +505,7 @@ fn command_line<'a, 'c>(
         alt((
             print_line,
             call_line(ctx),
+            sif_line(ctx),
             align_line,
             builtin_com_line(ctx),
         ))(i)

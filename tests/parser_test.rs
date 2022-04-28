@@ -245,7 +245,30 @@ mod body {
 
     #[test]
     fn test_sif() {
-        k9::snapshot!(do_test("tests/parse_tests/bodys/sif.erb", parse_body), "[]");
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/sif.erb", parse_body),
+            r#"
+[
+    Sif(
+        IntLit(
+            12,
+        ),
+        PrintSingle(
+            (empty),
+            StringLit(
+                "45",
+            ),
+        ),
+    ),
+    PrintSingle(
+        (empty),
+        StringLit(
+            "32",
+        ),
+    ),
+]
+"#
+        );
     }
 
     #[test]
