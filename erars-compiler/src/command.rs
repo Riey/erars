@@ -12,7 +12,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while},
     character::complete::*,
-    combinator::{cut, eof, map, map_res, opt, value, verify},
+    combinator::{complete, cut, eof, map, map_res, opt, value, verify},
     error::{context, make_error, ContextError, Error, ErrorKind, ParseError},
     multi::{many0, many1, separated_list0},
     sequence::{delimited, pair, preceded, terminated, tuple},
@@ -37,7 +37,11 @@ pub enum FormStrType {
 }
 
 fn sp<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
-    take_while(move |c| " \t".contains(c))(i)
+    take_while(move |c| " \t\r".contains(c))(i)
+}
+
+fn sp_nl<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+    take_while(move |c| " \t\r\n".contains(c))(i)
 }
 
 fn de_sp<'a, T, E: ParseError<&'a str>>(
@@ -259,48 +263,65 @@ fn single_expr<'c, 'a>(
 }
 
 macro_rules! define_bin_expr {
-        (
-            $name:ident
-            $(($mul_op:expr, $mul_tag:expr))?
-        ) => {
-            fn $name<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
-                fn merge_binop((lhs, op, rhs): (Expr, BinaryOperator, Expr)) -> Expr {
-                    Expr::binary(lhs, op, rhs)
-                }
-
-                fn expr1<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
-
-                    move |i| {
-                        let op = alt((
-                            value(BinaryOperator::Mul, tag("*")),
-                            value(BinaryOperator::Div, tag("/")),
-                            $(
-                                value($mul_op, tag($mul_tag)),
-                            )?
-                        ));
-                        de_sp(
-                            alt((
-                                map(tuple((single_expr(ctx), op, expr1(ctx))), merge_binop),
-                                single_expr(ctx),
-                            )),
-                        )(i)
-                    }
-                }
-
-                fn expr2<'a, 'c>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
-                    move |i| {
-                        let op = alt((
-                            value(BinaryOperator::Add, tag("+")),
-                            value(BinaryOperator::Sub, tag("-")),
-                        ));
-                        de_sp(alt((map(tuple((expr1(ctx), op, expr2(ctx))), merge_binop), expr1(ctx))))(i)
-                    }
-                }
-
-                move |i| de_sp(expr2(ctx))(i)
+    (
+        @sub
+        ($prev:ident, $name:ident)
+        $(($op:expr, $tag:expr))*
+    ) => {
+        fn $name<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+            move |i| {
+                let op = alt((
+                    $(
+                        value($op, tag($tag)),
+                    )*
+                ));
+                de_sp(
+                    alt((
+                        map(tuple(($prev(ctx), op, $name(ctx))), merge_binop),
+                        $prev(ctx),
+                    )),
+                )(i)
             }
-        };
-    }
+        }
+    };
+    (
+        $name:ident
+        $(($mul_op:expr, $mul_tag:expr))?
+    ) => {
+        fn $name<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+            fn merge_binop((lhs, op, rhs): (Expr, BinaryOperator, Expr)) -> Expr {
+                Expr::binary(lhs, op, rhs)
+            }
+
+            define_bin_expr!(@sub (single_expr, expr1)
+                (BinaryOperator::Mul, "*")
+                (BinaryOperator::Div, "/")
+                $(
+                    ($mul_op, $mul_tag)
+                )?
+            );
+
+            define_bin_expr!(@sub (expr1, expr2)
+                (BinaryOperator::Add, "+")
+                (BinaryOperator::Sub, "-")
+            );
+
+            define_bin_expr!(@sub (expr2, expr3)
+                (BinaryOperator::LessOrEqual, "<=")
+                (BinaryOperator::Less, "<")
+                (BinaryOperator::GreaterOrEqual, ">=")
+                (BinaryOperator::Greater, ">")
+            );
+
+            define_bin_expr!(@sub (expr3, expr4)
+                (BinaryOperator::Equal, "==")
+                (BinaryOperator::NotEqual, "!=")
+            );
+
+            move |i| de_sp(expr4(ctx))(i)
+        }
+    };
+}
 
 define_bin_expr!(bin_expr(BinaryOperator::Rem, "%"));
 define_bin_expr!(np_bin_expr);
@@ -393,10 +414,12 @@ fn variable<'c, 'a>(
         let (i, name) = ident(i)?;
         let (i, args) = many0(preceded(de_sp(char(':')), expr(ctx)))(i)?;
         ctx.is_arg.set(false);
-        let idx = ctx
-            .var
-            .get_var(name, ctx.current_func)
-            .expect("Variable not found");
+        let idx = ctx.var.get_var(name, ctx.current_func).ok_or_else(|| {
+            nom::Err::Error(nom::error::Error::<&'a str>::new(
+                i,
+                nom::error::ErrorKind::Complete,
+            ))
+        })?;
 
         Ok((i, Variable { var_idx: idx, args }))
     }
@@ -496,6 +519,48 @@ fn sif_line<'a, 'c>(
     }
 }
 
+fn if_line<'a, 'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+    move |i| {
+        let (i, _) = de_sp(tag("IF"))(i)?;
+
+        cut(move |i| {
+            let (i, if_block) = pair(
+                map(terminated(opt(de_sp(expr(ctx))), sp_nl), |e| {
+                    e.unwrap_or(Expr::IntLit(0))
+                }),
+                body(ctx),
+            )(i)?;
+
+            let (i, mut else_if_block) = many0(pair(
+                preceded(
+                    de_sp(tag("ELSEIF")),
+                    map(terminated(opt(de_sp(expr(ctx))), sp_nl), |e| {
+                        e.unwrap_or(Expr::IntLit(0))
+                    }),
+                ),
+                body(ctx),
+            ))(i)?;
+
+            let (i, else_block) = opt(preceded(de_sp(tag("ELSE")), preceded(sp_nl, body(ctx))))(i)?;
+
+            else_if_block.insert(0, if_block);
+
+            Ok((i, Stmt::If(else_if_block, else_block)))
+        })(i)
+    }
+}
+
+fn error_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+    map_res(alt((tag("ELSE"), tag("ENDIF"), tag("NEXT"))), |_| {
+        Err(nom::Err::Error(nom::error::Error::<&'a str>::new(
+            i,
+            nom::error::ErrorKind::Complete,
+        )))
+    })(i)
+}
+
 fn command_line<'a, 'c>(
     ctx: &'c ParseContext<'c>,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
@@ -504,8 +569,10 @@ fn command_line<'a, 'c>(
 
         alt((
             print_line,
+            error_line,
             call_line(ctx),
             sif_line(ctx),
+            if_line(ctx),
             align_line,
             builtin_com_line(ctx),
         ))(i)
@@ -584,7 +651,7 @@ pub fn function<'a, 'c>(
 pub fn era_program<'a, 'c>(
     var: &'c VariableDic,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Function>> + 'c {
-    move |i| preceded(opt(tag("\u{feff}")), many0(function(var)))(i)
+    move |i| complete(preceded(opt(tag("\u{feff}")), many0(function(var))))(i)
 }
 
 #[derive(Clone)]
