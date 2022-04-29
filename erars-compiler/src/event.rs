@@ -46,6 +46,12 @@ pub enum EventFlags {
     Single,
 }
 
+impl Default for EventFlags {
+    fn default() -> Self {
+        EventFlags::None
+    }
+}
+
 #[derive(
     Enum, Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, EnumString, IntoStaticStr,
 )]

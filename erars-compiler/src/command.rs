@@ -5,19 +5,22 @@ use strum::{Display, EnumString};
 use unicode_xid::UnicodeXID;
 
 use crate::{
-    Alignment, BinaryOperator, Expr, FormText, Function, FunctionHeader, FunctionIndex, PrintFlags,
-    Stmt, UnaryOperator, Variable, VariableDic,
+    ast::LocalVariable, push_default_locals, Alignment, BinaryOperator, EventFlags, Expr, FormText,
+    Function, FunctionHeader, FunctionIndex, FunctionInfo, PrintFlags, Stmt, UnaryOperator,
+    Variable, VariableDic, VariableInfo,
 };
 use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while},
     character::complete::*,
     combinator::{complete, cut, eof, map, map_res, opt, value, verify},
-    error::{context, make_error, ContextError, Error, ErrorKind, ParseError},
-    multi::{many0, many1, separated_list0},
+    error::{context, make_error, ContextError, ErrorKind, ParseError},
+    multi::{many0, many1, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult, Parser,
 };
+
+type Error<'a> = nom::error::Error<&'a str>;
 
 pub enum FormType {
     Percent,
@@ -40,13 +43,13 @@ fn sp<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
     take_while(move |c| " \t\r".contains(c))(i)
 }
 
-fn sp_nl<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn sp_nl<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error<'a>> {
     take_while(move |c| " \t\r\n".contains(c))(i)
 }
 
-fn de_sp<'a, T, E: ParseError<&'a str>>(
-    p: impl Parser<&'a str, T, E>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, T, E> {
+fn de_sp<'a, T>(
+    p: impl Parser<&'a str, T, Error<'a>>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, T, Error<'a>> {
     delimited(sp, p, sp)
 }
 
@@ -628,18 +631,92 @@ pub fn body<'a, 'r, 'c>(
     move |i| separated_list0(many1(newline), stmt(ctx))(i)
 }
 
+fn function_info<'a, 'c>(
+    ctx: &'c ParseContext<'c>,
+) -> impl FnMut(&'a str) -> IResult<&'a str, FunctionInfo> + 'c {
+    move |i| {
+        preceded(
+            char('#'),
+            cut(alt((
+                value(FunctionInfo::FunctionS, tag("FUNCTIONS")),
+                value(FunctionInfo::Function, tag("FUNCTION")),
+                map(
+                    tuple((
+                        terminated(
+                            alt((value(true, tag("DIMS")), value(false, tag("DIM")))),
+                            sp,
+                        ),
+                        ident,
+                        opt(preceded(
+                            de_sp(char('=')),
+                            cut(separated_list1(char(','), map(expr(ctx), Expr::const_eval))),
+                        )),
+                    )),
+                    |(is_str, name, values)| {
+                        FunctionInfo::Dim(LocalVariable {
+                            name: name.into(),
+                            info: VariableInfo {
+                                init: values.unwrap_or_default(),
+                                is_chara: false,
+                                is_str,
+                                size: Vec::new(),
+                            },
+                        })
+                    },
+                ),
+                value(FunctionInfo::EventFlag(EventFlags::Single), tag("SINGLE")),
+                value(FunctionInfo::EventFlag(EventFlags::Later), tag("LATER")),
+                value(FunctionInfo::EventFlag(EventFlags::Pre), tag("PRI")),
+            ))),
+        )(i)
+    }
+}
+
 pub fn function<'a, 'c>(
     var: &'c VariableDic,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Function> + 'c {
     move |i| {
         let (i, label) = function_label(i)?;
-        let ctx = ParseContext::new(var, var.insert_func(&label));
-        let (i, body) = body(&ctx)(i)?;
+        let ctx = ParseContext::new(var, var.insert_func(&label, Vec::new()));
+
+        let mut event_flags = EventFlags::None;
+
+        let (i, body) = if let Ok((i, _)) = de_sp(newline::<_, Error<'a>>)(i) {
+            let (i, infos) = separated_list0(sp_nl, function_info(&ctx))(i)?;
+
+            let mut locals = Vec::new();
+            let mut local_size = None;
+            let mut locals_size = None;
+            let arg_size = None;
+            let args_size = None;
+
+            for info in infos {
+                match info {
+                    FunctionInfo::Dim(var) => {
+                        locals.push((var.info, var.name));
+                    }
+                    FunctionInfo::EventFlag(f) => event_flags = f,
+                    FunctionInfo::LocalSize(s) => local_size = Some(s),
+                    FunctionInfo::LocalSSize(s) => locals_size = Some(s),
+                    FunctionInfo::Function | FunctionInfo::FunctionS => {}
+                }
+            }
+
+            push_default_locals(&mut locals, local_size, locals_size, arg_size, args_size);
+
+            var.set_func_locals(ctx.current_func, locals);
+
+            body(&ctx)(i)?
+        } else {
+            (i, Vec::new())
+        };
+
         Ok((
             i,
             Function {
                 idx: ctx.current_func,
                 header: FunctionHeader {
+                    event_flags,
                     ..Default::default()
                 },
                 body,
@@ -738,7 +815,7 @@ pub enum BuiltinCommand {
 #[cfg(test)]
 mod tests {
     fn dummy_ctx<'c>(var: &'c VariableDic) -> ParseContext<'c> {
-        let func = var.insert_func("TEST");
+        let func = var.insert_func("TEST", Vec::new());
         ParseContext::new(var, func)
     }
 

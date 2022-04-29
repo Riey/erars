@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
-use arrayvec::ArrayVec;
 use dashmap::DashMap;
 use enum_map::{Enum, EnumMap};
 use num_derive::FromPrimitive;
@@ -18,16 +17,65 @@ use crate::Value;
 #[derive(Serialize, Deserialize)]
 pub struct VariableDic {
     global_datas: RwLock<Vec<(VariableInfo, SmolStr)>>,
-    local_datas: Mutex<Vec<Vec<(VariableInfo, SmolStr)>>>,
-    func_datas: Mutex<Vec<SmolStr>>,
+    func_datas: Mutex<Vec<(SmolStr, Vec<(VariableInfo, SmolStr)>)>>,
     next_var: AtomicU32,
-    next_local: AtomicU32,
     next_func: AtomicU32,
 
     var_names: DashMap<SmolStr, GlobalIndex, ahash::RandomState>,
     local_names: DashMap<(FunctionIndex, SmolStr), LocalIndex, ahash::RandomState>,
     func_names: DashMap<SmolStr, FunctionIndex, ahash::RandomState>,
     known_idxs: EnumMap<KnownVariables, GlobalIndex>,
+}
+
+pub fn push_default_locals(
+    ret: &mut Vec<(VariableInfo, SmolStr)>,
+    local_size: Option<usize>,
+    locals_size: Option<usize>,
+    arg_size: Option<usize>,
+    args_size: Option<usize>,
+) {
+    ret.push((
+        VariableInfo {
+            size: vec![local_size.unwrap_or(1000)],
+            ..Default::default()
+        },
+        "LOCAL".into(),
+    ));
+    ret.push((
+        VariableInfo {
+            size: vec![arg_size.unwrap_or(1000)],
+            ..Default::default()
+        },
+        "ARG".into(),
+    ));
+
+    ret.push((
+        VariableInfo {
+            size: vec![locals_size.unwrap_or(100)],
+            is_str: true,
+            ..Default::default()
+        },
+        "LOCALS".into(),
+    ));
+    ret.push((
+        VariableInfo {
+            size: vec![args_size.unwrap_or(100)],
+            is_str: true,
+            ..Default::default()
+        },
+        "ARGS".into(),
+    ));
+}
+
+pub fn default_locals(
+    local_size: Option<usize>,
+    locals_size: Option<usize>,
+    arg_size: Option<usize>,
+    args_size: Option<usize>,
+) -> Vec<(VariableInfo, SmolStr)> {
+    let mut ret = Vec::with_capacity(4);
+    push_default_locals(&mut ret, local_size, locals_size, arg_size, args_size);
+    ret
 }
 
 pub fn default_infos() -> BTreeMap<String, VariableInfo> {
@@ -103,11 +151,9 @@ impl VariableDic {
     pub fn new(var_infos: &BTreeMap<String, VariableInfo>) -> Self {
         let mut ret = Self {
             global_datas: Default::default(),
-            local_datas: Default::default(),
             func_datas: Default::default(),
             next_var: AtomicU32::new(0),
             next_func: AtomicU32::new(0),
-            next_local: AtomicU32::new(0),
 
             var_names: Default::default(),
             func_names: Default::default(),
@@ -149,11 +195,6 @@ impl VariableDic {
         GlobalIndex::from_usize(ret as usize)
     }
 
-    fn next_local_idx(&self) -> LocalIndex {
-        let ret = self.next_local.fetch_add(1, Relaxed);
-        LocalIndex::from_usize(ret as usize)
-    }
-
     fn next_func_idx(&self) -> FunctionIndex {
         let ret = self.next_func.fetch_add(1, Relaxed);
         FunctionIndex::from_usize(ret as usize)
@@ -172,44 +213,35 @@ impl VariableDic {
         })
     }
 
-    pub fn insert_local_var(
+    pub fn insert_func(
         &self,
-        func: FunctionIndex,
         name: impl Into<SmolStr>,
-        info: VariableInfo,
-    ) -> LocalIndex {
-        let name = name.into();
-
-        *self
-            .local_names
-            .entry((func, name.clone()))
-            .or_insert_with(|| {
-                // must be locked before push data
-                let mut local_data = self.local_datas.lock();
-                let var_idx = self.next_local_idx();
-
-                let locals = local_data.get_mut(func.as_usize()).unwrap();
-                debug_assert_eq!(var_idx.as_usize(), locals.len());
-                locals.push((info, name));
-
-                var_idx
-            })
-    }
-
-    pub fn insert_func(&self, name: impl Into<SmolStr>) -> FunctionIndex {
+        locals: Vec<(VariableInfo, SmolStr)>,
+    ) -> FunctionIndex {
         let name = name.into();
 
         *self.func_names.entry(name.clone()).or_insert_with(|| {
             // must be locked before push data
-            let mut local = self.local_datas.lock();
             let mut func = self.func_datas.lock();
             let idx = self.next_func_idx();
-            debug_assert_eq!(idx.as_usize(), local.len());
-            local.push(Vec::with_capacity(4));
             debug_assert_eq!(idx.as_usize(), func.len());
-            func.push(name);
+            for (var_idx, (_, name)) in locals.iter().enumerate() {
+                self.local_names
+                    .insert((idx, name.clone()), LocalIndex::from_usize(var_idx));
+            }
+            func.push((name, locals));
             idx
         })
+    }
+
+    pub fn set_func_locals(&self, idx: FunctionIndex, locals: Vec<(VariableInfo, SmolStr)>) {
+        let mut datas = self.func_datas.lock();
+        let func = &mut datas[idx.as_usize()];
+        for (var_idx, (info, name)) in locals.into_iter().enumerate() {
+            self.local_names
+                .insert((idx, name.clone()), LocalIndex::from_usize(var_idx));
+            func.1.push((info, name));
+        }
     }
 
     pub fn get_global(&self, name: impl AsRef<str>) -> Option<GlobalIndex> {
@@ -235,6 +267,23 @@ impl VariableDic {
         self.known_idxs[known]
     }
 
+    pub fn check_is_str(&self, var: VariableIndex) -> Option<bool> {
+        match var {
+            VariableIndex::Global(global) => self.check_global_is_str(global),
+            VariableIndex::Local(func, local) => self.check_local_is_str(func, local),
+        }
+    }
+
+    pub fn check_global_is_str(&self, var: GlobalIndex) -> Option<bool> {
+        let data = self.global_datas.read();
+        Some(data.get(var.as_usize())?.0.is_str)
+    }
+
+    pub fn check_local_is_str(&self, func: FunctionIndex, var: LocalIndex) -> Option<bool> {
+        let data = self.func_datas.lock();
+        Some(data.get(func.as_usize())?.1.get(var.as_usize())?.0.is_str)
+    }
+
     pub fn resolve_var(&self, var: VariableIndex) -> Option<(SmolStr, VariableInfo)> {
         match var {
             VariableIndex::Global(global) => self.resolve_global_var(global),
@@ -254,8 +303,8 @@ impl VariableDic {
         func: FunctionIndex,
         idx: LocalIndex,
     ) -> Option<(SmolStr, VariableInfo)> {
-        let data = self.local_datas.lock();
-        let (info, name) = data.get(func.as_usize())?.get(idx.as_usize())?;
+        let data = self.func_datas.lock();
+        let (info, name) = data.get(func.as_usize())?.1.get(idx.as_usize())?;
 
         Some((name.clone(), info.clone()))
     }
@@ -268,7 +317,10 @@ impl VariableDic {
     }
 
     pub fn resolve_func(&self, idx: FunctionIndex) -> Option<SmolStr> {
-        self.func_datas.lock().get(idx.as_usize()).cloned()
+        self.func_datas
+            .lock()
+            .get(idx.as_usize())
+            .map(|(n, _)| n.clone())
     }
 
     pub fn iter_global(&self, mut f: impl FnMut(GlobalIndex, &VariableInfo)) {
@@ -281,9 +333,10 @@ impl VariableDic {
     }
 
     pub fn iter_local(&self, func: FunctionIndex, mut f: impl FnMut(LocalIndex, &VariableInfo)) {
-        let datas = self.local_datas.lock();
+        let datas = self.func_datas.lock();
 
         datas[func.as_usize()]
+            .1
             .iter()
             .enumerate()
             .for_each(|(c, (i, _))| f(LocalIndex::from_usize(c), i));
@@ -363,6 +416,10 @@ impl GlobalIndex {
     pub fn to_builtin(self) -> Option<BulitinVariable> {
         FromPrimitive::from_usize(self.as_usize())
     }
+}
+
+impl FunctionIndex {
+    pub const DUMMY: FunctionIndex = FunctionIndex(unsafe { NonZeroU32::new_unchecked(1) });
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

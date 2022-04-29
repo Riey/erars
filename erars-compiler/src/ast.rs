@@ -3,10 +3,11 @@ use std::fmt;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use smartstring::{LazyCompact, SmartString};
+use smol_str::SmolStr;
 
 use crate::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, FunctionIndex, GlobalIndex,
-    LocalIndex, PrintFlags, UnaryOperator, VariableIndex, VariableInfo,
+    LocalIndex, PrintFlags, UnaryOperator, Value, VariableIndex, VariableInfo,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -49,8 +50,7 @@ pub enum Stmt {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocalVariable {
-    pub idx: LocalIndex,
-    pub init: Vec<Expr>,
+    pub name: SmolStr,
     pub info: VariableInfo,
 }
 
@@ -64,10 +64,10 @@ pub struct Function {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
     pub args: Vec<(Variable, Option<Expr>)>,
-    pub infos: Vec<FunctionInfo>,
+    pub event_flags: EventFlags,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FunctionInfo {
     EventFlag(EventFlags),
     LocalSize(usize),
@@ -114,6 +114,14 @@ impl Expr {
 
     pub fn cond(op1: Self, op2: Self, op3: Self) -> Self {
         Self::CondExpr(Box::new(op1), Box::new(op2), Box::new(op3))
+    }
+
+    pub fn const_eval(self) -> Value {
+        match self {
+            Expr::StringLit(s) => Value::String(s),
+            Expr::IntLit(i) => Value::Int(i),
+            _ => panic!("Not const expr"),
+        }
     }
 }
 

@@ -128,65 +128,15 @@ impl FunctionDic {
             );
         }
 
-        let mut flags = EventFlags::None;
-        let mut local_size = 1000;
-        let mut locals_size = 100;
-
-        for info in header.infos {
-            match info {
-                FunctionInfo::LocalSize(size) => {
-                    local_size = size;
-                }
-                FunctionInfo::LocalSSize(size) => {
-                    locals_size = size;
-                }
-                FunctionInfo::EventFlag(f) => {
-                    flags = f;
-                }
-                FunctionInfo::Function | FunctionInfo::FunctionS => {}
-                FunctionInfo::Dim(_local) => {}
-            }
-        }
-
-        // builtin locals
-        variable_interner.insert_local_var(
-            func.idx,
-            "LOCAL",
-            VariableInfo {
-                size: vec![local_size],
-                ..Default::default()
-            },
-        );
-        variable_interner.insert_local_var(
-            func.idx,
-            "LOCALS",
-            VariableInfo {
-                size: vec![locals_size],
-                is_str: true,
-                ..Default::default()
-            },
-        );
-        variable_interner.insert_local_var(
-            func.idx,
-            "ARG",
-            VariableInfo {
-                size: vec![1000],
-                ..Default::default()
-            },
-        );
-        variable_interner.insert_local_var(
-            func.idx,
-            "ARGS",
-            VariableInfo {
-                size: vec![100],
-                is_str: true,
-                ..Default::default()
-            },
-        );
-
         let name = variable_interner.resolve_func(func.idx).unwrap();
         if let Ok(ty) = name.parse::<EventType>() {
-            self.insert_event(Event { ty, flags }, body);
+            self.insert_event(
+                Event {
+                    ty,
+                    flags: header.event_flags,
+                },
+                body,
+            );
         } else {
             self.insert_func(func.idx, body);
         }

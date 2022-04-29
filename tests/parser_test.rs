@@ -171,7 +171,44 @@ mod body {
 
     #[test]
     fn test_if() {
-        k9::snapshot!(do_test("tests/parse_tests/bodys/if.erb", parse_body), "[]");
+        k9::snapshot!(
+            do_test("tests/parse_tests/bodys/if.erb", parse_body),
+            r#"
+[
+    If(
+        [
+            (
+                BinopExpr(
+                    Var(
+                        Variable {
+                            var_idx: Global(
+                                GlobalIndex(
+                                    18,
+                                ),
+                            ),
+                            args: [],
+                        },
+                    ),
+                    Greater,
+                    IntLit(
+                        1,
+                    ),
+                ),
+                [
+                    PrintSingle(
+                        (empty),
+                        StringLit(
+                            "A > 1",
+                        ),
+                    ),
+                ],
+            ),
+        ],
+        None,
+    ),
+]
+"#
+        );
     }
 
     #[test]
@@ -288,15 +325,21 @@ mod expr {
         k9::snapshot!(
             do_test("tests/parse_tests/exprs/boolean.erb", parse_expr),
             "
-Var(
-    Variable {
-        var_idx: Global(
-            GlobalIndex(
-                82,
+BinopExpr(
+    Var(
+        Variable {
+            var_idx: Global(
+                GlobalIndex(
+                    82,
+                ),
             ),
-        ),
-        args: [],
-    },
+            args: [],
+        },
+    ),
+    Equal,
+    IntLit(
+        0,
+    ),
 )
 "
         );
@@ -507,7 +550,7 @@ Function {
     ),
     header: FunctionHeader {
         args: [],
-        infos: [],
+        event_flags: None,
     },
     body: [],
 }
@@ -526,7 +569,7 @@ Function {
     ),
     header: FunctionHeader {
         args: [],
-        infos: [],
+        event_flags: None,
     },
     body: [],
 }
@@ -538,18 +581,25 @@ Function {
     fn test_function() {
         k9::snapshot!(
             do_test("tests/parse_tests/functions/function.erb", parse_function),
-            "
+            r#"
 Function {
     idx: FunctionIndex(
         1,
     ),
     header: FunctionHeader {
         args: [],
-        infos: [],
+        event_flags: Pre,
     },
-    body: [],
+    body: [
+        PrintSingle(
+            NEWLINE,
+            StringLit(
+                "Hello",
+            ),
+        ),
+    ],
 }
-"
+"#
         );
     }
 
@@ -577,7 +627,7 @@ mod program {
         ),
         header: FunctionHeader {
             args: [],
-            infos: [],
+            event_flags: None,
         },
         body: [],
     },
@@ -598,7 +648,7 @@ mod program {
         ),
         header: FunctionHeader {
             args: [],
-            infos: [],
+            event_flags: None,
         },
         body: [],
     },
@@ -619,7 +669,7 @@ mod program {
         ),
         header: FunctionHeader {
             args: [],
-            infos: [],
+            event_flags: None,
         },
         body: [
             PrintSingle(
