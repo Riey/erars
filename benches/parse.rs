@@ -1,6 +1,7 @@
 use criterion::*;
 use erars::erars_compiler::{compile, parse_program};
 use erars_compiler::VariableDic;
+use pprof::criterion::{Output, PProfProfiler};
 
 fn parse_small(c: &mut Criterion) {
     let var = VariableDic::default();
@@ -24,6 +25,7 @@ fn parse_small(c: &mut Criterion) {
 
 fn parse_real(c: &mut Criterion) {
     let var = VariableDic::default();
+
     c.bench_function("parse title", |b| {
         b.iter(|| parse_program(include_str!("../ERB/TITLE.ERB"), &var));
     });
@@ -57,7 +59,12 @@ fn compile_real(c: &mut Criterion) {
     });
 }
 
-criterion_group!(parse_benches, parse_small, parse_real);
+criterion_group! {
+    name = parse_benches;
+    config = Criterion::default().with_profiler(PProfProfiler::new(50, Output::Flamegraph(None)));
+    targets = parse_small, parse_real
+}
+
 criterion_group!(compile_benches, compile_real);
 
 criterion_main!(parse_benches, compile_benches);
