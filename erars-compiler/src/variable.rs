@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::num::NonZeroU32;
 use std::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
+use dashmap::mapref::entry::Entry;
 use dashmap::DashMap;
 use enum_map::{Enum, EnumMap};
 use num_derive::FromPrimitive;
@@ -217,21 +218,25 @@ impl VariableDic {
         &self,
         name: impl Into<SmolStr>,
         locals: Vec<(VariableInfo, SmolStr)>,
-    ) -> FunctionIndex {
+    ) -> (FunctionIndex, bool) {
         let name = name.into();
 
-        *self.func_names.entry(name.clone()).or_insert_with(|| {
-            // must be locked before push data
-            let mut func = self.func_datas.lock();
-            let idx = self.next_func_idx();
-            debug_assert_eq!(idx.as_usize(), func.len());
-            for (var_idx, (_, name)) in locals.iter().enumerate() {
-                self.local_names
-                    .insert((idx, name.clone()), LocalIndex::from_usize(var_idx));
+        match self.func_names.entry(name.clone()) {
+            Entry::Vacant(v) => {
+                // must be locked before push data
+                let mut func = self.func_datas.lock();
+                let idx = self.next_func_idx();
+                debug_assert_eq!(idx.as_usize(), func.len());
+                for (var_idx, (_, name)) in locals.iter().enumerate() {
+                    self.local_names
+                        .insert((idx, name.clone()), LocalIndex::from_usize(var_idx));
+                }
+                func.push((name, locals));
+                v.insert(idx);
+                (idx, false)
             }
-            func.push((name, locals));
-            idx
-        })
+            Entry::Occupied(o) => (*o.get(), true),
+        }
     }
 
     pub fn set_func_locals(&self, idx: FunctionIndex, locals: Vec<(VariableInfo, SmolStr)>) {

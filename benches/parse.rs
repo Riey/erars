@@ -3,23 +3,34 @@ use erars::erars_compiler::{compile, parse_program};
 use erars_compiler::VariableDic;
 use pprof::criterion::{Output, PProfProfiler};
 
+fn gen_func(count: usize) -> String {
+    use std::fmt::Write;
+
+    let mut ret = String::new();
+
+    writeln!(ret, "@FUNC").unwrap();
+
+    for _ in 0..count {
+        writeln!(ret, "PRINTL Hello, world!").unwrap();
+    }
+
+    ret
+}
+
 fn parse_small(c: &mut Criterion) {
-    let var = VariableDic::default();
-    c.bench_function("small 5", |b| {
-        let code = "@FUNC\nPRINTL Hello, world!\n".repeat(5);
-        b.iter(|| parse_program(&code, &var).unwrap());
-    });
-    c.bench_function("small 500", |b| {
-        let code = "@FUNC\nPRINTL Hello, world!\n".repeat(500);
-        b.iter(|| parse_program(&code, &var).unwrap());
-    });
     c.bench_function("small 5000", |b| {
-        let code = "@FUNC\nPRINTL Hello, world!\n".repeat(5000);
-        b.iter(|| parse_program(&code, &var).unwrap());
+        let code = gen_func(5000);
+        b.iter(|| {
+            let var = VariableDic::default();
+            parse_program(&code, &var).unwrap()
+        });
     });
     c.bench_function("small 50000", |b| {
-        let code = "@FUNC\nPRINTL Hello, world!\n".repeat(50000);
-        b.iter(|| parse_program(&code, &var).unwrap());
+        let code = gen_func(50000);
+        b.iter(|| {
+            let var = VariableDic::default();
+            parse_program(&code, &var).unwrap()
+        });
     });
 }
 

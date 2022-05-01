@@ -5,9 +5,9 @@ use strum::{Display, EnumString};
 use unicode_xid::UnicodeXID;
 
 use crate::{
-    ast::LocalVariable, push_default_locals, Alignment, BinaryOperator, EventFlags, Expr, FormText,
-    Function, FunctionHeader, FunctionIndex, FunctionInfo, PrintFlags, Stmt, UnaryOperator,
-    Variable, VariableDic, VariableInfo,
+    ast::LocalVariable, push_default_locals, Alignment, BinaryOperator, EventFlags, EventType,
+    Expr, FormText, Function, FunctionHeader, FunctionIndex, FunctionInfo, PrintFlags, Stmt,
+    UnaryOperator, Variable, VariableDic, VariableInfo,
 };
 use nom::{
     branch::alt,
@@ -615,7 +615,7 @@ pub fn stmt<'a, 'c>(
     move |i| {
         let mut i = i.trim_start_matches(' ');
 
-        if !i.starts_with("PRINTFORM") && i.starts_with("PRINT") || i.starts_with("REUSELASTLINE") {
+        if i.starts_with("PRINT") || i.starts_with("REUSELASTLINE") {
             // don't strip comment
         } else {
             i = cut_comment(i);
@@ -677,7 +677,13 @@ pub fn function<'a, 'c>(
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Function> + 'c {
     move |i| {
         let (i, label) = function_label(i)?;
-        let ctx = ParseContext::new(var, var.insert_func(&label, Vec::new()));
+        let (func_idx, has_same) = var.insert_func(&label, Vec::new());
+
+        if label.parse::<EventType>().is_err() && has_same {
+            panic!("Duplicated function: {}", label);
+        }
+
+        let ctx = ParseContext::new(var, func_idx);
 
         let mut event_flags = EventFlags::None;
 
@@ -702,9 +708,10 @@ pub fn function<'a, 'c>(
                 }
             }
 
-            push_default_locals(&mut locals, local_size, locals_size, arg_size, args_size);
-
-            var.set_func_locals(ctx.current_func, locals);
+            if !has_same {
+                push_default_locals(&mut locals, local_size, locals_size, arg_size, args_size);
+                var.set_func_locals(ctx.current_func, locals);
+            }
 
             body(&ctx)(i)?
         } else {
@@ -815,7 +822,7 @@ pub enum BuiltinCommand {
 #[cfg(test)]
 mod tests {
     fn dummy_ctx<'c>(var: &'c VariableDic) -> ParseContext<'c> {
-        let func = var.insert_func("TEST", Vec::new());
+        let func = var.insert_func("TEST", Vec::new()).0;
         ParseContext::new(var, func)
     }
 

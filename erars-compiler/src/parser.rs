@@ -37,7 +37,8 @@ pub fn parse_program(s: &str, var: &VariableDic) -> ParserResult<Vec<Function>> 
 pub fn parse_body(s: &str, var: &VariableDic) -> ParserResult<Vec<Stmt>> {
     Ok(crate::command::body(&ParseContext::new(
         var,
-        var.insert_func("TEMP", default_locals(None, None, None, None)),
+        var.insert_func("TEMP", default_locals(None, None, None, None))
+            .0,
     ))(s)
     .unwrap()
     .1)
@@ -50,7 +51,8 @@ pub fn parse_function(s: &str, var: &VariableDic) -> ParserResult<Function> {
 pub fn parse_expr(s: &str, var: &VariableDic) -> ParserResult<Expr> {
     Ok(crate::command::expr(&ParseContext::new(
         var,
-        var.insert_func("TEMP", default_locals(None, None, None, None)),
+        var.insert_func("TEMP", default_locals(None, None, None, None))
+            .0,
     ))(s)
     .unwrap()
     .1)
