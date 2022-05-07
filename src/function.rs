@@ -5,8 +5,8 @@ use hashbrown::HashMap;
 use smartstring::{LazyCompact, SmartString};
 
 use erars_compiler::{
-    CompiledFunction, Event, EventFlags, EventType, Expr, FunctionIndex, FunctionInfo, GlobalIndex,
-    Instruction, KnownVariables, LocalIndex, Value, VariableDic, VariableIndex, VariableInfo,
+    CompiledFunction, Event, EventFlags, EventType, Expr, FunctionIndex,
+    Instruction, Value, VariableDic, VariableIndex,
 };
 use serde::{Deserialize, Serialize};
 
