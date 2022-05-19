@@ -231,6 +231,16 @@ fn paran_expr<'c, 'a>(
     }
 }
 
+fn method_expr<'c, 'a>(
+    ctx: &'c ParseContext<'c>
+) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+    move |i| {
+        let (i, name) = ident(i)?;
+        let (i, args) = delimited(de_sp(char('(')), expr_list(ctx), de_sp(char(')')))(i)?;
+        Ok((i, Expr::Method(name.into(), args)))
+    }
+}
+
 fn single_expr<'c, 'a>(
     ctx: &'c ParseContext<'c>,
 ) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
@@ -239,6 +249,7 @@ fn single_expr<'c, 'a>(
             de_sp(alt((
                 map(string, Expr::str),
                 map(i64, Expr::IntLit),
+                method_expr(ctx),
                 map(variable_no_arg(ctx), Expr::Var),
                 paran_expr(ctx),
             )))(i)?
@@ -246,6 +257,7 @@ fn single_expr<'c, 'a>(
             de_sp(alt((
                 map(string, Expr::str),
                 map(i64, Expr::IntLit),
+                method_expr(ctx),
                 map(variable(ctx), Expr::Var),
                 paran_expr(ctx),
             )))(i)?

@@ -347,10 +347,63 @@ BinopExpr(
 
     #[test]
     fn test_complex_op() {
-        k9::snapshot!(do_test(
-            "tests/parse_tests/exprs/complex_op.erb",
-            parse_expr
-        ));
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/complex_op.erb", parse_expr),
+            "
+BinopExpr(
+    BinopExpr(
+        IntLit(
+            50,
+        ),
+        Mul,
+        BinopExpr(
+            IntLit(
+                6,
+            ),
+            Sub,
+            Var(
+                Variable {
+                    var_idx: Global(
+                        GlobalIndex(
+                            19,
+                        ),
+                    ),
+                    args: [
+                        Var(
+                            Variable {
+                                var_idx: Local(
+                                    FunctionIndex(
+                                        1,
+                                    ),
+                                    LocalIndex(
+                                        2,
+                                    ),
+                                ),
+                                args: [],
+                            },
+                        ),
+                        IntLit(
+                            10,
+                        ),
+                    ],
+                },
+            ),
+        ),
+    ),
+    Add,
+    Var(
+        Variable {
+            var_idx: Global(
+                GlobalIndex(
+                    7,
+                ),
+            ),
+            args: [],
+        },
+    ),
+)
+"
+        );
     }
 
     #[test]
@@ -375,7 +428,39 @@ CondExpr(
 
     #[test]
     fn test_method() {
-        k9::snapshot!(do_test("tests/parse_tests/exprs/method.erb", parse_expr));
+        k9::snapshot!(
+            do_test("tests/parse_tests/exprs/method.erb", parse_expr),
+            r#"
+Method(
+    "FOO",
+    [
+        IntLit(
+            123,
+        ),
+        StringLit(
+            "BAR",
+        ),
+        Var(
+            Variable {
+                var_idx: Local(
+                    FunctionIndex(
+                        1,
+                    ),
+                    LocalIndex(
+                        1,
+                    ),
+                ),
+                args: [
+                    IntLit(
+                        123,
+                    ),
+                ],
+            },
+        ),
+    ],
+)
+"#
+        );
     }
 
     #[test]
@@ -640,7 +725,7 @@ mod program {
     fn test_method_call() {
         k9::snapshot!(
             do_test("tests/parse_tests/programs/method_call.erb", parse_program),
-            "
+            r#"
 [
     Function {
         idx: FunctionIndex(
@@ -650,10 +735,26 @@ mod program {
             args: [],
             event_flags: None,
         },
-        body: [],
+        body: [
+            Assign(
+                Variable {
+                    var_idx: Global(
+                        GlobalIndex(
+                            18,
+                        ),
+                    ),
+                    args: [],
+                },
+                None,
+                Method(
+                    "BAR",
+                    [],
+                ),
+            ),
+        ],
     },
 ]
-"
+"#
         );
     }
 
