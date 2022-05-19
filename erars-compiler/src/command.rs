@@ -11,16 +11,17 @@ use crate::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, is_not, tag, take_while},
+    bytes::complete::{escaped, tag, take_while},
     character::complete::*,
-    combinator::{complete, cut, eof, map, map_res, opt, value, verify},
-    error::{context, make_error, ContextError, ErrorKind, ParseError},
+    combinator::{complete, cut, eof, map, opt, value, verify},
+    error::{context, make_error, ErrorKind, ParseError},
     multi::{many0, many1, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
-    IResult, Parser,
+    Parser,
 };
 
 type Error<'a> = nom::error::Error<&'a str>;
+type IResult<'a, T> = nom::IResult<&'a str, T, Error<'a>>;
 
 pub enum FormType {
     Percent,
@@ -39,34 +40,32 @@ pub enum FormStrType {
     Arg,
 }
 
-fn sp<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn sp<'a>(i: &'a str) -> IResult<'a, &'a str> {
     take_while(move |c| " \t\r".contains(c))(i)
 }
 
-fn sp_nl<'a>(i: &'a str) -> IResult<&'a str, &'a str, Error<'a>> {
+fn sp_nl<'a>(i: &'a str) -> IResult<'a, &'a str> {
     take_while(move |c| " \t\r\n".contains(c))(i)
 }
 
-fn de_sp<'a, T>(
-    p: impl Parser<&'a str, T, Error<'a>>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, T, Error<'a>> {
+fn de_sp<'a, T>(p: impl Parser<&'a str, T, Error<'a>>) -> impl FnMut(&'a str) -> IResult<'a, T> {
     delimited(sp, p, sp)
 }
 
-fn ident<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
     verify(
         take_while(move |c: char| c.is_xid_continue() || c == '_'),
         |s: &str| s.chars().next().map_or(false, |c| c.is_xid_start()),
     )(i)
 }
 
-fn parse_str<'a, E: ParseError<&'a str>>(i: &'a str) -> IResult<&'a str, &'a str, E> {
+fn parse_str<'a>(i: &'a str) -> IResult<'a, &'a str> {
     escaped(alphanumeric1, '\\', one_of("\"n\\"))(i)
 }
 
 fn parse_form_normal_str<'a>(
     ty: FormStrType,
-) -> impl Fn(&'a str) -> IResult<&'a str, (String, Option<FormType>)> {
+) -> impl Fn(&'a str) -> IResult<'a, (String, Option<FormType>)> {
     move |mut i: &'a str| {
         let mut ret = String::new();
 
@@ -146,14 +145,14 @@ fn parse_form_normal_str<'a>(
 
 pub fn normal_form_str<'c>(
     ctx: &'c ParseContext<'c>,
-) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+) -> impl for<'a> FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| form_str(FormStrType::Normal, ctx)(i)
 }
 
 pub fn form_str<'c, 'a>(
     ty: FormStrType,
     ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i: &'a str| {
         let normal_str = parse_form_normal_str(ty);
         let (mut i, (normal, mut ty)) = normal_str(i)?;
@@ -210,15 +209,11 @@ pub fn form_str<'c, 'a>(
     }
 }
 
-fn string<'a, E: ParseError<&'a str> + ContextError<&'a str>>(
-    i: &'a str,
-) -> IResult<&'a str, &'a str, E> {
+fn string<'a>(i: &'a str) -> IResult<'a, &'a str> {
     context("string", delimited(char('\"'), parse_str, char('\"')))(i)
 }
 
-fn paran_expr<'c, 'a>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+fn paran_expr<'c, 'a>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         let is_arg = ctx.is_arg.get();
         ctx.is_arg.set(false);
@@ -231,9 +226,7 @@ fn paran_expr<'c, 'a>(
     }
 }
 
-fn method_expr<'c, 'a>(
-    ctx: &'c ParseContext<'c>
-) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+fn method_expr<'c, 'a>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         let (i, name) = ident(i)?;
         let (i, args) = delimited(de_sp(char('(')), expr_list(ctx), de_sp(char(')')))(i)?;
@@ -241,9 +234,7 @@ fn method_expr<'c, 'a>(
     }
 }
 
-fn single_expr<'c, 'a>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+fn single_expr<'c, 'a>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         let (i, expr) = if ctx.is_arg.get() {
             de_sp(alt((
@@ -283,7 +274,7 @@ macro_rules! define_bin_expr {
         ($prev:ident, $name:ident)
         $(($op:expr, $tag:expr))*
     ) => {
-        fn $name<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+        fn $name<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<'a, Expr> + 'c {
             move |i| {
                 let op = alt((
                     $(
@@ -303,7 +294,7 @@ macro_rules! define_bin_expr {
         $name:ident
         $(($mul_op:expr, $mul_tag:expr))?
     ) => {
-        fn $name<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+        fn $name<'c>(ctx: &'c ParseContext<'c>) -> impl for<'a> FnMut(&'a str) -> IResult<'a, Expr> + 'c {
             fn merge_binop((lhs, op, rhs): (Expr, BinaryOperator, Expr)) -> Expr {
                 Expr::binary(lhs, op, rhs)
             }
@@ -341,9 +332,7 @@ macro_rules! define_bin_expr {
 define_bin_expr!(bin_expr(BinaryOperator::Rem, "%"));
 define_bin_expr!(np_bin_expr);
 
-pub fn expr<'c, 'a>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+pub fn expr<'c, 'a>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         let cond = map(
             tuple((
@@ -360,13 +349,13 @@ pub fn expr<'c, 'a>(
 
 pub fn expr_list<'c, 'a>(
     ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Expr>> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
     move |i| separated_list0(de_sp(tag(",")), expr(ctx))(i)
 }
 
 pub fn call_arg_list<'c, 'a>(
     ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Expr>> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
     move |i| {
         preceded(
             sp,
@@ -379,9 +368,7 @@ pub fn call_arg_list<'c, 'a>(
     }
 }
 
-pub fn np_expr<'c, 'a>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Expr> + 'c {
+pub fn np_expr<'c, 'a>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         let cond = map(
             tuple((
@@ -406,7 +393,7 @@ fn cut_comment<'a>(i: &'a str) -> &'a str {
 
 fn variable_no_arg<'c, 'a>(
     ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Variable> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Variable> + 'c {
     move |i| {
         let (i, name) = ident(i)?;
         let idx = ctx.var.get_var(name, ctx.current_func).unwrap();
@@ -423,24 +410,21 @@ fn variable_no_arg<'c, 'a>(
 
 fn variable<'c, 'a>(
     ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Variable> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Variable> + 'c {
     move |i| {
         ctx.is_arg.set(true);
         let (i, name) = ident(i)?;
+        let idx = ctx.var.get_var(name, ctx.current_func).ok_or_else(|| {
+            nom::Err::Error(Error::from_error_kind(i, nom::error::ErrorKind::Complete))
+        })?;
         let (i, args) = many0(preceded(de_sp(char(':')), expr(ctx)))(i)?;
         ctx.is_arg.set(false);
-        let idx = ctx.var.get_var(name, ctx.current_func).ok_or_else(|| {
-            nom::Err::Error(nom::error::Error::<&'a str>::new(
-                i,
-                nom::error::ErrorKind::Complete,
-            ))
-        })?;
 
         Ok((i, Variable { var_idx: idx, args }))
     }
 }
 
-fn print_flags<'a>(i: &'a str) -> IResult<&'a str, PrintFlags> {
+fn print_flags<'a>(i: &'a str) -> IResult<'a, PrintFlags> {
     let (i, line) = map(
         opt(alt((
             value(PrintFlags::WAIT | PrintFlags::NEWLINE, char('W')),
@@ -459,7 +443,7 @@ fn print_flags<'a>(i: &'a str) -> IResult<&'a str, PrintFlags> {
     Ok((i, line | align))
 }
 
-fn print_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+fn print_line<'a>(i: &'a str) -> IResult<'a, Stmt> {
     map(
         preceded(
             tag("PRINT"),
@@ -469,9 +453,7 @@ fn print_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
     )(i)
 }
 
-fn call_line<'a, 'c>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+fn call_line<'a, 'c>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
         map(
             preceded(terminated(tag("CALL"), sp), pair(ident, call_arg_list(ctx))),
@@ -485,7 +467,7 @@ fn call_line<'a, 'c>(
     }
 }
 
-fn alignment<'a>(i: &'a str) -> IResult<&'a str, Alignment> {
+fn alignment<'a>(i: &'a str) -> IResult<'a, Alignment> {
     alt((
         value(Alignment::Left, tag("LEFT")),
         value(Alignment::Center, tag("CENTER")),
@@ -493,7 +475,7 @@ fn alignment<'a>(i: &'a str) -> IResult<&'a str, Alignment> {
     ))(i)
 }
 
-fn align_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+fn align_line<'a>(i: &'a str) -> IResult<'a, Stmt> {
     map(
         tuple((sp, tag("ALIGNMENT"), sp, alignment, sp)),
         |(_, _, _, align, _)| Stmt::Alignment(align),
@@ -502,7 +484,7 @@ fn align_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
 
 fn builtin_com_line<'a, 'c>(
     ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
         let (com, i) = i.split_once(' ').unwrap_or((i, ""));
         match com.parse::<BuiltinCommand>() {
@@ -523,9 +505,7 @@ fn builtin_com_line<'a, 'c>(
     }
 }
 
-fn sif_line<'a, 'c>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+fn sif_line<'a, 'c>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
         let (i, _) = tag("SIF")(i)?;
         let (i, cond) = expr(ctx)(i)?;
@@ -534,9 +514,7 @@ fn sif_line<'a, 'c>(
     }
 }
 
-fn if_line<'a, 'c>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+fn if_line<'a, 'c>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
         let (i, _) = de_sp(tag("IF"))(i)?;
 
@@ -567,24 +545,14 @@ fn if_line<'a, 'c>(
     }
 }
 
-fn error_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
-    map_res(alt((tag("ELSE"), tag("ENDIF"), tag("NEXT"))), |_| {
-        Err(nom::Err::Error(nom::error::Error::<&'a str>::new(
-            i,
-            nom::error::ErrorKind::Complete,
-        )))
-    })(i)
-}
-
 fn command_line<'a, 'c>(
     ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
         let i = i.trim_start();
 
         alt((
             print_line,
-            error_line,
             call_line(ctx),
             sif_line(ctx),
             if_line(ctx),
@@ -594,13 +562,11 @@ fn command_line<'a, 'c>(
     }
 }
 
-fn label_line<'a>(i: &'a str) -> IResult<&'a str, Stmt> {
+fn label_line<'a>(i: &'a str) -> IResult<'a, Stmt> {
     map(preceded(tag("$"), ident), |s| Stmt::Label(s.into()))(i)
 }
 
-fn assign_line<'a, 'c>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+fn assign_line<'a, 'c>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
         let (i, var) = variable(ctx)(i)?;
         let (i, _) = de_sp(char('='))(i)?;
@@ -617,13 +583,11 @@ fn assign_line<'a, 'c>(
     }
 }
 
-fn function_label<'a>(i: &'a str) -> IResult<&'a str, &'a str> {
+fn function_label<'a>(i: &'a str) -> IResult<'a, &'a str> {
     de_sp(preceded(char('@'), ident))(i)
 }
 
-pub fn stmt<'a, 'c>(
-    ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Stmt> + 'c {
+pub fn stmt<'a, 'c>(ctx: &'c ParseContext<'c>) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
         let mut i = i.trim_start_matches(' ');
 
@@ -639,13 +603,13 @@ pub fn stmt<'a, 'c>(
 
 pub fn body<'a, 'r, 'c>(
     ctx: &'r ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Stmt>> + 'r {
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<Stmt>> + 'r {
     move |i| separated_list0(many1(newline), stmt(ctx))(i)
 }
 
 fn function_info<'a, 'c>(
     ctx: &'c ParseContext<'c>,
-) -> impl FnMut(&'a str) -> IResult<&'a str, FunctionInfo> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, FunctionInfo> + 'c {
     move |i| {
         preceded(
             char('#'),
@@ -684,9 +648,7 @@ fn function_info<'a, 'c>(
     }
 }
 
-pub fn function<'a, 'c>(
-    var: &'c VariableDic,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Function> + 'c {
+pub fn function<'a, 'c>(var: &'c VariableDic) -> impl FnMut(&'a str) -> IResult<'a, Function> + 'c {
     move |i| {
         let (i, label) = function_label(i)?;
         let (func_idx, has_same) = var.insert_func(&label, Vec::new());
@@ -746,7 +708,7 @@ pub fn function<'a, 'c>(
 
 pub fn era_program<'a, 'c>(
     var: &'c VariableDic,
-) -> impl FnMut(&'a str) -> IResult<&'a str, Vec<Function>> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<Function>> + 'c {
     move |i| complete(preceded(opt(tag("\u{feff}")), many0(function(var))))(i)
 }
 
