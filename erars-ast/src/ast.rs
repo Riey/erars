@@ -1,17 +1,18 @@
 use std::fmt;
 
+use bitflags::bitflags;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
-use smartstring::{LazyCompact, SmartString};
+use smol_str::SmolStr;
+use strum::{Display, EnumString};
 
 use crate::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, PrintFlags, UnaryOperator,
-    VariableIndex, VariableInfo,
+    Alignment, BinaryOperator, BuiltinCommand, EventFlags, LocalVariable, UnaryOperator, Variable,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stmt {
-    Label(SmartString<LazyCompact>),
+    Label(SmolStr),
     SelectCase(
         Expr,
         Vec<(Vec<SelectCaseCond>, Vec<Stmt>)>,
@@ -23,7 +24,7 @@ pub enum Stmt {
     ReuseLastLine(String),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<Stmt>),
-    If(Vec<(Expr, Vec<Stmt>)>, Option<Vec<Stmt>>),
+    If(Vec<(Expr, Vec<Stmt>)>, Vec<Stmt>),
     Times(Variable, NotNan<f32>),
     Goto {
         label: Expr,
@@ -49,20 +50,13 @@ pub enum Stmt {
     Alignment(Alignment),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct LocalVariable {
-    pub idx: VariableIndex,
-    pub init: Vec<Expr>,
-    pub info: VariableInfo,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
     pub header: FunctionHeader,
     pub body: Vec<Stmt>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
     pub name: String,
     pub args: Vec<(Variable, Option<Expr>)>,
@@ -81,8 +75,8 @@ pub enum FunctionInfo {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Expr {
-    StringLit(String),
-    IntLit(i64),
+    String(String),
+    Int(i64),
     FormText(FormText),
     Var(Variable),
     Method(String, Vec<Self>),
@@ -99,11 +93,11 @@ pub enum Expr {
 
 impl Expr {
     pub fn int(i: impl Into<i64>) -> Self {
-        Self::IntLit(i.into())
+        Self::Int(i.into())
     }
 
     pub fn str(s: impl Into<String>) -> Self {
-        Self::StringLit(s.into())
+        Self::String(s.into())
     }
 
     pub fn unary(op1: Self, op: UnaryOperator) -> Self {
@@ -117,12 +111,6 @@ impl Expr {
     pub fn cond(op1: Self, op2: Self, op3: Self) -> Self {
         Self::CondExpr(Box::new(op1), Box::new(op2), Box::new(op3))
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Variable {
-    pub var_idx: VariableIndex,
-    pub args: Vec<Expr>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,4 +175,27 @@ impl fmt::Debug for FormText {
 
         Ok(())
     }
+}
+
+option_set::option_set! {
+    pub struct PrintFlags: UpperSnake + u32 {
+        const NEWLINE = 0x1;
+        const WAIT = 0x2;
+        const LEFT_ALIGN = 0x4;
+        const RIGHT_ALIGN = 0x8;
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString, Display)]
+pub enum BeginType {
+    #[strum(to_string = "TITLE")]
+    Title,
+    #[strum(to_string = "FIRST")]
+    First,
+    #[strum(to_string = "SHOP")]
+    Shop,
+    #[strum(to_string = "TURNEND")]
+    TurnEnd,
+    #[strum(to_string = "AFTERTRAIN")]
+    AfterTrain,
 }

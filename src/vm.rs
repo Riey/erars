@@ -2,22 +2,22 @@ use std::iter;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
-use smartstring::{LazyCompact, SmartString};
+use smol_str::SmolStr;
 use strum::Display;
 
 use hashbrown::{HashMap, HashSet};
 
-use erars_compiler::{
-    BeginType, BinaryOperator, BuiltinCommand, BulitinVariable, EventType, Instruction,
-    KnownVariables, PrintFlags, UnaryOperator, VariableIndex, VariableInfo, VariableInterner,
+use erars_ast::{
+    BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, UnaryOperator, VariableInfo,
 };
+use erars_compiler::Instruction;
 
 use crate::function::{FunctionBody, FunctionDic};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 use crate::value::Value;
 
 #[derive(Clone, Debug)]
-enum Variable {
+enum VmVariable {
     Int0D(i64),
     Int1D(Vec<i64>),
     Int2D(Vec<Vec<i64>>),
@@ -28,7 +28,7 @@ enum Variable {
     Str3D(Vec<Vec<Vec<String>>>),
 }
 
-impl Variable {
+impl VmVariable {
     pub fn new(info: &VariableInfo) -> Self {
         match (info.is_str, info.size.as_slice()) {
             (false, []) => Self::Int0D(info.default_int),
@@ -45,14 +45,14 @@ impl Variable {
 
     pub fn set(&mut self, args: impl Iterator<Item = usize>, value: Value) -> Result<()> {
         match self {
-            Variable::Int0D(..)
-            | Variable::Int1D(..)
-            | Variable::Int2D(..)
-            | Variable::Int3D(..) => *self.get_int(args)? = value.try_into()?,
-            Variable::Str0D(..)
-            | Variable::Str1D(..)
-            | Variable::Str2D(..)
-            | Variable::Str3D(..) => *self.get_str(args)? = value.try_into()?,
+            VmVariable::Int0D(..)
+            | VmVariable::Int1D(..)
+            | VmVariable::Int2D(..)
+            | VmVariable::Int3D(..) => *self.get_int(args)? = value.try_into()?,
+            VmVariable::Str0D(..)
+            | VmVariable::Str1D(..)
+            | VmVariable::Str2D(..)
+            | VmVariable::Str3D(..) => *self.get_str(args)? = value.try_into()?,
         }
 
         Ok(())
@@ -60,14 +60,14 @@ impl Variable {
 
     pub fn get(&mut self, args: impl Iterator<Item = usize>) -> Result<Value> {
         match self {
-            Variable::Int0D(..)
-            | Variable::Int1D(..)
-            | Variable::Int2D(..)
-            | Variable::Int3D(..) => self.get_int(args).map(Value::from),
-            Variable::Str0D(..)
-            | Variable::Str1D(..)
-            | Variable::Str2D(..)
-            | Variable::Str3D(..) => self.get_str(args).map(Value::from),
+            VmVariable::Int0D(..)
+            | VmVariable::Int1D(..)
+            | VmVariable::Int2D(..)
+            | VmVariable::Int3D(..) => self.get_int(args).map(Value::from),
+            VmVariable::Str0D(..)
+            | VmVariable::Str1D(..)
+            | VmVariable::Str2D(..)
+            | VmVariable::Str3D(..) => self.get_str(args).map(Value::from),
         }
     }
 
@@ -78,14 +78,14 @@ impl Variable {
             };
         }
         match self {
-            Variable::Int0D(s) => Ok(s),
-            Variable::Int1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
-            Variable::Int2D(s) => s
+            VmVariable::Int0D(s) => Ok(s),
+            VmVariable::Int1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
+            VmVariable::Int2D(s) => s
                 .get_mut(a!())
                 .unwrap()
                 .get_mut(a!())
                 .ok_or_else(|| anyhow!("Index out of range")),
-            Variable::Int3D(s) => s
+            VmVariable::Int3D(s) => s
                 .get_mut(a!())
                 .unwrap()
                 .get_mut(a!())
@@ -103,14 +103,14 @@ impl Variable {
             };
         }
         match self {
-            Variable::Str0D(s) => Ok(s),
-            Variable::Str1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
-            Variable::Str2D(s) => s
+            VmVariable::Str0D(s) => Ok(s),
+            VmVariable::Str1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
+            VmVariable::Str2D(s) => s
                 .get_mut(a!())
                 .unwrap()
                 .get_mut(a!())
                 .ok_or_else(|| anyhow!("Index out of range")),
-            Variable::Str3D(s) => s
+            VmVariable::Str3D(s) => s
                 .get_mut(a!())
                 .unwrap()
                 .get_mut(a!())
@@ -123,20 +123,19 @@ impl Variable {
 }
 
 enum UniformVariable {
-    Normal(Variable),
-    Character(Vec<Variable>),
-    Bulitin(BulitinVariable),
+    Normal(VmVariable),
+    Character(Vec<VmVariable>),
 }
 
 impl UniformVariable {
     pub fn new(info: &VariableInfo) -> Self {
         match info.is_chara {
-            false => UniformVariable::Normal(Variable::new(info)),
+            false => UniformVariable::Normal(VmVariable::new(info)),
             true => UniformVariable::Character(Vec::new()),
         }
     }
 
-    pub fn assume_normal(&mut self) -> &mut Variable {
+    pub fn assume_normal(&mut self) -> &mut VmVariable {
         match self {
             Self::Normal(v) => v,
             _ => panic!("Variable is not normal variable"),
@@ -145,7 +144,7 @@ impl UniformVariable {
 
     pub fn add_chara(&mut self, info: &VariableInfo) {
         match self {
-            UniformVariable::Character(c) => c.push(Variable::new(info)),
+            UniformVariable::Character(c) => c.push(VmVariable::new(info)),
             _ => {}
         }
     }
@@ -153,40 +152,19 @@ impl UniformVariable {
 
 struct VariableStorage {
     character_len: usize,
-    variable_interner: VariableInterner,
-    variables: Vec<(VariableInfo, UniformVariable)>,
-    local_variables:
-        HashMap<SmartString<LazyCompact>, HashMap<VariableIndex, (VariableInfo, UniformVariable)>>,
+    variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, UniformVariable)>>,
 }
 
 impl VariableStorage {
-    pub fn new(infos: &HashMap<String, VariableInfo>, variable_interner: VariableInterner) -> Self {
-        let variables = variable_interner
-            .idxs()
-            .map(|idx| {
-                let name = variable_interner.resolve(idx).unwrap();
-                if let Some(builtin) = idx.to_builtin() {
-                    (VariableInfo::default(), UniformVariable::Bulitin(builtin))
-                } else {
-                    let info = infos
-                        .get(name.as_str())
-                        .cloned()
-                        .unwrap_or_else(|| VariableInfo {
-                            default_int: 0,
-                            is_chara: false,
-                            is_str: false,
-                            size: vec![1000],
-                        });
-                    let var = UniformVariable::new(&info);
-
-                    (info, var)
-                }
-            })
+    pub fn new(infos: &HashMap<SmolStr, VariableInfo>) -> Self {
+        let variables = infos
+            .iter()
+            .map(|(k, v)| (k.clone(), (v.clone(), UniformVariable::new(v))))
             .collect();
 
         Self {
             character_len: 0,
-            variable_interner,
             variables,
             local_variables: HashMap::new(),
         }
@@ -206,7 +184,7 @@ impl VariableStorage {
                         }
                     }
 
-                    (*idx, (info.clone(), var))
+                    (idx.clone(), (info.clone(), var))
                 })
                 .collect()
         });
@@ -215,83 +193,51 @@ impl VariableStorage {
     fn get_local_var(
         &mut self,
         name: &str,
-        idx: VariableIndex,
+        var: &str,
     ) -> Result<&mut (VariableInfo, UniformVariable)> {
         self.local_variables
             .get_mut(name)
             .unwrap()
-            .get_mut(&idx)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", idx))
+            .get_mut(var)
+            .ok_or_else(|| anyhow!("Variable {} is not exists", var))
     }
 
-    fn get_var(&mut self, idx: VariableIndex) -> Result<&mut (VariableInfo, UniformVariable)> {
+    fn get_var(&mut self, var: &str) -> Result<&mut (VariableInfo, UniformVariable)> {
         self.variables
-            .get_mut(idx.as_usize())
-            .ok_or_else(|| anyhow!("Variable {} is not exists", idx))
+            .get_mut(var)
+            .ok_or_else(|| anyhow!("Variable {} is not exists", var))
     }
 
     fn get_var2(
         &mut self,
-        l: VariableIndex,
-        r: VariableIndex,
+        l: &str,
+        r: &str,
     ) -> Result<(
         &mut (VariableInfo, UniformVariable),
         &mut (VariableInfo, UniformVariable),
     )> {
         assert_ne!(l, r);
 
-        if l.as_usize() >= self.variables.len() {
-            bail!("Variable {} is not exists", l);
-        }
-
-        if r.as_usize() >= self.variables.len() {
-            bail!("Variable {} is not exists", r);
-        }
-
-        unsafe {
-            let ptr = self.variables.as_mut_ptr();
-
-            let l = ptr.add(l.as_usize());
-            let r = ptr.add(r.as_usize());
-
-            Ok((l.as_mut().unwrap_unchecked(), r.as_mut().unwrap_unchecked()))
+        match self.variables.get_many_mut([l, r]) {
+            Some([l, r]) => Ok((l, r)),
+            None => {
+                bail!("Variable {l} or {r} is not exists");
+            }
         }
     }
 
     pub fn reset_data(&mut self) {
         self.character_len = 0;
-        for var in self.variables.iter_mut() {
+        for var in self.variables.values_mut() {
             var.1 = UniformVariable::new(&var.0);
         }
     }
 
     pub fn add_chara(&mut self) {
         self.character_len += 1;
-        self.variables.iter_mut().for_each(|(info, var)| {
+        self.variables.values_mut().for_each(|(info, var)| {
             var.add_chara(info);
         });
-    }
-
-    pub fn get_known2(
-        &mut self,
-        l: KnownVariables,
-        r: KnownVariables,
-    ) -> (&mut UniformVariable, &mut UniformVariable) {
-        let (l, r) = self
-            .get_var2(
-                self.variable_interner.get_known(l),
-                self.variable_interner.get_known(r),
-            )
-            .unwrap();
-
-        (&mut l.1, &mut r.1)
-    }
-
-    pub fn get_known(&mut self, known: KnownVariables) -> &mut UniformVariable {
-        &mut self
-            .get_var(self.variable_interner.get_known(known))
-            .unwrap()
-            .1
     }
 }
 
@@ -303,7 +249,7 @@ enum Workflow {
 
 struct Callstack {
     stack_base: usize,
-    local_idxs: HashSet<VariableIndex>,
+    local_idxs: HashSet<SmolStr>,
 }
 
 pub struct VmContext {
@@ -314,28 +260,28 @@ pub struct VmContext {
 }
 
 impl VmContext {
-    pub fn new(infos: &HashMap<String, VariableInfo>, variable_interner: VariableInterner) -> Self {
+    pub fn new(infos: &HashMap<SmolStr, VariableInfo>) -> Self {
         Self {
-            var: VariableStorage::new(infos, variable_interner),
+            var: VariableStorage::new(infos),
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
         }
     }
 
-    pub fn is_local_var(&self, idx: &VariableIndex) -> bool {
+    pub fn is_local_var(&self, name: &str) -> bool {
         self.call_stack
             .last()
             .expect("Call stack is empty")
             .local_idxs
-            .contains(idx)
+            .contains(name)
     }
 
     pub fn new_func(&mut self, label: &str, body: &FunctionBody) {
         self.var.init_local(label, body);
         self.call_stack.push(Callstack {
             stack_base: self.stack.len(),
-            local_idxs: body.local_vars().keys().copied().collect(),
+            local_idxs: body.local_vars().keys().cloned().collect(),
         });
     }
 
@@ -399,7 +345,7 @@ impl TerminalVm {
     fn run_instruction(
         &self,
         func_name: &str,
-        goto_labels: &HashMap<SmartString<LazyCompact>, u32>,
+        goto_labels: &HashMap<SmolStr, u32>,
         inst: &Instruction,
         cursor: &mut usize,
         chan: &ConsoleChannel,
@@ -420,7 +366,9 @@ impl TerminalVm {
             Instruction::StoreVar(var_idx, c) => {
                 let target = *ctx
                     .var
-                    .get_known(KnownVariables::Target)
+                    .get_var("TARGET".into())
+                    .unwrap()
+                    .1
                     .assume_normal()
                     .get_int(iter::empty())?;
 
@@ -428,13 +376,12 @@ impl TerminalVm {
                 let value = ctx.pop();
 
                 let (info, var) = if ctx.is_local_var(var_idx) {
-                    ctx.var.get_local_var(func_name, *var_idx)?
+                    ctx.var.get_local_var(func_name, var_idx)?
                 } else {
-                    ctx.var.get_var(*var_idx)?
+                    ctx.var.get_var(var_idx)?
                 };
 
                 match var {
-                    UniformVariable::Bulitin(_) => bail!("Builtin variables are immutable"),
                     UniformVariable::Character(c) => {
                         let no = if args.len() < info.arg_len() {
                             target as usize
@@ -452,27 +399,21 @@ impl TerminalVm {
             Instruction::LoadVar(var_idx, c) => {
                 let target = *ctx
                     .var
-                    .get_known(KnownVariables::Target)
+                    .get_var("TARGET".into())
+                    .unwrap()
+                    .1
                     .assume_normal()
                     .get_int(iter::empty())?;
 
                 let mut args = ctx.take_arg_list(*c)?.into_iter();
 
                 let (info, var) = if ctx.is_local_var(var_idx) {
-                    ctx.var.get_local_var(func_name, *var_idx)?
+                    ctx.var.get_local_var(func_name, var_idx)?
                 } else {
-                    ctx.var.get_var(*var_idx)?
+                    ctx.var.get_var(var_idx)?
                 };
 
                 let value = match var {
-                    UniformVariable::Bulitin(builtin) => match builtin {
-                        BulitinVariable::Gamebase_Author => "Empty".into(),
-                        BulitinVariable::Gamebase_Year => 2022i64.into(),
-                        BulitinVariable::Gamebase_Title => "Title".into(),
-                        BulitinVariable::Gamebase_Version => 1000.into(),
-                        BulitinVariable::Gamebase_Info => "Info".into(),
-                        other => todo!("{other}"),
-                    },
                     UniformVariable::Character(c) => {
                         let no = if args.len() < info.arg_len() {
                             target as usize
@@ -504,9 +445,8 @@ impl TerminalVm {
                 let mut result_idx = 0usize;
                 let mut results_idx = 0usize;
 
-                let (result, results) = ctx
-                    .var
-                    .get_known2(KnownVariables::Result, KnownVariables::ResultS);
+                let ((_, result), (_, results)) =
+                    ctx.var.get_var2("RESULT".into(), "RESULTS".into()).unwrap();
                 let result = result.assume_normal();
                 let results = results.assume_normal();
 
@@ -644,7 +584,9 @@ impl TerminalVm {
                             ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
                             ConsoleResult::Value(ret) => {
                                 ctx.var
-                                    .get_known(KnownVariables::Result)
+                                    .get_var("RESULT".into())
+                                    .unwrap()
+                                    .1
                                     .assume_normal()
                                     .set(iter::empty(), ret)?;
                             }
@@ -674,7 +616,7 @@ impl TerminalVm {
     fn run_body(
         &self,
         func_name: &str,
-        goto_labels: &HashMap<SmartString<LazyCompact>, u32>,
+        goto_labels: &HashMap<SmolStr, u32>,
         body: &FunctionBody,
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
@@ -713,9 +655,9 @@ impl TerminalVm {
 
         for (var_idx, default_value, arg_indices) in body.args().iter() {
             let var = if ctx.is_local_var(var_idx) {
-                ctx.var.get_local_var(label, *var_idx)?
+                ctx.var.get_local_var(label, var_idx)?
             } else {
-                ctx.var.get_var(*var_idx)?
+                ctx.var.get_var(var_idx)?
             };
 
             var.1.assume_normal().set(
