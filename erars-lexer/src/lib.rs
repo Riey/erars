@@ -143,6 +143,8 @@ pub enum Token<'s> {
     #[token("CALL")]
     #[token("CALLF")]
     Call,
+    #[token("CALLFORM")]
+    CallForm,
     #[token("GOTO")]
     Goto,
     #[token("ALIGNMENT")]
@@ -168,7 +170,7 @@ pub enum Token<'s> {
     #[token("FINDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::FindChara))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
-    #[regex(r"PRINT[LW](L?C)? [^\r\n]*", |lex| unsafe { parse_print(lex.slice()) })]
+    #[regex(r"PRINT[LW]?(L?C)? [^\r\n]*", |lex| unsafe { parse_print(lex.slice()) })]
     #[regex(r"REUSELASTLINE [^\r\n]*", |lex| unsafe { parse_reuse(lex.slice()) })]
     #[token("QUIT", |_| single_command(BuiltinCommand::Quit))]
     #[token("WAIT", |_| single_command(BuiltinCommand::Wait))]

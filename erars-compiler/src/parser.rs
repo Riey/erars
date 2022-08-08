@@ -110,6 +110,18 @@ impl ParserContext {
                     jump: false,
                 }
             }
+            Token::CallForm => {
+                let left = cut_line(lex);
+                let (call_args, name) = try_nom!(lex, self::expr::form_arg_expr(self)(left));
+                let args = try_nom!(lex, self::expr::call_arg_list(self)(call_args)).1;
+
+                Stmt::Call {
+                    name,
+                    args,
+                    jump: false,
+                    catch: None,
+                }
+            }
             Token::Sif(cond) => {
                 let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
                 let first = match lex.next() {
@@ -220,7 +232,6 @@ impl ParserContext {
                 Some(other) => match self.parse_stmt(other, lex) {
                     Ok(stmt) => current_func.body.push(stmt),
                     Err(err) => {
-                        dbg!(current_func);
                         return Err(err);
                     }
                 },

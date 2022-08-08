@@ -480,6 +480,12 @@ pub fn varset_line<'c, 'a>(
     }
 }
 
+pub fn form_arg_expr<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
+    move |i| (de_sp(form_str(FormStrType::Arg, ctx)))(i)
+}
+
 fn function_arg_list<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<(Variable, Option<Expr>)>> + 'c {
