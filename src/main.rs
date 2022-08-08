@@ -15,7 +15,7 @@ use erars::{
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::VariableInfo;
-use erars_compiler::{Lexer, ParseError, ParserContext};
+use erars_compiler::{Lexer, ParserContext, ParserError};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
@@ -63,7 +63,7 @@ fn main() {
 
             let program = match program {
                 Ok(p) => p,
-                Err(ParseError::Assert(err, span)) | Err(ParseError::Other(err, span)) => {
+                Err((err, span)) => {
                     diagnostic
                         .labels
                         .push(Label::primary(file_id, span).with_message(format!("{}", err)));

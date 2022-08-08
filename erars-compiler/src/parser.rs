@@ -3,14 +3,14 @@ mod expr;
 use erars_ast::{Alignment, BeginType, Expr, Function, Stmt};
 use erars_lexer::Token;
 use hashbrown::HashMap;
-use logos::{internal::LexerInternal, Lexer, Logos};
+use logos::{internal::LexerInternal, Lexer};
 use std::{borrow::Cow, cell::Cell, mem};
 
-pub use crate::error::{ParseError, ParseResult};
+pub use crate::error::{ParserError, ParserResult};
 
 macro_rules! error {
     ($lex:expr, $msg:expr) => {{
-        return Err(ParseError::Other(String::from($msg), $lex.span()));
+        return Err((String::from($msg), $lex.span()));
     }};
 }
 
@@ -86,7 +86,7 @@ impl ParserContext {
         &self,
         first: Token<'s>,
         lex: &mut Lexer<'s, Token<'s>>,
-    ) -> ParseResult<Stmt> {
+    ) -> ParserResult<Stmt> {
         let stmt = match first {
             Token::DirectStmt(stmt) => stmt,
             Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
@@ -202,7 +202,7 @@ impl ParserContext {
         Ok(stmt)
     }
 
-    pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParseResult<Vec<Function>> {
+    pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();
         let mut current_func = Function::default();
 
@@ -236,8 +236,40 @@ impl ParserContext {
     }
 }
 
-pub fn lex(s: &str) -> Lexer<'_, Token<'_>> {
-    Token::lexer(s)
+impl ParserContext {
+    pub fn parse_program_str<'s>(&self, s: &'s str) -> ParserResult<Vec<Function>> {
+        self.parse(&mut Lexer::new(s))
+    }
+
+    pub fn parse_function_str<'s>(&self, s: &'s str) -> ParserResult<Function> {
+        self.parse_program_str(s)
+            .map(|f| f.into_iter().next().unwrap())
+    }
+
+    pub fn parse_expr_str<'s>(&self, s: &'s str) -> ParserResult<Expr> {
+        let lex = Lexer::<Token<'s>>::new(s);
+        Ok(try_nom!(lex, self::expr::expr(self)(s)).1)
+    }
+
+    pub fn parse_body_str<'s>(&self, s: &'s str) -> ParserResult<Vec<Stmt>> {
+        let mut lex = Lexer::<Token<'s>>::new(s);
+        let mut body = Vec::new();
+
+        loop {
+            match lex.next() {
+                Some(tok) => body.push(self.parse_stmt(tok, &mut lex)?),
+                None => break,
+            }
+        }
+
+        Ok(body)
+    }
+
+    pub fn parse_stmt_str<'s>(&self, s: &'s str) -> ParserResult<Stmt> {
+        let mut lex = Lexer::new(s);
+        let first = lex.next().unwrap();
+        self.parse_stmt(first, &mut lex)
+    }
 }
 
 fn cut_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {

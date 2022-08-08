@@ -1,12 +1,12 @@
 use erars::function::FunctionDic;
 use erars::ui::{ConsoleChannel, ConsoleMessage};
 use erars::vm::*;
-use erars_compiler::{compile, parse_program, VariableInterner};
+use erars_compiler::{compile, ParserContext};
 
 #[test]
 fn run_test() {
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
-    let mut var = VariableInterner::with_default_variables();
+    let parser_ctx = ParserContext::new(Default::default());
 
     for erb_file in erb_files {
         let erb_file = erb_file.unwrap();
@@ -19,23 +19,23 @@ fn run_test() {
 
         let erb_source = std::fs::read_to_string(&erb_file).unwrap();
         let ron_source = std::fs::read_to_string(ron_file).unwrap();
-        let program = parse_program(&erb_source, &mut var).unwrap();
+        let program = parser_ctx.parse_program_str(&erb_source).unwrap();
         let mut dic = FunctionDic::new();
 
         for func in program {
-            dic.insert_compiled_func(&var, compile(func, &var).unwrap());
+            dic.insert_compiled_func(compile(func).unwrap());
         }
 
-        let ret = test_runner(dic, var.clone());
+        let ret = test_runner(dic);
         let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();
 
         k9::assert_equal!(ret, expected_ret);
     }
 }
 
-fn test_runner(dic: FunctionDic, var: VariableInterner) -> Vec<ConsoleMessage> {
+fn test_runner(dic: FunctionDic) -> Vec<ConsoleMessage> {
     let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
-    let mut ctx = VmContext::new(&infos, var);
+    let mut ctx = VmContext::new(&infos);
     let vm = TerminalVm::new(dic);
     let chan = ConsoleChannel::new();
 

@@ -13,25 +13,25 @@ fn main() -> std::io::Result<()> {
         &mut file,
         "body",
         &format!("{}/parse_tests/bodys/*.erb", test_dir),
-        "parse_body",
+        "parse_body_str",
     )?;
     write_mod(
         &mut file,
         "expr",
         &format!("{}/parse_tests/exprs/*.erb", test_dir),
-        "parse_expr",
+        "parse_expr_str",
     )?;
     write_mod(
         &mut file,
         "function",
         &format!("{}/parse_tests/functions/*.erb", test_dir),
-        "parse_function",
+        "parse_function_str",
     )?;
     write_mod(
         &mut file,
         "program",
         &format!("{}/parse_tests/programs/*.erb", test_dir),
-        "parse_program",
+        "parse_program_str",
     )?;
 
     file.flush()?;
@@ -51,7 +51,7 @@ fn write_mod(
 ) -> std::io::Result<()> {
     writeln!(file, "mod {} {{ ", name)?;
     writeln!(file, "use crate::test_util::do_test;")?;
-    writeln!(file, "use erars_compiler::{};", parse_func)?;
+    writeln!(file, "use erars_compiler::ParserContext;")?;
 
     for expr in glob::glob(pattern).unwrap() {
         let expr = expr.unwrap();
@@ -65,7 +65,7 @@ fn write_mod(
         )?;
         writeln!(
             file,
-            "k9::snapshot!(do_test(\"{}\", {}));",
+            "k9::snapshot!(do_test(r#\"{}\"#, ParserContext::{}));",
             expr.display(),
             parse_func
         )?;

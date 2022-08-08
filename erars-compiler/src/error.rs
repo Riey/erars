@@ -1,23 +1,9 @@
 use std::fmt;
 
-pub type ParseResult<T> = Result<T, ParseError>;
+pub type ParserResult<T> = Result<T, ParserError>;
 pub type CompileResult<T> = Result<T, CompileError>;
 
-#[derive(Debug, thiserror::Error)]
-pub enum ParseError {
-    #[error("Assert error on {1:?}: {0}")]
-    Assert(String, std::ops::Range<usize>),
-    #[error("Parsing error on {1:?}: {0}")]
-    Other(String, std::ops::Range<usize>),
-}
-
-impl ParseError {
-    pub fn span(&self) -> std::ops::Range<usize> {
-        match self {
-            ParseError::Assert(_, span) | ParseError::Other(_, span) => span.clone(),
-        }
-    }
-}
+pub type ParserError = (String, std::ops::Range<usize>);
 
 #[derive(thiserror::Error)]
 pub enum CompileError {
