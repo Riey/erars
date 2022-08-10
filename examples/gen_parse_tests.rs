@@ -66,7 +66,7 @@ fn write_mod(
         writeln!(
             file,
             "k9::snapshot!(do_test(r#\"{}\"#, ParserContext::{}));",
-            expr.display(),
+            expr.display().to_string().replace("\\", "/"),
             parse_func
         )?;
         writeln!(file, "}}")?;
