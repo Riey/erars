@@ -1,6 +1,6 @@
 mod expr;
 
-use erars_ast::{Alignment, BeginType, Expr, Function, Stmt};
+use erars_ast::{Alignment, BeginType, Expr, Function, FunctionInfo, Stmt, EventFlags};
 use erars_lexer::Token;
 use hashbrown::HashMap;
 use logos::{internal::LexerInternal, Lexer};
@@ -229,6 +229,24 @@ impl ParserContext {
                     }
                     current_func.header.name = label.into();
                     current_func.header.args = args;
+                }
+                Some(Token::Function) => {
+                    current_func.header.infos.push(FunctionInfo::Function);
+                }
+                Some(Token::FunctionS) => {
+                    current_func.header.infos.push(FunctionInfo::FunctionS);
+                }
+                Some(Token::Pri) => {
+                    current_func.header.infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
+                }
+                Some(Token::Later) => {
+                    current_func.header.infos.push(FunctionInfo::EventFlag(EventFlags::Later));
+                }
+                Some(Token::Single) => {
+                    current_func.header.infos.push(FunctionInfo::EventFlag(EventFlags::Single));
+                }
+                Some(Token::Dim) | Some(Token::DimS) => {
+                    todo!()
                 }
                 Some(other) => match self.parse_stmt(other, lex) {
                     Ok(stmt) => current_func.body.push(stmt),

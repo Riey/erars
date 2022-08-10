@@ -5,7 +5,7 @@ use hashbrown::HashMap;
 use smol_str::SmolStr;
 
 use crate::value::Value;
-use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Variable, VariableInfo};
+use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, VariableInfo};
 use erars_compiler::{CompiledFunction, Instruction};
 use serde::{Deserialize, Serialize};
 

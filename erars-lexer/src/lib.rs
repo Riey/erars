@@ -107,8 +107,20 @@ pub enum Token<'s> {
     Colon,
     #[token("?")]
     Question,
-    #[token("#")]
-    Sharp,
+    #[token("#FUNCTION")]
+    Function,
+    #[token("#FUNCTIONS")]
+    FunctionS,
+    #[token("#DIM")]
+    Dim,
+    #[token("#DIMS")]
+    DimS,
+    #[token("#PRI")]
+    Pri,
+    #[token("#LATER")]
+    Later,
+    #[token("#SINGLE")]
+    Single,
 
     #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
     Ident(&'s str),
@@ -140,6 +152,13 @@ pub enum Token<'s> {
     #[token("REND")]
     Rend,
 
+    #[token("SELECTCASE", lex_line_left)]
+    SelectCase(&'s str),
+    #[token("CASE", lex_line_left)]
+    Case(&'s str),
+    #[token("CASEELSE")]
+    CaseElse,
+
     #[token("CALL")]
     #[token("CALLF")]
     Call,
@@ -162,6 +181,7 @@ pub enum Token<'s> {
     #[token("TINPUT", |lex| normal_expr_command(lex, BuiltinCommand::TInput))]
     #[token("TINPUTS", |lex| normal_expr_command(lex, BuiltinCommand::TInputS))]
     #[token("RETURN", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
+    #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
     #[token("STRLENS", |lex| normal_expr_command(lex, BuiltinCommand::StrLenS))]
     #[token("STRLENSU", |lex| normal_expr_command(lex, BuiltinCommand::StrLenSU))]
     #[token("CUSTOMDRAWLINE", |lex| normal_expr_command(lex, BuiltinCommand::CustomDrawLine))]
