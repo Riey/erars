@@ -15,7 +15,7 @@ use erars::{
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::VariableInfo;
-use erars_compiler::{Lexer, ParserContext, ParserError};
+use erars_compiler::{Lexer, ParserContext};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 

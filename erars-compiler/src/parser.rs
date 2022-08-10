@@ -96,6 +96,7 @@ impl ParserContext {
                 catch: None,
             },
             Token::LabelLine(label) => Stmt::Label(label.into()),
+            Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::PrintForm((flags, form)) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(form));
                 Stmt::Print(flags, form)

@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use super::ParserContext;
-use erars_ast::{Alignment, BinaryOperator, Expr, FormText, Stmt, UnaryOperator, Variable};
+use erars_ast::{Alignment, BinaryOperator, Expr, FormText, NotNan, Stmt, UnaryOperator, Variable};
 use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while},
@@ -9,6 +9,7 @@ use nom::{
     combinator::{eof, map, opt, value, verify},
     error::{context, ErrorKind},
     multi::{many0, separated_list0},
+    number::complete::float,
     sequence::{delimited, pair, preceded, terminated, tuple},
     Parser,
 };
@@ -435,6 +436,15 @@ pub fn for_line<'c, 'a>(
     }
 }
 
+pub fn times_line<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
+    move |i| {
+        map(
+            tuple((variable(ctx), char_sp(','), float)),
+            |(var, _, times)| Stmt::Times(var, NotNan::new(times).unwrap()),
+        )(i)
+    }
+}
+
 pub fn assign_line<'c, 'a>(
     ctx: &'c ParserContext,
     ident: &'c str,
@@ -529,6 +539,12 @@ pub fn variable<'c, 'a>(
 ) -> impl FnMut(&'a str) -> IResult<'a, Variable> + 'c {
     move |i| {
         let (i, name) = ident(i)?;
+        let name = ctx.replace(name);
+
+        if !is_ident(&name) {
+            panic!("Variable error");
+        }
+
         let (i, args) = variable_arg(ctx)(i)?;
         // let idx = ctx.var.get_var(name, ctx.current_func).ok_or_else(|| {
         //     nom::Err::Error(nom::error::Error::<&'a str>::new(

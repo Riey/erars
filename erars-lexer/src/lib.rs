@@ -153,6 +153,8 @@ pub enum Token<'s> {
     Begin,
     #[token("VARSET", lex_line_left)]
     Varset(&'s str),
+    #[token("TIMES", lex_line_left)]
+    Times(&'s str),
 
     #[token("LIMIT", |lex| normal_expr_command(lex, BuiltinCommand::Limit))]
     #[token("INPUT", |lex| normal_expr_command(lex, BuiltinCommand::Input))]

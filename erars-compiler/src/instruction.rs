@@ -1,6 +1,5 @@
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, NotNan, PrintFlags, UnaryOperator,
-    Variable,
 };
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
