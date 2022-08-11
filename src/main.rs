@@ -14,8 +14,10 @@ use erars::{
     ui::{ConsoleChannel, EraApp},
     vm::{TerminalVm, VmContext},
 };
-use erars_compiler::{VariableInfo, VariableInterner};
+use erars_ast::VariableInfo;
+use erars_compiler::{Lexer, ParserContext};
 use hashbrown::HashMap;
+use smol_str::SmolStr;
 
 fn main() {
     let chan = Arc::new(ConsoleChannel::new());
@@ -30,7 +32,7 @@ fn main() {
     let inner_chan = chan.clone();
 
     std::thread::spawn(move || {
-        let infos: HashMap<String, VariableInfo> =
+        let infos: HashMap<SmolStr, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
         let erbs = glob::glob_with(
@@ -49,13 +51,14 @@ fn main() {
         let mut diagnostic = Diagnostic::error()
             .with_code("E0001")
             .with_message("Compile ERROR");
-        let mut var = VariableInterner::with_default_variables();
+
+        let ctx = ParserContext::new(HashMap::default());
 
         for erb in erbs {
             let erb = erb.unwrap();
 
             let source = std::fs::read_to_string(&erb).unwrap();
-            let program = erars_compiler::parse_program(&source, &mut var);
+            let program = ctx.parse(&mut Lexer::new(source.as_str()));
             let file_id = files.add(erb.to_str().unwrap().to_string(), source);
 
             let program = match program {
@@ -71,9 +74,9 @@ fn main() {
             eprintln!("Compile {}", erb.display());
 
             for func in program {
-                let func = erars_compiler::compile(func, &var).unwrap();
+                let func = erars_compiler::compile(func).unwrap();
 
-                function_dic.insert_compiled_func(&var, func);
+                function_dic.insert_compiled_func(func);
             }
         }
 
@@ -87,7 +90,7 @@ fn main() {
             return;
         }
 
-        let mut ctx = VmContext::new(&infos, var);
+        let mut ctx = VmContext::new(&infos);
         let vm = TerminalVm::new(function_dic);
         let ret = vm.start(&inner_chan, &mut ctx);
 

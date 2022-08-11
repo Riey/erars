@@ -1,21 +1,8 @@
-use crate::{Alignment, BinaryOperator, BuiltinCommand, PrintFlags, UnaryOperator, VariableIndex};
-use ordered_float::NotNan;
+use erars_ast::{
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, NotNan, PrintFlags, UnaryOperator,
+};
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
-
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString, Display)]
-pub enum BeginType {
-    #[strum(to_string = "TITLE")]
-    Title,
-    #[strum(to_string = "FIRST")]
-    First,
-    #[strum(to_string = "SHOP")]
-    Shop,
-    #[strum(to_string = "TURNEND")]
-    TurnEnd,
-    #[strum(to_string = "AFTERTRAIN")]
-    AfterTrain,
-}
+use smol_str::SmolStr;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Instruction {
@@ -28,10 +15,10 @@ pub enum Instruction {
     LoadInt(i64),
     LoadStr(String),
     PadStr(Alignment),
-    LoadVar(VariableIndex, u32),
-    StoreVar(VariableIndex, u32),
+    LoadVar(SmolStr, u32),
+    StoreVar(SmolStr, u32),
     Varset {
-        code: VariableIndex,
+        code: SmolStr,
         args: u32,
         varset_args: u32,
     },

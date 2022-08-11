@@ -1,31 +1,29 @@
-use crate::{
-    ast::{FormText, SelectCaseCond},
-    BinaryOperator, CompileError, CompileResult, Expr, FormExpr, Function, FunctionHeader,
-    Instruction, KnownVariables, Stmt, Variable, VariableInterner,
+use crate::{CompileError, CompileResult, Instruction};
+use erars_ast::{
+    BinaryOperator, Expr, FormExpr, FormText, Function, FunctionHeader, SelectCaseCond, Stmt,
+    Variable,
 };
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
-use smartstring::{LazyCompact, SmartString};
+use smol_str::SmolStr;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CompiledFunction {
     pub header: FunctionHeader,
-    pub goto_labels: HashMap<SmartString<LazyCompact>, u32>,
+    pub goto_labels: HashMap<SmolStr, u32>,
     pub body: Vec<Instruction>,
 }
 
-struct Compiler<'v> {
-    var: &'v VariableInterner,
+struct Compiler {
     out: Vec<Instruction>,
-    goto_labels: HashMap<SmartString<LazyCompact>, u32>,
+    goto_labels: HashMap<SmolStr, u32>,
     continue_marks: Vec<u32>,
     break_marks: Vec<Vec<u32>>,
 }
 
-impl<'v> Compiler<'v> {
-    pub fn new(var: &'v VariableInterner) -> Self {
+impl Compiler {
+    pub fn new() -> Self {
         Self {
-            var,
             out: Vec::new(),
             goto_labels: HashMap::new(),
             continue_marks: Vec::new(),
@@ -89,8 +87,8 @@ impl<'v> Compiler<'v> {
                     self.store_var(var.clone())?;
                 }
             }
-            Expr::StringLit(s) => self.out.push(Instruction::LoadStr(s)),
-            Expr::IntLit(i) => self.out.push(Instruction::LoadInt(i)),
+            Expr::String(s) => self.out.push(Instruction::LoadStr(s)),
+            Expr::Int(i) => self.out.push(Instruction::LoadInt(i)),
             Expr::BinopExpr(lhs, op, rhs) => {
                 self.push_expr(*lhs)?;
                 self.push_expr(*rhs)?;
@@ -127,14 +125,14 @@ impl<'v> Compiler<'v> {
 
     fn store_var(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.out.push(Instruction::StoreVar(var.var_idx, count));
+        self.out.push(Instruction::StoreVar(var.var, count));
 
         Ok(())
     }
 
     fn push_var(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.out.push(Instruction::LoadVar(var.var_idx, count));
+        self.out.push(Instruction::LoadVar(var.var, count));
 
         Ok(())
     }
@@ -327,7 +325,7 @@ impl<'v> Compiler<'v> {
             }
             Stmt::Repeat(end, body) => self.push_for(
                 Variable {
-                    var_idx: self.var.get_known(KnownVariables::Count),
+                    var: SmolStr::new_inline("COUNT"),
                     args: Vec::new(),
                 },
                 Expr::int(0),
@@ -366,10 +364,8 @@ impl<'v> Compiler<'v> {
                     end_stack.push(self.mark());
                 }
 
-                if let Some(else_part) = else_part {
-                    for line in else_part {
-                        self.push_stmt(line)?;
-                    }
+                for line in else_part {
+                    self.push_stmt(line)?;
                 }
 
                 for end in end_stack {
@@ -399,13 +395,13 @@ impl<'v> Compiler<'v> {
                 name,
                 args,
                 catch,
-                jump,
+                is_jump,
             } => {
                 let count = self.push_list(args)?;
                 self.push_expr(name)?;
 
                 if let Some(catch) = catch {
-                    if jump {
+                    if is_jump {
                         self.out.push(Instruction::TryJump(count));
                     } else {
                         self.out.push(Instruction::TryCall(count));
@@ -416,7 +412,7 @@ impl<'v> Compiler<'v> {
                     }
                     self.insert(catch_top, Instruction::GotoIfNot(self.current_no()));
                 } else {
-                    if jump {
+                    if is_jump {
                         self.out.push(Instruction::Jump(count));
                     } else {
                         self.out.push(Instruction::Call(count));
@@ -456,7 +452,7 @@ impl<'v> Compiler<'v> {
                 let varset_count = self.push_list(args)?;
                 let arg_count = self.push_list(var.args)?;
                 self.out.push(Instruction::Varset {
-                    code: var.var_idx,
+                    code: var.var,
                     args: arg_count,
                     varset_args: varset_count,
                 });
@@ -499,8 +495,8 @@ impl<'v> Compiler<'v> {
     }
 }
 
-pub fn compile(func: Function, var: &VariableInterner) -> CompileResult<CompiledFunction> {
-    let mut compiler = Compiler::new(var);
+pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
+    let mut compiler = Compiler::new();
 
     for stmt in func.body {
         compiler.push_stmt(stmt)?;

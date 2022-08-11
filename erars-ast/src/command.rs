@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
+use strum::{Display, IntoStaticStr};
 
-#[derive(EnumString, Display, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Display, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr)]
 #[strum(serialize_all = "UPPERCASE")]
 #[serde(rename_all = "UPPERCASE")]
 #[allow(non_camel_case_types)]
@@ -21,6 +21,7 @@ pub enum BuiltinCommand {
     Wait,
     WaitAnykey,
 
+    Return,
     Restart,
     Quit,
     Throw,

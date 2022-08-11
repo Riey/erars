@@ -1,13 +1,16 @@
 mod test_util;
 mod body {
     use crate::test_util::do_test;
-    use erars_compiler::parse_body;
+    use erars_compiler::ParserContext;
 
     #[test]
     fn test_alignment() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/alignment.erb", parse_body),
-            "
+            do_test(
+                r#"tests/parse_tests/bodys/alignment.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
 [
     Alignment(
         Left,
@@ -18,37 +21,42 @@ mod body {
     Alignment(
         Right,
     ),
-    PrintForm(
+    Print(
         NEWLINE,
-        {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+        FormText(
+            {Var(Variable { var: "LOCALS", args: [] })},
+        ),
     ),
-    PrintForm(
+    Print(
         NEWLINE,
-        {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+        FormText(
+            {Var(Variable { var: "LOCALS", args: [] })},
+        ),
     ),
 ]
-"
+"#
         );
     }
 
     #[test]
     fn test_assign() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/assign.erb", parse_body),
-            "
+            do_test(
+                r#"tests/parse_tests/bodys/assign.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
 [
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                21,
-            ),
+            var: "COUNT",
             args: [
                 BinopExpr(
-                    IntLit(
+                    Int(
                         1,
                     ),
                     Add,
-                    IntLit(
+                    Int(
                         3,
                     ),
                 ),
@@ -56,33 +64,34 @@ mod body {
         },
         None,
         BinopExpr(
-            IntLit(
+            Int(
                 23,
             ),
             Add,
-            IntLit(
+            Int(
                 45,
             ),
         ),
     ),
 ]
-"
+"#
         );
     }
 
     #[test]
     fn test_assign_add() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/assign_add.erb", parse_body),
-            "
+            do_test(
+                r#"tests/parse_tests/bodys/assign_add.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
 [
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                88,
-            ),
+            var: "FLAG",
             args: [
-                IntLit(
+                Int(
                     13,
                 ),
             ],
@@ -90,56 +99,51 @@ mod body {
         Some(
             BitOr,
         ),
-        IntLit(
+        Int(
             2,
         ),
     ),
 ]
-"
+"#
         );
     }
 
     #[test]
     fn test_assign_str() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/assign_str.erb", parse_body),
+            do_test(
+                r#"tests/parse_tests/bodys/assign_str.erb"#,
+                ParserContext::parse_body_str
+            ),
             r#"
 [
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                18,
-            ),
+            var: "LOCALS",
             args: [],
         },
         None,
         FormText(
-             {IntLit(123)}456,
+            {Int(123)}456,
         ),
     ),
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                18,
-            ),
+            var: "LOCALS",
             args: [],
         },
         None,
         FormText(
-             {Var(Variable { var_idx: VariableIndex(17), args: [IntLit(0)] })}.{Method("TOSTR", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(1)] }), StringLit("00")])},
+            {Var(Variable { var: "LOCAL", args: [Int(0)] })}.{Method("TOSTR", [Var(Variable { var: "LOCAL", args: [Int(1)] }), String("00")])},
         ),
     ),
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                105,
-            ),
+            var: "NICKNAME",
             args: [
                 Var(
                     Variable {
-                        var_idx: VariableIndex(
-                            23,
-                        ),
+                        var: "MASTER",
                         args: [],
                     },
                 ),
@@ -147,14 +151,12 @@ mod body {
         },
         None,
         FormText(
-             {CondExpr(Var(Variable { var_idx: VariableIndex(95), args: [Var(Variable { var_idx: VariableIndex(23), args: [] }), IntLit(120)] }), FormText(신사), FormText(숙녀))},
+            {CondExpr(Var(Variable { var: "TALENT", args: [Var(Variable { var: "MASTER", args: [] }), Int(120)] }), FormText(신사), FormText(숙녀))},
         ),
     ),
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                18,
-            ),
+            var: "LOCALS",
             args: [],
         },
         None,
@@ -170,34 +172,35 @@ mod body {
     #[test]
     fn test_call() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/call.erb", parse_body),
+            do_test(
+                r#"tests/parse_tests/bodys/call.erb"#,
+                ParserContext::parse_body_str
+            ),
             r#"
 [
     Call {
-        name: StringLit(
+        name: String(
             "FOO",
         ),
         args: [
-            IntLit(
+            Int(
                 123,
             ),
             Var(
                 Variable {
-                    var_idx: VariableIndex(
-                        54,
-                    ),
+                    var: "A",
                     args: [
-                        IntLit(
+                        Int(
                             634,
                         ),
                     ],
                 },
             ),
-            StringLit(
+            String(
                 "123",
             ),
         ],
-        jump: false,
+        is_jump: false,
         catch: None,
     },
 ]
@@ -208,31 +211,33 @@ mod body {
     #[test]
     fn test_command() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/command.erb", parse_body),
-            r#"
+            do_test(
+                r#"tests/parse_tests/bodys/command.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
 [
     Command(
         CustomDrawLine,
-        [
-            StringLit(
-                "=",
-            ),
-        ],
+        [],
     ),
 ]
-"#
+"
         );
     }
 
     #[test]
     fn test_hello() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/hello.erb", parse_body),
+            do_test(
+                r#"tests/parse_tests/bodys/hello.erb"#,
+                ParserContext::parse_body_str
+            ),
             r#"
 [
     Print(
         NEWLINE,
-        StringLit(
+        String(
             "Hello, world!",
         ),
     ),
@@ -244,7 +249,10 @@ mod body {
     #[test]
     fn test_if() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/if.erb", parse_body),
+            do_test(
+                r#"tests/parse_tests/bodys/if.erb"#,
+                ParserContext::parse_body_str
+            ),
             r#"
 [
     If(
@@ -253,21 +261,19 @@ mod body {
                 BinopExpr(
                     Var(
                         Variable {
-                            var_idx: VariableIndex(
-                                54,
-                            ),
+                            var: "A",
                             args: [],
                         },
                     ),
                     Greater,
-                    IntLit(
+                    Int(
                         1,
                     ),
                 ),
                 [
                     Print(
                         (empty),
-                        StringLit(
+                        String(
                             "A > 1",
                         ),
                     ),
@@ -277,37 +283,33 @@ mod body {
                 BinopExpr(
                     Var(
                         Variable {
-                            var_idx: VariableIndex(
-                                54,
-                            ),
+                            var: "A",
                             args: [],
                         },
                     ),
                     Equal,
-                    IntLit(
+                    Int(
                         1,
                     ),
                 ),
                 [
                     Print(
                         (empty),
-                        StringLit(
+                        String(
                             "A == 1",
                         ),
                     ),
                 ],
             ),
         ],
-        Some(
-            [
-                Print(
-                    (empty),
-                    StringLit(
-                        "A < 1",
-                    ),
+        [
+            Print(
+                (empty),
+                String(
+                    "A < 1",
                 ),
-            ],
-        ),
+            ),
+        ],
     ),
 ]
 "#
@@ -317,183 +319,90 @@ mod body {
     #[test]
     fn test_number() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/number.erb", parse_body),
-            "
+            do_test(
+                r#"tests/parse_tests/bodys/number.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
 [
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
+            var: "LOCAL",
             args: [],
         },
         None,
-        IntLit(
+        Int(
             1,
         ),
     ),
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
+            var: "LOCAL",
             args: [],
         },
         None,
-        IntLit(
+        Int(
             1234,
         ),
     ),
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
+            var: "LOCAL",
             args: [],
         },
         None,
-        IntLit(
-            65535,
-        ),
-    ),
-    Assign(
-        Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
-            args: [],
-        },
-        None,
-        IntLit(
+        Int(
             0,
         ),
     ),
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
+            var: "LOCAL",
             args: [],
         },
         None,
-        IntLit(
-            4,
-        ),
-    ),
-    Assign(
-        Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
-            args: [],
-        },
-        None,
-        IntLit(
-            -65535,
-        ),
-    ),
-    Assign(
-        Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
-            args: [],
-        },
-        None,
-        IntLit(
+        Int(
             0,
         ),
     ),
     Assign(
         Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
+            var: "LOCAL",
             args: [],
         },
         None,
-        IntLit(
-            -4,
-        ),
-    ),
-]
-"
-        );
-    }
-
-    #[test]
-    fn test_print_simple() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/bodys/print_simple.erb", parse_body),
-            "
-[
-    PrintForm(
-        NEWLINE,
-        1 + 1 = {BinopExpr(IntLit(1), Add, IntLit(1))},
-    ),
-]
-"
-        );
-    }
-
-    #[test]
-    fn test_selectcase() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/bodys/selectcase.erb", parse_body),
-            r#"
-[
-    SelectCase(
-        IntLit(
+        Int(
             1,
         ),
-        [
-            (
-                [
-                    Single(
-                        IntLit(
-                            0,
-                        ),
-                    ),
-                ],
-                [
-                    Print(
-                        (empty),
-                        StringLit(
-                            "FOO",
-                        ),
-                    ),
-                ],
-            ),
-            (
-                [
-                    To(
-                        IntLit(
-                            1,
-                        ),
-                        IntLit(
-                            2,
-                        ),
-                    ),
-                ],
-                [
-                    Print(
-                        (empty),
-                        StringLit(
-                            "BAR",
-                        ),
-                    ),
-                ],
-            ),
-        ],
-        Some(
-            [
-                Print(
-                    (empty),
-                    StringLit(
-                        "BAZ",
-                    ),
-                ),
-            ],
+    ),
+    Assign(
+        Variable {
+            var: "LOCAL",
+            args: [],
+        },
+        None,
+        Int(
+            0,
+        ),
+    ),
+    Assign(
+        Variable {
+            var: "LOCAL",
+            args: [],
+        },
+        None,
+        Int(
+            0,
+        ),
+    ),
+    Assign(
+        Variable {
+            var: "LOCAL",
+            args: [],
+        },
+        None,
+        Int(
+            -1,
         ),
     ),
 ]
@@ -502,25 +411,56 @@ mod body {
     }
 
     #[test]
+    fn test_print_simple() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/print_simple.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    Print(
+        NEWLINE,
+        FormText(
+            1 + 1 = {BinopExpr(Int(1), Add, Int(1))},
+        ),
+    ),
+]
+"
+        );
+    }
+
+    #[test]
+    fn test_selectcase() {
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/bodys/selectcase.erb"#,
+            ParserContext::parse_body_str
+        ));
+    }
+
+    #[test]
     fn test_sif() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/sif.erb", parse_body),
+            do_test(
+                r#"tests/parse_tests/bodys/sif.erb"#,
+                ParserContext::parse_body_str
+            ),
             r#"
 [
     Sif(
-        IntLit(
+        Int(
             12,
         ),
         Print(
             (empty),
-            StringLit(
+            String(
                 "45",
             ),
         ),
     ),
     Print(
         (empty),
-        StringLit(
+        String(
             "32",
         ),
     ),
@@ -532,14 +472,15 @@ mod body {
     #[test]
     fn test_times() {
         k9::snapshot!(
-            do_test("tests/parse_tests/bodys/times.erb", parse_body),
-            "
+            do_test(
+                r#"tests/parse_tests/bodys/times.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
 [
     Times(
         Variable {
-            var_idx: VariableIndex(
-                17,
-            ),
+            var: "LOCAL",
             args: [],
         },
         NotNan(
@@ -547,141 +488,87 @@ mod body {
         ),
     ),
 ]
-"
+"#
         );
     }
 }
 mod expr {
     use crate::test_util::do_test;
-    use erars_compiler::parse_expr;
+    use erars_compiler::ParserContext;
 
     #[test]
     fn test_boolean() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/boolean.erb", parse_expr),
-            "
+            do_test(
+                r#"tests/parse_tests/exprs/boolean.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            r#"
 BinopExpr(
     BinopExpr(
         Var(
             Variable {
-                var_idx: VariableIndex(
-                    37,
-                ),
+                var: "RESULT",
                 args: [],
             },
         ),
         Equal,
-        IntLit(
+        Int(
             0,
         ),
     ),
     And,
-    BinopExpr(
-        Var(
-            Variable {
-                var_idx: VariableIndex(
-                    95,
+    Var(
+        Variable {
+            var: "TALENT",
+            args: [
+                Var(
+                    Variable {
+                        var: "MASTER",
+                        args: [],
+                    },
                 ),
-                args: [
-                    Var(
-                        Variable {
-                            var_idx: VariableIndex(
-                                23,
-                            ),
-                            args: [],
-                        },
-                    ),
-                    IntLit(
+                BinopExpr(
+                    Int(
                         998,
                     ),
-                ],
-            },
-        ),
-        Equal,
-        IntLit(
-            0,
-        ),
+                    Equal,
+                    Int(
+                        0,
+                    ),
+                ),
+            ],
+        },
     ),
 )
-"
+"#
         );
     }
 
     #[test]
     fn test_complex_op() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/exprs/complex_op.erb", parse_expr),
-            "
-BinopExpr(
-    BinopExpr(
-        IntLit(
-            50,
-        ),
-        Mul,
-        BinopExpr(
-            IntLit(
-                6,
-            ),
-            Sub,
-            Var(
-                Variable {
-                    var_idx: VariableIndex(
-                        93,
-                    ),
-                    args: [
-                        Var(
-                            Variable {
-                                var_idx: VariableIndex(
-                                    19,
-                                ),
-                                args: [],
-                            },
-                        ),
-                        IntLit(
-                            10,
-                        ),
-                    ],
-                },
-            ),
-        ),
-    ),
-    Add,
-    BinopExpr(
-        Var(
-            Variable {
-                var_idx: VariableIndex(
-                    6,
-                ),
-                args: [
-                    IntLit(
-                        10,
-                    ),
-                ],
-            },
-        ),
-        Mul,
-        IntLit(
-            5,
-        ),
-    ),
-)
-"
-        );
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/exprs/complex_op.erb"#,
+            ParserContext::parse_expr_str
+        ));
     }
 
     #[test]
     fn test_cond() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/cond.erb", parse_expr),
+            do_test(
+                r#"tests/parse_tests/exprs/cond.erb"#,
+                ParserContext::parse_expr_str
+            ),
             "
 CondExpr(
-    IntLit(
+    Int(
         1,
     ),
-    IntLit(
+    Int(
         2,
     ),
-    IntLit(
+    Int(
         3,
     ),
 )
@@ -692,24 +579,25 @@ CondExpr(
     #[test]
     fn test_method() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/method.erb", parse_expr),
+            do_test(
+                r#"tests/parse_tests/exprs/method.erb"#,
+                ParserContext::parse_expr_str
+            ),
             r#"
 Method(
     "FOO",
     [
-        IntLit(
+        Int(
             123,
         ),
-        StringLit(
+        String(
             "BAR",
         ),
         Var(
             Variable {
-                var_idx: VariableIndex(
-                    17,
-                ),
+                var: "LOCAL",
                 args: [
-                    IntLit(
+                    Int(
                         123,
                     ),
                 ],
@@ -724,14 +612,17 @@ Method(
     #[test]
     fn test_plus() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/plus.erb", parse_expr),
+            do_test(
+                r#"tests/parse_tests/exprs/plus.erb"#,
+                ParserContext::parse_expr_str
+            ),
             "
 BinopExpr(
-    IntLit(
+    Int(
         1,
     ),
     Add,
-    IntLit(
+    Int(
         1,
     ),
 )
@@ -742,19 +633,22 @@ BinopExpr(
     #[test]
     fn test_plus_mul() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/plus_mul.erb", parse_expr),
+            do_test(
+                r#"tests/parse_tests/exprs/plus_mul.erb"#,
+                ParserContext::parse_expr_str
+            ),
             "
 BinopExpr(
-    IntLit(
+    Int(
         1,
     ),
     Add,
     BinopExpr(
-        IntLit(
+        Int(
             2,
         ),
         Mul,
-        IntLit(
+        Int(
             3,
         ),
     ),
@@ -766,20 +660,23 @@ BinopExpr(
     #[test]
     fn test_plus_mul_paran() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/plus_mul_paran.erb", parse_expr),
+            do_test(
+                r#"tests/parse_tests/exprs/plus_mul_paran.erb"#,
+                ParserContext::parse_expr_str
+            ),
             "
 BinopExpr(
     BinopExpr(
-        IntLit(
+        Int(
             1,
         ),
         Add,
-        IntLit(
+        Int(
             2,
         ),
     ),
     Mul,
-    IntLit(
+    Int(
         3,
     ),
 )
@@ -790,9 +687,12 @@ BinopExpr(
     #[test]
     fn test_str_literal() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/str_literal.erb", parse_expr),
+            do_test(
+                r#"tests/parse_tests/exprs/str_literal.erb"#,
+                ParserContext::parse_expr_str
+            ),
             r#"
-StringLit(
+String(
     "123",
 )
 "#
@@ -802,82 +702,86 @@ StringLit(
     #[test]
     fn test_var_arg() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/var_arg.erb", parse_expr),
-            "
+            do_test(
+                r#"tests/parse_tests/exprs/var_arg.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            r#"
 Var(
     Variable {
-        var_idx: VariableIndex(
-            21,
-        ),
+        var: "COUNT",
         args: [
-            IntLit(
+            Int(
                 123,
             ),
         ],
     },
 )
-"
+"#
         );
     }
 
     #[test]
     fn test_var_complex() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/var_complex.erb", parse_expr),
-            "
+            do_test(
+                r#"tests/parse_tests/exprs/var_complex.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            r#"
 Var(
     Variable {
-        var_idx: VariableIndex(
-            21,
-        ),
+        var: "COUNT",
         args: [
             Var(
                 Variable {
-                    var_idx: VariableIndex(
-                        54,
-                    ),
+                    var: "A",
                     args: [
-                        IntLit(
+                        Int(
                             123,
                         ),
                     ],
                 },
             ),
-            IntLit(
+            Int(
                 123,
             ),
         ],
     },
 )
-"
+"#
         );
     }
 
     #[test]
     fn test_var_empty() {
         k9::snapshot!(
-            do_test("tests/parse_tests/exprs/var_empty.erb", parse_expr),
-            "
+            do_test(
+                r#"tests/parse_tests/exprs/var_empty.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            r#"
 Var(
     Variable {
-        var_idx: VariableIndex(
-            21,
-        ),
+        var: "COUNT",
         args: [],
     },
 )
-"
+"#
         );
     }
 }
 mod function {
     use crate::test_util::do_test;
-    use erars_compiler::parse_function;
+    use erars_compiler::ParserContext;
 
     #[test]
     fn test_call() {
         k9::snapshot!(
-            do_test("tests/parse_tests/functions/call.erb", parse_function),
+            do_test(
+                r#"tests/parse_tests/functions/call.erb"#,
+                ParserContext::parse_function_str
+            ),
             r#"
 Function {
     header: FunctionHeader {
@@ -888,31 +792,29 @@ Function {
     body: [
         Assign(
             Variable {
-                var_idx: VariableIndex(
-                    18,
-                ),
+                var: "LOCALS",
                 args: [],
             },
             None,
             FormText(
-                 LABEL,
+                LABEL,
             ),
         ),
         Goto {
-            label: StringLit(
+            label: String(
                 "LABEL",
             ),
             catch: None,
         },
         Goto {
             label: FormText(
-                {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+                {Var(Variable { var: "LOCALS", args: [] })},
             ),
             catch: None,
         },
         Goto {
             label: FormText(
-                {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+                {Var(Variable { var: "LOCALS", args: [] })},
             ),
             catch: Some(
                 [],
@@ -920,67 +822,66 @@ Function {
         },
         Goto {
             label: FormText(
-                {Var(Variable { var_idx: VariableIndex(18), args: [] })},
+                {Var(Variable { var: "LOCALS", args: [] })},
             ),
             catch: Some(
-                [],
+                [
+                    Print(
+                        NEWLINE,
+                        String(
+                            "CATCH",
+                        ),
+                    ),
+                ],
             ),
         },
         Call {
-            name: StringLit(
+            name: String(
                 "BAR",
             ),
             args: [],
-            jump: false,
+            is_jump: false,
             catch: None,
         },
         Call {
-            name: StringLit(
+            name: String(
                 "BAR",
             ),
             args: [],
-            jump: false,
-            catch: Some(
-                [],
-            ),
-        },
-        Call {
-            name: StringLit(
-                "BAR",
-            ),
-            args: [],
-            jump: false,
-            catch: Some(
-                [],
-            ),
-        },
-        Call {
-            name: StringLit(
-                "BAR",
-            ),
-            args: [],
-            jump: true,
+            is_jump: false,
             catch: None,
         },
         Call {
-            name: StringLit(
+            name: String(
                 "BAR",
             ),
             args: [],
-            jump: true,
-            catch: Some(
-                [],
+            is_jump: false,
+            catch: None,
+        },
+        Call {
+            name: String(
+                "BAR",
             ),
+            args: [],
+            is_jump: true,
+            catch: None,
+        },
+        Call {
+            name: String(
+                "BAR",
+            ),
+            args: [],
+            is_jump: true,
+            catch: None,
         },
         Call {
             name: FormText(
                 BAR,
             ),
             args: [],
-            jump: true,
-            catch: Some(
-                [],
-            ),
+            is_jump: true,
+            catch: None,
         },
         Label(
             "LABEL",
@@ -993,58 +894,19 @@ Function {
 
     #[test]
     fn test_dim() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/functions/dim.erb", parse_function),
-            r#"
-Function {
-    header: FunctionHeader {
-        name: "SYSTEM_TITLE",
-        args: [],
-        infos: [
-            Dim(
-                LocalVariable {
-                    idx: VariableIndex(
-                        108,
-                    ),
-                    init: [
-                        IntLit(
-                            2,
-                        ),
-                    ],
-                    info: VariableInfo {
-                        is_chara: false,
-                        is_str: false,
-                        default_int: 0,
-                        size: [],
-                    },
-                },
-            ),
-        ],
-    },
-    body: [
-        PrintList(
-            (empty),
-            [
-                Var(
-                    Variable {
-                        var_idx: VariableIndex(
-                            108,
-                        ),
-                        args: [],
-                    },
-                ),
-            ],
-        ),
-    ],
-}
-"#
-        );
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/functions/dim.erb"#,
+            ParserContext::parse_function_str
+        ));
     }
 
     #[test]
     fn test_function() {
         k9::snapshot!(
-            do_test("tests/parse_tests/functions/function.erb", parse_function),
+            do_test(
+                r#"tests/parse_tests/functions/function.erb"#,
+                ParserContext::parse_function_str
+            ),
             r#"
 Function {
     header: FunctionHeader {
@@ -1059,13 +921,15 @@ Function {
     body: [
         Print(
             NEWLINE,
-            StringLit(
+            String(
                 "Hello",
             ),
         ),
-        PrintForm(
+        Print(
             NEWLINE,
-            {IntLit(123)},
+            FormText(
+                {Int(123)},
+            ),
         ),
     ],
 }
@@ -1075,395 +939,23 @@ Function {
 
     #[test]
     fn test_juel() {
-        k9::snapshot!(
-            do_test("tests/parse_tests/functions/juel.erb", parse_function),
-            r#"
-Function {
-    header: FunctionHeader {
-        name: "COMMON_MOVE_JUEL",
-        args: [
-            (
-                Variable {
-                    var_idx: VariableIndex(
-                        19,
-                    ),
-                    args: [],
-                },
-                None,
-            ),
-            (
-                Variable {
-                    var_idx: VariableIndex(
-                        19,
-                    ),
-                    args: [
-                        IntLit(
-                            1,
-                        ),
-                    ],
-                },
-                None,
-            ),
-            (
-                Variable {
-                    var_idx: VariableIndex(
-                        19,
-                    ),
-                    args: [
-                        IntLit(
-                            2,
-                        ),
-                    ],
-                },
-                None,
-            ),
-            (
-                Variable {
-                    var_idx: VariableIndex(
-                        19,
-                    ),
-                    args: [
-                        IntLit(
-                            3,
-                        ),
-                    ],
-                },
-                None,
-            ),
-            (
-                Variable {
-                    var_idx: VariableIndex(
-                        19,
-                    ),
-                    args: [
-                        IntLit(
-                            4,
-                        ),
-                    ],
-                },
-                None,
-            ),
-        ],
-        infos: [],
-    },
-    body: [
-        Assign(
-            Variable {
-                var_idx: VariableIndex(
-                    17,
-                ),
-                args: [
-                    IntLit(
-                        1,
-                    ),
-                ],
-            },
-            None,
-            Method(
-                "LIMIT",
-                [
-                    BinopExpr(
-                        Var(
-                            Variable {
-                                var_idx: VariableIndex(
-                                    41,
-                                ),
-                                args: [
-                                    Var(
-                                        Variable {
-                                            var_idx: VariableIndex(
-                                                19,
-                                            ),
-                                            args: [],
-                                        },
-                                    ),
-                                    Var(
-                                        Variable {
-                                            var_idx: VariableIndex(
-                                                19,
-                                            ),
-                                            args: [
-                                                IntLit(
-                                                    1,
-                                                ),
-                                            ],
-                                        },
-                                    ),
-                                ],
-                            },
-                        ),
-                        Add,
-                        Var(
-                            Variable {
-                                var_idx: VariableIndex(
-                                    19,
-                                ),
-                                args: [
-                                    IntLit(
-                                        2,
-                                    ),
-                                ],
-                            },
-                        ),
-                    ),
-                    IntLit(
-                        0,
-                    ),
-                    BinopExpr(
-                        IntLit(
-                            -9223372036854775808,
-                        ),
-                        Sub,
-                        IntLit(
-                            1,
-                        ),
-                    ),
-                ],
-            ),
-        ),
-        Assign(
-            Variable {
-                var_idx: VariableIndex(
-                    17,
-                ),
-                args: [
-                    IntLit(
-                        2,
-                    ),
-                ],
-            },
-            None,
-            BinopExpr(
-                Var(
-                    Variable {
-                        var_idx: VariableIndex(
-                            17,
-                        ),
-                        args: [
-                            IntLit(
-                                1,
-                            ),
-                        ],
-                    },
-                ),
-                Sub,
-                Var(
-                    Variable {
-                        var_idx: VariableIndex(
-                            41,
-                        ),
-                        args: [
-                            Var(
-                                Variable {
-                                    var_idx: VariableIndex(
-                                        19,
-                                    ),
-                                    args: [],
-                                },
-                            ),
-                            Var(
-                                Variable {
-                                    var_idx: VariableIndex(
-                                        19,
-                                    ),
-                                    args: [
-                                        IntLit(
-                                            1,
-                                        ),
-                                    ],
-                                },
-                            ),
-                        ],
-                    },
-                ),
-            ),
-        ),
-        Assign(
-            Variable {
-                var_idx: VariableIndex(
-                    18,
-                ),
-                args: [],
-            },
-            None,
-            FormText(
-                 {Var(Variable { var_idx: VariableIndex(11), args: [Var(Variable { var_idx: VariableIndex(19), args: [IntLit(1)] })] })}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var_idx: VariableIndex(19), args: [IntLit(4)] }), Sub, BinopExpr(Var(Variable { var_idx: VariableIndex(19), args: [] }), NotEqual, Var(Variable { var_idx: VariableIndex(22), args: [] }))), LessOrEqual, IntLit(0)), FormText(({Var(Variable { var_idx: VariableIndex(104), args: [Var(Variable { var_idx: VariableIndex(19), args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(2)] })]), Equal, IntLit(1)), FormText(＋), FormText(－ ))} {Method("ABS", [Var(Variable { var_idx: VariableIndex(17), args: [IntLit(2)] })])},
-            ),
-        ),
-        Assign(
-            Variable {
-                var_idx: VariableIndex(
-                    41,
-                ),
-                args: [
-                    Var(
-                        Variable {
-                            var_idx: VariableIndex(
-                                19,
-                            ),
-                            args: [
-                                Var(
-                                    Variable {
-                                        var_idx: VariableIndex(
-                                            19,
-                                        ),
-                                        args: [
-                                            IntLit(
-                                                1,
-                                            ),
-                                        ],
-                                    },
-                                ),
-                            ],
-                        },
-                    ),
-                ],
-            },
-            None,
-            Var(
-                Variable {
-                    var_idx: VariableIndex(
-                        17,
-                    ),
-                    args: [
-                        IntLit(
-                            1,
-                        ),
-                    ],
-                },
-            ),
-        ),
-        If(
-            [
-                (
-                    BinopExpr(
-                        Method(
-                            "ABS",
-                            [
-                                Var(
-                                    Variable {
-                                        var_idx: VariableIndex(
-                                            17,
-                                        ),
-                                        args: [
-                                            IntLit(
-                                                2,
-                                            ),
-                                        ],
-                                    },
-                                ),
-                            ],
-                        ),
-                        Greater,
-                        IntLit(
-                            0,
-                        ),
-                    ),
-                    [
-                        SelectCase(
-                            Var(
-                                Variable {
-                                    var_idx: VariableIndex(
-                                        19,
-                                    ),
-                                    args: [
-                                        IntLit(
-                                            3,
-                                        ),
-                                    ],
-                                },
-                            ),
-                            [
-                                (
-                                    [
-                                        Single(
-                                            IntLit(
-                                                0,
-                                            ),
-                                        ),
-                                    ],
-                                    [
-                                        Print(
-                                            NEWLINE,
-                                            Var(
-                                                Variable {
-                                                    var_idx: VariableIndex(
-                                                        18,
-                                                    ),
-                                                    args: [],
-                                                },
-                                            ),
-                                        ),
-                                        Return(
-                                            [
-                                                IntLit(
-                                                    1,
-                                                ),
-                                            ],
-                                        ),
-                                    ],
-                                ),
-                                (
-                                    [
-                                        Single(
-                                            IntLit(
-                                                1,
-                                            ),
-                                        ),
-                                    ],
-                                    [
-                                        Print(
-                                            NEWLINE | WAIT,
-                                            Var(
-                                                Variable {
-                                                    var_idx: VariableIndex(
-                                                        18,
-                                                    ),
-                                                    args: [],
-                                                },
-                                            ),
-                                        ),
-                                        Return(
-                                            [
-                                                IntLit(
-                                                    1,
-                                                ),
-                                            ],
-                                        ),
-                                    ],
-                                ),
-                            ],
-                            Some(
-                                [
-                                    Return(
-                                        [
-                                            IntLit(
-                                                0,
-                                            ),
-                                        ],
-                                    ),
-                                ],
-                            ),
-                        ),
-                    ],
-                ),
-            ],
-            None,
-        ),
-    ],
-}
-"#
-        );
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/functions/juel.erb"#,
+            ParserContext::parse_function_str
+        ));
     }
 }
 mod program {
     use crate::test_util::do_test;
-    use erars_compiler::parse_program;
+    use erars_compiler::ParserContext;
 
     #[test]
     fn test_call_form() {
         k9::snapshot!(
-            do_test("tests/parse_tests/programs/call_form.erb", parse_program),
+            do_test(
+                r#"tests/parse_tests/programs/call_form.erb"#,
+                ParserContext::parse_program_str
+            ),
             r#"
 [
     Function {
@@ -1475,14 +967,10 @@ mod program {
         body: [
             Call {
                 name: FormText(
-                    FOO_{IntLit(123)},
+                    FOO_{Int(123)}, 345,
                 ),
-                args: [
-                    IntLit(
-                        345,
-                    ),
-                ],
-                jump: false,
+                args: [],
+                is_jump: false,
                 catch: None,
             },
         ],
@@ -1493,9 +981,7 @@ mod program {
             args: [
                 (
                     Variable {
-                        var_idx: VariableIndex(
-                            19,
-                        ),
+                        var: "ARG",
                         args: [],
                     },
                     None,
@@ -1504,9 +990,11 @@ mod program {
             infos: [],
         },
         body: [
-            PrintForm(
+            Print(
                 (empty),
-                FOO_{Var(Variable { var_idx: VariableIndex(19), args: [] })},
+                FormText(
+                    FOO_{Var(Variable { var: "ARG", args: [] })},
+                ),
             ),
         ],
     },
@@ -1518,7 +1006,10 @@ mod program {
     #[test]
     fn test_method_call() {
         k9::snapshot!(
-            do_test("tests/parse_tests/programs/method_call.erb", parse_program),
+            do_test(
+                r#"tests/parse_tests/programs/method_call.erb"#,
+                ParserContext::parse_program_str
+            ),
             r#"
 [
     Function {
@@ -1530,9 +1021,7 @@ mod program {
         body: [
             Assign(
                 Variable {
-                    var_idx: VariableIndex(
-                        54,
-                    ),
+                    var: "A",
                     args: [],
                 },
                 None,
@@ -1552,10 +1041,13 @@ mod program {
             ],
         },
         body: [
-            ReturnF(
-                IntLit(
-                    123,
-                ),
+            Command(
+                Return,
+                [
+                    Int(
+                        123,
+                    ),
+                ],
             ),
         ],
     },
@@ -1567,7 +1059,10 @@ mod program {
     #[test]
     fn test_simple() {
         k9::snapshot!(
-            do_test("tests/parse_tests/programs/simple.erb", parse_program),
+            do_test(
+                r#"tests/parse_tests/programs/simple.erb"#,
+                ParserContext::parse_program_str
+            ),
             r#"
 [
     Function {
@@ -1579,7 +1074,7 @@ mod program {
         body: [
             Print(
                 (empty),
-                StringLit(
+                String(
                     "foo",
                 ),
             ),
@@ -1594,7 +1089,7 @@ mod program {
         body: [
             Print(
                 (empty),
-                StringLit(
+                String(
                     "foo",
                 ),
             ),
@@ -1609,7 +1104,7 @@ mod program {
         body: [
             Print(
                 (empty),
-                StringLit(
+                String(
                     "bar",
                 ),
             ),

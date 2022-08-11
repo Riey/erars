@@ -2,46 +2,44 @@ use anyhow::{anyhow, Result};
 use arrayvec::ArrayVec;
 use enum_map::EnumMap;
 use hashbrown::HashMap;
-use smartstring::{LazyCompact, SmartString};
+use smol_str::SmolStr;
 
 use crate::value::Value;
-use erars_compiler::{
-    CompiledFunction, Event, EventFlags, EventType, Expr, FunctionInfo, Instruction,
-    KnownVariables, VariableIndex, VariableInfo, VariableInterner,
-};
+use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, VariableInfo};
+use erars_compiler::{CompiledFunction, Instruction};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {
     body: Vec<Instruction>,
-    goto_labels: HashMap<SmartString<LazyCompact>, u32>,
-    args: Vec<(VariableIndex, Option<Value>, ArrayVec<usize, 4>)>,
-    local_vars: HashMap<VariableIndex, (VariableInfo, Vec<Value>)>,
+    goto_labels: HashMap<SmolStr, u32>,
+    args: Vec<(SmolStr, Option<Value>, ArrayVec<usize, 4>)>,
+    local_vars: HashMap<SmolStr, (VariableInfo, Vec<Value>)>,
 }
 
 impl FunctionBody {
     pub fn push_arg(
         &mut self,
-        var_idx: VariableIndex,
+        var: SmolStr,
         default_value: Option<Value>,
         indices: ArrayVec<usize, 4>,
     ) {
-        self.args.push((var_idx, default_value, indices));
+        self.args.push((var, default_value, indices));
     }
 
-    pub fn push_local(&mut self, var_idx: VariableIndex, info: VariableInfo, init: Vec<Value>) {
-        self.local_vars.insert(var_idx, (info, init));
+    pub fn push_local(&mut self, var: SmolStr, info: VariableInfo, init: Vec<Value>) {
+        self.local_vars.insert(var, (info, init));
     }
 
-    pub fn goto_labels(&self) -> &HashMap<SmartString<LazyCompact>, u32> {
+    pub fn goto_labels(&self) -> &HashMap<SmolStr, u32> {
         &self.goto_labels
     }
 
-    pub fn args(&self) -> &[(VariableIndex, Option<Value>, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[(SmolStr, Option<Value>, ArrayVec<usize, 4>)] {
         &self.args
     }
 
-    pub fn local_vars(&self) -> &HashMap<VariableIndex, (VariableInfo, Vec<Value>)> {
+    pub fn local_vars(&self) -> &HashMap<SmolStr, (VariableInfo, Vec<Value>)> {
         &self.local_vars
     }
 
@@ -94,11 +92,7 @@ impl FunctionDic {
         }
     }
 
-    pub fn insert_compiled_func(
-        &mut self,
-        variable_interner: &VariableInterner,
-        func: CompiledFunction,
-    ) {
+    pub fn insert_compiled_func(&mut self, func: CompiledFunction) {
         let mut body = FunctionBody {
             body: func.body,
             goto_labels: func.goto_labels,
@@ -109,16 +103,16 @@ impl FunctionDic {
 
         for (var, default_value) in header.args {
             body.push_arg(
-                var.var_idx,
+                var.var,
                 default_value.map(|v| match v {
-                    Expr::IntLit(i) => i.into(),
-                    Expr::StringLit(s) => s.into(),
+                    Expr::Int(i) => i.into(),
+                    Expr::String(s) => s.into(),
                     _ => panic!("default arg must be constant"),
                 }),
                 var.args
                     .into_iter()
                     .map(|v| {
-                        if let Expr::IntLit(i) = v {
+                        if let Expr::Int(i) = v {
                             i as usize
                         } else {
                             panic!("Variable index must be constant")
@@ -146,14 +140,14 @@ impl FunctionDic {
                 FunctionInfo::Function | FunctionInfo::FunctionS => {}
                 FunctionInfo::Dim(local) => {
                     body.push_local(
-                        local.idx,
+                        local.var,
                         local.info,
                         local
                             .init
                             .into_iter()
                             .map(|v| match v {
-                                Expr::IntLit(i) => Value::Int(i),
-                                Expr::StringLit(s) => Value::String(s),
+                                Expr::Int(i) => Value::Int(i),
+                                Expr::String(s) => Value::String(s),
                                 _ => unreachable!(),
                             })
                             .collect(),
@@ -164,8 +158,13 @@ impl FunctionDic {
 
         // builtin locals
 
+        static LOCAL: SmolStr = SmolStr::new_inline("LOCAL");
+        static LOCALS: SmolStr = SmolStr::new_inline("LOCALS");
+        static ARG: SmolStr = SmolStr::new_inline("ARG");
+        static ARGS: SmolStr = SmolStr::new_inline("ARGS");
+
         body.push_local(
-            variable_interner.get_known(KnownVariables::Local),
+            LOCAL.clone(),
             VariableInfo {
                 default_int: 0,
                 is_chara: false,
@@ -176,7 +175,7 @@ impl FunctionDic {
         );
 
         body.push_local(
-            variable_interner.get_known(KnownVariables::LocalS),
+            LOCALS.clone(),
             VariableInfo {
                 default_int: 0,
                 is_chara: false,
@@ -187,7 +186,7 @@ impl FunctionDic {
         );
 
         body.push_local(
-            variable_interner.get_known(KnownVariables::Arg),
+            ARG.clone(),
             VariableInfo {
                 default_int: 0,
                 is_chara: false,
@@ -198,7 +197,7 @@ impl FunctionDic {
         );
 
         body.push_local(
-            variable_interner.get_known(KnownVariables::ArgS),
+            ARGS.clone(),
             VariableInfo {
                 default_int: 0,
                 is_chara: false,
