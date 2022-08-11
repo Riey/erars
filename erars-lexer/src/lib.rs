@@ -5,6 +5,11 @@ use erars_ast::*;
 pub fn parse_print_flags(mut s: &str) -> (&str, PrintFlags) {
     let mut flags = PrintFlags::empty();
 
+    if let Some(ss) = s.strip_prefix("SINGLE") {
+        s = ss;
+        flags |= PrintFlags::SINGLE;
+    }
+
     if let Some(ss) = s.strip_prefix('L') {
         if let Some(ss) = s.strip_prefix('C') {
             flags |= PrintFlags::LEFT_ALIGN;
@@ -35,25 +40,36 @@ unsafe fn parse_reuse(s: &str) -> Stmt {
     Stmt::ReuseLastLine(s.strip_prefix(' ').unwrap_or(s).into())
 }
 
-unsafe fn parse_print(s: &str) -> Stmt {
+unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
     // skip PRINT
-    let s = s.get_unchecked("PRINT".len()..);
+    let mut s = s.get_unchecked("PRINT".len()..);
+    let mut flags  = PrintFlags::empty();
 
-    let (s, flags) = parse_print_flags(s);
-
-    match s.strip_prefix(' ') {
-        Some(s) => Stmt::Print(flags, Expr::String(s.into())),
-        None => Stmt::Print(flags, Expr::String(String::new())),
+    if let Some(ss) = s.strip_prefix("SINGLE") {
+        flags |= PrintFlags::SINGLE;
+        s = ss;
     }
-}
 
-unsafe fn parse_print_args<const PREFIX: usize>(s: &str) -> (PrintFlags, &str) {
-    // skip PRINTFORM
-    let s = s.get_unchecked(PREFIX..);
+    let ty = if let Some(ss) = s.strip_prefix("FORMS") {
+        s = ss;
+        todo!("PRINTFORMS")
+    } else if let Some(ss) = s.strip_prefix("FORM") {
+        s = ss;
+        PrintType::Form
+    } else if let Some(ss) = s.strip_prefix('V') {
+        s = ss;
+        PrintType::V
+    } else if let Some(ss) = s.strip_prefix('S') {
+        s = ss;
+        PrintType::S
+    } else {
+        PrintType::Plain
+    };
 
-    let (s, flags) = parse_print_flags(s);
+    let (s, f) = parse_print_flags(s);
+    flags |= f;
 
-    (flags, s.strip_prefix(' ').unwrap_or_default())
+    (flags, ty, s.strip_prefix(' ').unwrap_or_default())
 }
 
 #[inline]
@@ -147,6 +163,14 @@ pub struct CallJumpInfo {
     pub is_catch: bool,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PrintType {
+    Plain,
+    Form,
+    S,
+    V,
+}
+
 #[derive(Logos, Debug, Eq, PartialEq)]
 pub enum Token<'s> {
     #[token("@")]
@@ -186,14 +210,8 @@ pub enum Token<'s> {
     #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
     Ident(&'s str),
 
-    #[regex(r"PRINTFORM[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print_args::<{"PRINTFORM".len()}>(lex.slice()) })]
-    PrintForm((PrintFlags, &'s str)),
-
-    #[regex(r"PRINTS[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print_args::<{"PRINTS".len()}>(lex.slice()) })]
-    PrintS((PrintFlags, &'s str)),
-
-    #[regex(r"PRINTV[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print_args::<{"PRINTV".len()}>(lex.slice()) })]
-    PrintV((PrintFlags, &'s str)),
+    #[regex(r"PRINT(SINGLE)?(V|S|FORMS?)?[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print(lex.slice()) })]
+    Print((PrintFlags, PrintType, &'s str)),
 
     #[token("SIF", lex_line_left)]
     Sif(&'s str),
@@ -258,7 +276,6 @@ pub enum Token<'s> {
     #[token("FINDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::FindChara))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
-    #[regex(r"PRINT[LW]?(L?C)? [^\r\n]*", |lex| unsafe { parse_print(lex.slice()) })]
     #[regex(r"REUSELASTLINE [^\r\n]*", |lex| unsafe { parse_reuse(lex.slice()) })]
     #[token("QUIT", |_| single_command(BuiltinCommand::Quit))]
     #[token("WAIT", |_| single_command(BuiltinCommand::Wait))]

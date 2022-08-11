@@ -183,6 +183,7 @@ option_set::option_set! {
         const WAIT = 0x2;
         const LEFT_ALIGN = 0x4;
         const RIGHT_ALIGN = 0x8;
+        const SINGLE = 0x10;
     }
 }
 

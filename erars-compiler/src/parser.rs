@@ -1,7 +1,7 @@
 mod expr;
 
 use erars_ast::{Alignment, BeginType, EventFlags, Expr, Function, FunctionInfo, Stmt};
-use erars_lexer::{JumpType, Token};
+use erars_lexer::{JumpType, Token, PrintType};
 use hashbrown::HashMap;
 use logos::{internal::LexerInternal, Lexer};
 use std::{borrow::Cow, cell::Cell, mem};
@@ -101,16 +101,19 @@ impl ParserContext {
             Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
             Token::LabelLine(label) => Stmt::Label(label.into()),
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
-            Token::PrintForm((flags, form)) => {
+            Token::Print((flags, PrintType::Plain, form)) => {
+                Stmt::Print(flags, Expr::str(form))
+            }
+            Token::Print((flags, PrintType::Form, form)) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(form));
                 Stmt::Print(flags, form)
             }
-            Token::PrintS((flags, s)) => {
-                let (_, s) = try_nom!(lex, self::expr::expr(self)(s));
+            Token::Print((flags, PrintType::S, form)) => {
+                let (_, s) = try_nom!(lex, self::expr::expr(self)(form));
                 Stmt::Print(flags, s)
             }
-            Token::PrintV((flags, s)) => {
-                let (_, s) = try_nom!(lex, self::expr::call_arg_list(self)(s));
+            Token::Print((flags, PrintType::V, form)) => {
+                let (_, s) = try_nom!(lex, self::expr::call_arg_list(self)(form));
                 Stmt::PrintList(flags, s)
             }
             Token::CallJump((info, args)) => {
