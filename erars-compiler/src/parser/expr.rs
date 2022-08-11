@@ -185,13 +185,13 @@ pub fn form_str<'c, 'a>(
                 Some(FormType::Percent) => {
                     ctx.ban_percent.set(true);
                     let (i, ex) = expr(ctx)(i)?;
-                    let (i, padding) = opt(preceded(preceded(sp, char(',')), expr(ctx)))(i)?;
+                    let (i, padding) = opt(preceded(char_sp(','), expr(ctx)))(i)?;
                     let (i, align) = if padding.is_some() {
-                        opt(preceded(preceded(sp, char(',')), alignment))(i)?
+                        opt(preceded(char_sp(','), alignment))(i)?
                     } else {
                         (i, None)
                     };
-                    let (i, _) = preceded(sp, char('%'))(i)?;
+                    let (i, _) = char_sp('%')(i)?;
                     ctx.ban_percent.set(false);
 
                     (i, ex, padding, align)

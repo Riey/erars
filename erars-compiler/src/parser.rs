@@ -1,6 +1,6 @@
 mod expr;
 
-use erars_ast::{Alignment, BeginType, Expr, Function, FunctionInfo, Stmt, EventFlags};
+use erars_ast::{Alignment, BeginType, EventFlags, Expr, Function, FunctionInfo, Stmt};
 use erars_lexer::Token;
 use hashbrown::HashMap;
 use logos::{internal::LexerInternal, Lexer};
@@ -237,13 +237,22 @@ impl ParserContext {
                     current_func.header.infos.push(FunctionInfo::FunctionS);
                 }
                 Some(Token::Pri) => {
-                    current_func.header.infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
+                    current_func
+                        .header
+                        .infos
+                        .push(FunctionInfo::EventFlag(EventFlags::Pre));
                 }
                 Some(Token::Later) => {
-                    current_func.header.infos.push(FunctionInfo::EventFlag(EventFlags::Later));
+                    current_func
+                        .header
+                        .infos
+                        .push(FunctionInfo::EventFlag(EventFlags::Later));
                 }
                 Some(Token::Single) => {
-                    current_func.header.infos.push(FunctionInfo::EventFlag(EventFlags::Single));
+                    current_func
+                        .header
+                        .infos
+                        .push(FunctionInfo::EventFlag(EventFlags::Single));
                 }
                 Some(Token::Dim) | Some(Token::DimS) => {
                     todo!()

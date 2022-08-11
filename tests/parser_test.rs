@@ -5,10 +5,37 @@ mod body {
 
     #[test]
     fn test_alignment() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/bodys/alignment.erb"#,
-            ParserContext::parse_body_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/alignment.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    Alignment(
+        Left,
+    ),
+    Alignment(
+        Center,
+    ),
+    Alignment(
+        Right,
+    ),
+    Print(
+        NEWLINE,
+        FormText(
+            {Var(Variable { var: "LOCALS", args: [] })},
+        ),
+    ),
+    Print(
+        NEWLINE,
+        FormText(
+            {Var(Variable { var: "LOCALS", args: [] })},
+        ),
+    ),
+]
+"#
+        );
     }
 
     #[test]
