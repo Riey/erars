@@ -43,7 +43,7 @@ unsafe fn parse_reuse(s: &str) -> Stmt {
 unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
     // skip PRINT
     let mut s = s.get_unchecked("PRINT".len()..);
-    let mut flags  = PrintFlags::empty();
+    let mut flags = PrintFlags::empty();
 
     if let Some(ss) = s.strip_prefix("SINGLE") {
         flags |= PrintFlags::SINGLE;
@@ -196,10 +196,10 @@ pub enum Token<'s> {
     Function,
     #[token("#FUNCTIONS")]
     FunctionS,
-    #[token("#DIM")]
-    Dim,
-    #[token("#DIMS")]
-    DimS,
+    #[token("#DIM", lex_line_left)]
+    Dim(&'s str),
+    #[token("#DIMS", lex_line_left)]
+    DimS(&'s str),
     #[token("#PRI")]
     Pri,
     #[token("#LATER")]

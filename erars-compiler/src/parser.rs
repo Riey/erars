@@ -113,7 +113,7 @@ impl ParserContext {
                 Stmt::Print(flags, s)
             }
             Token::Print((flags, PrintType::V, form)) => {
-                let (_, s) = try_nom!(lex, self::expr::call_arg_list(self)(form));
+                let (_, s) = try_nom!(lex, self::expr::expr_list(self)(form));
                 Stmt::PrintList(flags, s)
             }
             Token::CallJump((info, args)) => {
@@ -317,8 +317,13 @@ impl ParserContext {
                         .infos
                         .push(FunctionInfo::EventFlag(EventFlags::Single));
                 }
-                Some(Token::Dim) | Some(Token::DimS) => {
-                    todo!()
+                Some(Token::Dim(left)) => {
+                    let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
+                    current_func.header.infos.push(FunctionInfo::Dim(var));
+                }
+                Some(Token::DimS(left)) => {
+                    let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
+                    current_func.header.infos.push(FunctionInfo::Dim(var));
                 }
                 Some(other) => match self.parse_stmt(other, lex) {
                     Ok(stmt) => current_func.body.push(stmt),

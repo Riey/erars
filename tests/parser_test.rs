@@ -1017,10 +1017,51 @@ Function {
 
     #[test]
     fn test_dim() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/functions/dim.erb"#,
-            ParserContext::parse_function_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/functions/dim.erb"#,
+                ParserContext::parse_function_str
+            ),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "SYSTEM_TITLE",
+        args: [],
+        infos: [
+            Dim(
+                LocalVariable {
+                    var: "FOO",
+                    init: [
+                        Int(
+                            2,
+                        ),
+                    ],
+                    info: VariableInfo {
+                        is_chara: false,
+                        is_str: false,
+                        default_int: 0,
+                        size: [],
+                    },
+                },
+            ),
+        ],
+    },
+    body: [
+        PrintList(
+            (empty),
+            [
+                Var(
+                    Variable {
+                        var: "FOO",
+                        args: [],
+                    },
+                ),
+            ],
+        ),
+    ],
+}
+"#
+        );
     }
 
     #[test]

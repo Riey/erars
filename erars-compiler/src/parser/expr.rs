@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use super::ParserContext;
 use erars_ast::{
-    Alignment, BinaryOperator, Expr, FormText, NotNan, SelectCaseCond, Stmt, UnaryOperator,
-    Variable,
+    Alignment, BinaryOperator, Expr, FormText, LocalVariable, NotNan, SelectCaseCond, Stmt,
+    UnaryOperator, Variable, VariableInfo,
 };
 use erars_lexer::CallJumpInfo;
 use nom::{
@@ -559,6 +559,42 @@ pub fn varset_line<'c, 'a>(
         let (i, args) = opt(preceded(char(','), expr_list(ctx)))(i)?;
 
         Ok((i, Stmt::Varset(var, args.unwrap_or_default())))
+    }
+}
+
+pub fn dim_line<'c, 'a>(
+    ctx: &'c ParserContext,
+    is_str: bool,
+) -> impl FnMut(&'a str) -> IResult<'a, LocalVariable> + 'c {
+    move |mut i| {
+        let mut info = VariableInfo::default();
+        info.is_str = is_str;
+
+        let var = loop {
+            let (i_, id) = ident(i)?;
+            i = i_;
+            match id {
+                "CHARADATA" => {
+                    info.is_chara = true;
+                }
+                other => break other,
+            }
+        };
+        let (i, sizes) = separated_list0(char_sp(','), map(u32, |i| i as usize))(i)?;
+        info.size = sizes;
+        let (i, init) = opt(preceded(
+            char_sp('='),
+            separated_list1(char_sp(','), expr(ctx)),
+        ))(i)?;
+
+        Ok((
+            i,
+            LocalVariable {
+                var: var.into(),
+                init: init.unwrap_or_default(),
+                info,
+            },
+        ))
     }
 }
 
