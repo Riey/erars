@@ -151,6 +151,40 @@ impl ParserContext {
 
                 Stmt::Sif(cond, Box::new(body))
             }
+            Token::SelectCase(cond) => {
+                let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
+                let mut has_else = false;
+                let mut body = Vec::new();
+                let mut cases: Vec<(_, Vec<Stmt>)> = Vec::new();
+
+                loop {
+                    match lex.next() {
+                        Some(Token::Case(case)) => {
+                            if !cases.is_empty() {
+                                cases.last_mut().unwrap().1 = mem::take(&mut body);
+                            }
+                            let case = try_nom!(lex, self::expr::case_line(self)(case)).1;
+                            cases.push((case, Vec::new()));
+                        }
+                        Some(Token::CaseElse) => {
+                            cases.last_mut().unwrap().1 = mem::take(&mut body);
+                            has_else = true;
+                        }
+                        Some(Token::EndSelect) => break,
+                        Some(tok) => {
+                            body.push(self.parse_stmt(tok, lex)?);
+                        }
+                        None => error!(lex, "Unexpected EOF after SELECTCASE"),
+                    }
+                }
+
+                if has_else {
+                    Stmt::SelectCase(cond, cases, Some(body))
+                } else {
+                    cases.last_mut().unwrap().1 = body;
+                    Stmt::SelectCase(cond, cases, None)
+                }
+            }
             Token::For(left) => {
                 let (var, init, end, step) = try_nom!(lex, self::expr::for_line(self)(left)).1;
                 let mut body = Vec::new();

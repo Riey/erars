@@ -217,6 +217,8 @@ pub enum Token<'s> {
     Case(&'s str),
     #[token("CASEELSE")]
     CaseElse,
+    #[token("ENDSELECT")]
+    EndSelect,
 
     #[regex("(TRY)?C?(CALL|JUMP|GOTO)(FORM)?", call_jump_line)]
     CallJump((CallJumpInfo, &'s str)),

@@ -1,7 +1,10 @@
 use std::borrow::Cow;
 
 use super::ParserContext;
-use erars_ast::{Alignment, BinaryOperator, Expr, FormText, NotNan, Stmt, UnaryOperator, Variable};
+use erars_ast::{
+    Alignment, BinaryOperator, Expr, FormText, NotNan, SelectCaseCond, Stmt, UnaryOperator,
+    Variable,
+};
 use erars_lexer::CallJumpInfo;
 use nom::{
     branch::alt,
@@ -9,7 +12,7 @@ use nom::{
     character::complete::*,
     combinator::{eof, map, opt, value, verify},
     error::{context, ErrorKind},
-    multi::{many0, separated_list0},
+    multi::{many0, separated_list0, separated_list1},
     number::complete::float,
     sequence::{delimited, pair, preceded, terminated, tuple},
     Parser,
@@ -461,6 +464,30 @@ pub fn call_jump_line<'c, 'a>(
 
         Ok((i, (name, args)))
     }
+}
+
+fn case_cond<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, SelectCaseCond> + 'c {
+    move |i| {
+        alt((
+            map(
+                tuple((expr(ctx), de_sp(tag("TO")), expr(ctx))),
+                |(l, _, r)| SelectCaseCond::To(l, r),
+            ),
+            map(
+                preceded(de_sp(tag("IS")), pair(de_sp(binop), expr(ctx))),
+                |(op, expr)| SelectCaseCond::Is(op, expr),
+            ),
+            map(expr(ctx), SelectCaseCond::Single),
+        ))(i)
+    }
+}
+
+pub fn case_line<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<SelectCaseCond>> + 'c {
+    move |i| separated_list1(char_sp(','), case_cond(ctx))(i)
 }
 
 pub fn for_line<'c, 'a>(

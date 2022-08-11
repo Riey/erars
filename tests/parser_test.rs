@@ -432,10 +432,70 @@ mod body {
 
     #[test]
     fn test_selectcase() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/bodys/selectcase.erb"#,
-            ParserContext::parse_body_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/selectcase.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    SelectCase(
+        Int(
+            1,
+        ),
+        [
+            (
+                [
+                    Single(
+                        Int(
+                            0,
+                        ),
+                    ),
+                ],
+                [
+                    Print(
+                        (empty),
+                        String(
+                            "FOO",
+                        ),
+                    ),
+                ],
+            ),
+            (
+                [
+                    To(
+                        Int(
+                            1,
+                        ),
+                        Int(
+                            2,
+                        ),
+                    ),
+                ],
+                [
+                    Print(
+                        (empty),
+                        String(
+                            "BAR",
+                        ),
+                    ),
+                ],
+            ),
+        ],
+        Some(
+            [
+                Print(
+                    (empty),
+                    String(
+                        "BAZ",
+                    ),
+                ),
+            ],
+        ),
+    ),
+]
+"#
+        );
     }
 
     #[test]
