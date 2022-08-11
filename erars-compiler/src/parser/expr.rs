@@ -198,13 +198,13 @@ pub fn form_str<'c, 'a>(
                 }
                 Some(FormType::Brace) => {
                     let (i, ex) = expr(ctx)(i)?;
-                    let (i, padding) = opt(preceded(preceded(sp, char(',')), expr(ctx)))(i)?;
+                    let (i, padding) = opt(preceded(char_sp(','), expr(ctx)))(i)?;
                     let (i, align) = if padding.is_some() {
-                        opt(preceded(preceded(sp, char(',')), alignment))(i)?
+                        opt(preceded(char_sp(','), alignment))(i)?
                     } else {
                         (i, None)
                     };
-                    let (i, _) = preceded(sp, char('}'))(i)?;
+                    let (i, _) = char_sp('}')(i)?;
 
                     (i, ex, padding, align)
                 }
@@ -265,7 +265,7 @@ fn ident_or_method_expr<'c, 'a>(
         } else {
             match ident {
                 Cow::Borrowed(ident) => {
-                    if ctx.is_arg.get() {
+                    if !ctx.is_arg.get() {
                         let (i, args) = variable_arg(ctx)(i)?;
                         Ok((
                             i,
@@ -284,17 +284,30 @@ fn ident_or_method_expr<'c, 'a>(
                         ))
                     }
                 }
-                Cow::Owned(m) => match expr(ctx)(&m) {
-                    Ok((left, expr)) => {
-                        if !left.is_empty() {
-                            eprintln!("Macro must be complete form");
-                            Err(nom::Err::Failure(Error::new(i, ErrorKind::Eof)))
-                        } else {
-                            Ok((i, expr))
+                Cow::Owned(m) => {
+                    if !ctx.is_arg.get() && is_ident(&m) {
+                        let (i, args) = variable_arg(ctx)(i)?;
+                        Ok((
+                            i,
+                            Expr::Var(Variable {
+                                var: m.into(),
+                                args,
+                            }),
+                        ))
+                    } else {
+                        match expr(ctx)(&m) {
+                            Ok((left, expr)) => {
+                                if !left.is_empty() {
+                                    eprintln!("Macro must be complete form");
+                                    Err(nom::Err::Failure(Error::new(i, ErrorKind::Eof)))
+                                } else {
+                                    Ok((i, expr))
+                                }
+                            }
+                            Err(err) => Err(err.map_input(|_| i)),
                         }
                     }
-                    Err(err) => Err(err.map_input(|_| i)),
-                },
+                }
             }
         }
     }

@@ -110,10 +110,63 @@ mod body {
 
     #[test]
     fn test_assign_str() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/bodys/assign_str.erb"#,
-            ParserContext::parse_body_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/assign_str.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    Assign(
+        Variable {
+            var: "LOCALS",
+            args: [],
+        },
+        None,
+        FormText(
+            {Int(123)}456,
+        ),
+    ),
+    Assign(
+        Variable {
+            var: "LOCALS",
+            args: [],
+        },
+        None,
+        FormText(
+            {Var(Variable { var: "LOCAL", args: [Int(0)] })}.{Method("TOSTR", [Var(Variable { var: "LOCAL", args: [Int(1)] }), String("00")])},
+        ),
+    ),
+    Assign(
+        Variable {
+            var: "NICKNAME",
+            args: [
+                Var(
+                    Variable {
+                        var: "MASTER",
+                        args: [],
+                    },
+                ),
+            ],
+        },
+        None,
+        FormText(
+            {CondExpr(Var(Variable { var: "TALENT", args: [Var(Variable { var: "MASTER", args: [] }), Int(120)] }), FormText(신사), FormText(숙녀))},
+        ),
+    ),
+    Assign(
+        Variable {
+            var: "LOCALS",
+            args: [],
+        },
+        None,
+        FormText(
+            ,
+        ),
+    ),
+]
+"#
+        );
     }
 
     #[test]
@@ -136,8 +189,15 @@ mod body {
             Var(
                 Variable {
                     var: "A",
-                    args: [],
+                    args: [
+                        Int(
+                            634,
+                        ),
+                    ],
                 },
+            ),
+            String(
+                "123",
             ),
         ],
         jump: false,
@@ -461,7 +521,23 @@ BinopExpr(
     Var(
         Variable {
             var: "TALENT",
-            args: [],
+            args: [
+                Var(
+                    Variable {
+                        var: "MASTER",
+                        args: [],
+                    },
+                ),
+                BinopExpr(
+                    Int(
+                        998,
+                    ),
+                    Equal,
+                    Int(
+                        0,
+                    ),
+                ),
+            ],
         },
     ),
 )
@@ -502,10 +578,35 @@ CondExpr(
 
     #[test]
     fn test_method() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/exprs/method.erb"#,
-            ParserContext::parse_expr_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/method.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            r#"
+Method(
+    "FOO",
+    [
+        Int(
+            123,
+        ),
+        String(
+            "BAR",
+        ),
+        Var(
+            Variable {
+                var: "LOCAL",
+                args: [
+                    Int(
+                        123,
+                    ),
+                ],
+            },
+        ),
+    ],
+)
+"#
+        );
     }
 
     #[test]
@@ -609,7 +710,11 @@ String(
 Var(
     Variable {
         var: "COUNT",
-        args: [],
+        args: [
+            Int(
+                123,
+            ),
+        ],
     },
 )
 "#
@@ -627,7 +732,21 @@ Var(
 Var(
     Variable {
         var: "COUNT",
-        args: [],
+        args: [
+            Var(
+                Variable {
+                    var: "A",
+                    args: [
+                        Int(
+                            123,
+                        ),
+                    ],
+                },
+            ),
+            Int(
+                123,
+            ),
+        ],
     },
 )
 "#
