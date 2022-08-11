@@ -319,17 +319,19 @@ fn ident_or_method_expr<'c, 'a>(
 
 fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
+        let (i, op) = opt(de_sp(alt((
+            value(UnaryOperator::Not, char('!')),
+            value(UnaryOperator::Not, char('~')),
+            value(UnaryOperator::Minus, char('-')),
+            value(UnaryOperator::Plus, char('+')),
+        ))))(i)?;
+
         let (i, expr) = de_sp(alt((
             map(string, |s| Expr::String(s.into())),
             map(i64, Expr::Int),
             ident_or_method_expr(ctx),
             paran_expr(ctx),
         )))(i)?;
-
-        let (i, op) = opt(de_sp(alt((
-            value(UnaryOperator::Not, tag("!")),
-            value(UnaryOperator::Not, tag("~")),
-        ))))(i)?;
 
         let expr = match op {
             Some(op) => Expr::unary(expr, op),

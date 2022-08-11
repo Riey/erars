@@ -381,8 +381,11 @@ mod body {
             args: [],
         },
         None,
-        Int(
-            0,
+        UnaryopExpr(
+            Int(
+                0,
+            ),
+            Minus,
         ),
     ),
     Assign(
@@ -391,8 +394,11 @@ mod body {
             args: [],
         },
         None,
-        Int(
-            0,
+        UnaryopExpr(
+            Int(
+                0,
+            ),
+            Minus,
         ),
     ),
     Assign(
@@ -401,8 +407,11 @@ mod body {
             args: [],
         },
         None,
-        Int(
-            -1,
+        UnaryopExpr(
+            Int(
+                1,
+            ),
+            Minus,
         ),
     ),
 ]
@@ -607,10 +616,64 @@ BinopExpr(
 
     #[test]
     fn test_complex_op() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/exprs/complex_op.erb"#,
-            ParserContext::parse_expr_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/complex_op.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            r#"
+BinopExpr(
+    UnaryopExpr(
+        BinopExpr(
+            Int(
+                50,
+            ),
+            Mul,
+            BinopExpr(
+                Int(
+                    6,
+                ),
+                Sub,
+                Var(
+                    Variable {
+                        var: "ABL",
+                        args: [
+                            Var(
+                                Variable {
+                                    var: "ARG",
+                                    args: [],
+                                },
+                            ),
+                            Int(
+                                10,
+                            ),
+                        ],
+                    },
+                ),
+            ),
+        ),
+        Plus,
+    ),
+    Add,
+    Var(
+        Variable {
+            var: "RAND",
+            args: [
+                BinopExpr(
+                    Int(
+                        10,
+                    ),
+                    Mul,
+                    Int(
+                        5,
+                    ),
+                ),
+            ],
+        },
+    ),
+)
+"#
+        );
     }
 
     #[test]
