@@ -1,7 +1,7 @@
 mod expr;
 
 use erars_ast::{Alignment, BeginType, EventFlags, Expr, Function, FunctionInfo, Stmt};
-use erars_lexer::Token;
+use erars_lexer::{JumpType, Token};
 use hashbrown::HashMap;
 use logos::{internal::LexerInternal, Lexer};
 use std::{borrow::Cow, cell::Cell, mem};
@@ -42,6 +42,14 @@ macro_rules! try_nom {
                 }
                 _ => unreachable!(),
             },
+        }
+    };
+}
+
+macro_rules! erb_assert_eq {
+    ($lex:expr, $lhs:expr, $rhs:expr, $msg:expr) => {
+        if $lhs != $rhs {
+            error!($lex, $msg);
         }
     };
 }
@@ -91,36 +99,46 @@ impl ParserContext {
             Token::DirectStmt(stmt) => stmt,
             Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
             Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
-            Token::Goto => Stmt::Goto {
-                label: Expr::str(take_ident!(lex)),
-                catch: None,
-            },
             Token::LabelLine(label) => Stmt::Label(label.into()),
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::PrintForm((flags, form)) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(form));
                 Stmt::Print(flags, form)
             }
-            Token::Call => {
-                let ident = take_ident!(lex);
-                let args = cut_line(lex);
-                Stmt::Call {
-                    name: Expr::str(ident),
-                    args: try_nom!(lex, self::expr::call_arg_list(self)(args)).1,
-                    catch: None,
-                    jump: false,
-                }
-            }
-            Token::CallForm => {
-                let left = cut_line(lex);
-                let (call_args, name) = try_nom!(lex, self::expr::form_arg_expr(self)(left));
-                let args = try_nom!(lex, self::expr::call_arg_list(self)(call_args)).1;
+            Token::CallJump((info, args)) => {
+                let (name, args) = try_nom!(lex, self::expr::call_jump_line(self, info)(args)).1;
 
-                Stmt::Call {
-                    name,
-                    args,
-                    jump: false,
-                    catch: None,
+                let catch = if info.is_catch {
+                    erb_assert_eq!(
+                        lex,
+                        lex.next(),
+                        Some(Token::Catch),
+                        "TRYC 다음에 CATCH가 와야합니다."
+                    );
+
+                    let mut catch = Vec::new();
+
+                    loop {
+                        match lex.next() {
+                            Some(Token::EndCatch) => break Some(catch),
+                            Some(tok) => catch.push(self.parse_stmt(tok, lex)?),
+                            None => error!(lex, "ENDCATCH없이 끝났습니다."),
+                        }
+                    }
+                } else if info.is_try {
+                    Some(Vec::new())
+                } else {
+                    None
+                };
+
+                match info.ty {
+                    JumpType::Goto => Stmt::Goto { label: name, catch },
+                    JumpType::Call | JumpType::Jump => Stmt::Call {
+                        name,
+                        args,
+                        catch: None,
+                        is_jump: info.ty == JumpType::Jump,
+                    },
                 }
             }
             Token::Sif(cond) => {

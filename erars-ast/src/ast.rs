@@ -33,7 +33,7 @@ pub enum Stmt {
     Call {
         name: Expr,
         args: Vec<Expr>,
-        jump: bool,
+        is_jump: bool,
         catch: Option<Vec<Stmt>>,
     },
     Begin(BeginType),

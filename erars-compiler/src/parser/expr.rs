@@ -2,6 +2,7 @@ use std::borrow::Cow;
 
 use super::ParserContext;
 use erars_ast::{Alignment, BinaryOperator, Expr, FormText, NotNan, Stmt, UnaryOperator, Variable};
+use erars_lexer::CallJumpInfo;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while},
@@ -436,6 +437,30 @@ pub fn assign_op<'a>(i: &'a str) -> IResult<'a, Option<BinaryOperator>> {
     ));
 
     context("AssignOp", terminated(opt(op), char('=')))(i)
+}
+
+pub fn call_jump_line<'c, 'a>(
+    ctx: &'c ParserContext,
+    info: CallJumpInfo,
+) -> impl FnMut(&'a str) -> IResult<'a, (Expr, Vec<Expr>)> + 'c {
+    move |i| {
+        let (i, name) = if info.is_form {
+            form_arg_expr(ctx)(i)?
+        } else {
+            let (i, function) = ident(i)?;
+            let function = ctx.replace(function);
+
+            if !is_ident(function.as_ref()) {
+                panic!("CALL/JUMP문은 식별자를 받아야합니다");
+            }
+
+            (i, Expr::String(function.into_owned()))
+        };
+
+        let (i, args) = call_arg_list(ctx)(i)?;
+
+        Ok((i, (name, args)))
+    }
 }
 
 pub fn for_line<'c, 'a>(

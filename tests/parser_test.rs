@@ -200,7 +200,7 @@ mod body {
                 "123",
             ),
         ],
-        jump: false,
+        is_jump: false,
         catch: None,
     },
 ]
@@ -777,10 +777,119 @@ mod function {
 
     #[test]
     fn test_call() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/functions/call.erb"#,
-            ParserContext::parse_function_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/functions/call.erb"#,
+                ParserContext::parse_function_str
+            ),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "FOO",
+        args: [],
+        infos: [],
+    },
+    body: [
+        Assign(
+            Variable {
+                var: "LOCALS",
+                args: [],
+            },
+            None,
+            FormText(
+                LABEL,
+            ),
+        ),
+        Goto {
+            label: String(
+                "LABEL",
+            ),
+            catch: None,
+        },
+        Goto {
+            label: FormText(
+                {Var(Variable { var: "LOCALS", args: [] })},
+            ),
+            catch: None,
+        },
+        Goto {
+            label: FormText(
+                {Var(Variable { var: "LOCALS", args: [] })},
+            ),
+            catch: Some(
+                [],
+            ),
+        },
+        Goto {
+            label: FormText(
+                {Var(Variable { var: "LOCALS", args: [] })},
+            ),
+            catch: Some(
+                [
+                    Print(
+                        NEWLINE,
+                        String(
+                            "CATCH",
+                        ),
+                    ),
+                ],
+            ),
+        },
+        Call {
+            name: String(
+                "BAR",
+            ),
+            args: [],
+            is_jump: false,
+            catch: None,
+        },
+        Call {
+            name: String(
+                "BAR",
+            ),
+            args: [],
+            is_jump: false,
+            catch: None,
+        },
+        Call {
+            name: String(
+                "BAR",
+            ),
+            args: [],
+            is_jump: false,
+            catch: None,
+        },
+        Call {
+            name: String(
+                "BAR",
+            ),
+            args: [],
+            is_jump: true,
+            catch: None,
+        },
+        Call {
+            name: String(
+                "BAR",
+            ),
+            args: [],
+            is_jump: true,
+            catch: None,
+        },
+        Call {
+            name: FormText(
+                BAR,
+            ),
+            args: [],
+            is_jump: true,
+            catch: None,
+        },
+        Label(
+            "LABEL",
+        ),
+    ],
+}
+"#
+        );
     }
 
     #[test]
@@ -861,7 +970,7 @@ mod program {
                     FOO_{Int(123)}, 345,
                 ),
                 args: [],
-                jump: false,
+                is_jump: false,
                 catch: None,
             },
         ],

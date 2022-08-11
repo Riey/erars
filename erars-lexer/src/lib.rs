@@ -85,8 +85,67 @@ fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
     s.strip_prefix(' ').unwrap_or(s)
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct AssignOp(pub Option<BinaryOperator>);
+fn call_jump_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> (CallJumpInfo, &'s str) {
+    let mut com = lex.slice();
+    let mut info = CallJumpInfo {
+        ty: JumpType::Call,
+        is_catch: false,
+        is_form: false,
+        is_try: false,
+    };
+
+    if let Some(c) = com.strip_prefix("TRY") {
+        info.is_try = true;
+        com = c;
+    }
+
+    if let Some(c) = com.strip_prefix("C") {
+        if !c.starts_with("A") {
+            info.is_catch = true;
+            com = c;
+        }
+    }
+
+    if let Some(c) = com.strip_prefix("CALL") {
+        com = c;
+    } else if let Some(c) = com.strip_prefix("JUMP") {
+        info.ty = JumpType::Jump;
+        com = c;
+    } else if let Some(c) = com.strip_prefix("GOTO") {
+        info.ty = JumpType::Goto;
+        com = c;
+    } else {
+        unreachable!()
+    }
+
+    if com == "FORM" {
+        info.is_form = true;
+        com = "";
+    }
+
+    if !com.is_empty() {
+        unreachable!()
+    }
+
+    let args = lex_line_left(lex);
+
+    (info, args)
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum JumpType {
+    Call,
+    Jump,
+    Goto,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CallJumpInfo {
+    pub ty: JumpType,
+    pub is_try: bool,
+    pub is_form: bool,
+    pub is_catch: bool,
+}
 
 #[derive(Logos, Debug, Eq, PartialEq)]
 pub enum Token<'s> {
@@ -126,8 +185,6 @@ pub enum Token<'s> {
 
     #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
     Ident(&'s str),
-    #[regex(r"-?[0-9]+", |lex| lex.slice().parse())]
-    Number(i64),
 
     #[regex(r"PRINTFORM[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print_form(lex.slice()) })]
     PrintForm((PrintFlags, &'s str)),
@@ -161,13 +218,12 @@ pub enum Token<'s> {
     #[token("CASEELSE")]
     CaseElse,
 
-    #[token("CALL")]
-    #[token("CALLF")]
-    Call,
-    #[token("CALLFORM")]
-    CallForm,
-    #[token("GOTO")]
-    Goto,
+    #[regex("(TRY)?C?(CALL|JUMP|GOTO)(FORM)?", call_jump_line)]
+    CallJump((CallJumpInfo, &'s str)),
+    #[token("CATCH")]
+    Catch,
+    #[token("ENDCATCH")]
+    EndCatch,
     #[token("ALIGNMENT")]
     Alignment,
     #[token("BEGIN")]

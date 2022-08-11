@@ -395,13 +395,13 @@ impl Compiler {
                 name,
                 args,
                 catch,
-                jump,
+                is_jump,
             } => {
                 let count = self.push_list(args)?;
                 self.push_expr(name)?;
 
                 if let Some(catch) = catch {
-                    if jump {
+                    if is_jump {
                         self.out.push(Instruction::TryJump(count));
                     } else {
                         self.out.push(Instruction::TryCall(count));
@@ -412,7 +412,7 @@ impl Compiler {
                     }
                     self.insert(catch_top, Instruction::GotoIfNot(self.current_no()));
                 } else {
-                    if jump {
+                    if is_jump {
                         self.out.push(Instruction::Jump(count));
                     } else {
                         self.out.push(Instruction::Call(count));
