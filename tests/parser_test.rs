@@ -1062,10 +1062,343 @@ Function {
 
     #[test]
     fn test_juel() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/functions/juel.erb"#,
-            ParserContext::parse_function_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/functions/juel.erb"#,
+                ParserContext::parse_function_str
+            ),
+            r#"
+Function {
+    header: FunctionHeader {
+        name: "COMMON_MOVE_JUEL",
+        args: [
+            (
+                Variable {
+                    var: "ARG",
+                    args: [],
+                },
+                None,
+            ),
+            (
+                Variable {
+                    var: "ARG",
+                    args: [
+                        Int(
+                            1,
+                        ),
+                    ],
+                },
+                None,
+            ),
+            (
+                Variable {
+                    var: "ARG",
+                    args: [
+                        Int(
+                            2,
+                        ),
+                    ],
+                },
+                None,
+            ),
+            (
+                Variable {
+                    var: "ARG",
+                    args: [
+                        Int(
+                            3,
+                        ),
+                    ],
+                },
+                None,
+            ),
+            (
+                Variable {
+                    var: "ARG",
+                    args: [
+                        Int(
+                            4,
+                        ),
+                    ],
+                },
+                None,
+            ),
+        ],
+        infos: [],
+    },
+    body: [
+        Assign(
+            Variable {
+                var: "LOCAL",
+                args: [
+                    Int(
+                        1,
+                    ),
+                ],
+            },
+            None,
+            Method(
+                "LIMIT",
+                [
+                    Var(
+                        Variable {
+                            var: "JUEL",
+                            args: [
+                                Var(
+                                    Variable {
+                                        var: "ARG",
+                                        args: [],
+                                    },
+                                ),
+                                BinopExpr(
+                                    Var(
+                                        Variable {
+                                            var: "ARG",
+                                            args: [
+                                                Int(
+                                                    1,
+                                                ),
+                                            ],
+                                        },
+                                    ),
+                                    Add,
+                                    Var(
+                                        Variable {
+                                            var: "ARG",
+                                            args: [],
+                                        },
+                                    ),
+                                ),
+                                Int(
+                                    2,
+                                ),
+                            ],
+                        },
+                    ),
+                    Int(
+                        0,
+                    ),
+                    BinopExpr(
+                        UnaryopExpr(
+                            Int(
+                                62,
+                            ),
+                            Minus,
+                        ),
+                        Sub,
+                        Int(
+                            1,
+                        ),
+                    ),
+                ],
+            ),
+        ),
+        Assign(
+            Variable {
+                var: "LOCAL",
+                args: [
+                    Int(
+                        2,
+                    ),
+                ],
+            },
+            None,
+            Var(
+                Variable {
+                    var: "LOCAL",
+                    args: [
+                        BinopExpr(
+                            Int(
+                                1,
+                            ),
+                            Sub,
+                            Var(
+                                Variable {
+                                    var: "JUEL",
+                                    args: [],
+                                },
+                            ),
+                        ),
+                        Var(
+                            Variable {
+                                var: "ARG",
+                                args: [],
+                            },
+                        ),
+                        Var(
+                            Variable {
+                                var: "ARG",
+                                args: [
+                                    Int(
+                                        1,
+                                    ),
+                                ],
+                            },
+                        ),
+                    ],
+                },
+            ),
+        ),
+        Assign(
+            Variable {
+                var: "LOCALS",
+                args: [],
+            },
+            None,
+            FormText(
+                {Var(Variable { var: "PALAMNAME", args: [Var(Variable { var: "ARG", args: [Int(1)] })] })}의 구슬{CondExpr(Var(Variable { var: "ARG", args: [BinopExpr(BinopExpr(Int(4), Sub, BinopExpr(Var(Variable { var: "ARG", args: [] }), NotEqual, Var(Variable { var: "TARGET", args: [] }))), LessOrEqual, Int(0))] }), FormText(({Var(Variable { var: "CALLNAME", args: [Var(Variable { var: "ARG", args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var: "LOCAL", args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {Method("ABS", [Var(Variable { var: "LOCAL", args: [Int(2)] })])},
+            ),
+        ),
+        Assign(
+            Variable {
+                var: "JUEL",
+                args: [
+                    Var(
+                        Variable {
+                            var: "ARG",
+                            args: [],
+                        },
+                    ),
+                    Var(
+                        Variable {
+                            var: "ARG",
+                            args: [
+                                Int(
+                                    1,
+                                ),
+                            ],
+                        },
+                    ),
+                ],
+            },
+            None,
+            Var(
+                Variable {
+                    var: "LOCAL",
+                    args: [
+                        Int(
+                            1,
+                        ),
+                    ],
+                },
+            ),
+        ),
+        If(
+            [
+                (
+                    BinopExpr(
+                        Method(
+                            "ABS",
+                            [
+                                Var(
+                                    Variable {
+                                        var: "LOCAL",
+                                        args: [
+                                            Int(
+                                                2,
+                                            ),
+                                        ],
+                                    },
+                                ),
+                            ],
+                        ),
+                        Greater,
+                        Int(
+                            0,
+                        ),
+                    ),
+                    [
+                        SelectCase(
+                            Var(
+                                Variable {
+                                    var: "ARG",
+                                    args: [
+                                        Int(
+                                            3,
+                                        ),
+                                    ],
+                                },
+                            ),
+                            [
+                                (
+                                    [
+                                        Single(
+                                            Int(
+                                                0,
+                                            ),
+                                        ),
+                                    ],
+                                    [
+                                        Print(
+                                            NEWLINE,
+                                            Var(
+                                                Variable {
+                                                    var: "LOCALS",
+                                                    args: [],
+                                                },
+                                            ),
+                                        ),
+                                        Command(
+                                            Return,
+                                            [
+                                                Int(
+                                                    1,
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                                (
+                                    [
+                                        Single(
+                                            Int(
+                                                1,
+                                            ),
+                                        ),
+                                    ],
+                                    [
+                                        Print(
+                                            NEWLINE | WAIT,
+                                            Var(
+                                                Variable {
+                                                    var: "LOCALS",
+                                                    args: [],
+                                                },
+                                            ),
+                                        ),
+                                        Command(
+                                            Return,
+                                            [
+                                                Int(
+                                                    1,
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                            Some(
+                                [
+                                    Command(
+                                        Return,
+                                        [
+                                            Int(
+                                                0,
+                                            ),
+                                        ],
+                                    ),
+                                ],
+                            ),
+                        ),
+                    ],
+                ),
+            ],
+            [],
+        ),
+    ],
+}
+"#
+        );
     }
 }
 mod program {

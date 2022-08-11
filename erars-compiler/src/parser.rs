@@ -105,6 +105,14 @@ impl ParserContext {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(form));
                 Stmt::Print(flags, form)
             }
+            Token::PrintS((flags, s)) => {
+                let (_, s) = try_nom!(lex, self::expr::expr(self)(s));
+                Stmt::Print(flags, s)
+            }
+            Token::PrintV((flags, s)) => {
+                let (_, s) = try_nom!(lex, self::expr::call_arg_list(self)(s));
+                Stmt::PrintList(flags, s)
+            }
             Token::CallJump((info, args)) => {
                 let (name, args) = try_nom!(lex, self::expr::call_jump_line(self, info)(args)).1;
 

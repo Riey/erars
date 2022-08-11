@@ -47,9 +47,9 @@ unsafe fn parse_print(s: &str) -> Stmt {
     }
 }
 
-unsafe fn parse_print_form(s: &str) -> (PrintFlags, &str) {
+unsafe fn parse_print_args<const PREFIX: usize>(s: &str) -> (PrintFlags, &str) {
     // skip PRINTFORM
-    let s = s.get_unchecked("PRINTFORM".len()..);
+    let s = s.get_unchecked(PREFIX..);
 
     let (s, flags) = parse_print_flags(s);
 
@@ -186,8 +186,14 @@ pub enum Token<'s> {
     #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
     Ident(&'s str),
 
-    #[regex(r"PRINTFORM[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print_form(lex.slice()) })]
+    #[regex(r"PRINTFORM[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print_args::<{"PRINTFORM".len()}>(lex.slice()) })]
     PrintForm((PrintFlags, &'s str)),
+
+    #[regex(r"PRINTS[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print_args::<{"PRINTS".len()}>(lex.slice()) })]
+    PrintS((PrintFlags, &'s str)),
+
+    #[regex(r"PRINTV[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print_args::<{"PRINTV".len()}>(lex.slice()) })]
+    PrintV((PrintFlags, &'s str)),
 
     #[token("SIF", lex_line_left)]
     Sif(&'s str),
