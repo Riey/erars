@@ -95,7 +95,7 @@ fn parse_form_normal_str<'a>(
         let mut ret = String::new();
 
         let form_ty = loop {
-            match take_while(move |c| !"\\\n%{#".contains(c))(i) {
+            match take_while(move |c| !"\\\n%{#,".contains(c))(i) {
                 Ok((left, plain)) => {
                     ret.push_str(plain);
                     i = left;
@@ -138,9 +138,14 @@ fn parse_form_normal_str<'a>(
                             i = ch.as_str();
                         }
                     }
+
                     match left.as_bytes().get(0).copied() {
-                        Some(b'%') => break Some(FormType::Percent),
-                        Some(b'{') => break Some(FormType::Brace),
+                        Some(b',') if ty == FormStrType::Arg => {
+                            break None;
+                        }
+                        Some(b',') => {
+                            ret.push(',');
+                        }
                         Some(b'\n') | None => break None,
                         Some(b'\\') => {
                             match left.as_bytes().get(1).copied() {
