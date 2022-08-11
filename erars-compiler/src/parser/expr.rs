@@ -438,10 +438,9 @@ pub fn for_line<'c, 'a>(
 
 pub fn times_line<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
-        map(
-            tuple((variable(ctx), char_sp(','), float)),
-            |(var, _, times)| Stmt::Times(var, NotNan::new(times).unwrap()),
-        )(i)
+        let (i, var) = variable(ctx)(i)?;
+        let (i, times) = preceded(char_sp(','), float)(i)?;
+        Ok((i, Stmt::Times(var, NotNan::new(times).unwrap())))
     }
 }
 
@@ -546,12 +545,6 @@ pub fn variable<'c, 'a>(
         }
 
         let (i, args) = variable_arg(ctx)(i)?;
-        // let idx = ctx.var.get_var(name, ctx.current_func).ok_or_else(|| {
-        //     nom::Err::Error(nom::error::Error::<&'a str>::new(
-        //         i,
-        //         nom::error::ErrorKind::Complete,
-        //     ))
-        // })?;
 
         Ok((
             i,

@@ -411,10 +411,25 @@ mod body {
 
     #[test]
     fn test_times() {
-        k9::snapshot!(do_test(
-            r#"tests/parse_tests/bodys/times.erb"#,
-            ParserContext::parse_body_str
-        ));
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/times.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    Times(
+        Variable {
+            var: "LOCAL",
+            args: [],
+        },
+        NotNan(
+            123.33,
+        ),
+    ),
+]
+"#
+        );
     }
 }
 mod expr {

@@ -69,7 +69,7 @@ impl ParserContext {
     }
 
     pub fn is_str_var(&self, ident: &str) -> bool {
-        matches!(ident, "NICKNAME" | "NAME" | "CALLNAME")
+        matches!(ident, "NICKNAME" | "NAME" | "CALLNAME" | "LOCALS")
     }
 
     pub fn replace<'s>(&self, s: &'s str) -> Cow<'s, str> {

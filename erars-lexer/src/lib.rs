@@ -71,7 +71,7 @@ fn normal_expr_command<'s>(
 
 fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
     let args = lex.remainder();
-    match args.split_once('\n') {
+    let s = match args.split_once('\n') {
         Some((args, _)) => {
             lex.bump_unchecked(args.len() + 1);
             args
@@ -80,7 +80,9 @@ fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
             lex.bump_unchecked(args.len());
             args
         }
-    }
+    };
+
+    s.strip_prefix(' ').unwrap_or(s)
 }
 
 #[derive(Debug, PartialEq, Eq)]
