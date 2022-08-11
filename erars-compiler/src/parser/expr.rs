@@ -328,6 +328,12 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
 
         let (i, expr) = de_sp(alt((
             map(string, |s| Expr::String(s.into())),
+            map(preceded(tag("0x"), hex_digit1), |s| {
+                Expr::Int(i64::from_str_radix(s, 16).unwrap())
+            }),
+            map(pair(terminated(i64, char('p')), i64), |(l, r)| {
+                Expr::Int(l ^ r)
+            }),
             map(i64, Expr::Int),
             ident_or_method_expr(ctx),
             paran_expr(ctx),

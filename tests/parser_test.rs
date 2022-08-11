@@ -352,7 +352,7 @@ mod body {
         },
         None,
         Int(
-            0,
+            65535,
         ),
     ),
     Assign(
@@ -372,7 +372,7 @@ mod body {
         },
         None,
         Int(
-            1,
+            3,
         ),
     ),
     Assign(
@@ -383,7 +383,7 @@ mod body {
         None,
         UnaryopExpr(
             Int(
-                0,
+                65535,
             ),
             Minus,
         ),
@@ -409,7 +409,7 @@ mod body {
         None,
         UnaryopExpr(
             Int(
-                1,
+                3,
             ),
             Minus,
         ),
