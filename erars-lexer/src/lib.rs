@@ -336,6 +336,7 @@ pub enum Token<'s> {
     #[token("CLEARBIT", |lex| normal_expr_command(lex, BuiltinCommand::ClearBit))]
     #[token("POWER", |lex| normal_expr_command(lex, BuiltinCommand::Power))]
     #[token("GETEXPLV", |lex| normal_expr_command(lex, BuiltinCommand::GetExpLv))]
+    #[token("GETPALAMLV", |lex| normal_expr_command(lex, BuiltinCommand::GetPalamLv))]
     #[token("CHKDATA", |lex| normal_expr_command(lex, BuiltinCommand::ChkData))]
     #[token("UNICODE", |lex| normal_expr_command(lex, BuiltinCommand::Unicode))]
     #[token("BAR", |lex| normal_expr_command(lex, BuiltinCommand::Bar))]
