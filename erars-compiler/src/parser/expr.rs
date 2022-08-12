@@ -5,7 +5,6 @@ use erars_ast::{
     Alignment, BinaryOperator, Expr, FormText, LocalVariable, NotNan, SelectCaseCond, Stmt,
     UnaryOperator, Variable, VariableInfo,
 };
-use erars_lexer::CallJumpInfo;
 use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while},
@@ -498,10 +497,10 @@ pub fn assign_op<'a>(i: &'a str) -> IResult<'a, Option<BinaryOperator>> {
 
 pub fn call_jump_line<'c, 'a>(
     ctx: &'c ParserContext,
-    info: CallJumpInfo,
+    is_form: bool,
 ) -> impl FnMut(&'a str) -> IResult<'a, (Expr, Vec<Expr>)> + 'c {
     move |i| {
-        let (i, name) = if info.is_form {
+        let (i, name) = if is_form {
             form_arg_expr(ctx)(i)?
         } else {
             let (i, function) = ident(i)?;

@@ -396,37 +396,44 @@ impl TerminalVm {
                     }
                 }
             }
-            Instruction::LoadVar(var_idx, c) => {
-                let target = *ctx
-                    .var
-                    .get_var("TARGET".into())
-                    .unwrap()
-                    .1
-                    .assume_normal()
-                    .get_int(iter::empty())?;
+            Instruction::LoadVar(var_idx, c) => match var_idx.as_str() {
+                "GAMEBASE_VERSION" => ctx.push(0),
+                "GAMEBASE_AUTHOR" => ctx.push("Riey"),
+                "GAMEBASE_YEAR" => ctx.push(2022),
+                "GAMEBASE_TITLE" => ctx.push("eraTHYMKR"),
+                "GAMEBASE_INFO" => ctx.push(""),
+                _ => {
+                    let target = *ctx
+                        .var
+                        .get_var("TARGET".into())
+                        .unwrap()
+                        .1
+                        .assume_normal()
+                        .get_int(iter::empty())?;
 
-                let mut args = ctx.take_arg_list(*c)?.into_iter();
+                    let mut args = ctx.take_arg_list(*c)?.into_iter();
 
-                let (info, var) = if ctx.is_local_var(var_idx) {
-                    ctx.var.get_local_var(func_name, var_idx)?
-                } else {
-                    ctx.var.get_var(var_idx)?
-                };
+                    let (info, var) = if ctx.is_local_var(var_idx) {
+                        ctx.var.get_local_var(func_name, var_idx)?
+                    } else {
+                        ctx.var.get_var(var_idx)?
+                    };
 
-                let value = match var {
-                    UniformVariable::Character(c) => {
-                        let no = if args.len() < info.arg_len() {
-                            target as usize
-                        } else {
-                            args.next().unwrap()
-                        };
-                        c[no].get(args)?
-                    }
-                    UniformVariable::Normal(v) => v.get(args)?,
-                };
+                    let value = match var {
+                        UniformVariable::Character(c) => {
+                            let no = if args.len() < info.arg_len() {
+                                target as usize
+                            } else {
+                                args.next().unwrap()
+                            };
+                            c[no].get(args)?
+                        }
+                        UniformVariable::Normal(v) => v.get(args)?,
+                    };
 
-                ctx.push(value);
-            }
+                    ctx.push(value);
+                }
+            },
             Instruction::ReuseLastLine => {
                 chan.send_msg(ConsoleMessage::ReuseLastLine(ctx.pop_str()?));
             }

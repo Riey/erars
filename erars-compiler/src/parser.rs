@@ -116,8 +116,19 @@ impl ParserContext {
                 let (_, s) = try_nom!(lex, self::expr::expr_list(self)(form));
                 Stmt::PrintList(flags, s)
             }
+            Token::CallF(args) => {
+                let (name, args) = try_nom!(lex, self::expr::call_jump_line(self, false)(args)).1;
+
+                Stmt::Call {
+                    name,
+                    args,
+                    catch: None,
+                    is_jump: false,
+                }
+            }
             Token::CallJump((info, args)) => {
-                let (name, args) = try_nom!(lex, self::expr::call_jump_line(self, info)(args)).1;
+                let (name, args) =
+                    try_nom!(lex, self::expr::call_jump_line(self, info.is_form)(args)).1;
 
                 let catch = if info.is_catch {
                     erb_assert_eq!(
@@ -277,14 +288,20 @@ impl ParserContext {
                 let ident = self.replace(take_ident!(lex));
                 let left = cut_line(lex);
                 let args = try_nom!(lex, self::expr::variable_arg(self)(left)).1;
-                let var = Variable { var: ident.into(), args };
+                let var = Variable {
+                    var: ident.into(),
+                    args,
+                };
                 Stmt::Assign(var, Some(BinaryOperator::Add), Expr::Int(1))
             }
             Token::Dec => {
                 let ident = self.replace(take_ident!(lex));
                 let left = cut_line(lex);
                 let args = try_nom!(lex, self::expr::variable_arg(self)(left)).1;
-                let var = Variable { var: ident.into(), args };
+                let var = Variable {
+                    var: ident.into(),
+                    args,
+                };
                 Stmt::Assign(var, Some(BinaryOperator::Sub), Expr::Int(1))
             }
             Token::Ident(var) => {

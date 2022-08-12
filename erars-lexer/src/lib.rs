@@ -255,6 +255,8 @@ pub enum Token<'s> {
 
     #[regex("(TRY)?C?(CALL|JUMP|GOTO)(FORM)?", call_jump_line)]
     CallJump((CallJumpInfo, &'s str)),
+    #[token("CALLF", lex_line_left)]
+    CallF(&'s str,),
     #[token("CATCH")]
     Catch,
     #[token("ENDCATCH")]
