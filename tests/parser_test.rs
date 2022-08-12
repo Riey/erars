@@ -1464,9 +1464,13 @@ mod program {
         body: [
             Call {
                 name: FormText(
-                    FOO_{Int(123)}, 345,
+                    FOO_{Int(123)},
                 ),
-                args: [],
+                args: [
+                    Int(
+                        345,
+                    ),
+                ],
                 is_jump: false,
                 catch: None,
             },
