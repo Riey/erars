@@ -691,17 +691,20 @@ fn function_arg_list<'c, 'a>(
     }
 }
 
-pub fn function_args<'c, 'a>(
+pub fn function_line<'c, 'a>(
     ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, Vec<(Variable, Option<Expr>)>> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, (&'a str, Vec<(Variable, Option<Expr>)>)> + 'c {
     move |i| {
-        preceded(
-            sp,
-            alt((
-                de_char_sp('(', function_arg_list(ctx), ')'),
-                preceded(char_sp(','), function_arg_list(ctx)),
-                value(Vec::new(), eof),
-            )),
+        pair(
+            ident,
+            preceded(
+                sp,
+                alt((
+                    de_char_sp('(', function_arg_list(ctx), ')'),
+                    preceded(char_sp(','), function_arg_list(ctx)),
+                    value(Vec::new(), eof),
+                )),
+            ),
         )(i)
     }
 }

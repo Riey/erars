@@ -6,7 +6,7 @@ use erars_ast::{
 use erars_lexer::{JumpType, PrintType, Token};
 use hashbrown::HashMap;
 use logos::{internal::LexerInternal, Lexer};
-use std::{borrow::Cow, cell::Cell, mem};
+use std::{borrow::Cow, cell::Cell, mem, sync::Arc};
 
 pub use crate::error::{ParserError, ParserResult};
 
@@ -58,19 +58,19 @@ macro_rules! erb_assert_eq {
 
 #[derive(Debug)]
 pub struct ParserContext {
-    pub macros: HashMap<String, String>,
+    pub macros: Arc<HashMap<String, String>>,
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
 }
 
 impl Default for ParserContext {
     fn default() -> Self {
-        Self::new(HashMap::default())
+        Self::new(Arc::default())
     }
 }
 
 impl ParserContext {
-    pub fn new(macros: HashMap<String, String>) -> Self {
+    pub fn new(macros: Arc<HashMap<String, String>>) -> Self {
         Self {
             macros,
             is_arg: Cell::new(false),
@@ -79,7 +79,10 @@ impl ParserContext {
     }
 
     pub fn is_str_var(&self, ident: &str) -> bool {
-        matches!(ident, "NICKNAME" | "NAME" | "CALLNAME" | "LOCALS")
+        matches!(
+            ident,
+            "NICKNAME" | "NAME" | "CALLNAME" | "LOCALS" | "STR" | "CSTR" | "RESULTS"
+        )
     }
 
     pub fn replace<'s>(&self, s: &'s str) -> Cow<'s, str> {
@@ -325,9 +328,8 @@ impl ParserContext {
 
         loop {
             match lex.next() {
-                Some(Token::At) => {
-                    let label = take_ident!(lex);
-                    let args = try_nom!(lex, self::expr::function_args(self)(cut_line(lex))).1;
+                Some(Token::At(left)) => {
+                    let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
                     if !current_func.header.name.is_empty() {
                         out.push(mem::take(&mut current_func));
                     }

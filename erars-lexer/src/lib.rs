@@ -173,8 +173,8 @@ pub enum PrintType {
 
 #[derive(Logos, Debug, Eq, PartialEq)]
 pub enum Token<'s> {
-    #[token("@")]
-    At,
+    #[token("@", lex_line_left)]
+    At(&'s str),
     #[token("$", lex_line_left)]
     LabelLine(&'s str),
 
@@ -297,6 +297,11 @@ pub enum Token<'s> {
     #[token("SETCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetColor))]
     #[token("GETBIT", |lex| normal_expr_command(lex, BuiltinCommand::GetBit))]
     #[token("SETBIT", |lex| normal_expr_command(lex, BuiltinCommand::SetBit))]
+    #[token("CLEARBIT", |lex| normal_expr_command(lex, BuiltinCommand::ClearBit))]
+    #[token("POWER", |lex| normal_expr_command(lex, BuiltinCommand::Power))]
+    #[token("GETEXPLV", |lex| normal_expr_command(lex, BuiltinCommand::GetExpLv))]
+    #[token("CHKDATA", |lex| normal_expr_command(lex, BuiltinCommand::ChkData))]
+    #[token("Unicode", |lex| normal_expr_command(lex, BuiltinCommand::Unicode))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[regex(r"REUSELASTLINE [^\r\n]*", |lex| unsafe { parse_reuse(lex.slice()) })]
