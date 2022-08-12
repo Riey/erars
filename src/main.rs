@@ -35,7 +35,7 @@ fn main() {
     let inner_chan = chan.clone();
 
     std::thread::spawn(move || {
-        let mut infos: HashMap<SmolStr, VariableInfo> =
+        let infos: HashMap<SmolStr, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
         let erhs = glob::glob_with(
@@ -67,46 +67,34 @@ fn main() {
                 .with_message("Compile ERROR"),
         );
 
-        let header_infos: Vec<HeaderInfo> = erhs
-            .par_bridge()
-            .map(|erh| {
-                let erh = erh.unwrap();
-                let source = std::fs::read_to_string(&erh).unwrap();
-                eprintln!("Parse {}", erh.display());
+        let mut header_info = HeaderInfo {
+            global_variables: infos,
+            ..Default::default()
+        };
 
-                let info = match HeaderInfo::parse_header(&source) {
-                    Ok(info) => info,
-                    Err((err, span)) => {
-                        let file_id = files.lock().add(erh.to_str().unwrap().to_string(), source);
-                        diagnostic
-                            .lock()
-                            .labels
-                            .push(Label::primary(file_id, span).with_message(format!("{}", err)));
-                        HeaderInfo::default()
-                    }
-                };
+        for erh in erhs {
+            let erh = erh.unwrap();
+            let source = std::fs::read_to_string(&erh).unwrap();
+            eprintln!("Parse {}", erh.display());
 
-                info
-            })
-            .collect();
-
-        let mut macros: HashMap<String, String> = HashMap::new();
-
-        for header_info in header_infos {
-            for (k, v) in header_info.macros {
-                macros.insert(k, v);
-            }
-            for (k, v) in header_info.global_variables {
-                infos.insert(k, v);
+            match header_info.merge_header(&source) {
+                Ok(()) => (),
+                Err((err, span)) => {
+                    let file_id = files.lock().add(erh.to_str().unwrap().to_string(), source);
+                    diagnostic
+                        .lock()
+                        .labels
+                        .push(Label::primary(file_id, span).with_message(format!("{}", err)));
+                }
             }
         }
 
-        let macros = Arc::new(macros);
+        let header_info = Arc::new(header_info);
 
         let funcs = erbs
             .par_bridge()
             .flat_map(|erb| {
-                let ctx = ParserContext::new(macros.clone());
+                let ctx = ParserContext::new(header_info.clone());
                 let erb = erb.unwrap();
                 let source = std::fs::read_to_string(&erb).unwrap();
 
@@ -152,7 +140,7 @@ fn main() {
             return;
         }
 
-        let mut ctx = VmContext::new(&infos);
+        let mut ctx = VmContext::new(&header_info.global_variables);
         let vm = TerminalVm::new(function_dic);
         let ret = vm.start(&inner_chan, &mut ctx);
 

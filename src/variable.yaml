@@ -9,6 +9,11 @@ STR:
   is_chara: false
   is_str: true
 
+TSTR:
+  size: [1000]
+  is_chara: false
+  is_str: true
+
 CSTR:
   size: [1000]
   is_chara: true
@@ -68,6 +73,17 @@ MONEY:
   size: [1000]
   is_chara: false
   is_str: false
+
+RESULT:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+RESULTS:
+  size: [1000]
+  is_chara: false
+  is_str: true
+
 
 # GLOBAL:
 #   is_global: true

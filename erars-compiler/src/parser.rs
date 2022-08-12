@@ -1,14 +1,19 @@
 mod expr;
 
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionInfo,
-    Stmt, Variable, VariableInfo,
+    Alignment, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionInfo, Stmt, Variable,
+    VariableInfo,
 };
 use erars_lexer::{ErhToken, JumpType, PrintType, Token};
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use logos::{internal::LexerInternal, Lexer};
 use smol_str::SmolStr;
-use std::{borrow::Cow, cell::Cell, mem, sync::Arc};
+use std::{
+    borrow::Cow,
+    cell::{Cell, RefCell},
+    mem,
+    sync::Arc,
+};
 
 pub use crate::error::{ParserError, ParserResult};
 
@@ -65,41 +70,38 @@ pub struct HeaderInfo {
 }
 
 impl HeaderInfo {
-    pub fn parse_header(s: &str) -> ParserResult<Self> {
-        let mut ctx = ParserContext::default();
-        let mut global_variables = HashMap::new();
+    pub fn merge_header(&mut self, s: &str) -> ParserResult<()> {
+        let ctx = ParserContext::default();
         let mut lex = Lexer::new(s);
 
         loop {
             match lex.next() {
                 Some(ErhToken::Define(def)) => {
                     let (def, ident) = try_nom!(lex, self::expr::ident(def));
-                    unsafe { Arc::get_mut(&mut ctx.macros).unwrap_unchecked() }
+                    self.macros
                         .insert(ident.to_string(), def.trim().to_string());
                 }
                 Some(ErhToken::Dim(dim)) => {
                     let var = try_nom!(lex, self::expr::dim_line(&ctx, false)(dim)).1;
-                    global_variables.insert(var.var, var.info);
+                    self.global_variables.insert(var.var, var.info);
                 }
                 Some(ErhToken::DimS(dims)) => {
                     let var = try_nom!(lex, self::expr::dim_line(&ctx, true)(dims)).1;
-                    global_variables.insert(var.var, var.info);
+                    self.global_variables.insert(var.var, var.info);
                 }
                 Some(ErhToken::Error) => error!(lex, "Invalid token"),
                 None => break,
             }
         }
 
-        Ok(Self {
-            macros: Arc::try_unwrap(ctx.macros).unwrap(),
-            global_variables,
-        })
+        Ok(())
     }
 }
 
 #[derive(Debug)]
 pub struct ParserContext {
-    pub macros: Arc<HashMap<String, String>>,
+    pub header: Arc<HeaderInfo>,
+    pub local_strs: RefCell<HashSet<SmolStr>>,
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
 }
@@ -111,25 +113,31 @@ impl Default for ParserContext {
 }
 
 impl ParserContext {
-    pub fn new(macros: Arc<HashMap<String, String>>) -> Self {
+    pub fn new(header: Arc<HeaderInfo>) -> Self {
         Self {
-            macros,
+            header,
+            local_strs: RefCell::default(),
             is_arg: Cell::new(false),
             ban_percent: Cell::new(false),
         }
     }
 
     pub fn is_str_var(&self, ident: &str) -> bool {
-        matches!(
-            ident,
-            "NICKNAME" | "NAME" | "CALLNAME" | "LOCALS" | "STR" | "CSTR" | "RESULTS"
-        )
+        if matches!(ident, "LOCALS" | "ARGS") {
+            true
+        } else if self.local_strs.borrow().contains(ident) {
+            true
+        } else if let Some(v) = self.header.global_variables.get(ident) {
+            v.is_str
+        } else {
+            false
+        }
     }
 
     pub fn replace<'s>(&self, s: &'s str) -> Cow<'s, str> {
         let mut ret = Cow::Borrowed(s);
 
-        while let Some(new) = self.macros.get(ret.as_ref()) {
+        while let Some(new) = self.header.macros.get(ret.as_ref()) {
             ret = Cow::Owned(new.clone());
         }
 
@@ -408,6 +416,7 @@ impl ParserContext {
                     if !current_func.header.name.is_empty() {
                         out.push(mem::take(&mut current_func));
                     }
+                    self.local_strs.borrow_mut().clear();
                     current_func.header.name = label.into();
                     current_func.header.args = args;
                 }
@@ -441,6 +450,7 @@ impl ParserContext {
                 }
                 Some(Token::DimS(left)) => {
                     let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
+                    self.local_strs.borrow_mut().insert(var.var.clone());
                     current_func.header.infos.push(FunctionInfo::Dim(var));
                 }
                 Some(Token::LocalSize(size)) => {
