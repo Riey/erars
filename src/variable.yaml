@@ -14,6 +14,11 @@ CSTR:
   is_chara: true
   is_str: true
 
+CFLAG:
+  size: [1000]
+  is_chara: true
+  is_str: true
+
 NAME:
   size: []
   is_chara: true
@@ -44,6 +49,25 @@ COUNT:
   is_chara: false
   is_str: false
 
+RESULT:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+FLAG:
+  size: [10000]
+  is_chara: false
+  is_str: false
+
+DAY:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+MONEY:
+  size: [1000]
+  is_chara: false
+  is_str: false
 
 # GLOBAL:
 #   is_global: true

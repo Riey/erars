@@ -1,6 +1,5 @@
 use criterion::*;
-use erars::erars_compiler::{compile, parse_program};
-use erars_compiler::VariableInterner;
+use erars::erars_compiler::{compile, ParserContext};
 
 fn gen_bench(count: usize) -> String {
     let mut ret = String::from("@FUNC\n");
@@ -13,48 +12,54 @@ fn gen_bench(count: usize) -> String {
 }
 
 fn parse_small(c: &mut Criterion) {
-    let mut var = VariableInterner::with_default_variables();
+    let ctx = ParserContext::default();
     c.bench_function("small 5000", |b| {
         let code = gen_bench(5000);
-        b.iter(|| parse_program(&code, &mut var).unwrap());
+        b.iter(|| ctx.parse_program_str(&code).unwrap());
     });
     c.bench_function("small 50000", |b| {
         let code = gen_bench(50000);
-        b.iter(|| parse_program(&code, &mut var).unwrap());
+        b.iter(|| ctx.parse_program_str(&code).unwrap());
     });
 }
 
 fn parse_real(c: &mut Criterion) {
-    let mut var = VariableInterner::with_default_variables();
+    let ctx = ParserContext::default();
 
     c.bench_function("parse title", |b| {
-        b.iter(|| parse_program(include_str!("../ERB/TITLE.ERB"), &mut var));
+        b.iter(|| {
+            ctx.parse_program_str(include_str!("../ERB/TITLE.ERB"))
+                .unwrap()
+        });
     });
 
     c.bench_function("parse system", |b| {
-        b.iter(|| parse_program(include_str!("../ERB/SYSTEM.ERB"), &mut var));
+        b.iter(|| {
+            ctx.parse_program_str(include_str!("../ERB/SYSTEM.ERB"))
+                .unwrap()
+        });
     });
 }
 
 fn compile_real(c: &mut Criterion) {
-    let mut var = VariableInterner::with_default_variables();
+    let ctx = ParserContext::default();
 
     c.bench_function("compile title", |b| {
         b.iter(|| {
-            parse_program(include_str!("../ERB/TITLE.ERB"), &mut var)
+            ctx.parse_program_str(include_str!("../ERB/TITLE.ERB"))
                 .unwrap()
                 .into_iter()
-                .map(|f| compile(f, &var))
+                .map(|f| compile(f))
                 .collect::<Result<Vec<_>, _>>()
         });
     });
 
     c.bench_function("compile system", |b| {
         b.iter(|| {
-            parse_program(include_str!("../ERB/SYSTEM.ERB"), &mut var)
+            ctx.parse_program_str(include_str!("../ERB/SYSTEM.ERB"))
                 .unwrap()
                 .into_iter()
-                .map(|f| compile(f, &var))
+                .map(|f| compile(f))
                 .collect::<Result<Vec<_>, _>>()
         });
     });

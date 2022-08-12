@@ -49,4 +49,7 @@ ron = "0.7.0"
 name = "parse"
 harness = false
 
+[profile.release]
+debug = 1
+
 [features]
