@@ -394,7 +394,8 @@ impl Compiler {
             Stmt::Call {
                 name,
                 args,
-                catch,
+                try_body,
+                catch_body: catch,
                 is_jump,
             } => {
                 let count = self.push_list(args)?;
@@ -406,11 +407,17 @@ impl Compiler {
                     } else {
                         self.out.push(Instruction::TryCall(count));
                     }
-                    let catch_top = self.mark();
+                    let try_top = self.mark();
+                    for try_body in try_body {
+                        self.push_stmt(try_body)?;
+                    }
+                    let try_end = self.mark();
+                    let catch_top = self.current_no();
                     for stmt in catch {
                         self.push_stmt(stmt)?;
                     }
-                    self.insert(catch_top, Instruction::GotoIfNot(self.current_no()));
+                    self.insert(try_top, Instruction::GotoIfNot(catch_top));
+                    self.insert(try_end, Instruction::Goto(self.current_no()));
                 } else {
                     if is_jump {
                         self.out.push(Instruction::Jump(count));
@@ -419,7 +426,7 @@ impl Compiler {
                     }
                 }
             }
-            Stmt::Goto { label, catch } => {
+            Stmt::Goto { label, catch_body: catch } => {
                 self.push_expr(label)?;
 
                 if let Some(catch) = catch {

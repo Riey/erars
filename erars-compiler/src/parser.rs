@@ -48,13 +48,13 @@ macro_rules! try_nom {
     };
 }
 
-macro_rules! erb_assert_eq {
-    ($lex:expr, $lhs:expr, $rhs:expr, $msg:expr) => {
-        if $lhs != $rhs {
-            error!($lex, $msg);
-        }
-    };
-}
+// macro_rules! erb_assert_eq {
+//     ($lex:expr, $lhs:expr, $rhs:expr, $msg:expr) => {
+//         if $lhs != $rhs {
+//             error!($lex, $msg);
+//         }
+//     };
+// }
 
 #[derive(Debug)]
 pub struct ParserContext {
@@ -125,31 +125,40 @@ impl ParserContext {
                 Stmt::Call {
                     name,
                     args,
-                    catch: None,
+                    try_body: Vec::new(),
+                    catch_body: None,
                     is_jump: false,
                 }
             }
             Token::CallJump((info, args)) => {
                 let (name, args) =
                     try_nom!(lex, self::expr::call_jump_line(self, info.is_form)(args)).1;
+                let mut try_body = Vec::new();
 
-                let catch = if info.is_catch {
-                    erb_assert_eq!(
-                        lex,
-                        lex.next(),
-                        Some(Token::Catch),
-                        "TRYC 다음에 CATCH가 와야합니다."
-                    );
-
-                    let mut catch = Vec::new();
+                let catch_body = if info.is_catch {
+                    let mut catch_body = Vec::new();
 
                     loop {
                         match lex.next() {
-                            Some(Token::EndCatch) => break Some(catch),
-                            Some(tok) => catch.push(self.parse_stmt(tok, lex)?),
+                            Some(Token::Catch) => {
+                                break;
+                            }
+                            Some(tok) => try_body.push(self.parse_stmt(tok, lex)?),
+                            None => error!(lex, "CATCH없이 끝났습니다."),
+                        }
+                    }
+
+                    loop {
+                        match lex.next() {
+                            Some(Token::EndCatch) => {
+                                break;
+                            }
+                            Some(tok) => catch_body.push(self.parse_stmt(tok, lex)?),
                             None => error!(lex, "ENDCATCH없이 끝났습니다."),
                         }
                     }
+
+                    Some(catch_body)
                 } else if info.is_try {
                     Some(Vec::new())
                 } else {
@@ -157,11 +166,12 @@ impl ParserContext {
                 };
 
                 match info.ty {
-                    JumpType::Goto => Stmt::Goto { label: name, catch },
+                    JumpType::Goto => Stmt::Goto { label: name, catch_body },
                     JumpType::Call | JumpType::Jump => Stmt::Call {
                         name,
                         args,
-                        catch: None,
+                        try_body,
+                        catch_body: None,
                         is_jump: info.ty == JumpType::Jump,
                     },
                 }
@@ -261,9 +271,15 @@ impl ParserContext {
                 loop {
                     match lex.next() {
                         Some(Token::ElseIf(left)) => {
+                            let left = left.trim_start_matches(' ');
+
                             if_elses.push((cond, block));
                             block = Vec::new();
-                            cond = try_nom!(lex, self::expr::expr(self)(left)).1;
+                            cond = if left.is_empty() {
+                                Expr::Int(1)
+                            } else {
+                                try_nom!(lex, self::expr::expr(self)(left)).1
+                            };
                         }
                         Some(Token::Else) => {
                             is_else = true;

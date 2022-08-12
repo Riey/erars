@@ -28,13 +28,15 @@ pub enum Stmt {
     Times(Variable, NotNan<f32>),
     Goto {
         label: Expr,
-        catch: Option<Vec<Stmt>>,
+        catch_body: Option<Vec<Stmt>>,
     },
     Call {
         name: Expr,
         args: Vec<Expr>,
         is_jump: bool,
-        catch: Option<Vec<Stmt>>,
+
+        try_body: Vec<Stmt>,
+        catch_body: Option<Vec<Stmt>>,
     },
     Begin(BeginType),
     Varset(Variable, Vec<Expr>),

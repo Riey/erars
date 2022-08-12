@@ -201,7 +201,8 @@ mod body {
             ),
         ],
         is_jump: false,
-        catch: None,
+        try_body: [],
+        catch_body: None,
     },
 ]
 "#
@@ -966,19 +967,19 @@ Function {
             label: String(
                 "LABEL",
             ),
-            catch: None,
+            catch_body: None,
         },
         Goto {
             label: FormText(
                 {Var(Variable { var: "LOCALS", args: [] })},
             ),
-            catch: None,
+            catch_body: None,
         },
         Goto {
             label: FormText(
                 {Var(Variable { var: "LOCALS", args: [] })},
             ),
-            catch: Some(
+            catch_body: Some(
                 [],
             ),
         },
@@ -986,7 +987,7 @@ Function {
             label: FormText(
                 {Var(Variable { var: "LOCALS", args: [] })},
             ),
-            catch: Some(
+            catch_body: Some(
                 [
                     Print(
                         NEWLINE,
@@ -1003,7 +1004,8 @@ Function {
             ),
             args: [],
             is_jump: false,
-            catch: None,
+            try_body: [],
+            catch_body: None,
         },
         Call {
             name: String(
@@ -1011,7 +1013,8 @@ Function {
             ),
             args: [],
             is_jump: false,
-            catch: None,
+            try_body: [],
+            catch_body: None,
         },
         Call {
             name: String(
@@ -1019,7 +1022,8 @@ Function {
             ),
             args: [],
             is_jump: false,
-            catch: None,
+            try_body: [],
+            catch_body: None,
         },
         Call {
             name: String(
@@ -1027,7 +1031,8 @@ Function {
             ),
             args: [],
             is_jump: true,
-            catch: None,
+            try_body: [],
+            catch_body: None,
         },
         Call {
             name: String(
@@ -1035,7 +1040,8 @@ Function {
             ),
             args: [],
             is_jump: true,
-            catch: None,
+            try_body: [],
+            catch_body: None,
         },
         Call {
             name: FormText(
@@ -1043,7 +1049,8 @@ Function {
             ),
             args: [],
             is_jump: true,
-            catch: None,
+            try_body: [],
+            catch_body: None,
         },
         Label(
             "LABEL",
@@ -1511,7 +1518,8 @@ mod program {
                     ),
                 ],
                 is_jump: false,
-                catch: None,
+                try_body: [],
+                catch_body: None,
             },
         ],
     },
