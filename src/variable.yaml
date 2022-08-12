@@ -35,7 +35,12 @@ MASTERNAME:
   is_str: true
 
 TARGET:
-  size: []
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+COUNT:
+  size: [1000]
   is_chara: false
   is_str: false
 
