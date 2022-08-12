@@ -34,6 +34,12 @@ MASTERNAME:
   is_chara: true
   is_str: true
 
+TARGET:
+  size: []
+  is_chara: false
+  is_str: false
+
+
 # GLOBAL:
 #   is_global: true
 #   size: [1000]

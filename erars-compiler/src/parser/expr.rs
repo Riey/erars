@@ -71,6 +71,7 @@ fn alignment<'a>(i: &'a str) -> IResult<'a, Alignment> {
     ))(i)
 }
 
+#[derive(Debug)]
 pub enum FormType {
     Percent,
     Brace,
@@ -93,73 +94,53 @@ fn parse_form_normal_str<'a>(
 ) -> impl Fn(&'a str) -> IResult<'a, (String, Option<FormType>)> {
     move |mut i: &'a str| {
         let mut ret = String::new();
+        let mut ch = i.chars();
 
         let form_ty = loop {
-            match take_while(move |c| !"\\\n%{#,".contains(c))(i) {
-                Ok((left, plain)) => {
-                    ret.push_str(plain);
-                    i = left;
-
-                    if let Some(left) = left.strip_prefix('%') {
-                        i = left;
-                        break Some(FormType::Percent);
-                    } else if let Some(left) = left.strip_prefix('{') {
-                        i = left;
-                        break Some(FormType::Brace);
-                    } else if let Some(left) = left.strip_prefix('#') {
-                        if ty == FormStrType::FirstCond {
-                            i = left;
-                            break None;
-                        }
-                    } else if let Some(left) = left.strip_prefix('\\') {
-                        if let Some(left) = left.strip_prefix('@') {
-                            i = left;
-
-                            if ty == FormStrType::SecondCond {
-                                break None;
-                            } else {
-                                break Some(FormType::At);
-                            }
-                        } else {
-                            let mut ch = left.chars();
-
-                            // escape
-                            match ch.next() {
-                                Some(c) => ret.push(c),
-                                // incomplete escape
-                                None => {
-                                    return Err(nom::Err::Error(nom::error::make_error(
-                                        i,
-                                        nom::error::ErrorKind::EscapedTransform,
-                                    )))
-                                }
-                            };
-
-                            i = ch.as_str();
-                        }
-                    }
-
-                    match left.as_bytes().get(0).copied() {
-                        Some(b',') if ty == FormStrType::Arg => {
-                            break None;
-                        }
-                        Some(b',') => {
-                            ret.push(',');
-                        }
-                        Some(b'\n') | None => break None,
-                        Some(b'\\') => {
-                            match left.as_bytes().get(1).copied() {
-                                Some(b'@') => {
-                                    // \@
-                                    break Some(FormType::Percent);
-                                }
-                                _ => {}
-                            }
-                        }
-                        Some(_) => {}
-                    }
+            match ch.next() {
+                Some('%') => {
+                    i = ch.as_str();
+                    break Some(FormType::Percent);
                 }
-                Err(err) => return Err(err),
+                Some('{') => {
+                    i = ch.as_str();
+                    break Some(FormType::Brace);
+                }
+                Some('#') if ty == FormStrType::FirstCond => {
+                    i = ch.as_str();
+                    break None;
+                }
+                Some('\\') => match ch.next() {
+                    Some('@') => {
+                        if ty == FormStrType::SecondCond {
+                            i = ch.as_str();
+                            break None;
+                        } else {
+                            i = ch.as_str();
+                            break Some(FormType::At);
+                        }
+                    }
+                    Some(escape) => {
+                        i = ch.as_str();
+                        ret.push(escape);
+                    }
+                    None => {
+                        return Err(nom::Err::Error(nom::error::make_error(
+                            i,
+                            nom::error::ErrorKind::EscapedTransform,
+                        )));
+                    }
+                },
+                Some(',') if ty == FormStrType::Arg => {
+                    break None;
+                }
+                Some(other) => {
+                    i = ch.as_str();
+                    ret.push(other);
+                }
+                None => {
+                    break None;
+                }
             }
         };
 

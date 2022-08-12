@@ -1,7 +1,7 @@
 mod expr;
 
 use erars_ast::{Alignment, BeginType, EventFlags, Expr, Function, FunctionInfo, Stmt};
-use erars_lexer::{JumpType, Token, PrintType};
+use erars_lexer::{JumpType, PrintType, Token};
 use hashbrown::HashMap;
 use logos::{internal::LexerInternal, Lexer};
 use std::{borrow::Cow, cell::Cell, mem};
@@ -101,9 +101,7 @@ impl ParserContext {
             Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
             Token::LabelLine(label) => Stmt::Label(label.into()),
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
-            Token::Print((flags, PrintType::Plain, form)) => {
-                Stmt::Print(flags, Expr::str(form))
-            }
+            Token::Print((flags, PrintType::Plain, form)) => Stmt::Print(flags, Expr::str(form)),
             Token::Print((flags, PrintType::Form, form)) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(form));
                 Stmt::Print(flags, form)
@@ -202,15 +200,27 @@ impl ParserContext {
 
                 loop {
                     match lex.next() {
-                        Some(Token::Next) => break,
+                        Some(Token::Next) => break Stmt::For(var, init, end, step, body),
                         Some(other) => {
                             body.push(self.parse_stmt(other, lex)?);
                         }
                         None => error!(lex, "Unexpected EOF after FOR"),
                     }
                 }
-
-                Stmt::For(var, init, end, step, body)
+            }
+            Token::Do => {
+                let mut body = Vec::new();
+                loop {
+                    match lex.next() {
+                        Some(Token::Loop(left)) => {
+                            break Stmt::Do(try_nom!(lex, self::expr::expr(self)(left)).1, body);
+                        }
+                        Some(tok) => {
+                            body.push(self.parse_stmt(tok, lex)?);
+                        }
+                        None => error!(lex, "Unexpected EOF after DO"),
+                    }
+                }
             }
             Token::Repeat(left) => {
                 let arg = try_nom!(lex, self::expr::expr(self)(left)).1;
@@ -218,15 +228,13 @@ impl ParserContext {
 
                 loop {
                     match lex.next() {
-                        Some(Token::Rend) => break,
+                        Some(Token::Rend) => break Stmt::Repeat(arg, body),
                         Some(other) => {
                             body.push(self.parse_stmt(other, lex)?);
                         }
                         None => error!(lex, "Unexpected EOF after FOR"),
                     }
                 }
-
-                Stmt::Repeat(arg, body)
             }
             Token::If(left) => {
                 let mut is_else = false;

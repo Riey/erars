@@ -230,6 +230,11 @@ pub enum Token<'s> {
     #[token("NEXT")]
     Next,
 
+    #[token("DO")]
+    Do,
+    #[token("LOOP", lex_line_left)]
+    Loop(&'s str),
+
     #[token("REPEAT", lex_line_left)]
     Repeat(&'s str),
     #[token("REND")]
