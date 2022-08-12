@@ -3,10 +3,11 @@ use erars::ui::{ConsoleChannel, ConsoleMessage};
 use erars::vm::*;
 use erars_compiler::{compile, ParserContext};
 
+mod test_util;
+
 #[test]
 fn run_test() {
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
-    let parser_ctx = ParserContext::new(Default::default());
 
     for erb_file in erb_files {
         let erb_file = erb_file.unwrap();
@@ -17,9 +18,8 @@ fn run_test() {
 
         eprintln!("Run {}", erb_file.display());
 
-        let erb_source = std::fs::read_to_string(&erb_file).unwrap();
         let ron_source = std::fs::read_to_string(ron_file).unwrap();
-        let program = parser_ctx.parse_program_str(&erb_source).unwrap();
+        let program = test_util::do_test(erb_file.to_str().unwrap(), ParserContext::parse_program_str);
         let mut dic = FunctionDic::new();
 
         for func in program {

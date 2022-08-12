@@ -1,6 +1,8 @@
 mod expr;
 
-use erars_ast::{Alignment, BeginType, EventFlags, Expr, Function, FunctionInfo, Stmt};
+use erars_ast::{
+    Alignment, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionInfo, Stmt, Variable,
+};
 use erars_lexer::{JumpType, PrintType, Token};
 use hashbrown::HashMap;
 use logos::{internal::LexerInternal, Lexer};
@@ -270,6 +272,20 @@ impl ParserContext {
                 }
 
                 Stmt::If(if_elses, block)
+            }
+            Token::Inc => {
+                let ident = self.replace(take_ident!(lex));
+                let left = cut_line(lex);
+                let args = try_nom!(lex, self::expr::variable_arg(self)(left)).1;
+                let var = Variable { var: ident.into(), args };
+                Stmt::Assign(var, Some(BinaryOperator::Add), Expr::Int(1))
+            }
+            Token::Dec => {
+                let ident = self.replace(take_ident!(lex));
+                let left = cut_line(lex);
+                let args = try_nom!(lex, self::expr::variable_arg(self)(left)).1;
+                let var = Variable { var: ident.into(), args };
+                Stmt::Assign(var, Some(BinaryOperator::Sub), Expr::Int(1))
             }
             Token::Ident(var) => {
                 let i = cut_line(lex);

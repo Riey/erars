@@ -623,36 +623,33 @@ BinopExpr(
             ),
             r#"
 BinopExpr(
-    UnaryopExpr(
+    BinopExpr(
+        Int(
+            50,
+        ),
+        Mul,
         BinopExpr(
             Int(
-                50,
+                6,
             ),
-            Mul,
-            BinopExpr(
-                Int(
-                    6,
-                ),
-                Sub,
-                Var(
-                    Variable {
-                        var: "ABL",
-                        args: [
-                            Var(
-                                Variable {
-                                    var: "ARG",
-                                    args: [],
-                                },
-                            ),
-                            Int(
-                                10,
-                            ),
-                        ],
-                    },
-                ),
+            Sub,
+            Var(
+                Variable {
+                    var: "ABL",
+                    args: [
+                        Var(
+                            Variable {
+                                var: "ARG",
+                                args: [],
+                            },
+                        ),
+                        Int(
+                            10,
+                        ),
+                    ],
+                },
             ),
         ),
-        Plus,
     ),
     Add,
     Var(

@@ -523,7 +523,6 @@ impl TerminalVm {
                     let operand = ctx.pop_int()?;
                     ctx.push(-operand);
                 }
-                UnaryOperator::Plus => {}
             },
             Instruction::BinaryOperator(op) => {
                 let rhs = ctx.pop();

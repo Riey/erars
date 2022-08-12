@@ -192,6 +192,10 @@ pub enum Token<'s> {
     Colon,
     #[token("?")]
     Question,
+    #[token("++")]
+    Inc,
+    #[token("--")]
+    Dec,
     #[token("#FUNCTION")]
     Function,
     #[token("#FUNCTIONS")]

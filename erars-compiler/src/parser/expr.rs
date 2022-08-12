@@ -305,12 +305,31 @@ fn ident_or_method_expr<'c, 'a>(
 
 fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
-        let (i, op) = opt(de_sp(alt((
-            value(UnaryOperator::Not, char('!')),
-            value(UnaryOperator::Not, char('~')),
-            value(UnaryOperator::Minus, char('-')),
-            value(UnaryOperator::Plus, char('+')),
-        ))))(i)?;
+        enum UnaryIncOp {
+            Inc,
+            Dec,
+            Unary(UnaryOperator),
+            None,
+        }
+        use UnaryIncOp::*;
+        let i = i.trim_start_matches(' ');
+
+        let (i, op) = if let Some(i) = i.strip_prefix("++") {
+            (i, Inc)
+        } else if let Some(i) = i.strip_prefix("--") {
+            (i, Dec)
+        } else if let Some(i) = i.strip_prefix('+') {
+            (i, None)
+        } else if let Some(i) = i.strip_prefix('!') {
+            (i, Unary(UnaryOperator::Not))
+        } else if let Some(i) = i.strip_prefix('~') {
+            (i, Unary(UnaryOperator::Not))
+        } else if let Some(i) = i.strip_prefix('-') {
+            (i, Unary(UnaryOperator::Minus))
+        } else {
+            (i, None)
+        };
+        let i = i.trim_start_matches(' ');
 
         let (i, expr) = de_sp(alt((
             map(string, |s| Expr::String(s.into())),
@@ -324,13 +343,54 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
             ident_or_method_expr(ctx),
             paran_expr(ctx),
         )))(i)?;
+        let i = i.trim_start_matches(' ');
 
         let expr = match op {
-            Some(op) => Expr::unary(expr, op),
+            Unary(op) => Expr::unary(expr, op),
+            Inc | Dec => {
+                let is_inc = matches!(op, Inc);
+
+                match expr {
+                    Expr::Var(var) => Expr::IncOpExpr {
+                        var,
+                        is_pre: true,
+                        is_inc,
+                    },
+                    _ => {
+                        panic!("증감연산자는 변수와 함께 써야합니다.");
+                    }
+                }
+            }
             None => expr,
         };
 
-        Ok((i, expr))
+        Ok(if let Some(i) = i.strip_prefix("++") {
+            let expr = match expr {
+                Expr::Var(var) => Expr::IncOpExpr {
+                    var,
+                    is_pre: false,
+                    is_inc: true,
+                },
+                _ => {
+                    panic!("증감연산자는 변수와 함께 써야합니다.");
+                }
+            };
+            (i, expr)
+        } else if let Some(i) = i.strip_prefix("--") {
+            let expr = match expr {
+                Expr::Var(var) => Expr::IncOpExpr {
+                    var,
+                    is_pre: false,
+                    is_inc: false,
+                },
+                _ => {
+                    panic!("증감연산자는 변수와 함께 써야합니다.");
+                }
+            };
+            (i, expr)
+        } else {
+            (i, expr)
+        })
     }
 }
 
@@ -522,8 +582,20 @@ pub fn assign_line<'c, 'a>(
             args,
         };
 
-        if ctx.is_str_var(&var.var) {
-            let (i, _) = delimited(sp, char('='), opt(char(' ')))(i)?;
+        let i = i.trim_start_matches(' ');
+
+        if let Some(i) = i.strip_prefix("++") {
+            Ok((
+                i,
+                Stmt::Assign(var, Some(BinaryOperator::Add), Expr::Int(1)),
+            ))
+        } else if let Some(i) = i.strip_prefix("--") {
+            Ok((
+                i,
+                Stmt::Assign(var, Some(BinaryOperator::Sub), Expr::Int(1)),
+            ))
+        } else if ctx.is_str_var(&var.var) {
+            let (i, _) = terminated(char('='), opt(char(' ')))(i)?;
             let (i, rhs) = normal_form_str(ctx)(i)?;
 
             Ok((i, Stmt::Assign(var, None, rhs)))
