@@ -4,8 +4,7 @@ use enum_map::EnumMap;
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
-use crate::value::Value;
-use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, VariableInfo};
+use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, VariableInfo, Value};
 use erars_compiler::{CompiledFunction, Instruction};
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +13,7 @@ pub struct FunctionBody {
     body: Vec<Instruction>,
     goto_labels: HashMap<SmolStr, u32>,
     args: Vec<(SmolStr, Option<Value>, ArrayVec<usize, 4>)>,
-    local_vars: HashMap<SmolStr, (VariableInfo, Vec<Value>)>,
+    local_vars: HashMap<SmolStr, VariableInfo>,
 }
 
 impl FunctionBody {
@@ -27,8 +26,8 @@ impl FunctionBody {
         self.args.push((var, default_value, indices));
     }
 
-    pub fn push_local(&mut self, var: SmolStr, info: VariableInfo, init: Vec<Value>) {
-        self.local_vars.insert(var, (info, init));
+    pub fn push_local(&mut self, var: SmolStr, info: VariableInfo) {
+        self.local_vars.insert(var, info);
     }
 
     pub fn goto_labels(&self) -> &HashMap<SmolStr, u32> {
@@ -39,7 +38,7 @@ impl FunctionBody {
         &self.args
     }
 
-    pub fn local_vars(&self) -> &HashMap<SmolStr, (VariableInfo, Vec<Value>)> {
+    pub fn local_vars(&self) -> &HashMap<SmolStr, VariableInfo> {
         &self.local_vars
     }
 
@@ -142,15 +141,6 @@ impl FunctionDic {
                     body.push_local(
                         local.var,
                         local.info,
-                        local
-                            .init
-                            .into_iter()
-                            .map(|v| match v {
-                                Expr::Int(i) => Value::Int(i),
-                                Expr::String(s) => Value::String(s),
-                                _ => unreachable!(),
-                            })
-                            .collect(),
                     );
                 }
             }
@@ -170,8 +160,8 @@ impl FunctionDic {
                 is_chara: false,
                 is_str: false,
                 size: vec![local_size],
+                init: Vec::new(),
             },
-            Vec::new(),
         );
 
         body.push_local(
@@ -181,8 +171,8 @@ impl FunctionDic {
                 is_chara: false,
                 is_str: true,
                 size: vec![locals_size],
+                init: Vec::new(),
             },
-            Vec::new(),
         );
 
         body.push_local(
@@ -192,8 +182,8 @@ impl FunctionDic {
                 is_chara: false,
                 is_str: false,
                 size: vec![1000],
+                init: Vec::new(),
             },
-            Vec::new(),
         );
 
         body.push_local(
@@ -203,8 +193,8 @@ impl FunctionDic {
                 is_chara: false,
                 is_str: true,
                 size: vec![100],
+                init: Vec::new(),
             },
-            Vec::new(),
         );
 
         if let Ok(ty) = header.name.parse::<EventType>() {

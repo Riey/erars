@@ -18,7 +18,7 @@ use erars::{
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::VariableInfo;
-use erars_compiler::{CompiledFunction, Lexer, ParserContext};
+use erars_compiler::{CompiledFunction, HeaderInfo, Lexer, ParserContext};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
@@ -35,8 +35,18 @@ fn main() {
     let inner_chan = chan.clone();
 
     std::thread::spawn(move || {
-        let infos: HashMap<SmolStr, VariableInfo> =
+        let mut infos: HashMap<SmolStr, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
+
+        let erhs = glob::glob_with(
+            &format!("{}/ERB/**/*.ERH", target_path),
+            glob::MatchOptions {
+                case_sensitive: false,
+                require_literal_leading_dot: true,
+                require_literal_separator: true,
+            },
+        )
+        .unwrap();
 
         let erbs = glob::glob_with(
             &format!("{}/ERB/**/*.ERB", target_path),
@@ -57,38 +67,73 @@ fn main() {
                 .with_message("Compile ERROR"),
         );
 
-        let macros: Arc<HashMap<String, String>> = Arc::default();
+        let header_infos: Vec<HeaderInfo> = erhs
+            .par_bridge()
+            .map(|erh| {
+                let erh = erh.unwrap();
+                let source = std::fs::read_to_string(&erh).unwrap();
+                eprintln!("Parse {}", erh.display());
 
-        let funcs =
-            erbs.par_bridge()
-                .flat_map(|erb| {
-                    let ctx = ParserContext::new(macros.clone());
-                    let erb = erb.unwrap();
-                    let source = std::fs::read_to_string(&erb).unwrap();
+                let info = match HeaderInfo::parse_header(&source) {
+                    Ok(info) => info,
+                    Err((err, span)) => {
+                        let file_id = files.lock().add(erh.to_str().unwrap().to_string(), source);
+                        diagnostic
+                            .lock()
+                            .labels
+                            .push(Label::primary(file_id, span).with_message(format!("{}", err)));
+                        HeaderInfo::default()
+                    }
+                };
 
-                    eprintln!("Parse {}", erb.display());
+                info
+            })
+            .collect();
 
-                    let program = ctx.parse(&mut Lexer::new(source.as_str()));
-                    let file_id = files.lock().add(erb.to_str().unwrap().to_string(), source);
+        let mut macros: HashMap<String, String> = HashMap::new();
 
-                    let program = match program {
-                        Ok(p) => p,
-                        Err((err, span)) => {
-                            diagnostic.lock().labels.push(
-                                Label::primary(file_id, span).with_message(format!("{}", err)),
-                            );
-                            Vec::new()
-                        }
-                    };
+        for header_info in header_infos {
+            for (k, v) in header_info.macros {
+                macros.insert(k, v);
+            }
+            for (k, v) in header_info.global_variables {
+                infos.insert(k, v);
+            }
+        }
 
-                    eprintln!("Compile {}", erb.display());
+        let macros = Arc::new(macros);
 
-                    program
-                        .into_iter()
-                        .map(|f| erars_compiler::compile(f).unwrap())
-                        .collect_vec()
-                })
-                .collect::<Vec<CompiledFunction>>();
+        let funcs = erbs
+            .par_bridge()
+            .flat_map(|erb| {
+                let ctx = ParserContext::new(macros.clone());
+                let erb = erb.unwrap();
+                let source = std::fs::read_to_string(&erb).unwrap();
+
+                eprintln!("Parse {}", erb.display());
+
+                let program = ctx.parse(&mut Lexer::new(source.as_str()));
+
+                let program = match program {
+                    Ok(p) => p,
+                    Err((err, span)) => {
+                        let file_id = files.lock().add(erb.to_str().unwrap().to_string(), source);
+                        diagnostic
+                            .lock()
+                            .labels
+                            .push(Label::primary(file_id, span).with_message(format!("{}", err)));
+                        Vec::new()
+                    }
+                };
+
+                eprintln!("Compile {}", erb.display());
+
+                program
+                    .into_iter()
+                    .map(|f| erars_compiler::compile(f).unwrap())
+                    .collect_vec()
+            })
+            .collect::<Vec<CompiledFunction>>();
 
         for func in funcs {
             function_dic.insert_compiled_func(func);

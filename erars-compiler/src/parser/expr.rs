@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use super::ParserContext;
 use erars_ast::{
     Alignment, BinaryOperator, Expr, FormText, LocalVariable, NotNan, SelectCaseCond, Stmt,
-    UnaryOperator, Variable, VariableInfo,
+    UnaryOperator, Value, Variable, VariableInfo,
 };
 use nom::{
     branch::alt,
@@ -45,7 +45,7 @@ fn is_ident(i: &str) -> bool {
     i.chars().all(|c| c.is_xid_continue() || c == '_')
 }
 
-fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
+pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
     verify(
         take_while(move |c: char| c.is_xid_continue() || c == '_'),
         |s: &str| s.chars().next().map_or(false, |c| c.is_xid_start()),
@@ -660,17 +660,25 @@ pub fn dim_line<'c, 'a>(
         info.size = sizes;
         let (i, init) = opt(preceded(
             char_sp('='),
-            separated_list1(char_sp(','), expr(ctx)),
+            separated_list0(char_sp(','), map(expr(ctx), |expr| const_eval(ctx, expr))),
         ))(i)?;
+        info.init = init.unwrap_or_default();
 
         Ok((
             i,
             LocalVariable {
                 var: var.into(),
-                init: init.unwrap_or_default(),
                 info,
             },
         ))
+    }
+}
+
+fn const_eval(_ctx: &ParserContext, expr: Expr) -> Value {
+    match expr {
+        Expr::Int(i) => Value::Int(i),
+        Expr::String(s) => Value::String(s),
+        _ => panic!("Can't evaulating expression"),
     }
 }
 

@@ -8,13 +8,12 @@ use strum::Display;
 use hashbrown::{HashMap, HashSet};
 
 use erars_ast::{
-    BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, UnaryOperator, VariableInfo,
+    BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, UnaryOperator, VariableInfo, Value
 };
 use erars_compiler::Instruction;
 
 use crate::function::{FunctionBody, FunctionDic};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
-use crate::value::Value;
 
 #[derive(Clone, Debug)]
 enum VmVariable {
@@ -174,12 +173,12 @@ impl VariableStorage {
         self.local_variables.entry(name.into()).or_insert_with(|| {
             body.local_vars()
                 .iter()
-                .map(|(idx, (info, init))| {
+                .map(|(idx, info)| {
                     let mut var = UniformVariable::new(info);
 
-                    if !init.is_empty() {
+                    if !info.init.is_empty() {
                         let var = var.assume_normal();
-                        for (idx, init_var) in init.iter().enumerate() {
+                        for (idx, init_var) in info.init.iter().enumerate() {
                             var.set(iter::once(idx), init_var.clone()).unwrap();
                         }
                     }

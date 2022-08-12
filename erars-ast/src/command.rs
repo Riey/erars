@@ -46,6 +46,7 @@ pub enum BuiltinCommand {
     AddDefChara,
     AddChara,
     DelChara,
+    GetChara,
     SwapChara,
     FindChara,
 

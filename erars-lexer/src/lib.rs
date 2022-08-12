@@ -85,6 +85,22 @@ fn normal_expr_command<'s>(
     (com, lex_line_left(lex))
 }
 
+fn lex_line_left_erh<'s>(lex: &mut Lexer<'s, ErhToken<'s>>) -> &'s str {
+    let args = lex.remainder();
+    let s = match args.split_once('\n') {
+        Some((args, _)) => {
+            lex.bump_unchecked(args.len() + 1);
+            args
+        }
+        None => {
+            lex.bump_unchecked(args.len());
+            args
+        }
+    };
+
+    s.strip_prefix(' ').unwrap_or(s)
+}
+
 fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
     let args = lex.remainder();
     let s = match args.split_once('\n') {
@@ -169,6 +185,25 @@ pub enum PrintType {
     Form,
     S,
     V,
+}
+
+#[derive(Logos, Debug, Eq, PartialEq)]
+pub enum ErhToken<'s> {
+    #[token("#DEFINE", lex_line_left_erh)]
+    Define(&'s str),
+
+    #[token("#DIM", lex_line_left_erh)]
+    Dim(&'s str),
+
+    #[token("#DIMS", lex_line_left_erh)]
+    DimS(&'s str),
+    
+    #[error]
+    // BOM
+    #[token("\u{FEFF}", logos::skip)]
+    #[regex(r"[ \t\r\n]+", logos::skip)]
+    #[regex(r";[^\n]*", logos::skip)]
+    Error,
 }
 
 #[derive(Logos, Debug, Eq, PartialEq)]

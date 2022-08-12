@@ -1,4 +1,4 @@
-use crate::Expr;
+use crate::{Expr, value::Value};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
@@ -11,17 +11,17 @@ pub struct Variable {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LocalVariable {
     pub var: SmolStr,
-    pub init: Vec<Expr>,
     pub info: VariableInfo,
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct VariableInfo {
     pub is_chara: bool,
     pub is_str: bool,
     pub default_int: i64,
     pub size: Vec<usize>,
+    pub init: Vec<Value>,
 }
 
 impl VariableInfo {

@@ -16,3 +16,4 @@ ordered-float = { version = "3.0.0", features = ["serde"] }
 serde = { version = "1.0.142", features = ["derive"] }
 smol_str = { version = "0.1.23", features = ["serde"] }
 strum = { version = "0.24.1", features = ["derive"] }
+anyhow = { version = "1" }

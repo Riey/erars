@@ -1,11 +1,13 @@
 mod expr;
 
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionInfo, Stmt, Variable,
+    Alignment, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionInfo,
+    Stmt, Variable, VariableInfo,
 };
-use erars_lexer::{JumpType, PrintType, Token};
+use erars_lexer::{ErhToken, JumpType, PrintType, Token};
 use hashbrown::HashMap;
 use logos::{internal::LexerInternal, Lexer};
+use smol_str::SmolStr;
 use std::{borrow::Cow, cell::Cell, mem, sync::Arc};
 
 pub use crate::error::{ParserError, ParserResult};
@@ -55,6 +57,45 @@ macro_rules! try_nom {
 //         }
 //     };
 // }
+
+#[derive(Debug, Default)]
+pub struct HeaderInfo {
+    pub macros: HashMap<String, String>,
+    pub global_variables: HashMap<SmolStr, VariableInfo>,
+}
+
+impl HeaderInfo {
+    pub fn parse_header(s: &str) -> ParserResult<Self> {
+        let mut ctx = ParserContext::default();
+        let mut global_variables = HashMap::new();
+        let mut lex = Lexer::new(s);
+
+        loop {
+            match lex.next() {
+                Some(ErhToken::Define(def)) => {
+                    let (def, ident) = try_nom!(lex, self::expr::ident(def));
+                    unsafe { Arc::get_mut(&mut ctx.macros).unwrap_unchecked() }
+                        .insert(ident.to_string(), def.trim().to_string());
+                }
+                Some(ErhToken::Dim(dim)) => {
+                    let var = try_nom!(lex, self::expr::dim_line(&ctx, false)(dim)).1;
+                    global_variables.insert(var.var, var.info);
+                }
+                Some(ErhToken::DimS(dims)) => {
+                    let var = try_nom!(lex, self::expr::dim_line(&ctx, true)(dims)).1;
+                    global_variables.insert(var.var, var.info);
+                }
+                Some(ErhToken::Error) => error!(lex, "Invalid token"),
+                None => break,
+            }
+        }
+
+        Ok(Self {
+            macros: Arc::try_unwrap(ctx.macros).unwrap(),
+            global_variables,
+        })
+    }
+}
 
 #[derive(Debug)]
 pub struct ParserContext {
@@ -166,7 +207,10 @@ impl ParserContext {
                 };
 
                 match info.ty {
-                    JumpType::Goto => Stmt::Goto { label: name, catch_body },
+                    JumpType::Goto => Stmt::Goto {
+                        label: name,
+                        catch_body,
+                    },
                     JumpType::Call | JumpType::Jump => Stmt::Call {
                         name,
                         args,
