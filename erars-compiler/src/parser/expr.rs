@@ -356,7 +356,8 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                         is_inc,
                     },
                     _ => {
-                        panic!("증감연산자는 변수와 함께 써야합니다.");
+                        eprintln!("증감연산자는 변수와 함께 써야합니다.");
+                        return Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)));
                     }
                 }
             }
@@ -371,7 +372,8 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                     is_inc: true,
                 },
                 _ => {
-                    panic!("증감연산자는 변수와 함께 써야합니다.");
+                    eprintln!("증감연산자는 변수와 함께 써야합니다.");
+                    return Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)));
                 }
             };
             (i, expr)
@@ -383,7 +385,8 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                     is_inc: false,
                 },
                 _ => {
-                    panic!("증감연산자는 변수와 함께 써야합니다.");
+                    eprintln!("증감연산자는 변수와 함께 써야합니다.");
+                    return Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)));
                 }
             };
             (i, expr)
@@ -562,7 +565,10 @@ pub fn for_line<'c, 'a>(
                 let var = exprs.pop().unwrap().into_var().unwrap();
                 Ok((i, (var, init, end, step)))
             }
-            other => panic!("FOR문은 인자로 3개나 4개를 가져야합니다: 받은 인자수 {other}개"),
+            other => {
+                eprintln!("FOR문은 인자로 3개나 4개를 가져야합니다: 받은 인자수 {other}개");
+                Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)))
+            }
         }
     }
 }

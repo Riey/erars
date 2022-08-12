@@ -118,6 +118,13 @@ impl Expr {
             _ => None,
         }
     }
+
+    pub fn into_const_int(self) -> Option<i64> {
+        match self {
+            Self::Int(i) => Some(i),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

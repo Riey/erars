@@ -200,6 +200,10 @@ pub enum Token<'s> {
     Function,
     #[token("#FUNCTIONS")]
     FunctionS,
+    #[token("#LOCALSIZE", lex_line_left)]
+    LocalSize(&'s str),
+    #[token("#LOCALSSIZE", lex_line_left)]
+    LocalSSize(&'s str),
     #[token("#DIM", lex_line_left)]
     Dim(&'s str),
     #[token("#DIMS", lex_line_left)]
@@ -244,6 +248,11 @@ pub enum Token<'s> {
     #[token("REND")]
     Rend,
 
+    #[token("WHILE", lex_line_left)]
+    While(&'s str),
+    #[token("WEND")]
+    Wend,
+
     #[token("SELECTCASE", lex_line_left)]
     SelectCase(&'s str),
     #[token("CASE", lex_line_left)]
@@ -256,7 +265,7 @@ pub enum Token<'s> {
     #[regex("(TRY)?C?(CALL|JUMP|GOTO)(FORM)?", call_jump_line)]
     CallJump((CallJumpInfo, &'s str)),
     #[token("CALLF", lex_line_left)]
-    CallF(&'s str,),
+    CallF(&'s str),
     #[token("CATCH")]
     Catch,
     #[token("ENDCATCH")]
@@ -285,6 +294,9 @@ pub enum Token<'s> {
     #[token("DELCHARA", |lex| normal_expr_command(lex, BuiltinCommand::DelChara))]
     #[token("SWAPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::SwapChara))]
     #[token("FINDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::FindChara))]
+    #[token("SETCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetColor))]
+    #[token("GETBIT", |lex| normal_expr_command(lex, BuiltinCommand::GetBit))]
+    #[token("SETBIT", |lex| normal_expr_command(lex, BuiltinCommand::SetBit))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[regex(r"REUSELASTLINE [^\r\n]*", |lex| unsafe { parse_reuse(lex.slice()) })]
@@ -295,6 +307,7 @@ pub enum Token<'s> {
     #[token("LOADGLOBAL", |_| single_command(BuiltinCommand::LoadGlobal))]
     #[token("DRAWLINE", |_| single_command(BuiltinCommand::DrawLine))]
     #[token("RESETDATA", |_| single_command(BuiltinCommand::ResetData))]
+    #[token("RESETCOLOR", |_| single_command(BuiltinCommand::ResetColor))]
     #[token("ADDDEFCHARA", |_| single_command(BuiltinCommand::AddDefChara))]
     #[token("FONTBOLD", |_| single_command(BuiltinCommand::FontBold))]
     #[token("FONTITALIC", |_| single_command(BuiltinCommand::FontItalic))]

@@ -19,7 +19,8 @@ fn run_test() {
         eprintln!("Run {}", erb_file.display());
 
         let ron_source = std::fs::read_to_string(ron_file).unwrap();
-        let program = test_util::do_test(erb_file.to_str().unwrap(), ParserContext::parse_program_str);
+        let program =
+            test_util::do_test(erb_file.to_str().unwrap(), ParserContext::parse_program_str);
         let mut dic = FunctionDic::new();
 
         for func in program {

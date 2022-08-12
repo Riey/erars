@@ -366,6 +366,26 @@ impl ParserContext {
                     let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
                     current_func.header.infos.push(FunctionInfo::Dim(var));
                 }
+                Some(Token::LocalSize(size)) => {
+                    let var = try_nom!(lex, self::expr::expr(self)(size))
+                        .1
+                        .into_const_int()
+                        .unwrap();
+                    current_func
+                        .header
+                        .infos
+                        .push(FunctionInfo::LocalSize(var as usize));
+                }
+                Some(Token::LocalSSize(size)) => {
+                    let var = try_nom!(lex, self::expr::expr(self)(size))
+                        .1
+                        .into_const_int()
+                        .unwrap();
+                    current_func
+                        .header
+                        .infos
+                        .push(FunctionInfo::LocalSSize(var as usize));
+                }
                 Some(other) => match self.parse_stmt(other, lex) {
                     Ok(stmt) => current_func.body.push(stmt),
                     Err(err) => {
