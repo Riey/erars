@@ -234,6 +234,21 @@ impl ParserContext {
                     }
                 }
             }
+            Token::While(left) => {
+                let cond = try_nom!(lex, self::expr::expr(self)(left)).1;
+                let mut body = Vec::new();
+                loop {
+                    match lex.next() {
+                        Some(Token::Wend) => {
+                            break Stmt::While(cond, body);
+                        }
+                        Some(tok) => {
+                            body.push(self.parse_stmt(tok, lex)?);
+                        }
+                        None => error!(lex, "Unexpected EOF after DO"),
+                    }
+                }
+            }
             Token::Do => {
                 let mut body = Vec::new();
                 loop {

@@ -53,5 +53,6 @@ harness = false
 
 [profile.release]
 debug = 1
+lto = true
 
 [features]
