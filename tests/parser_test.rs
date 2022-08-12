@@ -227,6 +227,48 @@ mod body {
     }
 
     #[test]
+    fn test_for() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/for.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    For(
+        Variable {
+            var: "COUNT",
+            args: [],
+        },
+        Int(
+            0,
+        ),
+        Int(
+            10,
+        ),
+        Int(
+            1,
+        ),
+        [
+            PrintList(
+                NEWLINE,
+                [
+                    Var(
+                        Variable {
+                            var: "COUNT",
+                            args: [],
+                        },
+                    ),
+                ],
+            ),
+        ],
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
     fn test_hello() {
         k9::snapshot!(
             do_test(

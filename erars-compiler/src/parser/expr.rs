@@ -548,10 +548,23 @@ pub fn for_line<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, (Variable, Expr, Expr, Expr)> + 'c {
     move |i| {
-        let (i, var) = variable(ctx)(i)?;
-        let (i, (init, end)) = pair(expr(ctx), expr(ctx))(i)?;
-        let (i, step) = opt(expr(ctx))(i)?;
-        Ok((i, (var, init, end, step.unwrap_or(Expr::int(1)))))
+        let (i, mut exprs) = expr_list(ctx)(i)?;
+        match exprs.len() {
+            3 => {
+                let end = exprs.pop().unwrap();
+                let init = exprs.pop().unwrap();
+                let var = exprs.pop().unwrap().into_var().unwrap();
+                Ok((i, (var, init, end, Expr::int(1))))
+            }
+            4 => {
+                let step = exprs.pop().unwrap();
+                let end = exprs.pop().unwrap();
+                let init = exprs.pop().unwrap();
+                let var = exprs.pop().unwrap().into_var().unwrap();
+                Ok((i, (var, init, end, step)))
+            }
+            other => panic!("FOR문은 인자로 3개나 4개를 가져야합니다: 받은 인자수 {other}개"),
+        }
     }
 }
 
@@ -704,7 +717,7 @@ pub fn variable<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Variable> + 'c {
     move |i| {
-        let (i, name) = ident(i)?;
+        let (i, name) = de_sp(ident)(i)?;
         let name = ctx.replace(name);
 
         if !is_ident(&name) {

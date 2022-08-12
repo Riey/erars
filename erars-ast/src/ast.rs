@@ -111,6 +111,13 @@ impl Expr {
     pub fn cond(op1: Self, op2: Self, op3: Self) -> Self {
         Self::CondExpr(Box::new(op1), Box::new(op2), Box::new(op3))
     }
+
+    pub fn into_var(self) -> Option<Variable> {
+        match self {
+            Self::Var(var) => Some(var),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
