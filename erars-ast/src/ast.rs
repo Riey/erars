@@ -215,4 +215,6 @@ pub enum BeginType {
     TurnEnd,
     #[strum(to_string = "AFTERTRAIN")]
     AfterTrain,
+    #[strum(to_string = "ABLUP")]
+    AblUp,
 }
