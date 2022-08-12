@@ -47,7 +47,7 @@ macro_rules! try_nom {
             Ok(ret) => ret,
             Err(err) => match err {
                 nom::Err::Error(err) | nom::Err::Failure(err) => {
-                    error!($lex, format!("Expression parsing failed: {:?}", err.code))
+                    error!($lex, format!("Expression parsing failed: {}", err))
                 }
                 _ => unreachable!(),
             },

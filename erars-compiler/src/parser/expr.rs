@@ -10,7 +10,8 @@ use nom::{
     bytes::complete::{escaped, is_not, tag, take_while},
     character::complete::*,
     combinator::{eof, map, opt, value, verify},
-    error::{context, ErrorKind},
+    error::{context, ErrorKind, VerboseError},
+    error_position,
     multi::{many0, separated_list0, separated_list1},
     number::complete::float,
     sequence::{delimited, pair, preceded, terminated, tuple},
@@ -18,7 +19,7 @@ use nom::{
 };
 use unicode_xid::UnicodeXID;
 
-type Error<'a> = nom::error::Error<&'a str>;
+type Error<'a> = nom::error::VerboseError<&'a str>;
 type IResult<'a, T> = nom::IResult<&'a str, T, Error<'a>>;
 
 fn sp<'a>(i: &'a str) -> IResult<'a, &'a str> {
@@ -288,12 +289,14 @@ fn ident_or_method_expr<'c, 'a>(
                             Ok((left, expr)) => {
                                 if !left.is_empty() {
                                     eprintln!("Macro must be complete form");
-                                    Err(nom::Err::Failure(Error::new(i, ErrorKind::Eof)))
+                                    Err(nom::Err::Failure(error_position!(i, ErrorKind::Eof)))
                                 } else {
                                     Ok((i, expr))
                                 }
                             }
-                            Err(err) => Err(err.map_input(|_| i)),
+                            Err(err) => Err(err.map(|e| VerboseError {
+                                errors: e.errors.into_iter().map(|(_i, kind)| (i, kind)).collect(),
+                            })),
                         }
                     }
                 }
@@ -357,7 +360,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                     },
                     _ => {
                         eprintln!("증감연산자는 변수와 함께 써야합니다.");
-                        return Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)));
+                        return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
                     }
                 }
             }
@@ -373,7 +376,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                 },
                 _ => {
                     eprintln!("증감연산자는 변수와 함께 써야합니다.");
-                    return Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)));
+                    return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
                 }
             };
             (i, expr)
@@ -386,7 +389,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                 },
                 _ => {
                     eprintln!("증감연산자는 변수와 함께 써야합니다.");
-                    return Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)));
+                    return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
                 }
             };
             (i, expr)
@@ -567,7 +570,7 @@ pub fn for_line<'c, 'a>(
             }
             other => {
                 eprintln!("FOR문은 인자로 3개나 4개를 가져야합니다: 받은 인자수 {other}개");
-                Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)))
+                Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)))
             }
         }
     }
@@ -590,7 +593,7 @@ pub fn assign_line<'c, 'a>(
 
         if !is_ident(&var_name) {
             eprintln!("Expanded variable name in assign line is incorrect `{var_name}`");
-            return Err(nom::Err::Failure(Error::new(i, ErrorKind::Verify)));
+            return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
         }
 
         let (i, args) = variable_arg(ctx)(i)?;
