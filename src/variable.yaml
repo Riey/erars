@@ -22,7 +22,7 @@ CSTR:
 CFLAG:
   size: [1000]
   is_chara: true
-  is_str: true
+  is_str: false
 
 NAME:
   size: []

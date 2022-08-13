@@ -363,5 +363,6 @@ pub enum Token<'s> {
     #[token("\u{FEFF}", logos::skip)]
     #[regex(r"[ \t\r\n]+", logos::skip)]
     #[regex(r";[^\n]*", logos::skip)]
+    #[regex(r"\[[^\n]+\]", logos::skip)]
     Error,
 }
