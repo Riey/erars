@@ -367,6 +367,10 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
             None => expr,
         };
 
+        if ctx.is_arg.get() {
+            return Ok((i, expr));
+        }
+
         Ok(if let Some(i) = i.strip_prefix("++") {
             let expr = match expr {
                 Expr::Var(var) => Expr::IncOpExpr {
@@ -375,8 +379,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                     is_inc: true,
                 },
                 _ => {
-                    eprintln!("증감연산자는 변수와 함께 써야합니다.");
-                    return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
+                    return Err(nom::Err::Error(error_position!(i, ErrorKind::Verify)));
                 }
             };
             (i, expr)
@@ -388,8 +391,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                     is_inc: false,
                 },
                 _ => {
-                    eprintln!("증감연산자는 변수와 함께 써야합니다.");
-                    return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
+                    return Err(nom::Err::Error(error_position!(i, ErrorKind::Verify)));
                 }
             };
             (i, expr)
@@ -427,6 +429,12 @@ fn bin_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a
         let mut stack = Vec::with_capacity(8);
 
         loop {
+            if ctx.is_arg.get() {
+                if i.starts_with("++") || i.starts_with("--") {
+                    break;
+                }
+            }
+
             let (new_i, op) = opt(binop)(i)?;
 
             if new_i.starts_with('=') {
@@ -588,13 +596,15 @@ pub fn assign_line<'c, 'a>(
     ctx: &'c ParserContext,
     ident: &'c str,
 ) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
-    move |i| {
+    move |mut i| {
         let var_name = ctx.replace(ident);
 
         if !is_ident(&var_name) {
             eprintln!("Expanded variable name in assign line is incorrect `{var_name}`");
             return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
         }
+
+        i = i.trim_end_matches(' ');
 
         let (i, args) = variable_arg(ctx)(i)?;
 
