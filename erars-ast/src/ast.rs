@@ -39,7 +39,6 @@ pub enum Stmt {
         catch_body: Option<Vec<Stmt>>,
     },
     Begin(BeginType),
-    Varset(Variable, Vec<Expr>),
     Repeat(Expr, Vec<Stmt>),
     Do(Expr, Vec<Stmt>),
     While(Expr, Vec<Stmt>),

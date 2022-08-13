@@ -125,14 +125,16 @@ impl Compiler {
 
     fn store_var(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.out.push(Instruction::StoreVar(var.var, count));
+        self.out.push(Instruction::LoadVarRef(var.var, count));
+        self.out.push(Instruction::StoreVar);
 
         Ok(())
     }
 
     fn push_var(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.out.push(Instruction::LoadVar(var.var, count));
+        self.out.push(Instruction::LoadVarRef(var.var, count));
+        self.out.push(Instruction::LoadVar);
 
         Ok(())
     }
@@ -426,7 +428,10 @@ impl Compiler {
                     }
                 }
             }
-            Stmt::Goto { label, catch_body: catch } => {
+            Stmt::Goto {
+                label,
+                catch_body: catch,
+            } => {
                 self.push_expr(label)?;
 
                 if let Some(catch) = catch {
@@ -454,15 +459,6 @@ impl Compiler {
             Stmt::Command(command, args) => {
                 let count = self.push_list(args)?;
                 self.out.push(Instruction::Command(command, count));
-            }
-            Stmt::Varset(var, args) => {
-                let varset_count = self.push_list(args)?;
-                let arg_count = self.push_list(var.args)?;
-                self.out.push(Instruction::Varset {
-                    code: var.var,
-                    args: arg_count,
-                    varset_args: varset_count,
-                });
             }
             Stmt::Times(var, ratio) => {
                 self.push_var(var.clone())?;

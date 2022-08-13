@@ -1,4 +1,4 @@
-use super::{ConsoleLinePart};
+use super::ConsoleLinePart;
 use erars_ast::Value;
 use pest::Parser;
 

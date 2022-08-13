@@ -4,7 +4,7 @@ use enum_map::EnumMap;
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
-use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, VariableInfo, Value};
+use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, VariableInfo};
 use erars_compiler::{CompiledFunction, Instruction};
 use serde::{Deserialize, Serialize};
 
@@ -138,10 +138,7 @@ impl FunctionDic {
                 }
                 FunctionInfo::Function | FunctionInfo::FunctionS => {}
                 FunctionInfo::Dim(local) => {
-                    body.push_local(
-                        local.var,
-                        local.info,
-                    );
+                    body.push_local(local.var, local.info);
                 }
             }
         }

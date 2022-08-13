@@ -197,7 +197,7 @@ pub enum ErhToken<'s> {
 
     #[token("#DIMS", lex_line_left_erh)]
     DimS(&'s str),
-    
+
     #[error]
     // BOM
     #[token("\u{FEFF}", logos::skip)]
@@ -309,11 +309,10 @@ pub enum Token<'s> {
     Alignment,
     #[token("BEGIN")]
     Begin,
-    #[token("VARSET", lex_line_left)]
-    Varset(&'s str),
     #[token("TIMES", lex_line_left)]
     Times(&'s str),
 
+    #[token("VARSET", |lex| normal_expr_command(lex, BuiltinCommand::Varset))]
     #[token("LIMIT", |lex| normal_expr_command(lex, BuiltinCommand::Limit))]
     #[token("INPUT", |lex| normal_expr_command(lex, BuiltinCommand::Input))]
     #[token("INPUTS", |lex| normal_expr_command(lex, BuiltinCommand::InputS))]
@@ -331,8 +330,8 @@ pub enum Token<'s> {
     #[token("SWAPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::SwapChara))]
     #[token("FINDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::FindChara))]
     #[token("SETCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetColor))]
-    #[token("GETBIT", |lex| normal_expr_command(lex, BuiltinCommand::GetBit))]
     #[token("SETBIT", |lex| normal_expr_command(lex, BuiltinCommand::SetBit))]
+    #[token("GETBIT", |lex| normal_expr_command(lex, BuiltinCommand::GetBit))]
     #[token("CLEARBIT", |lex| normal_expr_command(lex, BuiltinCommand::ClearBit))]
     #[token("POWER", |lex| normal_expr_command(lex, BuiltinCommand::Power))]
     #[token("GETEXPLV", |lex| normal_expr_command(lex, BuiltinCommand::GetExpLv))]

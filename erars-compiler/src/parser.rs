@@ -398,7 +398,6 @@ impl ParserContext {
                 let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
                 Stmt::Command(com, args)
             }
-            Token::Varset(args) => try_nom!(lex, self::expr::varset_line(self)(args)).1,
             other => error!(lex, format!("[Stmt] Invalid token: {:?}", other)),
         };
 

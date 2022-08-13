@@ -8,7 +8,8 @@ use strum::Display;
 use hashbrown::{HashMap, HashSet};
 
 use erars_ast::{
-    BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, UnaryOperator, VariableInfo, Value
+    BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, UnaryOperator, Value,
+    VariableInfo,
 };
 use erars_compiler::Instruction;
 
@@ -251,10 +252,59 @@ struct Callstack {
     local_idxs: HashSet<SmolStr>,
 }
 
+#[derive(Clone, Debug)]
+struct VariableRef {
+    name: SmolStr,
+    idxs: ArrayVec<usize, 4>,
+}
+
+#[derive(Clone, Debug)]
+enum LocalValue {
+    Value(Value),
+    VarRef(VariableRef),
+}
+
+impl<T> From<T> for LocalValue
+where
+    Value: From<T>,
+{
+    fn from(v: T) -> Self {
+        Self::Value(Value::from(v))
+    }
+}
+
+impl From<VariableRef> for LocalValue {
+    fn from(r: VariableRef) -> Self {
+        Self::VarRef(r)
+    }
+}
+
+impl TryFrom<LocalValue> for Value {
+    type Error = anyhow::Error;
+
+    fn try_from(value: LocalValue) -> Result<Self, Self::Error> {
+        match value {
+            LocalValue::Value(v) => Ok(v),
+            _ => bail!("LocalValue type is not Value"),
+        }
+    }
+}
+
+impl TryFrom<LocalValue> for VariableRef {
+    type Error = anyhow::Error;
+
+    fn try_from(value: LocalValue) -> Result<VariableRef, Self::Error> {
+        match value {
+            LocalValue::VarRef(v) => Ok(v),
+            _ => bail!("LocalValue type is not VariableRef"),
+        }
+    }
+}
+
 pub struct VmContext {
     var: VariableStorage,
     begin: Option<BeginType>,
-    stack: Vec<Value>,
+    stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
 }
 
@@ -266,6 +316,24 @@ impl VmContext {
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
         }
+    }
+
+    fn resolve_var_ref<'c>(
+        &'c mut self,
+        func_name: &str,
+        r: &VariableRef,
+    ) -> Result<(
+        &'c mut VariableInfo,
+        &'c mut UniformVariable,
+        arrayvec::IntoIter<usize, 4>,
+    )> {
+        let (info, var) = if self.is_local_var(&r.name) {
+            self.var.get_local_var(func_name, &r.name)
+        } else {
+            self.var.get_var(&r.name)
+        }?;
+
+        Ok((info, var, r.idxs.clone().into_iter()))
     }
 
     pub fn is_local_var(&self, name: &str) -> bool {
@@ -290,45 +358,64 @@ impl VmContext {
 
     pub fn return_func(&mut self) -> impl Iterator<Item = Value> + '_ {
         let call_stack = self.call_stack.last().unwrap();
-        self.stack.drain(call_stack.stack_base..)
+        self.stack
+            .drain(call_stack.stack_base..)
+            .map(|v| v.try_into().unwrap())
     }
 
     fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
-        self.take_list(count).map(usize::try_from).collect()
+        self.take_value_list(count).map(usize::try_from).collect()
     }
 
-    fn take_list(&mut self, count: u32) -> impl Iterator<Item = Value> + '_ {
+    fn take_value_list(&mut self, count: u32) -> impl Iterator<Item = Value> + '_ {
+        self.take_list(count).map(|l| l.try_into().unwrap())
+    }
+
+    fn take_list(&mut self, count: u32) -> impl Iterator<Item = LocalValue> + '_ {
         self.stack.drain(self.stack.len() - count as usize..)
     }
 
     fn dup(&mut self) {
         let last = self.stack.last().unwrap().clone();
-        self.push(last);
+        self.stack.push(last);
     }
 
     fn dup_prev(&mut self) {
         let prev = self.stack[self.stack.len() - 2].clone();
-        self.push(prev);
+        self.stack.push(prev);
+    }
+
+    fn push_var_ref(&mut self, name: SmolStr, idxs: ArrayVec<usize, 4>) {
+        self.stack
+            .push(LocalValue::VarRef(VariableRef { name, idxs }));
     }
 
     fn push(&mut self, value: impl Into<Value>) {
-        self.stack.push(value.into());
+        self.stack.push(LocalValue::Value(value.into()));
     }
 
-    fn pop(&mut self) -> Value {
+    fn pop(&mut self) -> LocalValue {
         // if this failed, it must be compiler error
         self.stack
             .pop()
             .unwrap_or_else(|| unreachable!("Unknown compiler error"))
     }
 
-    fn pop_str(&mut self) -> Result<String> {
+    fn pop_value(&mut self) -> Value {
+        self.pop().try_into().unwrap()
+    }
+
+    fn pop_var_ref(&mut self) -> Result<VariableRef> {
         self.pop().try_into()
+    }
+
+    fn pop_str(&mut self) -> Result<String> {
+        self.pop_value().try_into()
     }
 
     #[allow(unused)]
     fn pop_int(&mut self) -> Result<i64> {
-        self.pop().try_into()
+        self.pop_value().try_into()
     }
 }
 
@@ -362,7 +449,11 @@ impl TerminalVm {
             Instruction::GotoLabel => {
                 *cursor = goto_labels[ctx.pop_str()?.as_str()] as usize;
             }
-            Instruction::StoreVar(var_idx, c) => {
+            Instruction::LoadVarRef(var_idx, c) => {
+                let args = ctx.take_arg_list(*c)?;
+                ctx.push_var_ref(var_idx.clone(), args);
+            }
+            Instruction::StoreVar => {
                 let target = *ctx
                     .var
                     .get_var("TARGET".into())
@@ -370,16 +461,10 @@ impl TerminalVm {
                     .1
                     .assume_normal()
                     .get_int(iter::empty())?;
+                let var_ref = ctx.pop_var_ref()?;
+                let value = ctx.pop_value();
 
-                let mut args = ctx.take_arg_list(*c)?.into_iter();
-                let value = ctx.pop();
-
-                let (info, var) = if ctx.is_local_var(var_idx) {
-                    ctx.var.get_local_var(func_name, var_idx)?
-                } else {
-                    ctx.var.get_var(var_idx)?
-                };
-
+                let (info, var, mut args) = ctx.resolve_var_ref(func_name, &var_ref)?;
                 match var {
                     UniformVariable::Character(c) => {
                         let no = if args.len() < info.arg_len() {
@@ -395,44 +480,40 @@ impl TerminalVm {
                     }
                 }
             }
-            Instruction::LoadVar(var_idx, c) => match var_idx.as_str() {
-                "GAMEBASE_VERSION" => ctx.push(0),
-                "GAMEBASE_AUTHOR" => ctx.push("Riey"),
-                "GAMEBASE_YEAR" => ctx.push(2022),
-                "GAMEBASE_TITLE" => ctx.push("eraTHYMKR"),
-                "GAMEBASE_INFO" => ctx.push(""),
-                _ => {
-                    let target = *ctx
-                        .var
-                        .get_var("TARGET".into())
-                        .unwrap()
-                        .1
-                        .assume_normal()
-                        .get_int(iter::empty())?;
+            Instruction::LoadVar => {
+                let var_ref = ctx.pop_var_ref()?;
+                match var_ref.name.as_str() {
+                    "GAMEBASE_VERSION" => ctx.push(0),
+                    "GAMEBASE_AUTHOR" => ctx.push("Riey"),
+                    "GAMEBASE_YEAR" => ctx.push(2022),
+                    "GAMEBASE_TITLE" => ctx.push("eraTHYMKR"),
+                    "GAMEBASE_INFO" => ctx.push(""),
+                    _ => {
+                        let target = *ctx
+                            .var
+                            .get_var("TARGET".into())
+                            .unwrap()
+                            .1
+                            .assume_normal()
+                            .get_int(iter::empty())?;
 
-                    let mut args = ctx.take_arg_list(*c)?.into_iter();
+                        let (info, var, mut args) = ctx.resolve_var_ref(func_name, &var_ref)?;
+                        let value = match var {
+                            UniformVariable::Character(c) => {
+                                let no = if args.len() < info.arg_len() {
+                                    target as usize
+                                } else {
+                                    args.next().unwrap()
+                                };
+                                c[no].get(args)?
+                            }
+                            UniformVariable::Normal(v) => v.get(args)?,
+                        };
 
-                    let (info, var) = if ctx.is_local_var(var_idx) {
-                        ctx.var.get_local_var(func_name, var_idx)?
-                    } else {
-                        ctx.var.get_var(var_idx)?
-                    };
-
-                    let value = match var {
-                        UniformVariable::Character(c) => {
-                            let no = if args.len() < info.arg_len() {
-                                target as usize
-                            } else {
-                                args.next().unwrap()
-                            };
-                            c[no].get(args)?
-                        }
-                        UniformVariable::Normal(v) => v.get(args)?,
-                    };
-
-                    ctx.push(value);
+                        ctx.push(value);
+                    }
                 }
-            },
+            }
             Instruction::ReuseLastLine => {
                 chan.send_msg(ConsoleMessage::ReuseLastLine(ctx.pop_str()?));
             }
@@ -473,7 +554,7 @@ impl TerminalVm {
             }
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
-                let mut args = ctx.take_list(*c);
+                let mut args = ctx.take_value_list(*c);
 
                 match func.as_str() {
                     "TOSTR" => {
@@ -495,7 +576,7 @@ impl TerminalVm {
             }
             Instruction::Call(c) => {
                 let func = ctx.pop_str()?;
-                let args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>();
+                let args = ctx.take_value_list(*c).collect::<ArrayVec<_, 8>>();
 
                 match func.as_str() {
                     _ => {
@@ -509,7 +590,7 @@ impl TerminalVm {
                 return Ok(Some(Workflow::Exit));
             }
             Instruction::ConcatString(c) => {
-                let args = ctx.take_list(*c);
+                let args = ctx.take_value_list(*c);
                 let ret = args
                     .into_iter()
                     .fold(String::new(), |s, l| s + l.into_str().as_str());
@@ -522,7 +603,7 @@ impl TerminalVm {
             }
             Instruction::UnaryOperator(op) => match op {
                 UnaryOperator::Not => {
-                    let operand = ctx.pop().as_bool();
+                    let operand = ctx.pop_value().as_bool();
                     ctx.push(!operand);
                 }
                 UnaryOperator::Minus => {
@@ -531,8 +612,8 @@ impl TerminalVm {
                 }
             },
             Instruction::BinaryOperator(op) => {
-                let rhs = ctx.pop();
-                let lhs = ctx.pop();
+                let rhs = ctx.pop_value();
+                let lhs = ctx.pop_value();
 
                 let ret = match op {
                     BinaryOperator::Add => match lhs {
@@ -569,7 +650,7 @@ impl TerminalVm {
                 *cursor = *no as usize;
             }
             Instruction::GotoIfNot(no) => {
-                let cond = ctx.pop().as_bool();
+                let cond = ctx.pop_value().as_bool();
                 if !cond {
                     *cursor = *no as usize;
                 }
@@ -578,9 +659,65 @@ impl TerminalVm {
                 chan.send_msg(ConsoleMessage::Alignment(*align));
             }
             Instruction::Command(com, c) => {
-                let args = ctx.take_list(*c).collect::<ArrayVec<_, 4>>();
+                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 4>>().into_iter();
+                macro_rules! pop {
+                    () => {
+                        match args.next() {
+                            Some(v) => v,
+                            None => bail!("매개변수가 부족합니다"),
+                        }
+                    };
+                    (@opt) => {
+                        args.next()
+                    };
+                    (@var) => {
+                        VariableRef::try_from(pop!())?
+                    };
+                    (@value) => {
+                        Value::try_from(pop!())?
+                    };
+                    (@opt @value) => {
+                        match pop!(@opt) {
+                            Some(v) => Some(Value::try_from(v)?),
+                            None => None,
+                        }
+                    };
+                    (@$t:ty) => {
+                        $t::try_from(Value::try_from(pop!())?)?
+                    };
+                    (@opt @$t:ty) => {
+                        match pop!(@opt) {
+                            Some(v) => Some(<$t>::try_from(Value::try_from(v)?)?),
+                            None => None,
+                        }
+                    };
+                }
 
                 match com {
+                    BuiltinCommand::Varset => {
+                        let var = pop!(@var);
+                        let (info, var, args) = ctx.resolve_var_ref(func_name, &var)?;
+                        let value = pop!(@opt @value);
+                        let start = pop!(@opt @usize);
+                        let end = pop!(@opt @usize);
+
+                        match (value, start, end) {
+                            (None, None, None) => {
+                                *var = UniformVariable::new(info);
+                            }
+                            (Some(value), start, end) => {
+                                let var = var.assume_normal();
+                                let start = start.unwrap_or(0);
+                                let end = end.unwrap_or(info.size.last().copied().unwrap_or(1));
+
+                                for i in start..end {
+                                    let args = args.clone().chain(Some(i));
+                                    var.set(args, value.clone())?;
+                                }
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
                     BuiltinCommand::DrawLine => {
                         chan.send_msg(ConsoleMessage::DrawLine);
                     }

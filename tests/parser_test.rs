@@ -1077,16 +1077,16 @@ Function {
             Dim(
                 LocalVariable {
                     var: "FOO",
-                    init: [
-                        Int(
-                            2,
-                        ),
-                    ],
                     info: VariableInfo {
                         is_chara: false,
                         is_str: false,
                         default_int: 0,
                         size: [],
+                        init: [
+                            Int(
+                                2,
+                            ),
+                        ],
                     },
                 },
             ),

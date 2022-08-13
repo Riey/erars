@@ -629,18 +629,6 @@ pub fn assign_line<'c, 'a>(
     }
 }
 
-pub fn varset_line<'c, 'a>(
-    ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
-    move |i| {
-        let (i, var) = (de_sp(variable(ctx)))(i)?;
-
-        let (i, args) = opt(preceded(char(','), expr_list(ctx)))(i)?;
-
-        Ok((i, Stmt::Varset(var, args.unwrap_or_default())))
-    }
-}
-
 pub fn dim_line<'c, 'a>(
     ctx: &'c ParserContext,
     is_str: bool,

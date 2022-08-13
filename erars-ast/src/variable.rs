@@ -1,4 +1,4 @@
-use crate::{Expr, value::Value};
+use crate::{value::Value, Expr};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
@@ -27,5 +27,15 @@ pub struct VariableInfo {
 impl VariableInfo {
     pub fn arg_len(&self) -> usize {
         self.size.len() + self.is_chara as usize
+    }
+
+    pub fn full_size(&self) -> usize {
+        let mut ret = 1;
+
+        for s in self.size.iter() {
+            ret *= *s;
+        }
+
+        ret
     }
 }

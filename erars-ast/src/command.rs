@@ -63,4 +63,16 @@ pub enum BuiltinCommand {
     GetBit,
     ClearBit,
     Power,
+
+    Varset,
+}
+
+impl BuiltinCommand {
+    pub fn set_var_arg_count(self) -> usize {
+        use BuiltinCommand::*;
+        match self {
+            SetBit | ClearBit | Varset => 1,
+            _ => 0,
+        }
+    }
 }

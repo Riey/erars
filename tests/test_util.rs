@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
     files::SimpleFiles,
@@ -6,7 +8,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_compiler::{ParserContext, ParserResult};
+use erars_compiler::{HeaderInfo, ParserContext, ParserResult};
 use serde::de::DeserializeOwned;
 
 #[track_caller]
@@ -15,7 +17,12 @@ pub fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     f: fn(&ParserContext, &str) -> ParserResult<T>,
 ) -> T {
     let source = std::fs::read_to_string(path).unwrap();
-    let ctx = ParserContext::default();
+    let info = HeaderInfo {
+        global_variables: serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap(),
+        ..Default::default()
+    };
+
+    let ctx = ParserContext::new(Arc::new(info));
     let mut files = SimpleFiles::new();
     let file_id = files.add(path, &source);
 

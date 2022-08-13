@@ -15,13 +15,9 @@ pub enum Instruction {
     LoadInt(i64),
     LoadStr(String),
     PadStr(Alignment),
-    LoadVar(SmolStr, u32),
-    StoreVar(SmolStr, u32),
-    Varset {
-        code: SmolStr,
-        args: u32,
-        varset_args: u32,
-    },
+    LoadVarRef(SmolStr, u32),
+    LoadVar,
+    StoreVar,
     CallMethod(u32),
     Call(u32),
     /// if name is not exists, push 1

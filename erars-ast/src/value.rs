@@ -1,6 +1,12 @@
 use anyhow::{bail, Error, Result};
 use serde::{Deserialize, Serialize};
 
+// #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+// pub enum LocalValue {
+//     Value(Value),
+//     VarRef(SmolStr, ArrayVec<usize, 4>),
+// }
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Value {
     Int(i64),
