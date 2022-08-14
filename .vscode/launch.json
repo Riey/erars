@@ -55,7 +55,7 @@
                     "kind": "test"
                 }
             },
-            "args": ["--", "print_simple"],
+            "args": ["--", "endif"],
             "cwd": "${workspaceFolder}"
         }
     ]

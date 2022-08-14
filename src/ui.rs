@@ -3,8 +3,10 @@ use eframe::epi::{App, Frame};
 use egui::{Color32, FontData, FontDefinitions, FontFamily};
 use erars_ast::{Alignment, Value};
 use maplit::btreemap;
+use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::iter;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -68,13 +70,11 @@ impl App for EraApp {
     }
 
     fn update(&mut self, ctx: &egui::Context, frame: &Frame) {
+        self.chan.set_frame(frame.clone());
+
         if self.req.is_none() {
             while let Some(msg) = self.chan.recv_msg() {
                 match msg {
-                    ConsoleMessage::Exit => {
-                        frame.quit();
-                        return;
-                    }
                     ConsoleMessage::Input(req) => self.req = Some(req),
                     ConsoleMessage::NewLine => self.console.new_line(),
                     ConsoleMessage::Print(s) => self.console.print(s),
@@ -219,7 +219,6 @@ pub enum ConsoleMessage {
     ReuseLastLine(String),
     Alignment(Alignment),
     Input(InputRequest),
-    Exit,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -237,6 +236,9 @@ pub enum ConsoleResult {
 }
 
 pub struct ConsoleChannel {
+    frame: Mutex<Option<Frame>>,
+    delay_redraw: AtomicBool,
+    delay_exit: AtomicBool,
     console: (Sender<ConsoleMessage>, Receiver<ConsoleMessage>),
     ret: (Sender<ConsoleResult>, Receiver<ConsoleResult>),
 }
@@ -244,8 +246,36 @@ pub struct ConsoleChannel {
 impl ConsoleChannel {
     pub fn new() -> Self {
         Self {
+            frame: Mutex::new(None),
+            delay_redraw: AtomicBool::new(false),
+            delay_exit: AtomicBool::new(false),
             console: bounded(256),
             ret: bounded(8),
+        }
+    }
+
+    pub fn set_frame(&self, frame: Frame) {
+        if self.delay_redraw.swap(false, Ordering::SeqCst) {
+            frame.request_repaint();
+        }
+        if self.delay_exit.swap(false, Ordering::SeqCst) {
+            frame.quit();
+        }
+
+        *self.frame.lock() = Some(frame);
+    }
+
+    pub fn request_redraw(&self) {
+        match self.frame.lock().as_ref() {
+            Some(f) => f.request_repaint(),
+            None => self.delay_redraw.store(true, Ordering::SeqCst),
+        }
+    }
+
+    pub fn exit(&self) {
+        match self.frame.lock().as_ref() {
+            Some(f) => f.quit(),
+            None => self.delay_exit.store(true, Ordering::SeqCst),
         }
     }
 

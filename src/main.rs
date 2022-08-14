@@ -29,7 +29,7 @@ fn main() {
         use simplelog::*;
         CombinedLogger::init(vec![
             TermLogger::new(
-                LevelFilter::Warn,
+                LevelFilter::Trace,
                 Config::default(),
                 TerminalMode::Mixed,
                 ColorChoice::Auto,
@@ -114,6 +114,7 @@ fn main() {
         let header_info = Arc::new(header_info);
 
         let funcs = erbs
+            // .into_iter()
             .par_bridge()
             .flat_map(|erb| {
                 let ctx = ParserContext::new(header_info.clone());
@@ -157,7 +158,7 @@ fn main() {
             let config = Config::default();
             codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                 .unwrap();
-            inner_chan.send_msg(erars::ui::ConsoleMessage::Exit);
+            inner_chan.exit();
             log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
             return;
         }
@@ -168,7 +169,7 @@ fn main() {
 
         if let Err(err) = ret {
             eprintln!("{}", err);
-            inner_chan.send_msg(erars::ui::ConsoleMessage::Exit);
+            inner_chan.exit();
         }
 
         println!("Program Terminated");

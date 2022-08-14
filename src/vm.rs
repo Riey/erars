@@ -552,12 +552,14 @@ impl TerminalVm {
             }
             Instruction::ReuseLastLine => {
                 chan.send_msg(ConsoleMessage::ReuseLastLine(ctx.pop_str()?));
+                chan.request_redraw();
             }
             Instruction::Print(flags) => {
                 chan.send_msg(ConsoleMessage::Print(ctx.pop_str()?));
                 if flags.contains(PrintFlags::NEWLINE) {
                     chan.send_msg(ConsoleMessage::NewLine);
                 }
+                chan.request_redraw();
 
                 // TODO: PRINTW
             }
@@ -622,7 +624,7 @@ impl TerminalVm {
             }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
-                chan.send_msg(ConsoleMessage::Exit);
+                chan.exit();
                 return Ok(Some(Workflow::Exit));
             }
             Instruction::ConcatString(c) => {
@@ -756,6 +758,7 @@ impl TerminalVm {
                     }
                     BuiltinCommand::DrawLine => {
                         chan.send_msg(ConsoleMessage::DrawLine);
+                        chan.request_redraw();
                     }
                     BuiltinCommand::Input => {
                         chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
@@ -770,9 +773,10 @@ impl TerminalVm {
                                     .set(iter::empty(), ret)?;
                             }
                         }
+                        chan.request_redraw();
                     }
                     BuiltinCommand::Quit => {
-                        chan.send_msg(ConsoleMessage::Exit);
+                        chan.exit();
                         return Ok(Some(Workflow::Exit));
                     }
                     BuiltinCommand::AddDefChara => {

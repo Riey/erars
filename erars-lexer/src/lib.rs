@@ -360,14 +360,13 @@ pub enum Token<'s> {
     #[token("UNICODE", |lex| normal_expr_command(lex, BuiltinCommand::Unicode))]
     #[token("BAR", |lex| normal_expr_command(lex, BuiltinCommand::Bar))]
     #[token("ARRAYSHIFT", |lex| normal_expr_command(lex, BuiltinCommand::ArrayShift))]
-
     #[token("SUBSTRING", |lex| normal_expr_command(lex, BuiltinCommand::SubString))]
     #[token("SUBSTRINGU", |lex| normal_expr_command(lex, BuiltinCommand::SubStringU))]
     #[token("SPLIT", |lex| normal_expr_command(lex, BuiltinCommand::Split))]
-
     #[token("THROW", |lex| normal_expr_command(lex, BuiltinCommand::Throw))]
     #[token("SWAP", |lex| normal_expr_command(lex, BuiltinCommand::Swap))]
     #[token("REDRAW", |lex| normal_expr_command(lex, BuiltinCommand::Redraw))]
+    #[token("CHKFONT", |lex| normal_expr_command(lex, BuiltinCommand::ChkFont))]
     #[token("SETFONT", |lex| normal_expr_command(lex, BuiltinCommand::SetFont))]
     #[token("FONTSTYLE", |lex| normal_expr_command(lex, BuiltinCommand::FontStyle))]
     #[token("SAVEDATA", |lex| normal_expr_command(lex, BuiltinCommand::SaveData))]
@@ -375,7 +374,6 @@ pub enum Token<'s> {
     #[token("DELDATA", |lex| normal_expr_command(lex, BuiltinCommand::DelData))]
     #[token("CHKDATA", |lex| normal_expr_command(lex, BuiltinCommand::ChkData))]
     #[token("SAVENOS", |lex| normal_expr_command(lex, BuiltinCommand::SaveNos))]
-
     #[token("SAVECHARA", |lex| normal_expr_command(lex, BuiltinCommand::SaveChara))]
     #[token("LOADCHARA", |lex| normal_expr_command(lex, BuiltinCommand::LoadChara))]
     #[token("CHKCHARADATA", |lex| normal_expr_command(lex, BuiltinCommand::ChkCharaData))]
@@ -387,7 +385,6 @@ pub enum Token<'s> {
     #[token("SORTCHARA", |lex| normal_expr_command(lex, BuiltinCommand::SortChara))]
     #[token("FINDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::FindChara))]
     #[token("PICKUPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::PickupChara))]
-
     #[token("CSVNAME", |lex| normal_expr_command(lex, BuiltinCommand::CsvName))]
     #[token("CSVCALLNAME", |lex| normal_expr_command(lex, BuiltinCommand::CsvCallName))]
     #[token("CSVNICKNAME", |lex| normal_expr_command(lex, BuiltinCommand::CsvNickName))]
@@ -421,6 +418,7 @@ pub enum Token<'s> {
     #[token("GETDEFBGCOLOR", |_| single_command(BuiltinCommand::GetDefBgColor))]
     #[token("GETFOCUSCOLOR", |_| single_command(BuiltinCommand::GetFocusColor))]
     #[token("ADDDEFCHARA", |_| single_command(BuiltinCommand::AddDefChara))]
+    #[token("GETFONT", |_| single_command(BuiltinCommand::GetFont))]
     #[token("FONTBOLD", |_| single_command(BuiltinCommand::FontBold))]
     #[token("FONTITALIC", |_| single_command(BuiltinCommand::FontItalic))]
     #[token("FONTREGULAR", |_| single_command(BuiltinCommand::FontRegular))]
