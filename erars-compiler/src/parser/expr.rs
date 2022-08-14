@@ -460,16 +460,16 @@ fn bin_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a
 
 pub fn expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
-        let cond = map(
-            tuple((
-                bin_expr(ctx),
-                de_char_sp('?', bin_expr(ctx), '#'),
-                bin_expr(ctx),
-            )),
-            |(cond, if_true, or_false)| Expr::cond(cond, if_true, or_false),
-        );
+        let (i, expr) = bin_expr(ctx)(i)?;
 
-        alt((cond, bin_expr(ctx)))(i)
+        let (i, cond) = opt(pair(de_char_sp('?', bin_expr(ctx), '#'), bin_expr(ctx)))(i)?;
+
+        let expr = match cond {
+            Some((if_true, or_false)) => Expr::cond(expr, if_true, or_false),
+            None => expr,
+        };
+
+        Ok((i, expr))
     }
 }
 
