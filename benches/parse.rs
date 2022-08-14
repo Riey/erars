@@ -1,5 +1,8 @@
+use std::sync::Arc;
+
 use criterion::*;
 use erars::erars_compiler::{compile, ParserContext};
+use erars_compiler::HeaderInfo;
 
 fn gen_bench(count: usize) -> String {
     let mut ret = String::from("@FUNC\n");
@@ -11,8 +14,15 @@ fn gen_bench(count: usize) -> String {
     ret
 }
 
+fn make_ctx() -> ParserContext {
+    ParserContext::new(Arc::new(HeaderInfo {
+        global_variables: serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap(),
+        ..Default::default()
+    }))
+}
+
 fn parse_small(c: &mut Criterion) {
-    let ctx = ParserContext::default();
+    let ctx = make_ctx();
     c.bench_function("small 5000", |b| {
         let code = gen_bench(5000);
         b.iter(|| ctx.parse_program_str(&code).unwrap());
@@ -24,7 +34,7 @@ fn parse_small(c: &mut Criterion) {
 }
 
 fn parse_real(c: &mut Criterion) {
-    let ctx = ParserContext::default();
+    let ctx = make_ctx();
 
     c.bench_function("parse title", |b| {
         b.iter(|| {
@@ -42,7 +52,7 @@ fn parse_real(c: &mut Criterion) {
 }
 
 fn compile_real(c: &mut Criterion) {
-    let ctx = ParserContext::default();
+    let ctx = make_ctx();
 
     c.bench_function("compile title", |b| {
         b.iter(|| {
