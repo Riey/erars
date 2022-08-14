@@ -339,6 +339,7 @@ pub enum Token<'s> {
     #[token("CHKDATA", |lex| normal_expr_command(lex, BuiltinCommand::ChkData))]
     #[token("UNICODE", |lex| normal_expr_command(lex, BuiltinCommand::Unicode))]
     #[token("BAR", |lex| normal_expr_command(lex, BuiltinCommand::Bar))]
+    #[token("ARRAYSHIFT", |lex| normal_expr_command(lex, BuiltinCommand::ArrayShift))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[regex(r"REUSELASTLINE [^\r\n]*", |lex| unsafe { parse_reuse(lex.slice()) })]

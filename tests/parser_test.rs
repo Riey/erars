@@ -469,7 +469,7 @@ mod body {
                 r#"tests/parse_tests/bodys/print_simple.erb"#,
                 ParserContext::parse_body_str
             ),
-            "
+            r#"
 [
     Print(
         NEWLINE,
@@ -477,8 +477,14 @@ mod body {
             1 + 1 = {BinopExpr(Int(1), Add, Int(1))},
         ),
     ),
+    Print(
+        NEWLINE | WAIT,
+        FormText(
+            {Method("조사처리", [Var(Variable { var: "CALLNAME", args: [Method("GET_CHARA_M", [])] }), String("와")])}같이 온 걸 보니, 단단히 각오하고 온 것 같다,
+        ),
+    ),
 ]
-"
+"#
         );
     }
 

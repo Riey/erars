@@ -173,6 +173,7 @@ pub fn form_str<'c, 'a>(
         loop {
             let (left, expr, padding, align) = match ty {
                 Some(FormType::Percent) => {
+                    let ban_percent = ctx.ban_percent.get();
                     ctx.ban_percent.set(true);
                     let (i, ex) = expr(ctx)(i)?;
                     let (i, padding) = opt(preceded(char_sp(','), expr(ctx)))(i)?;
@@ -182,7 +183,7 @@ pub fn form_str<'c, 'a>(
                         (i, None)
                     };
                     let (i, _) = char_sp('%')(i)?;
-                    ctx.ban_percent.set(false);
+                    ctx.ban_percent.set(ban_percent);
 
                     (i, ex, padding, align)
                 }
@@ -250,7 +251,10 @@ fn ident_or_method_expr<'c, 'a>(
         let i = i.trim_start_matches(' ');
 
         if let Some(i) = i.strip_prefix('(') {
+            let p = ctx.ban_percent.get();
+            ctx.ban_percent.set(false);
             let (i, args) = terminated(separated_list0(char_sp(','), expr(ctx)), char_sp(')'))(i)?;
+            ctx.ban_percent.set(p);
             Ok((i, Expr::Method(ident.into(), args)))
         } else {
             match ident {
@@ -722,9 +726,10 @@ pub fn variable_arg<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
     move |i| {
+        let is_arg = ctx.is_arg.get();
         ctx.is_arg.set(true);
         let (i, args) = many0(preceded(char_sp(':'), expr(ctx)))(i)?;
-        ctx.is_arg.set(false);
+        ctx.is_arg.set(is_arg);
 
         Ok((i, args))
     }

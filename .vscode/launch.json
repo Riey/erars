@@ -48,15 +48,14 @@
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=erars",
                     "--package=erars"
                 ],
                 "filter": {
-                    "name": "erars",
-                    "kind": "bin"
+                    "name": "parser_test",
+                    "kind": "test"
                 }
             },
-            "args": [],
+            "args": ["--", "print_simple"],
             "cwd": "${workspaceFolder}"
         }
     ]
