@@ -153,13 +153,8 @@ fn call_jump_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> (CallJumpInfo, &'s str)
         unreachable!()
     }
 
-    if com == "FORM" {
+    if com.starts_with("FORM") {
         info.is_form = true;
-        com = "";
-    }
-
-    if !com.is_empty() {
-        unreachable!()
     }
 
     let args = lex_line_left(lex);
@@ -311,10 +306,8 @@ pub enum Token<'s> {
     #[token("ENDSELECT")]
     EndSelect,
 
-    #[regex("(TRY)?C?(CALL|JUMP|GOTO)(FORM)?", call_jump_line)]
+    #[regex("(TRY)?C?(CALLF?|JUMP|GOTO)(FORM)?", call_jump_line)]
     CallJump((CallJumpInfo, &'s str)),
-    #[token("CALLF", lex_line_left)]
-    CallF(&'s str),
     #[token("CATCH")]
     Catch,
     #[token("ENDCATCH")]

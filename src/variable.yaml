@@ -4,6 +4,11 @@
   # is_global: false
   # size: [1000]
 
+SAVESTR:
+  size: [1000]
+  is_chara: false
+  is_str: true
+
 STR:
   size: [1000]
   is_chara: false

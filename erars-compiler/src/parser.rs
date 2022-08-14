@@ -233,17 +233,6 @@ impl ParserContext {
                 let (_, s) = try_nom!(lex, self::expr::expr_list(self)(form));
                 Stmt::PrintList(flags, s)
             }
-            Token::CallF(args) => {
-                let (name, args) = try_nom!(lex, self::expr::call_jump_line(self, false)(args)).1;
-
-                Stmt::Call {
-                    name,
-                    args,
-                    try_body: Vec::new(),
-                    catch_body: None,
-                    is_jump: false,
-                }
-            }
             Token::CallJump((info, args)) => {
                 let (name, args) =
                     try_nom!(lex, self::expr::call_jump_line(self, info.is_form)(args)).1;
