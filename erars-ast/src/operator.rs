@@ -51,6 +51,13 @@ pub enum BinaryOperator {
     #[strum(to_string = "^^")]
     BitXor,
 
+    /// <<
+    #[strum(to_string = "<<")]
+    Lhs,
+    /// >>
+    #[strum(to_string = ">>")]
+    Rhs,
+
     /// ==
     #[strum(to_string = "==")]
     Equal,
@@ -80,9 +87,9 @@ impl BinaryOperator {
             And | Or | Xor => 3,
             Equal | NotEqual => 4,
             Less | LessOrEqual | Greater | GreaterOrEqual => 5,
-
-            Add | Sub => 6,
-            Mul | Div | Rem => 7,
+            Lhs | Rhs => 6,
+            Add | Sub => 7,
+            Mul | Div | Rem => 8,
         }
     }
 }

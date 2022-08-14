@@ -15,8 +15,8 @@ use std::{
     sync::Arc,
 };
 
-pub use expr::normal_form_str;
 pub use crate::error::{ParserError, ParserResult};
+pub use expr::normal_form_str;
 
 macro_rules! error {
     ($lex:expr, $msg:expr) => {{
@@ -175,6 +175,10 @@ impl ParserContext {
             Token::StrLenForm(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
                 Stmt::Command(BuiltinCommand::StrLenForm, vec![form])
+            }
+            Token::PutForm(left) => {
+                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
+                Stmt::Command(BuiltinCommand::PutForm, vec![form])
             }
             Token::StrLenFormU(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));

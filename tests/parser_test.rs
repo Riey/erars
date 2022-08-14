@@ -547,6 +547,12 @@ mod body {
             {Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })}의 교습 관찰 결과 완료  결과：임시 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}에 의한 실제 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })}증가⇒{CondExpr(BinopExpr(Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), Equal, Int(1)), FormText(성공), FormText(실패))}({Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(693)] })}％) 작업 내용：{Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(690)] })},
         ),
     ),
+    Print(
+        NEWLINE | WAIT,
+        FormText(
+            보지에서 애액을 흘렸{CondExpr(BinopExpr(Var(Variable { var: "TEQUIP", func_extern: None, args: [Int(42)] }), Equal, Int(0)), FormText(고, 작은 한숨을 토해냈), String(""))}다.,
+        ),
+    ),
 ]
 "#
         );

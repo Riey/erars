@@ -108,13 +108,11 @@ fn parse_form_normal_str<'a>(
                     break Some(FormType::Brace);
                 }
                 Some('#') if ty == FormStrType::FirstCond => {
-                    i = ch.as_str();
                     break None;
                 }
                 Some('\\') => match ch.next() {
                     Some('@') => {
-                        if ty == FormStrType::SecondCond {
-                            i = ch.as_str();
+                        if ty == FormStrType::SecondCond || ty == FormStrType::FirstCond {
                             break None;
                         } else {
                             i = ch.as_str();
@@ -204,9 +202,17 @@ pub fn form_str<'c, 'a>(
                     let (i, cond) = bin_expr(ctx)(i)?;
                     let (i, _) = de_sp(tag("?"))(i)?;
                     let (i, if_true) = form_str(FormStrType::FirstCond, ctx)(i)?;
-                    let (i, or_false) = preceded(sp, form_str(FormStrType::SecondCond, ctx))(i)?;
 
-                    (i, Expr::cond(cond, if_true, or_false), None, None)
+                    if let Some(i) = i.strip_prefix('#') {
+                        let (i, or_false) =
+                            preceded(sp, form_str(FormStrType::SecondCond, ctx))(i)?;
+                        let i = i.strip_prefix("\\@").unwrap();
+                        (i, Expr::cond(cond, if_true, or_false), None, None)
+                    } else if let Some(i) = i.strip_prefix("\\@") {
+                        (i, Expr::cond(cond, if_true, Expr::str("")), None, None)
+                    } else {
+                        unreachable!()
+                    }
                 }
                 None => break,
             };
@@ -426,6 +432,8 @@ fn binop(i: &str) -> IResult<'_, BinaryOperator> {
         value(BinaryOperator::Mul, char('*')),
         value(BinaryOperator::Div, char('/')),
         value(BinaryOperator::Rem, char('%')),
+        value(BinaryOperator::Lhs, tag("<<")),
+        value(BinaryOperator::Rhs, tag(">>")),
         value(BinaryOperator::Xor, tag("^^")),
         value(BinaryOperator::Or, tag("||")),
         value(BinaryOperator::And, tag("&&")),
@@ -519,6 +527,8 @@ pub fn assign_op<'a>(i: &'a str) -> IResult<'a, Option<BinaryOperator>> {
         value(BinaryOperator::Mul, char('*')),
         value(BinaryOperator::Div, char('/')),
         value(BinaryOperator::Rem, char('%')),
+        value(BinaryOperator::Lhs, tag("<<")),
+        value(BinaryOperator::Rhs, tag(">>")),
         value(BinaryOperator::BitXor, char('^')),
         value(BinaryOperator::BitOr, char('|')),
         value(BinaryOperator::BitAnd, char('&')),

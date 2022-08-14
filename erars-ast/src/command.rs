@@ -34,11 +34,6 @@ pub enum BuiltinCommand {
     Throw,
     CallTrain,
 
-    SaveData,
-    LoadData,
-    SaveGlobal,
-    LoadGlobal,
-
     Redraw,
     DrawLine,
     CustomDrawLine,
@@ -47,20 +42,33 @@ pub enum BuiltinCommand {
     Swap,
     Split,
     Unicode,
+    PutForm,
 
-    Reset_Stain,
+    ResetStain,
     GetExpLv,
     GetPalamLv,
 
     ResetData,
+    SaveData,
+    LoadData,
+    DelData,
     ChkData,
+    SaveNos,
 
+    SaveGlobal,
+    LoadGlobal,
+
+    SaveChara,
+    LoadChara,
+    ChkCharaData,
+    FindCharaData,
     AddDefChara,
     AddChara,
     DelChara,
     GetChara,
     SwapChara,
     FindChara,
+    PickupChara,
 
     SetColor,
     SetBgColor,
