@@ -309,6 +309,10 @@ pub enum Token<'s> {
     Alignment,
     #[token("BEGIN")]
     Begin,
+    #[token("STRLENFORM", lex_line_left)]
+    StrLenForm(&'s str),
+    #[token("STRLENFORMU", lex_line_left)]
+    StrLenFormU(&'s str),
     #[token("TIMES", lex_line_left)]
     Times(&'s str),
 
@@ -318,6 +322,10 @@ pub enum Token<'s> {
     #[token("INPUTS", |lex| normal_expr_command(lex, BuiltinCommand::InputS))]
     #[token("TINPUT", |lex| normal_expr_command(lex, BuiltinCommand::TInput))]
     #[token("TINPUTS", |lex| normal_expr_command(lex, BuiltinCommand::TInputS))]
+    #[token("ONEINPUT", |lex| normal_expr_command(lex, BuiltinCommand::OneInput))]
+    #[token("ONEINPUTS", |lex| normal_expr_command(lex, BuiltinCommand::OneInputS))]
+    #[token("TONEINPUT", |lex| normal_expr_command(lex, BuiltinCommand::TOneInput))]
+    #[token("TONEINPUTS", |lex| normal_expr_command(lex, BuiltinCommand::TOneInputS))]
     #[token("RETURN", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
     #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
     #[token("STRLENS", |lex| normal_expr_command(lex, BuiltinCommand::StrLenS))]
@@ -330,6 +338,9 @@ pub enum Token<'s> {
     #[token("SWAPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::SwapChara))]
     #[token("FINDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::FindChara))]
     #[token("SETCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetColor))]
+    #[token("SETBGCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColor))]
+    #[token("SETCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetColorByName))]
+    #[token("SETBGCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColorByName))]
     #[token("SETBIT", |lex| normal_expr_command(lex, BuiltinCommand::SetBit))]
     #[token("GETBIT", |lex| normal_expr_command(lex, BuiltinCommand::GetBit))]
     #[token("CLEARBIT", |lex| normal_expr_command(lex, BuiltinCommand::ClearBit))]
@@ -340,6 +351,11 @@ pub enum Token<'s> {
     #[token("UNICODE", |lex| normal_expr_command(lex, BuiltinCommand::Unicode))]
     #[token("BAR", |lex| normal_expr_command(lex, BuiltinCommand::Bar))]
     #[token("ARRAYSHIFT", |lex| normal_expr_command(lex, BuiltinCommand::ArrayShift))]
+    #[token("SUBSTRINGU", |lex| normal_expr_command(lex, BuiltinCommand::SubStringU))]
+    #[token("SPLIT", |lex| normal_expr_command(lex, BuiltinCommand::Split))]
+    #[token("THROW", |lex| normal_expr_command(lex, BuiltinCommand::Throw))]
+    #[token("SWAP", |lex| normal_expr_command(lex, BuiltinCommand::Swap))]
+    #[token("REDRAW", |lex| normal_expr_command(lex, BuiltinCommand::Redraw))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[regex(r"REUSELASTLINE [^\r\n]*", |lex| unsafe { parse_reuse(lex.slice()) })]
@@ -351,19 +367,28 @@ pub enum Token<'s> {
     #[token("DRAWLINE", |_| single_command(BuiltinCommand::DrawLine))]
     #[token("RESETDATA", |_| single_command(BuiltinCommand::ResetData))]
     #[token("RESETCOLOR", |_| single_command(BuiltinCommand::ResetColor))]
+    #[token("RESETBGCOLOR", |_| single_command(BuiltinCommand::ResetBgColor))]
+    #[token("GETCOLOR", |_| single_command(BuiltinCommand::GetColor))]
+    #[token("GETDEFCOLOR", |_| single_command(BuiltinCommand::GetDefColor))]
+    #[token("GETBGCOLOR", |_| single_command(BuiltinCommand::GetBgColor))]
+    #[token("GETDEFBGCOLOR", |_| single_command(BuiltinCommand::GetDefBgColor))]
+    #[token("GETFOCUSCOLOR", |_| single_command(BuiltinCommand::GetFocusColor))]
     #[token("ADDDEFCHARA", |_| single_command(BuiltinCommand::AddDefChara))]
     #[token("FONTBOLD", |_| single_command(BuiltinCommand::FontBold))]
     #[token("FONTITALIC", |_| single_command(BuiltinCommand::FontItalic))]
     #[token("FONTREGULAR", |_| single_command(BuiltinCommand::FontRegular))]
+    #[token("UPCHECK", |_| single_command(BuiltinCommand::UpCheck))]
     #[token("CONTINUE", |_| Stmt::Continue)]
     #[token("BREAK", |_| Stmt::Break)]
     DirectStmt(Stmt),
+
+    #[regex(r"\[[^\]]+\]")]
+    Preprocess(&'s str),
 
     #[error]
     // BOM
     #[token("\u{FEFF}", logos::skip)]
     #[regex(r"[ \t\r\n]+", logos::skip)]
     #[regex(r";[^\n]*", logos::skip)]
-    #[regex(r"\[[^\n]+\]", logos::skip)]
     Error,
 }

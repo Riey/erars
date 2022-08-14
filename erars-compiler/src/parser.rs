@@ -122,6 +122,23 @@ impl ParserContext {
         }
     }
 
+    fn next_token<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Option<Token<'s>>> {
+        loop {
+            match lex.next() {
+                Some(Token::Preprocess("[SKIPSTART]")) => loop {
+                    match lex.next() {
+                        Some(Token::Preprocess("[SKIPEND]")) => break,
+                        None => error!(lex, "[SKIPSTART]가 [SKIPEND]없이 끝났습니다."),
+                        _ => {}
+                    }
+                },
+                Some(Token::Preprocess(_)) => {}
+                Some(tok) => break Ok(Some(tok)),
+                None => break Ok(None),
+            }
+        }
+    }
+
     pub fn is_str_var(&self, ident: &str) -> bool {
         if matches!(ident, "LOCALS" | "ARGS") {
             true
@@ -188,7 +205,7 @@ impl ParserContext {
                     let mut catch_body = Vec::new();
 
                     loop {
-                        match lex.next() {
+                        match self.next_token(lex)? {
                             Some(Token::Catch) => {
                                 break;
                             }
@@ -198,7 +215,7 @@ impl ParserContext {
                     }
 
                     loop {
-                        match lex.next() {
+                        match self.next_token(lex)? {
                             Some(Token::EndCatch) => {
                                 break;
                             }
@@ -230,7 +247,7 @@ impl ParserContext {
             }
             Token::Sif(cond) => {
                 let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
-                let first = match lex.next() {
+                let first = match self.next_token(lex)? {
                     Some(first) => first,
                     None => error!(lex, "Unexpected EOF after SIF"),
                 };
@@ -245,7 +262,7 @@ impl ParserContext {
                 let mut cases: Vec<(_, Vec<Stmt>)> = Vec::new();
 
                 loop {
-                    match lex.next() {
+                    match self.next_token(lex)? {
                         Some(Token::Case(case)) => {
                             if !cases.is_empty() {
                                 cases.last_mut().unwrap().1 = mem::take(&mut body);
@@ -277,7 +294,7 @@ impl ParserContext {
                 let mut body = Vec::new();
 
                 loop {
-                    match lex.next() {
+                    match self.next_token(lex)? {
                         Some(Token::Next) => break Stmt::For(var, init, end, step, body),
                         Some(other) => {
                             body.push(self.parse_stmt(other, lex)?);
@@ -290,7 +307,7 @@ impl ParserContext {
                 let cond = try_nom!(lex, self::expr::expr(self)(left)).1;
                 let mut body = Vec::new();
                 loop {
-                    match lex.next() {
+                    match self.next_token(lex)? {
                         Some(Token::Wend) => {
                             break Stmt::While(cond, body);
                         }
@@ -304,7 +321,7 @@ impl ParserContext {
             Token::Do => {
                 let mut body = Vec::new();
                 loop {
-                    match lex.next() {
+                    match self.next_token(lex)? {
                         Some(Token::Loop(left)) => {
                             break Stmt::Do(try_nom!(lex, self::expr::expr(self)(left)).1, body);
                         }
@@ -320,7 +337,7 @@ impl ParserContext {
                 let mut body = Vec::new();
 
                 loop {
-                    match lex.next() {
+                    match self.next_token(lex)? {
                         Some(Token::Rend) => break Stmt::Repeat(arg, body),
                         Some(other) => {
                             body.push(self.parse_stmt(other, lex)?);
@@ -336,7 +353,7 @@ impl ParserContext {
                 let mut if_elses = Vec::new();
 
                 loop {
-                    match lex.next() {
+                    match self.next_token(lex)? {
                         Some(Token::ElseIf(left)) => {
                             let left = left.trim_start_matches(' ');
 
@@ -409,7 +426,7 @@ impl ParserContext {
         let mut current_func = Function::default();
 
         loop {
-            match lex.next() {
+            match self.next_token(lex)? {
                 Some(Token::At(left)) => {
                     let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
                     if !current_func.header.name.is_empty() {
@@ -510,7 +527,7 @@ impl ParserContext {
         let mut body = Vec::new();
 
         loop {
-            match lex.next() {
+            match self.next_token(&mut lex)? {
                 Some(tok) => body.push(self.parse_stmt(tok, &mut lex)?),
                 None => break,
             }

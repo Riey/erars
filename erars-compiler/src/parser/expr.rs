@@ -630,10 +630,10 @@ pub fn assign_line<'c, 'a>(
                 Stmt::Assign(var, Some(BinaryOperator::Sub), Expr::Int(1)),
             ))
         } else if ctx.is_str_var(&var.var) {
-            let (i, _) = terminated(char('='), opt(char(' ')))(i)?;
+            let (i, op) = delimited(sp, assign_op, opt(char(' ')))(i)?;
             let (i, rhs) = normal_form_str(ctx)(i)?;
 
-            Ok((i, Stmt::Assign(var, None, rhs)))
+            Ok((i, Stmt::Assign(var, op, rhs)))
         } else {
             let (i, op) = de_sp(assign_op)(i)?;
             let (i, rhs) = expr(ctx)(i)?;

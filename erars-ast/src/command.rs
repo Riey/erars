@@ -9,15 +9,22 @@ pub enum BuiltinCommand {
     Limit,
     Min,
     Max,
+    UpCheck,
 
     StrLenS,
     StrLenSU,
+    StrLenForm,
+    StrLenFormU,
     SubStringU,
 
     Input,
     InputS,
     TInput,
     TInputS,
+    OneInput,
+    OneInputS,
+    TOneInput,
+    TOneInputS,
     Wait,
     WaitAnykey,
 
@@ -29,10 +36,12 @@ pub enum BuiltinCommand {
     SaveGlobal,
     LoadGlobal,
 
+    Redraw,
     DrawLine,
     CustomDrawLine,
     ClearLine,
 
+    Swap,
     Split,
     Unicode,
 
@@ -51,11 +60,22 @@ pub enum BuiltinCommand {
     FindChara,
 
     SetColor,
+    SetBgColor,
     ResetColor,
+    ResetBgColor,
+    SetColorByName,
+    SetBgColorByName,
+    GetColor,
+    GetDefColor,
+    GetBgColor,
+    GetDefBgColor,
+    GetFocusColor,
 
     FontBold,
     FontItalic,
     FontRegular,
+    FontStyle,
+    GetStyle,
 
     Bar,
 
