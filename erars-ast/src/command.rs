@@ -15,6 +15,7 @@ pub enum BuiltinCommand {
     StrLenSU,
     StrLenForm,
     StrLenFormU,
+    SubString,
     SubStringU,
 
     Input,
@@ -68,6 +69,7 @@ pub enum BuiltinCommand {
     GetChara,
     SwapChara,
     FindChara,
+    SortChara,
     PickupChara,
 
     SetColor,

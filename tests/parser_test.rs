@@ -143,6 +143,17 @@ mod body {
     ),
     Assign(
         Variable {
+            var: "LOCALS",
+            func_extern: None,
+            args: [],
+        },
+        None,
+        FormText(
+            {FormText({BinopExpr(Int(1), Add, Int(1))})},
+        ),
+    ),
+    Assign(
+        Variable {
             var: "NICKNAME",
             func_extern: None,
             args: [

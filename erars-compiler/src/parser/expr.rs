@@ -88,6 +88,8 @@ pub enum FormStrType {
     SecondCond,
     /// no comma, blank
     Arg,
+    /// no "
+    Str,
 }
 
 fn parse_form_normal_str<'a>(
@@ -131,6 +133,9 @@ fn parse_form_normal_str<'a>(
                     }
                 },
                 Some(',') if ty == FormStrType::Arg => {
+                    break None;
+                }
+                Some('"') if ty == FormStrType::Str => {
                     break None;
                 }
                 Some(other) => {
@@ -355,9 +360,10 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
         };
         let i = i.trim_start_matches(' ');
 
-        let (i, expr) = de_sp(alt((
+        let (i, expr) = context("single_expr", de_sp(alt((
             value(Expr::Int(i64::MAX), tag("__INT_MAX__")),
             value(Expr::Int(i64::MIN), tag("__INT_MIN__")),
+            delimited(tag("@\""), form_str(FormStrType::Str, ctx), tag("\"")),
             map(string, |s| Expr::String(s.into())),
             map(preceded(tag("0x"), hex_digit1), |s| {
                 Expr::Int(i64::from_str_radix(s, 16).unwrap())
@@ -368,7 +374,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
             map(i64, Expr::Int),
             ident_or_method_expr(ctx),
             paran_expr(ctx),
-        )))(i)?;
+        ))))(i)?;
         let i = i.trim_start_matches(' ');
 
         let expr = match op {
