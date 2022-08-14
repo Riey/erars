@@ -27,6 +27,8 @@ fn run_test() {
             dic.insert_compiled_func(compile(func).unwrap());
         }
 
+        eprintln!("FunctionDic: {dic:?}");
+
         let ret = test_runner(dic);
         let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();
 

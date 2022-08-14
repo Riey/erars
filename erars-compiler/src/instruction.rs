@@ -15,7 +15,7 @@ pub enum Instruction {
     LoadInt(i64),
     LoadStr(String),
     PadStr(Alignment),
-    LoadVarRef(SmolStr, u32),
+    LoadVarRef(SmolStr, Option<SmolStr>, u32),
     LoadVar,
     StoreVar,
     CallMethod(u32),

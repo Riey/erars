@@ -5,6 +5,7 @@ use smol_str::SmolStr;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Variable {
     pub var: SmolStr,
+    pub func_extern: Option<SmolStr>,
     pub args: Vec<Expr>,
 }
 

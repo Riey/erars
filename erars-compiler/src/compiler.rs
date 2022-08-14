@@ -125,7 +125,8 @@ impl Compiler {
 
     fn store_var(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.out.push(Instruction::LoadVarRef(var.var, count));
+        self.out
+            .push(Instruction::LoadVarRef(var.var, var.func_extern, count));
         self.out.push(Instruction::StoreVar);
 
         Ok(())
@@ -133,7 +134,8 @@ impl Compiler {
 
     fn push_var(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.out.push(Instruction::LoadVarRef(var.var, count));
+        self.out
+            .push(Instruction::LoadVarRef(var.var, var.func_extern, count));
         self.out.push(Instruction::LoadVar);
 
         Ok(())
@@ -243,6 +245,7 @@ impl Compiler {
                     Some(cond) => self.push_expr(cond)?,
                     None => self.push_var(Variable {
                         var: "RAND".into(),
+                        func_extern: None,
                         args: vec![Expr::Int(list.len() as _)],
                     })?,
                 }
@@ -370,6 +373,7 @@ impl Compiler {
             Stmt::Repeat(end, body) => self.push_for(
                 Variable {
                     var: SmolStr::new_inline("COUNT"),
+                    func_extern: None,
                     args: Vec::new(),
                 },
                 Expr::int(0),

@@ -427,9 +427,11 @@ impl ParserContext {
             Token::Inc => {
                 let ident = self.replace(take_ident!(lex));
                 let left = cut_line(lex);
+                let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(left));
                 let args = try_nom!(lex, self::expr::variable_arg(self)(left)).1;
                 let var = Variable {
                     var: ident.into(),
+                    func_extern,
                     args,
                 };
                 Stmt::Assign(var, Some(BinaryOperator::Add), Expr::Int(1))
@@ -437,9 +439,11 @@ impl ParserContext {
             Token::Dec => {
                 let ident = self.replace(take_ident!(lex));
                 let left = cut_line(lex);
+                let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(left));
                 let args = try_nom!(lex, self::expr::variable_arg(self)(left)).1;
                 let var = Variable {
                     var: ident.into(),
+                    func_extern,
                     args,
                 };
                 Stmt::Assign(var, Some(BinaryOperator::Sub), Expr::Int(1))

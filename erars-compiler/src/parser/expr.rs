@@ -17,6 +17,7 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Parser,
 };
+use smol_str::SmolStr;
 use unicode_xid::UnicodeXID;
 
 type Error<'a> = nom::error::VerboseError<&'a str>;
@@ -246,6 +247,10 @@ fn paran_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<
     }
 }
 
+pub fn var_func_extern<'a>(i: &'a str) -> IResult<'a, Option<SmolStr>> {
+    opt(map(preceded(char('@'), ident), |s| s.into()))(i)
+}
+
 fn ident_or_method_expr<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
@@ -260,6 +265,7 @@ fn ident_or_method_expr<'c, 'a>(
             ctx.ban_percent.set(p);
             Ok((i, Expr::Method(ident.into(), args)))
         } else {
+            let (i, func_extern) = var_func_extern(i)?;
             match ident {
                 Cow::Borrowed(ident) => {
                     if !ctx.is_arg.get() {
@@ -268,6 +274,7 @@ fn ident_or_method_expr<'c, 'a>(
                             i,
                             Expr::Var(Variable {
                                 var: ident.into(),
+                                func_extern,
                                 args,
                             }),
                         ))
@@ -276,6 +283,7 @@ fn ident_or_method_expr<'c, 'a>(
                             i,
                             Expr::Var(Variable {
                                 var: ident.into(),
+                                func_extern,
                                 args: Vec::new(),
                             }),
                         ))
@@ -288,6 +296,7 @@ fn ident_or_method_expr<'c, 'a>(
                             i,
                             Expr::Var(Variable {
                                 var: m.into(),
+                                func_extern,
                                 args,
                             }),
                         ))
@@ -613,10 +622,12 @@ pub fn assign_line<'c, 'a>(
 
         i = i.trim_end_matches(' ');
 
+        let (i, func_extern) = var_func_extern(i)?;
         let (i, args) = variable_arg(ctx)(i)?;
 
         let var = Variable {
             var: var_name.into(),
+            func_extern,
             args,
         };
 
@@ -749,12 +760,14 @@ pub fn variable<'c, 'a>(
             panic!("Variable error");
         }
 
+        let (i, func_extern) = var_func_extern(i)?;
         let (i, args) = variable_arg(ctx)(i)?;
 
         Ok((
             i,
             Variable {
                 var: name.into(),
+                func_extern,
                 args,
             },
         ))

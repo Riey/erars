@@ -255,6 +255,7 @@ struct Callstack {
 #[derive(Clone, Debug)]
 struct VariableRef {
     name: SmolStr,
+    func_extern: Option<SmolStr>,
     idxs: ArrayVec<usize, 4>,
 }
 
@@ -320,6 +321,7 @@ impl VmContext {
 
     fn resolve_var_ref<'c>(
         &'c mut self,
+        dic: &FunctionDic,
         func_name: &str,
         r: &VariableRef,
     ) -> Result<(
@@ -327,10 +329,18 @@ impl VmContext {
         &'c mut UniformVariable,
         arrayvec::IntoIter<usize, 4>,
     )> {
-        let (info, var) = if self.is_local_var(&r.name) {
-            self.var.get_local_var(func_name, &r.name)
-        } else {
-            self.var.get_var(&r.name)
+        let (info, var) = match r.func_extern.as_deref() {
+            Some(ex_func) => {
+                self.var.init_local(ex_func, dic.get_func(ex_func)?);
+                self.var.get_local_var(ex_func, &r.name)
+            }
+            None => {
+                if self.is_local_var(&r.name) {
+                    self.var.get_local_var(func_name, &r.name)
+                } else {
+                    self.var.get_var(&r.name)
+                }
+            }
         }?;
 
         Ok((info, var, r.idxs.clone().into_iter()))
@@ -385,9 +395,17 @@ impl VmContext {
         self.stack.push(prev);
     }
 
-    fn push_var_ref(&mut self, name: SmolStr, idxs: ArrayVec<usize, 4>) {
-        self.stack
-            .push(LocalValue::VarRef(VariableRef { name, idxs }));
+    fn push_var_ref(
+        &mut self,
+        name: SmolStr,
+        func_extern: Option<SmolStr>,
+        idxs: ArrayVec<usize, 4>,
+    ) {
+        self.stack.push(LocalValue::VarRef(VariableRef {
+            name,
+            func_extern,
+            idxs,
+        }));
     }
 
     fn push(&mut self, value: impl Into<Value>) {
@@ -449,9 +467,9 @@ impl TerminalVm {
             Instruction::GotoLabel => {
                 *cursor = goto_labels[ctx.pop_str()?.as_str()] as usize;
             }
-            Instruction::LoadVarRef(var_idx, c) => {
+            Instruction::LoadVarRef(var_idx, func_extern, c) => {
                 let args = ctx.take_arg_list(*c)?;
-                ctx.push_var_ref(var_idx.clone(), args);
+                ctx.push_var_ref(var_idx.clone(), func_extern.clone(), args);
             }
             Instruction::StoreVar => {
                 let target = *ctx
@@ -464,7 +482,7 @@ impl TerminalVm {
                 let var_ref = ctx.pop_var_ref()?;
                 let value = ctx.pop_value();
 
-                let (info, var, mut args) = ctx.resolve_var_ref(func_name, &var_ref)?;
+                let (info, var, mut args) = ctx.resolve_var_ref(&self.dic, func_name, &var_ref)?;
                 match var {
                     UniformVariable::Character(c) => {
                         let no = if args.len() < info.arg_len() {
@@ -497,7 +515,7 @@ impl TerminalVm {
                             .assume_normal()
                             .get_int(iter::empty())?;
 
-                        let (info, var, mut args) = ctx.resolve_var_ref(func_name, &var_ref)?;
+                        let (info, var, mut args) = ctx.resolve_var_ref(&self.dic, func_name, &var_ref)?;
                         let value = match var {
                             UniformVariable::Character(c) => {
                                 let no = if args.len() < info.arg_len() {
@@ -696,7 +714,7 @@ impl TerminalVm {
                 match com {
                     BuiltinCommand::Varset => {
                         let var = pop!(@var);
-                        let (info, var, args) = ctx.resolve_var_ref(func_name, &var)?;
+                        let (info, var, args) = ctx.resolve_var_ref(&self.dic, func_name, &var)?;
                         let value = pop!(@opt @value);
                         let start = pop!(@opt @usize);
                         let end = pop!(@opt @usize);
