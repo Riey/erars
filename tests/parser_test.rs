@@ -541,6 +541,12 @@ mod body {
             {Method("조사처리", [Var(Variable { var: "CALLNAME", func_extern: None, args: [Method("GET_CHARA_M", [])] }), String("와")])}같이 온 걸 보니, 단단히 각오하고 온 것 같다,
         ),
     ),
+    Print(
+        NEWLINE,
+        FormText(
+            {Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })}의 교습 관찰 결과 완료  결과：임시 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}에 의한 실제 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })}증가⇒{CondExpr(BinopExpr(Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), Equal, Int(1)), FormText(성공), FormText(실패))}({Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(693)] })}％) 작업 내용：{Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(690)] })},
+        ),
+    ),
 ]
 "#
         );
@@ -717,29 +723,29 @@ BinopExpr(
         ),
     ),
     And,
-    Var(
-        Variable {
-            var: "TALENT",
-            func_extern: None,
-            args: [
-                Var(
-                    Variable {
-                        var: "MASTER",
-                        func_extern: None,
-                        args: [],
-                    },
-                ),
-                BinopExpr(
+    BinopExpr(
+        Var(
+            Variable {
+                var: "TALENT",
+                func_extern: None,
+                args: [
+                    Var(
+                        Variable {
+                            var: "MASTER",
+                            func_extern: None,
+                            args: [],
+                        },
+                    ),
                     Int(
                         998,
                     ),
-                    Equal,
-                    Int(
-                        0,
-                    ),
-                ),
-            ],
-        },
+                ],
+            },
+        ),
+        Equal,
+        Int(
+            0,
+        ),
     ),
 )
 "#
@@ -786,22 +792,22 @@ BinopExpr(
         ),
     ),
     Add,
-    Var(
-        Variable {
-            var: "RAND",
-            func_extern: None,
-            args: [
-                BinopExpr(
+    BinopExpr(
+        Var(
+            Variable {
+                var: "RAND",
+                func_extern: None,
+                args: [
                     Int(
                         10,
                     ),
-                    Mul,
-                    Int(
-                        5,
-                    ),
-                ),
-            ],
-        },
+                ],
+            },
+        ),
+        Mul,
+        Int(
+            5,
+        ),
     ),
 )
 "#
@@ -1332,19 +1338,19 @@ Function {
             Method(
                 "LIMIT",
                 [
-                    Var(
-                        Variable {
-                            var: "JUEL",
-                            func_extern: None,
-                            args: [
-                                Var(
-                                    Variable {
-                                        var: "ARG",
-                                        func_extern: None,
-                                        args: [],
-                                    },
-                                ),
-                                BinopExpr(
+                    BinopExpr(
+                        Var(
+                            Variable {
+                                var: "JUEL",
+                                func_extern: None,
+                                args: [
+                                    Var(
+                                        Variable {
+                                            var: "ARG",
+                                            func_extern: None,
+                                            args: [],
+                                        },
+                                    ),
                                     Var(
                                         Variable {
                                             var: "ARG",
@@ -1356,20 +1362,21 @@ Function {
                                             ],
                                         },
                                     ),
-                                    Add,
-                                    Var(
-                                        Variable {
-                                            var: "ARG",
-                                            func_extern: None,
-                                            args: [],
-                                        },
+                                ],
+                            },
+                        ),
+                        Add,
+                        Var(
+                            Variable {
+                                var: "ARG",
+                                func_extern: None,
+                                args: [
+                                    Int(
+                                        2,
                                     ),
-                                ),
-                                Int(
-                                    2,
-                                ),
-                            ],
-                        },
+                                ],
+                            },
+                        ),
                     ),
                     Int(
                         0,
@@ -1400,44 +1407,45 @@ Function {
                 ],
             },
             None,
-            Var(
-                Variable {
-                    var: "LOCAL",
-                    func_extern: None,
-                    args: [
-                        BinopExpr(
+            BinopExpr(
+                Var(
+                    Variable {
+                        var: "LOCAL",
+                        func_extern: None,
+                        args: [
                             Int(
                                 1,
                             ),
-                            Sub,
+                        ],
+                    },
+                ),
+                Sub,
+                Var(
+                    Variable {
+                        var: "JUEL",
+                        func_extern: None,
+                        args: [
                             Var(
                                 Variable {
-                                    var: "JUEL",
+                                    var: "ARG",
                                     func_extern: None,
                                     args: [],
                                 },
                             ),
-                        ),
-                        Var(
-                            Variable {
-                                var: "ARG",
-                                func_extern: None,
-                                args: [],
-                            },
-                        ),
-                        Var(
-                            Variable {
-                                var: "ARG",
-                                func_extern: None,
-                                args: [
-                                    Int(
-                                        1,
-                                    ),
-                                ],
-                            },
-                        ),
-                    ],
-                },
+                            Var(
+                                Variable {
+                                    var: "ARG",
+                                    func_extern: None,
+                                    args: [
+                                        Int(
+                                            1,
+                                        ),
+                                    ],
+                                },
+                            ),
+                        ],
+                    },
+                ),
             ),
         ),
         Assign(
@@ -1448,7 +1456,7 @@ Function {
             },
             None,
             FormText(
-                {Var(Variable { var: "PALAMNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [Int(1)] })] })}의 구슬{CondExpr(Var(Variable { var: "ARG", func_extern: None, args: [BinopExpr(BinopExpr(Int(4), Sub, BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [] }), NotEqual, Var(Variable { var: "TARGET", func_extern: None, args: [] }))), LessOrEqual, Int(0))] }), FormText(({Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {Method("ABS", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })])},
+                {Var(Variable { var: "PALAMNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [Int(1)] })] })}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [] }), NotEqual, Var(Variable { var: "TARGET", func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {Method("ABS", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })])},
             ),
         ),
         Assign(

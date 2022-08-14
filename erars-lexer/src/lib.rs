@@ -307,7 +307,7 @@ pub enum Token<'s> {
     #[token("ENDSELECT")]
     EndSelect,
 
-    #[regex("(TRY)?C?(CALLF?|JUMP|GOTO)(FORM)?", call_jump_line)]
+    #[regex("(TRY)?C?(CALL|JUMP|GOTO)(FORM)?F?", call_jump_line)]
     CallJump((CallJumpInfo, &'s str)),
     #[token("CATCH")]
     Catch,
@@ -325,6 +325,7 @@ pub enum Token<'s> {
     Times(&'s str),
 
     #[token("VARSET", |lex| normal_expr_command(lex, BuiltinCommand::Varset))]
+    #[token("CVARSET", |lex| normal_expr_command(lex, BuiltinCommand::CVarset))]
     #[token("LIMIT", |lex| normal_expr_command(lex, BuiltinCommand::Limit))]
     #[token("INPUT", |lex| normal_expr_command(lex, BuiltinCommand::Input))]
     #[token("INPUTS", |lex| normal_expr_command(lex, BuiltinCommand::InputS))]
@@ -336,6 +337,7 @@ pub enum Token<'s> {
     #[token("TONEINPUTS", |lex| normal_expr_command(lex, BuiltinCommand::TOneInputS))]
     #[token("RETURN", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
     #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
+    #[token("CALLTRAIN", |lex| normal_expr_command(lex, BuiltinCommand::CallTrain))]
     #[token("STRLENS", |lex| normal_expr_command(lex, BuiltinCommand::StrLenS))]
     #[token("STRLENSU", |lex| normal_expr_command(lex, BuiltinCommand::StrLenSU))]
     #[token("CUSTOMDRAWLINE", |lex| normal_expr_command(lex, BuiltinCommand::CustomDrawLine))]
@@ -352,6 +354,7 @@ pub enum Token<'s> {
     #[token("SETBIT", |lex| normal_expr_command(lex, BuiltinCommand::SetBit))]
     #[token("GETBIT", |lex| normal_expr_command(lex, BuiltinCommand::GetBit))]
     #[token("CLEARBIT", |lex| normal_expr_command(lex, BuiltinCommand::ClearBit))]
+    #[token("INVERTBIT", |lex| normal_expr_command(lex, BuiltinCommand::InvertBit))]
     #[token("POWER", |lex| normal_expr_command(lex, BuiltinCommand::Power))]
     #[token("GETEXPLV", |lex| normal_expr_command(lex, BuiltinCommand::GetExpLv))]
     #[token("GETPALAMLV", |lex| normal_expr_command(lex, BuiltinCommand::GetPalamLv))]
@@ -365,6 +368,8 @@ pub enum Token<'s> {
     #[token("SWAP", |lex| normal_expr_command(lex, BuiltinCommand::Swap))]
     #[token("REDRAW", |lex| normal_expr_command(lex, BuiltinCommand::Redraw))]
     #[token("SETFONT", |lex| normal_expr_command(lex, BuiltinCommand::SetFont))]
+    #[token("FONTSTYLE", |lex| normal_expr_command(lex, BuiltinCommand::FontStyle))]
+    #[token("SAVEDATA", |lex| normal_expr_command(lex, BuiltinCommand::SaveData))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[regex(r"REUSELASTLINE( [^\r\n]*)?", |lex| unsafe { parse_reuse(lex.slice()) })]

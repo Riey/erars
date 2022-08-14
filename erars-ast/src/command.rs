@@ -32,7 +32,9 @@ pub enum BuiltinCommand {
     Restart,
     Quit,
     Throw,
+    CallTrain,
 
+    SaveData,
     SaveGlobal,
     LoadGlobal,
 
@@ -83,9 +85,11 @@ pub enum BuiltinCommand {
     SetBit,
     GetBit,
     ClearBit,
+    InvertBit,
     Power,
 
     ArrayShift,
 
     Varset,
+    CVarset,
 }

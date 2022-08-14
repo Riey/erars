@@ -79,7 +79,7 @@ pub enum FormType {
     At,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FormStrType {
     Normal,
     /// no #
@@ -742,7 +742,7 @@ pub fn variable_arg<'c, 'a>(
     move |i| {
         let is_arg = ctx.is_arg.get();
         ctx.is_arg.set(true);
-        let (i, args) = many0(preceded(char_sp(':'), expr(ctx)))(i)?;
+        let (i, args) = many0(preceded(char_sp(':'), single_expr(ctx)))(i)?;
         ctx.is_arg.set(is_arg);
 
         Ok((i, args))
