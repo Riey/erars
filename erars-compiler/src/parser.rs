@@ -181,6 +181,46 @@ impl ParserContext {
             }
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::Print((flags, PrintType::Plain, form)) => Stmt::Print(flags, Expr::str(form)),
+            Token::Print((flags, PrintType::Data, form)) => {
+                let form = form.trim();
+                let cond = if form.is_empty() {
+                    None
+                } else {
+                    Some(try_nom!(lex, self::expr::expr(self)(form)).1)
+                };
+                let mut list = Vec::new();
+
+                loop {
+                    match self.next_token(lex)? {
+                        Some(Token::Data(data)) => list.push(vec![Expr::str(data)]),
+                        Some(Token::DataForm(data)) => list.push(vec![
+                            try_nom!(lex, self::expr::normal_form_str(self)(data)).1,
+                        ]),
+                        Some(Token::DataList) => {
+                            let mut cur_list = Vec::new();
+                            loop {
+                                match self.next_token(lex)? {
+                                    Some(Token::Data(data)) => cur_list.push(Expr::str(data)),
+                                    Some(Token::DataForm(data)) => cur_list.push(
+                                        try_nom!(lex, self::expr::normal_form_str(self)(data)).1,
+                                    ),
+                                    Some(Token::EndList) => break,
+                                    Some(_) => {
+                                        error!(lex, "DATALIST에 잘못된 토큰이 들어왔습니다")
+                                    }
+                                    None => error!(lex, "ENDLIST없이 DATALIST가 끝났습니다."),
+                                }
+                            }
+                            list.push(cur_list);
+                        }
+                        Some(Token::EndData) => break,
+                        Some(_) => error!(lex, "PRINTDATA에 잘못된 토큰이 들어왔습니다"),
+                        None => error!(lex, "ENDDATA없이 PRINTDATA가 끝났습니다."),
+                    }
+                }
+
+                Stmt::PrintData(flags, cond, list)
+            }
             Token::Print((flags, PrintType::Form, form)) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(form));
                 Stmt::Print(flags, form)

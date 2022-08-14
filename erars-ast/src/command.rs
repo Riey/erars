@@ -88,4 +88,3 @@ pub enum BuiltinCommand {
 
     Varset,
 }
-

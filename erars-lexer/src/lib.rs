@@ -50,12 +50,15 @@ unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
         s = ss;
     }
 
-    let ty = if let Some(ss) = s.strip_prefix("FORMS") {
-        s = ss;
+    let ty = if let Some(_ss) = s.strip_prefix("FORMS") {
+        // s = ss;
         todo!("PRINTFORMS")
     } else if let Some(ss) = s.strip_prefix("FORM") {
         s = ss;
         PrintType::Form
+    } else if let Some(ss) = s.strip_prefix("DATA") {
+        s = ss;
+        PrintType::Data
     } else if let Some(ss) = s.strip_prefix('V') {
         s = ss;
         PrintType::V
@@ -185,6 +188,7 @@ pub enum PrintType {
     Form,
     S,
     V,
+    Data,
 }
 
 #[derive(Logos, Debug, Eq, PartialEq)]
@@ -253,8 +257,18 @@ pub enum Token<'s> {
     #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
     Ident(&'s str),
 
-    #[regex(r"PRINT(SINGLE)?(V|S|FORMS?)?[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print(lex.slice()) })]
+    #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print(lex.slice()) })]
     Print((PrintFlags, PrintType, &'s str)),
+    #[token("DATA", lex_line_left)]
+    Data(&'s str),
+    #[token("DATAFORM", lex_line_left)]
+    DataForm(&'s str),
+    #[token("DATALIST")]
+    DataList,
+    #[token("ENDLIST")]
+    EndList,
+    #[token("ENDDATA")]
+    EndData,
 
     #[token("SIF", lex_line_left)]
     Sif(&'s str),

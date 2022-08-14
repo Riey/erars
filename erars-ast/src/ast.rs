@@ -21,6 +21,7 @@ pub enum Stmt {
     Print(PrintFlags, Expr),
     PrintList(PrintFlags, Vec<Expr>),
     PrintForm(PrintFlags, FormText),
+    PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
     ReuseLastLine(String),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<Stmt>),

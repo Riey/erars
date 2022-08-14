@@ -463,6 +463,44 @@ mod body {
     }
 
     #[test]
+    fn test_print_data() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/print_data.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    PrintData(
+        (empty),
+        None,
+        [
+            [
+                String(
+                    "data",
+                ),
+            ],
+            [
+                FormText(
+                    LOCAL={Var(Variable { var: "LOCAL", args: [] })},
+                ),
+            ],
+            [
+                String(
+                    "list",
+                ),
+                String(
+                    "form",
+                ),
+            ],
+        ],
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
     fn test_print_simple() {
         k9::snapshot!(
             do_test(

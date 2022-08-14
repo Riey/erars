@@ -238,6 +238,48 @@ impl Compiler {
                 self.push_form(form)?;
                 self.out.push(Instruction::Print(flags));
             }
+            Stmt::PrintData(flags, cond, list) => {
+                match cond {
+                    Some(cond) => self.push_expr(cond)?,
+                    None => self.push_var(Variable {
+                        var: "RAND".into(),
+                        args: vec![Expr::Int(list.len() as _)],
+                    })?,
+                }
+
+                let branch = self.current_no();
+
+                for _ in 0..list.len() * 4 {
+                    self.mark();
+                }
+
+                let mut line_positions = Vec::new();
+
+                for (i, part) in list.into_iter().enumerate() {
+                    let start = self.current_no();
+
+                    self.insert(branch + i as u32 * 4 + 0, Instruction::Duplicate);
+                    self.insert(branch + i as u32 * 4 + 1, Instruction::LoadInt(i as _));
+                    self.insert(
+                        branch + i as u32 * 4 + 2,
+                        Instruction::BinaryOperator(BinaryOperator::NotEqual),
+                    );
+                    self.insert(branch + i as u32 * 4 + 3, Instruction::GotoIfNot(start));
+
+                    for line in part {
+                        self.push_expr(line)?;
+                    }
+
+                    self.out.push(Instruction::Print(flags));
+
+                    let end = self.mark();
+                    line_positions.push(end);
+                }
+
+                for end in line_positions {
+                    self.insert(end, Instruction::Goto(self.current_no()));
+                }
+            }
             Stmt::ReuseLastLine(text) => {
                 self.out.push(Instruction::LoadStr(text));
                 self.out.push(Instruction::ReuseLastLine);
