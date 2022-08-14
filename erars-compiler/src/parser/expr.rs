@@ -350,6 +350,8 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
         let i = i.trim_start_matches(' ');
 
         let (i, expr) = de_sp(alt((
+            value(Expr::Int(i64::MAX), tag("__INT_MAX__")),
+            value(Expr::Int(i64::MIN), tag("__INT_MIN__")),
             map(string, |s| Expr::String(s.into())),
             map(preceded(tag("0x"), hex_digit1), |s| {
                 Expr::Int(i64::from_str_radix(s, 16).unwrap())

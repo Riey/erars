@@ -35,6 +35,7 @@ pub enum BuiltinCommand {
     CallTrain,
 
     SaveData,
+    LoadData,
     SaveGlobal,
     LoadGlobal,
 
@@ -92,4 +93,21 @@ pub enum BuiltinCommand {
 
     Varset,
     CVarset,
+
+    GetTime,
+
+    CsvName,
+    CsvCallName,
+    CsvMasterName,
+    CsvNickName,
+    CsvBase,
+    CsvCstr,
+    CsvAbl,
+    CsvTalent,
+    CsvMark,
+    CsvExp,
+    CsvRelation,
+    CsvJuel,
+    CsvEquip,
+    CsvCflag,
 }
