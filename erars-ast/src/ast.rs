@@ -20,7 +20,7 @@ pub enum Stmt {
     ),
     Print(PrintFlags, Expr),
     PrintList(PrintFlags, Vec<Expr>),
-    PrintForm(PrintFlags, FormText),
+    PrintFormS(PrintFlags, Expr),
     PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
     ReuseLastLine(String),
     Assign(Variable, Option<BinaryOperator>, Expr),

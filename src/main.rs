@@ -23,6 +23,26 @@ use hashbrown::HashMap;
 use smol_str::SmolStr;
 
 fn main() {
+    log_panics::init();
+
+    {
+        use simplelog::*;
+        CombinedLogger::init(vec![
+            TermLogger::new(
+                LevelFilter::Warn,
+                Config::default(),
+                TerminalMode::Mixed,
+                ColorChoice::Auto,
+            ),
+            WriteLogger::new(
+                LevelFilter::Info,
+                Config::default(),
+                std::fs::File::create("erars.log").unwrap(),
+            ),
+        ])
+        .unwrap();
+    }
+
     let chan = Arc::new(ConsoleChannel::new());
     let mut args = std::env::args();
 
@@ -60,8 +80,8 @@ fn main() {
 
         let mut function_dic = FunctionDic::new();
 
-        let files = Mutex::new(SimpleFiles::new());
-        let diagnostic = Mutex::new(
+        let mut files = Mutex::new(SimpleFiles::new());
+        let mut diagnostic = Mutex::new(
             Diagnostic::error()
                 .with_code("E0001")
                 .with_message("Compile ERROR"),
@@ -75,14 +95,16 @@ fn main() {
         for erh in erhs {
             let erh = erh.unwrap();
             let source = std::fs::read_to_string(&erh).unwrap();
-            eprintln!("Parse {}", erh.display());
+            log::info!("Parse {}", erh.display());
 
             match header_info.merge_header(&source) {
                 Ok(()) => (),
                 Err((err, span)) => {
-                    let file_id = files.lock().add(erh.to_str().unwrap().to_string(), source);
+                    let file_id = files
+                        .get_mut()
+                        .add(erh.to_str().unwrap().to_string(), source);
                     diagnostic
-                        .lock()
+                        .get_mut()
                         .labels
                         .push(Label::primary(file_id, span).with_message(format!("{}", err)));
                 }
@@ -98,7 +120,7 @@ fn main() {
                 let erb = erb.unwrap();
                 let source = std::fs::read_to_string(&erb).unwrap();
 
-                eprintln!("Parse {}", erb.display());
+                log::info!("Parse {}", erb.display());
 
                 let program = ctx.parse(&mut Lexer::new(source.as_str()));
 
@@ -114,7 +136,7 @@ fn main() {
                     }
                 };
 
-                eprintln!("Compile {}", erb.display());
+                log::info!("Compile {}", erb.display());
 
                 program
                     .into_iter()
@@ -136,12 +158,12 @@ fn main() {
             codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                 .unwrap();
             inner_chan.send_msg(erars::ui::ConsoleMessage::Exit);
-            eprintln!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
+            log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
             return;
         }
 
         let mut ctx = VmContext::new(&header_info.global_variables);
-        let vm = TerminalVm::new(function_dic);
+        let vm = TerminalVm::new(function_dic, header_info);
         let ret = vm.start(&inner_chan, &mut ctx);
 
         if let Err(err) = ret {

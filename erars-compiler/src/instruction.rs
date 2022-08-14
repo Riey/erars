@@ -14,6 +14,7 @@ pub enum Instruction {
     DuplicatePrev,
     LoadInt(i64),
     LoadStr(String),
+    EvalFormString,
     PadStr(Alignment),
     LoadVarRef(SmolStr, Option<SmolStr>, u32),
     LoadVar,

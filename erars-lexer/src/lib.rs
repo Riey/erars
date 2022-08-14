@@ -50,9 +50,9 @@ unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
         s = ss;
     }
 
-    let ty = if let Some(_ss) = s.strip_prefix("FORMS") {
-        // s = ss;
-        todo!("PRINTFORMS")
+    let ty = if let Some(ss) = s.strip_prefix("FORMS") {
+        s = ss;
+        PrintType::FormS
     } else if let Some(ss) = s.strip_prefix("FORM") {
         s = ss;
         PrintType::Form
@@ -181,6 +181,7 @@ pub struct CallJumpInfo {
 pub enum PrintType {
     Plain,
     Form,
+    FormS,
     S,
     V,
     Data,

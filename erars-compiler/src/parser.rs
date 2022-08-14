@@ -15,6 +15,7 @@ use std::{
     sync::Arc,
 };
 
+pub use expr::normal_form_str;
 pub use crate::error::{ParserError, ParserResult};
 
 macro_rules! error {
@@ -228,6 +229,10 @@ impl ParserContext {
             Token::Print((flags, PrintType::S, form)) => {
                 let (_, s) = try_nom!(lex, self::expr::expr(self)(form));
                 Stmt::Print(flags, s)
+            }
+            Token::Print((flags, PrintType::FormS, form)) => {
+                let (_, s) = try_nom!(lex, self::expr::expr(self)(form));
+                Stmt::PrintFormS(flags, s)
             }
             Token::Print((flags, PrintType::V, form)) => {
                 let (_, s) = try_nom!(lex, self::expr::expr_list(self)(form));

@@ -1,4 +1,5 @@
 use std::iter;
+use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -11,7 +12,7 @@ use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, UnaryOperator, Value,
     VariableInfo,
 };
-use erars_compiler::Instruction;
+use erars_compiler::{HeaderInfo, Instruction, ParserContext};
 
 use crate::function::{FunctionBody, FunctionDic};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
@@ -439,11 +440,15 @@ impl VmContext {
 
 pub struct TerminalVm {
     dic: FunctionDic,
+    header_info: Arc<HeaderInfo>,
 }
 
 impl TerminalVm {
-    pub fn new(function_dic: FunctionDic) -> Self {
-        Self { dic: function_dic }
+    pub fn new(function_dic: FunctionDic, header_info: Arc<HeaderInfo>) -> Self {
+        Self {
+            dic: function_dic,
+            header_info,
+        }
     }
 
     fn run_instruction(
@@ -464,6 +469,18 @@ impl TerminalVm {
             Instruction::Pop => drop(ctx.pop()),
             Instruction::Duplicate => ctx.dup(),
             Instruction::DuplicatePrev => ctx.dup_prev(),
+            Instruction::EvalFormString => {
+                let form = ctx.pop_str()?;
+                let parser_ctx = ParserContext::new(self.header_info.clone());
+                let expr = erars_compiler::normal_form_str(&parser_ctx)(&form)
+                    .unwrap()
+                    .1;
+                let insts = erars_compiler::compile_expr(expr).unwrap();
+
+                for inst in insts {
+                    self.run_instruction(func_name, goto_labels, &inst, &mut 0, chan, ctx)?;
+                }
+            }
             Instruction::GotoLabel => {
                 *cursor = goto_labels[ctx.pop_str()?.as_str()] as usize;
             }
@@ -515,7 +532,8 @@ impl TerminalVm {
                             .assume_normal()
                             .get_int(iter::empty())?;
 
-                        let (info, var, mut args) = ctx.resolve_var_ref(&self.dic, func_name, &var_ref)?;
+                        let (info, var, mut args) =
+                            ctx.resolve_var_ref(&self.dic, func_name, &var_ref)?;
                         let value = match var {
                             UniformVariable::Character(c) => {
                                 let no = if args.len() < info.arg_len() {

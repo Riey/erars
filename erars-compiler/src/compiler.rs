@@ -231,13 +231,14 @@ impl Compiler {
                 self.push_expr(text)?;
                 self.out.push(Instruction::Print(flags));
             }
+            Stmt::PrintFormS(flags, text) => {
+                self.push_expr(text)?;
+                self.out.push(Instruction::EvalFormString);
+                self.out.push(Instruction::Print(flags));
+            }
             Stmt::PrintList(flags, args) => {
                 let count = self.push_list(args)?;
                 self.out.push(Instruction::ConcatString(count));
-                self.out.push(Instruction::Print(flags));
-            }
-            Stmt::PrintForm(flags, form) => {
-                self.push_form(form)?;
                 self.out.push(Instruction::Print(flags));
             }
             Stmt::PrintData(flags, cond, list) => {
@@ -542,6 +543,22 @@ impl Compiler {
             self.insert(break_mark, Instruction::Goto(self.current_no()));
         }
     }
+}
+
+pub fn compile_stmt(stmt: Stmt) -> CompileResult<Vec<Instruction>> {
+    let mut compiler = Compiler::new();
+
+    compiler.push_stmt(stmt)?;
+
+    Ok(compiler.out)
+}
+
+pub fn compile_expr(expr: Expr) -> CompileResult<Vec<Instruction>> {
+    let mut compiler = Compiler::new();
+
+    compiler.push_expr(expr)?;
+
+    Ok(compiler.out)
 }
 
 pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
