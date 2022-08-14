@@ -1,8 +1,8 @@
 mod expr;
 
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, EventFlags, Expr, Function, FunctionInfo, Stmt, Variable,
-    VariableInfo,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, Expr, Function, FunctionInfo,
+    Stmt, Variable, VariableInfo,
 };
 use erars_lexer::{ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -171,6 +171,14 @@ impl ParserContext {
             Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
             Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
             Token::LabelLine(label) => Stmt::Label(label.into()),
+            Token::StrLenForm(left) => {
+                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
+                Stmt::Command(BuiltinCommand::StrLenForm, vec![form])
+            }
+            Token::StrLenFormU(left) => {
+                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
+                Stmt::Command(BuiltinCommand::StrLenFormU, vec![form])
+            }
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::Print((flags, PrintType::Plain, form)) => Stmt::Print(flags, Expr::str(form)),
             Token::Print((flags, PrintType::Form, form)) => {

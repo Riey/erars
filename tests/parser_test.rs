@@ -576,6 +576,26 @@ mod body {
             ),
         ),
     ),
+    Sif(
+        BinopExpr(
+            Var(
+                Variable {
+                    var: "LOCALS",
+                    args: [],
+                },
+            ),
+            NotEqual,
+            String(
+                "",
+            ),
+        ),
+        Print(
+            NEWLINE,
+            FormText(
+                {Var(Variable { var: "LOCALS", args: [] })},
+            ),
+        ),
+    ),
     Print(
         (empty),
         String(
@@ -862,7 +882,7 @@ BinopExpr(
             ),
             r#"
 String(
-    "123",
+    "",
 )
 "#
         );

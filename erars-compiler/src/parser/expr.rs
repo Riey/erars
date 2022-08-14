@@ -9,7 +9,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while},
     character::complete::*,
-    combinator::{eof, map, opt, value, verify},
+    combinator::{eof, map, opt, success, value, verify},
     error::{context, ErrorKind, VerboseError},
     error_position,
     multi::{many0, separated_list0, separated_list1},
@@ -224,7 +224,10 @@ pub fn form_str<'c, 'a>(
 }
 
 fn string<'a>(i: &'a str) -> IResult<'a, &'a str> {
-    context("string", delimited(char('\"'), parse_str, char('\"')))(i)
+    context(
+        "string",
+        delimited(char('\"'), alt((parse_str, success(""))), char('\"')),
+    )(i)
 }
 
 fn paran_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
