@@ -363,9 +363,10 @@ pub enum Token<'s> {
     #[token("THROW", |lex| normal_expr_command(lex, BuiltinCommand::Throw))]
     #[token("SWAP", |lex| normal_expr_command(lex, BuiltinCommand::Swap))]
     #[token("REDRAW", |lex| normal_expr_command(lex, BuiltinCommand::Redraw))]
+    #[token("SETFONT", |lex| normal_expr_command(lex, BuiltinCommand::SetFont))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
-    #[regex(r"REUSELASTLINE [^\r\n]*", |lex| unsafe { parse_reuse(lex.slice()) })]
+    #[regex(r"REUSELASTLINE( [^\r\n]*)?", |lex| unsafe { parse_reuse(lex.slice()) })]
     #[token("QUIT", |_| single_command(BuiltinCommand::Quit))]
     #[token("WAIT", |_| single_command(BuiltinCommand::Wait))]
     #[token("RESTART", |_| single_command(BuiltinCommand::Restart))]
@@ -395,7 +396,7 @@ pub enum Token<'s> {
     #[error]
     // BOM
     #[token("\u{FEFF}", logos::skip)]
-    #[regex(r"[ \t\r\n]+", logos::skip)]
+    #[regex(r"[ \t\r\n　]+", logos::skip)]
     #[regex(r";[^\n]*", logos::skip)]
     Error,
 }
