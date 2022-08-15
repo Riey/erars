@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {
     file_path: SmolStr,
-    body: Vec<Instruction>,
+    body: Box<[Instruction]>,
     goto_labels: HashMap<SmolStr, u32>,
     args: Vec<(Box<str>, Option<Value>, ArrayVec<usize, 4>)>,
     local_vars: HashMap<SmolStr, VariableInfo>,

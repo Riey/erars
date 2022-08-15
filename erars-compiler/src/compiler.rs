@@ -11,7 +11,7 @@ use smol_str::SmolStr;
 pub struct CompiledFunction {
     pub header: FunctionHeader,
     pub goto_labels: HashMap<SmolStr, u32>,
-    pub body: Vec<Instruction>,
+    pub body: Box<[Instruction]>,
 }
 
 struct Compiler {
@@ -560,20 +560,20 @@ impl Compiler {
     }
 }
 
-pub fn compile_stmt(stmt: Stmt) -> CompileResult<Vec<Instruction>> {
+pub fn compile_stmt(stmt: Stmt) -> CompileResult<Box<[Instruction]>> {
     let mut compiler = Compiler::new();
 
     compiler.push_stmt(stmt)?;
 
-    Ok(compiler.out)
+    Ok(compiler.out.into_boxed_slice())
 }
 
-pub fn compile_expr(expr: Expr) -> CompileResult<Vec<Instruction>> {
+pub fn compile_expr(expr: Expr) -> CompileResult<Box<[Instruction]>> {
     let mut compiler = Compiler::new();
 
     compiler.push_expr(expr)?;
 
-    Ok(compiler.out)
+    Ok(compiler.out.into_boxed_slice())
 }
 
 pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
@@ -586,6 +586,6 @@ pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
     Ok(CompiledFunction {
         header: func.header,
         goto_labels: compiler.goto_labels,
-        body: compiler.out,
+        body: compiler.out.into_boxed_slice(),
     })
 }

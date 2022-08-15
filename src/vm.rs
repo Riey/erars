@@ -515,8 +515,8 @@ impl TerminalVm {
                     .1;
                 let insts = erars_compiler::compile_expr(expr).unwrap();
 
-                for inst in insts {
-                    self.run_instruction(func_name, goto_labels, &inst, &mut 0, chan, ctx)?;
+                for inst in insts.iter() {
+                    self.run_instruction(func_name, goto_labels, inst, &mut 0, chan, ctx)?;
                 }
             }
             Instruction::GotoLabel => {
