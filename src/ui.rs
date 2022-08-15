@@ -91,7 +91,7 @@ impl ConsoleChannel {
     }
 
     pub fn exit(&self) {
-        match self.redraw_fn.lock().as_deref() {
+        match self.exit_fn.lock().as_deref() {
             Some(f) => f(),
             None => self.delay_exit.store(true, SeqCst),
         }

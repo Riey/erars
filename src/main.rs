@@ -13,7 +13,7 @@ use codespan_reporting::{
 };
 use erars::{
     function::FunctionDic,
-    ui::{ConsoleChannel, ConsoleMessage, EraApp, StdioBackend},
+    ui::{ConsoleChannel, EraApp, StdioBackend},
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::VariableInfo;
@@ -213,12 +213,9 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
 
         let mut ctx = VmContext::new(&header_info.global_variables);
         let vm = TerminalVm::new(function_dic, header_info);
-        let ret = vm.start(&inner_chan, &mut ctx);
+        vm.start(&inner_chan, &mut ctx);
 
-        if let Err(err) = ret {
-            log::error!("{}", err);
-            inner_chan.send_msg(ConsoleMessage::Print(format!("VM 에러 발생: {err}")));
-        }
+        inner_chan.exit();
 
         log::info!("Program Terminated");
     });

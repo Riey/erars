@@ -18,6 +18,14 @@ use erars_compiler::{HeaderInfo, Instruction, ParserContext};
 use crate::function::{FunctionBody, FunctionDic};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 
+macro_rules! report_error {
+    ($chan:expr, $($t:tt)+) => {
+        log::error!($($t)+);
+        $chan.send_msg(ConsoleMessage::Print(format!($($t)+)));
+        $chan.send_msg(ConsoleMessage::NewLine);
+    };
+}
+
 #[derive(Clone, Debug)]
 enum VmVariable {
     Int0D(i64),
@@ -988,58 +996,66 @@ impl TerminalVm {
         }
     }
 
-    pub fn start(&self, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
+    fn report_stack(stack: &Callstack, chan: &ConsoleChannel, span: Option<Range<usize>>) {
+        let span = span.unwrap_or(stack.span.clone());
+
+        match &stack.func_name {
+            Ok(name) => match std::fs::read_to_string(stack.file_path.as_str()) {
+                Ok(s) => {
+                    report_error!(
+                        chan,
+                        "    at function {name}@{:?} `{}` [{}]",
+                        span,
+                        stack.file_path,
+                        &s[span.clone()]
+                    );
+                }
+                Err(_) => {
+                    report_error!(
+                        chan,
+                        "    at function {name}@{:?} `{}`",
+                        span,
+                        stack.file_path,
+                    );
+                }
+            },
+            Err(ty) => match dbg!(std::fs::read_to_string(stack.file_path.as_str())) {
+                Ok(s) => {
+                    report_error!(
+                        chan,
+                        "    at {ty}@{:?} `{}` [{}]",
+                        span,
+                        stack.file_path,
+                        &s[span.clone()]
+                    );
+                }
+                Err(_) => {
+                    report_error!(chan, "    at {ty}@{:?} `{}`", span, stack.file_path,);
+                }
+            },
+        }
+    }
+
+    pub fn start(&self, chan: &ConsoleChannel, ctx: &mut VmContext) {
         while let Some(begin) = ctx.begin.take() {
             match self.begin(begin, chan, ctx) {
                 Ok(()) => {}
                 Err(err) => {
-                    log::error!("VM failed with :{err}");
+                    report_error!(chan, "VM failed with: {err}");
 
                     let mut call_stack = ctx.call_stack.iter();
 
                     if let Some(first) = call_stack.next() {
                         for stack in call_stack.rev() {
-                            match &stack.func_name {
-                                Ok(name) => {
-                                    log::error!(
-                                        "    at function {name} `{}@{:?}`",
-                                        stack.file_path,
-                                        stack.span
-                                    )
-                                }
-                                Err(ty) => {
-                                    log::error!(
-                                        "    at EVENT{ty} `{}@{:?}`",
-                                        stack.file_path,
-                                        stack.span
-                                    )
-                                }
-                            }
+                            Self::report_stack(stack, chan, None);
                         }
 
-                        match &first.func_name {
-                            Ok(name) => {
-                                log::error!(
-                                    "    at function {name} `{}@{:?}`",
-                                    first.file_path,
-                                    ctx.current_span,
-                                )
-                            }
-                            Err(ty) => {
-                                log::error!(
-                                    "    at EVENT{ty} `{}@{:?}`",
-                                    first.file_path,
-                                    ctx.current_span
-                                )
-                            }
-                        }
+                        Self::report_stack(first, chan, Some(ctx.current_span.clone()));
                     }
 
                     break;
                 }
             }
         }
-
-        Ok(())
     }
 }
