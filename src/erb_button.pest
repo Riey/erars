@@ -1,8 +1,0 @@
-print_button_text = { normal_text ~ button* }
-
-button = { "[" ~ button_text ~ "]" ~ normal_text }
-
-normal_text = ${ normal_char* }
-normal_char = _{ !("[") ~ ANY }
-button_text = ${ button_text_char+ }
-button_text_char = _{ !("]") ~ ANY }

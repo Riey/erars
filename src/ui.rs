@@ -1,236 +1,16 @@
 use crossbeam_channel::{bounded, Receiver, Sender};
-use eframe::epi::{App, Frame};
-use egui::{Color32, FontData, FontDefinitions, FontFamily};
 use erars_ast::{Alignment, Value};
-use maplit::btreemap;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::iter;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::Arc;
 use std::time::Duration;
 
-mod button_parser;
+#[cfg(feature = "stdio-backend")]
+mod stdio_backend;
 
-const FONT: &[u8] = include_bytes!("../res/D2Coding-Ver1.3.2-20180524.ttc");
-
-pub struct EraApp {
-    console: EraConsole,
-    req: Option<InputRequest>,
-    chan: Arc<ConsoleChannel>,
-}
-
-impl EraApp {
-    pub fn new(chan: Arc<ConsoleChannel>) -> Self {
-        Self {
-            console: EraConsole::default(),
-            req: None,
-            chan,
-        }
-    }
-}
-
-impl App for EraApp {
-    fn setup(
-        &mut self,
-        ctx: &egui::Context,
-        _frame: &Frame,
-        _storage: Option<&dyn eframe::epi::Storage>,
-    ) {
-        ctx.set_fonts(FontDefinitions {
-            font_data: btreemap! {
-                "default".into() => FontData::from_static(FONT),
-            },
-            families: btreemap! {
-                FontFamily::Monospace => vec!["default".into()],
-                FontFamily::Proportional => vec!["default".into()],
-            },
-            ..Default::default()
-        });
-
-        let mut widgets = egui::style::Widgets::dark();
-        widgets.noninteractive.fg_stroke.color = Color32::WHITE;
-        widgets.inactive.fg_stroke.color = Color32::WHITE;
-        widgets.hovered.fg_stroke.color = Color32::YELLOW;
-
-        ctx.set_visuals(egui::Visuals {
-            button_frame: false,
-            extreme_bg_color: Color32::BLACK,
-            widgets,
-            ..egui::Visuals::dark()
-        });
-    }
-
-    fn clear_color(&self) -> egui::Rgba {
-        egui::Rgba::BLACK
-    }
-
-    fn name(&self) -> &str {
-        "erars"
-    }
-
-    fn update(&mut self, ctx: &egui::Context, frame: &Frame) {
-        self.chan.set_frame(frame.clone());
-
-        if self.req.is_none() {
-            while let Some(msg) = self.chan.recv_msg() {
-                log::trace!("[UI] Recv: {msg:?}");
-                match msg {
-                    ConsoleMessage::SetColor(r, g, b) => {
-                        self.console.color = Color32::from_rgb(r, g, b);
-                    }
-                    ConsoleMessage::Input(req) => self.req = Some(req),
-                    ConsoleMessage::NewLine => self.console.new_line(),
-                    ConsoleMessage::Print(s) => self.console.print(s),
-                    ConsoleMessage::DrawLine => self.console.draw_line(),
-                    ConsoleMessage::Alignment(align) => self.console.set_align(align),
-                    ConsoleMessage::PrintButton(value, s) => self.console.print_button(value, s),
-                    ConsoleMessage::ReuseLastLine(s) => self.console.reuse_last_line(s),
-                }
-            }
-        }
-
-        egui::TopBottomPanel::top("setting").show(ctx, |ui| {
-            ui.menu_button("Setting", |ui| {
-                ctx.style_ui(ui);
-            });
-        });
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            let mut ret = |value: &Value| match (&self.req, value) {
-                (Some(InputRequest::Anykey), _)
-                | (Some(InputRequest::EnterKey), _)
-                | (Some(InputRequest::Int), Value::Int(_))
-                | (Some(InputRequest::Str), Value::String(_)) => {
-                    self.req = None;
-                    self.chan.send_ret(ConsoleResult::Value(value.clone()));
-                }
-                _ => {}
-            };
-            for line in self
-                .console
-                .lines
-                .iter()
-                .chain(iter::once(&self.console.last_line))
-            {
-                match line.align {
-                    Alignment::Left => {
-                        ui.horizontal(|ui| {
-                            for part in line.parts.iter() {
-                                part.display(ui, &mut ret);
-                            }
-                        });
-                    }
-                    Alignment::Center => {
-                        ui.vertical_centered(|ui| {
-                            for part in line.parts.iter() {
-                                part.display(ui, &mut ret);
-                            }
-                        });
-                    }
-                    Alignment::Right => {
-                        todo!()
-                    }
-                }
-            }
-        });
-    }
-}
-
-struct EraConsole {
-    color: Color32,
-    lines: Vec<ConsoleLine>,
-    last_line: ConsoleLine,
-}
-
-impl Default for EraConsole {
-    fn default() -> Self {
-        Self {
-            color: Color32::WHITE,
-            lines: Vec::new(),
-            last_line: ConsoleLine::default(),
-        }
-    }
-}
-
-#[derive(Default)]
-struct ConsoleLine {
-    parts: Vec<ConsoleLinePart>,
-    align: Alignment,
-    reuse: bool,
-}
-
-enum ConsoleLinePart {
-    Normal(String, Color32),
-    Line(Color32),
-    Button(Value, Color32, String),
-}
-
-impl ConsoleLinePart {
-    pub fn display(&self, ui: &mut egui::Ui, ret: impl FnOnce(&Value)) {
-        match self {
-            ConsoleLinePart::Normal(s, color) => {
-                ui.colored_label(*color, s);
-            }
-            ConsoleLinePart::Line(color) => {
-                let width = ui.available_width();
-                let char_width = ui.fonts().glyph_width(&egui::FontId::monospace(14.0), '=');
-                let s = "=".repeat((width / char_width) as usize);
-                ui.colored_label(*color, s);
-            }
-            ConsoleLinePart::Button(value, color, text) => {
-                if ui
-                    .button(egui::RichText::new(text).color(*color))
-                    .on_hover_cursor(egui::CursorIcon::PointingHand)
-                    .clicked()
-                {
-                    ret(value);
-                }
-            }
-        }
-    }
-}
-
-impl EraConsole {
-    pub fn print_button(&mut self, value: Value, s: String) {
-        self.last_line
-            .parts
-            .push(ConsoleLinePart::Button(value, self.color, s));
-    }
-
-    // pub fn print_plain_text(&mut self, s: String) {
-    //     self.last_line.parts.push(ConsoleLinePart::Normal(s));
-    // }
-
-    pub fn print(&mut self, s: String) {
-        button_parser::parse_button(s, self.color, &mut self.last_line.parts);
-    }
-    pub fn new_line(&mut self) {
-        let prev_line = std::mem::take(&mut self.last_line);
-        let prev_align = prev_line.align;
-        self.lines.push(prev_line);
-        self.last_line.align = prev_align;
-    }
-    pub fn set_align(&mut self, align: Alignment) {
-        self.last_line.align = align;
-    }
-
-    pub fn draw_line(&mut self) {
-        self.last_line.parts.push(ConsoleLinePart::Line(self.color));
-        self.new_line();
-    }
-
-    pub fn reuse_last_line(&mut self, s: String) {
-        if !self.last_line.reuse {
-            self.new_line();
-            self.print(s);
-            self.last_line.reuse = true;
-        } else {
-            self.last_line.parts.clear();
-            self.print(s);
-        }
-    }
-}
+#[cfg(feature = "stdio-backend")]
+pub use stdio_backend::StdioBackend;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConsoleMessage {
@@ -244,7 +24,7 @@ pub enum ConsoleMessage {
     SetColor(u8, u8, u8),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InputRequest {
     Anykey,
     EnterKey,
@@ -258,8 +38,13 @@ pub enum ConsoleResult {
     Value(Value),
 }
 
+pub trait EraApp {
+    fn run(&mut self, chan: Arc<ConsoleChannel>) -> anyhow::Result<()>;
+}
+
 pub struct ConsoleChannel {
-    frame: Mutex<Option<Frame>>,
+    redraw_fn: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
+    exit_fn: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
     delay_redraw: AtomicBool,
     delay_exit: AtomicBool,
     console: (Sender<ConsoleMessage>, Receiver<ConsoleMessage>),
@@ -269,7 +54,8 @@ pub struct ConsoleChannel {
 impl ConsoleChannel {
     pub fn new() -> Self {
         Self {
-            frame: Mutex::new(None),
+            redraw_fn: Mutex::new(None),
+            exit_fn: Mutex::new(None),
             delay_redraw: AtomicBool::new(false),
             delay_exit: AtomicBool::new(false),
             console: bounded(256),
@@ -277,28 +63,37 @@ impl ConsoleChannel {
         }
     }
 
-    pub fn set_frame(&self, frame: Frame) {
-        if self.delay_redraw.swap(false, Ordering::SeqCst) {
-            frame.request_repaint();
-        }
-        if self.delay_exit.swap(false, Ordering::SeqCst) {
-            frame.quit();
+    pub fn set_redraw_fn(&self, f: impl Fn() + Send + Sync + 'static) {
+        let mut redraw_fn = self.redraw_fn.lock();
+
+        if self.delay_redraw.swap(false, SeqCst) {
+            f();
         }
 
-        *self.frame.lock() = Some(frame);
+        *redraw_fn = Some(Box::new(f));
+    }
+
+    pub fn set_exit_fn(&self, f: impl Fn() + Send + Sync + 'static) {
+        let mut exit_fn = self.exit_fn.lock();
+
+        if self.delay_exit.swap(false, SeqCst) {
+            f();
+        }
+
+        *exit_fn = Some(Box::new(f));
     }
 
     pub fn request_redraw(&self) {
-        match self.frame.lock().as_ref() {
-            Some(f) => f.request_repaint(),
-            None => self.delay_redraw.store(true, Ordering::SeqCst),
+        match self.redraw_fn.lock().as_deref() {
+            Some(f) => f(),
+            None => self.delay_redraw.store(true, SeqCst),
         }
     }
 
     pub fn exit(&self) {
-        match self.frame.lock().as_ref() {
-            Some(f) => f.quit(),
-            None => self.delay_exit.store(true, Ordering::SeqCst),
+        match self.redraw_fn.lock().as_deref() {
+            Some(f) => f(),
+            None => self.delay_exit.store(true, SeqCst),
         }
     }
 
