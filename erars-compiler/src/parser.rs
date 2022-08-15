@@ -67,10 +67,23 @@ macro_rules! try_nom {
 #[derive(Debug, Default)]
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
+    pub var_names: HashMap<(SmolStr, SmolStr), u32>,
     pub global_variables: HashMap<SmolStr, VariableInfo>,
 }
 
 impl HeaderInfo {
+    pub fn merge_name_csv(&mut self, var: &str, s: &str) -> ParserResult<()> {
+        let var = SmolStr::from(var);
+
+        let ret = self::expr::name_csv(s).unwrap().1;
+
+        for (n, s) in ret {
+            self.var_names.insert((var.clone(), s), n);
+        }
+
+        Ok(())
+    }
+
     pub fn merge_header(&mut self, s: &str) -> ParserResult<()> {
         let ctx = ParserContext::default();
         let mut lex = Lexer::new(s);
@@ -434,24 +447,24 @@ impl ParserContext {
                 Stmt::If(if_elses, block)
             }
             Token::Inc => {
-                let ident = self.replace(take_ident!(lex));
+                let ident = SmolStr::from(self.replace(take_ident!(lex)));
                 let left = cut_line(lex);
                 let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(left));
-                let args = try_nom!(lex, self::expr::variable_arg(self)(left)).1;
+                let args = try_nom!(lex, self::expr::variable_arg(self, &ident)(left)).1;
                 let var = Variable {
-                    var: ident.into(),
+                    var: ident,
                     func_extern,
                     args,
                 };
                 Stmt::Assign(var, Some(BinaryOperator::Add), Expr::Int(1))
             }
             Token::Dec => {
-                let ident = self.replace(take_ident!(lex));
+                let ident = SmolStr::from(self.replace(take_ident!(lex)));
                 let left = cut_line(lex);
                 let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(left));
-                let args = try_nom!(lex, self::expr::variable_arg(self)(left)).1;
+                let args = try_nom!(lex, self::expr::variable_arg(self, &ident)(left)).1;
                 let var = Variable {
-                    var: ident.into(),
+                    var: ident,
                     func_extern,
                     args,
                 };

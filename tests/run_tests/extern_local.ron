@@ -1,5 +1,4 @@
 [
     Print("100"),
     NewLine,
-    Exit,
 ]

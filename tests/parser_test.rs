@@ -855,6 +855,29 @@ CondExpr(
     }
 
     #[test]
+    fn test_csv() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/csv.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            r#"
+Var(
+    Variable {
+        var: "FLAG",
+        func_extern: None,
+        args: [
+            Int(
+                1,
+            ),
+        ],
+    },
+)
+"#
+        );
+    }
+
+    #[test]
     fn test_method() {
         k9::snapshot!(
             do_test(
@@ -1201,6 +1224,7 @@ Function {
                     info: VariableInfo {
                         is_chara: false,
                         is_str: false,
+                        is_global: false,
                         default_int: 0,
                         size: [],
                         init: [

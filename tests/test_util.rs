@@ -12,10 +12,13 @@ use erars_compiler::{HeaderInfo, ParserContext, ParserResult};
 use serde::de::DeserializeOwned;
 
 pub fn get_ctx() -> ParserContext {
-    let info = HeaderInfo {
+    let mut info = HeaderInfo {
         global_variables: serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap(),
         ..Default::default()
     };
+
+    info.merge_name_csv("FLAG", include_str!("../CSV/FLAG.CSV"))
+        .unwrap();
 
     ParserContext::new(Arc::new(info))
 }

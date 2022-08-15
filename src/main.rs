@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -21,19 +21,36 @@ use erars_compiler::{CompiledFunction, HeaderInfo, Lexer, ParserContext};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
+fn try_load_csv(info: &mut HeaderInfo, target_path: &str, var: &str) {
+    let csv_path = Path::new(target_path)
+        .join("CSV")
+        .join(format!("{var}.CSV"));
+    log::trace!("Read {}", csv_path.display());
+
+    match std::fs::read_to_string(&csv_path) {
+        Ok(csv) => {
+            info.merge_name_csv(var, &csv).ok();
+        }
+        Err(err) => {
+            log::warn!("Loading {var}.CSV: {err}");
+        }
+    }
+}
+
 fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
     let chan = Arc::new(ConsoleChannel::new());
-    let mut args = std::env::args();
-
-    let target_path = if let Some(path) = args.nth(1) {
-        path
-    } else {
-        ".".into()
-    };
 
     let inner_chan = chan.clone();
 
     std::thread::spawn(move || {
+        let mut args = std::env::args();
+
+        let target_path = if let Some(path) = args.nth(1) {
+            path
+        } else {
+            ".".into()
+        };
+
         let infos: HashMap<SmolStr, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
@@ -70,6 +87,30 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             global_variables: infos,
             ..Default::default()
         };
+
+        try_load_csv(&mut header_info, &target_path, "ABL");
+        try_load_csv(&mut header_info, &target_path, "BASE");
+        try_load_csv(&mut header_info, &target_path, "EQUIP");
+        try_load_csv(&mut header_info, &target_path, "TEQUIP");
+        try_load_csv(&mut header_info, &target_path, "PALAM");
+        try_load_csv(&mut header_info, &target_path, "EXP");
+        try_load_csv(&mut header_info, &target_path, "SOURCE");
+        try_load_csv(&mut header_info, &target_path, "EX");
+        try_load_csv(&mut header_info, &target_path, "FLAG");
+        try_load_csv(&mut header_info, &target_path, "CFLAG");
+        try_load_csv(&mut header_info, &target_path, "TFLAG");
+        try_load_csv(&mut header_info, &target_path, "TALENT");
+        try_load_csv(&mut header_info, &target_path, "ITEM");
+        try_load_csv(&mut header_info, &target_path, "STAIN");
+
+        try_load_csv(&mut header_info, &target_path, "TSTR");
+        try_load_csv(&mut header_info, &target_path, "CSTR");
+        try_load_csv(&mut header_info, &target_path, "STR");
+
+        try_load_csv(&mut header_info, &target_path, "SAVESTR");
+        try_load_csv(&mut header_info, &target_path, "GLOBAL");
+        try_load_csv(&mut header_info, &target_path, "GLOBALS");
+        // try_load_csv(&mut header_info, &target_path, "CDFLAG");
 
         for erh in erhs {
             let erh = erh.unwrap();

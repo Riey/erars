@@ -7,7 +7,7 @@ use erars_ast::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, is_not, tag, take_while},
+    bytes::complete::{escaped, is_not, tag, take_until, take_while},
     character::complete::*,
     combinator::{eof, map, opt, success, value, verify},
     error::{context, ErrorKind, VerboseError},
@@ -23,8 +23,12 @@ use unicode_xid::UnicodeXID;
 type Error<'a> = nom::error::VerboseError<&'a str>;
 type IResult<'a, T> = nom::IResult<&'a str, T, Error<'a>>;
 
-fn sp<'a>(i: &'a str) -> IResult<'a, &'a str> {
-    take_while(move |c| " \t\r".contains(c))(i)
+fn sp<'a>(i: &'a str) -> IResult<'a, ()> {
+    map(take_while(move |c| " \t\r".contains(c)), |_| ())(i)
+}
+
+fn sp_nl<'a>(i: &'a str) -> IResult<'a, ()> {
+    map(take_while(move |c| " \t\r\n".contains(c)), |_| ())(i)
 }
 
 fn char_sp<'a>(ch: char) -> impl FnMut(&'a str) -> IResult<'a, char> {
@@ -45,6 +49,24 @@ fn de_sp<'a, T>(p: impl Parser<&'a str, T, Error<'a>>) -> impl FnMut(&'a str) ->
 
 fn is_ident(i: &str) -> bool {
     i.chars().all(|c| c.is_xid_continue() || c == '_')
+}
+
+fn name_csv_line<'a>(i: &'a str) -> IResult<'a, (u32, SmolStr)> {
+    let (i, u) = u32(i)?;
+    let (i, _) = char_sp(',')(i)?;
+    let (i, name) = ident(i)?;
+
+    Ok((i, (u, name.into())))
+}
+
+fn comment_line<'a>(i: &'a str) -> IResult<'a, ()> {
+    let (i, _) = char(';')(i)?;
+    let (i, _) = take_until("\n")(i)?;
+    Ok((i, ()))
+}
+
+pub fn name_csv<'a>(i: &'a str) -> IResult<'a, Vec<(u32, SmolStr)>> {
+    many0(preceded(opt(alt((comment_line, sp_nl))), name_csv_line))(i)
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
@@ -279,12 +301,13 @@ fn ident_or_method_expr<'c, 'a>(
             let (i, func_extern) = var_func_extern(i)?;
             match ident {
                 Cow::Borrowed(ident) => {
+                    let var = SmolStr::from(ident);
                     if !ctx.is_arg.get() {
-                        let (i, args) = variable_arg(ctx)(i)?;
+                        let (i, args) = variable_arg(ctx, &var)(i)?;
                         Ok((
                             i,
                             Expr::Var(Variable {
-                                var: ident.into(),
+                                var,
                                 func_extern,
                                 args,
                             }),
@@ -293,7 +316,7 @@ fn ident_or_method_expr<'c, 'a>(
                         Ok((
                             i,
                             Expr::Var(Variable {
-                                var: ident.into(),
+                                var,
                                 func_extern,
                                 args: Vec::new(),
                             }),
@@ -302,11 +325,12 @@ fn ident_or_method_expr<'c, 'a>(
                 }
                 Cow::Owned(m) => {
                     if !ctx.is_arg.get() && is_ident(&m) {
-                        let (i, args) = variable_arg(ctx)(i)?;
+                        let var = SmolStr::from(m);
+                        let (i, args) = variable_arg(ctx, &var)(i)?;
                         Ok((
                             i,
                             Expr::Var(Variable {
-                                var: m.into(),
+                                var,
                                 func_extern,
                                 args,
                             }),
@@ -315,7 +339,7 @@ fn ident_or_method_expr<'c, 'a>(
                         match expr(ctx)(&m) {
                             Ok((left, expr)) => {
                                 if !left.is_empty() {
-                                    eprintln!("Macro must be complete form");
+                                    log::error!("Macro must be complete form");
                                     Err(nom::Err::Failure(error_position!(i, ErrorKind::Eof)))
                                 } else {
                                     Ok((i, expr))
@@ -392,7 +416,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                         is_inc,
                     },
                     _ => {
-                        eprintln!("증감연산자는 변수와 함께 써야합니다.");
+                        log::error!("증감연산자는 변수와 함께 써야합니다.");
                         return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
                     }
                 }
@@ -614,7 +638,7 @@ pub fn for_line<'c, 'a>(
                 Ok((i, (var, init, end, step)))
             }
             other => {
-                eprintln!("FOR문은 인자로 3개나 4개를 가져야합니다: 받은 인자수 {other}개");
+                log::error!("FOR문은 인자로 3개나 4개를 가져야합니다: 받은 인자수 {other}개");
                 Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)))
             }
         }
@@ -634,20 +658,20 @@ pub fn assign_line<'c, 'a>(
     ident: &'c str,
 ) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |mut i| {
-        let var_name = ctx.replace(ident);
+        let var_name = SmolStr::from(ctx.replace(ident));
 
         if !is_ident(&var_name) {
-            eprintln!("Expanded variable name in assign line is incorrect `{var_name}`");
+            log::error!("Expanded variable name in assign line is incorrect `{var_name}`");
             return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
         }
 
         i = i.trim_end_matches(' ');
 
         let (i, func_extern) = var_func_extern(i)?;
-        let (i, args) = variable_arg(ctx)(i)?;
+        let (i, args) = variable_arg(ctx, &var_name)(i)?;
 
         let var = Variable {
-            var: var_name.into(),
+            var: var_name,
             func_extern,
             args,
         };
@@ -757,13 +781,35 @@ pub fn function_line<'c, 'a>(
     }
 }
 
+fn variable_named_arg<'c, 'a>(
+    ctx: &'c ParserContext,
+    var: &'c SmolStr,
+) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
+    move |i| {
+        let (i, ident) = ident(i)?;
+        if let Some(v) = ctx
+            .header
+            .var_names
+            .get(&(var.clone(), SmolStr::new_inline(ident)))
+        {
+            Ok((i, Expr::int(*v)))
+        } else {
+            Err(nom::Err::Error(error_position!(i, ErrorKind::Verify)))
+        }
+    }
+}
+
 pub fn variable_arg<'c, 'a>(
     ctx: &'c ParserContext,
+    var: &'c SmolStr,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
     move |i| {
         let is_arg = ctx.is_arg.get();
         ctx.is_arg.set(true);
-        let (i, args) = many0(preceded(char_sp(':'), single_expr(ctx)))(i)?;
+        let (i, args) = many0(preceded(
+            char_sp(':'),
+            alt((variable_named_arg(ctx, var), single_expr(ctx))),
+        ))(i)?;
         ctx.is_arg.set(is_arg);
 
         Ok((i, args))
@@ -775,19 +821,19 @@ pub fn variable<'c, 'a>(
 ) -> impl FnMut(&'a str) -> IResult<'a, Variable> + 'c {
     move |i| {
         let (i, name) = de_sp(ident)(i)?;
-        let name = ctx.replace(name);
+        let name = SmolStr::from(ctx.replace(name));
 
         if !is_ident(&name) {
             panic!("Variable error");
         }
 
         let (i, func_extern) = var_func_extern(i)?;
-        let (i, args) = variable_arg(ctx)(i)?;
+        let (i, args) = variable_arg(ctx, &name)(i)?;
 
         Ok((
             i,
             Variable {
-                var: name.into(),
+                var: name,
                 func_extern,
                 args,
             },
