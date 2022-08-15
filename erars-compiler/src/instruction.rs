@@ -16,7 +16,7 @@ pub enum Instruction {
     /// Duplicate second value in stack
     DuplicatePrev,
     LoadInt(i64),
-    LoadStr(String),
+    LoadStr(Box<str>),
     EvalFormString,
     PadStr(Alignment),
     LoadVarRef(u32),

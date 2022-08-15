@@ -502,7 +502,7 @@ impl TerminalVm {
         match inst {
             Instruction::ReportSpan(span) => ctx.current_span = span.clone(),
             Instruction::LoadInt(n) => ctx.push(*n),
-            Instruction::LoadStr(s) => ctx.push(s),
+            Instruction::LoadStr(s) => ctx.push(s.to_string()),
             Instruction::Nop => {}
             Instruction::Pop => drop(ctx.pop()),
             Instruction::Duplicate => ctx.dup(),

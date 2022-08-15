@@ -584,7 +584,7 @@ pub fn call_jump_line<'c, 'a>(
                 panic!("CALL/JUMP문은 식별자를 받아야합니다");
             }
 
-            (i, Expr::String(function.into_owned()))
+            (i, Expr::String(function.into_owned().into_boxed_str()))
         };
 
         let (i, args) = call_arg_list(ctx)(i)?;
@@ -740,7 +740,7 @@ pub fn dim_line<'c, 'a>(
 fn const_eval(_ctx: &ParserContext, expr: Expr) -> Value {
     match expr {
         Expr::Int(i) => Value::Int(i),
-        Expr::String(s) => Value::String(s),
+        Expr::String(s) => Value::String(s.into_string()),
         _ => panic!("Can't evaulating expression"),
     }
 }

@@ -22,7 +22,7 @@ pub enum Stmt {
     PrintList(PrintFlags, Vec<Expr>),
     PrintFormS(PrintFlags, Expr),
     PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
-    ReuseLastLine(String),
+    ReuseLastLine(Box<str>),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<StmtWithPos>),
     If(Vec<(Expr, Vec<StmtWithPos>)>, Vec<StmtWithPos>),
@@ -90,11 +90,11 @@ pub enum FunctionInfo {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Expr {
-    String(String),
+    String(Box<str>),
     Int(i64),
     FormText(FormText),
     Var(Variable),
-    Method(String, Vec<Self>),
+    Method(Box<str>, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),
     /// ++/-- var ++/--
     IncOpExpr {
@@ -111,7 +111,7 @@ impl Expr {
         Self::Int(i.into())
     }
 
-    pub fn str(s: impl Into<String>) -> Self {
+    pub fn str(s: impl Into<Box<str>>) -> Self {
         Self::String(s.into())
     }
 

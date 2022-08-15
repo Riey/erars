@@ -129,10 +129,10 @@ impl Compiler {
 
     fn push_var_ref(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.push(Instruction::LoadStr(var.var.into_string()));
+        self.push(Instruction::LoadStr(var.var));
         match var.func_extern {
             Some(e) => {
-                self.push(Instruction::LoadStr(e.into_string()));
+                self.push(Instruction::LoadStr(e));
                 self.push(Instruction::LoadExternVarRef(count));
             }
             None => {
@@ -173,7 +173,7 @@ impl Compiler {
                 self.push_expr(padding)?;
                 self.push(Instruction::PadStr(align.unwrap_or_default()));
             }
-            self.push(Instruction::LoadStr(text));
+            self.push(Instruction::LoadStr(text.into_boxed_str()));
         }
         self.push(Instruction::ConcatString(count));
 

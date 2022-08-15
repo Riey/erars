@@ -112,7 +112,7 @@ impl FunctionDic {
                 var.var,
                 default_value.map(|v| match v {
                     Expr::Int(i) => i.into(),
-                    Expr::String(s) => s.into(),
+                    Expr::String(s) => s.into_string().into(),
                     _ => panic!("default arg must be constant"),
                 }),
                 var.args
