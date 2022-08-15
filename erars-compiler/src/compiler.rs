@@ -127,17 +127,30 @@ impl Compiler {
         Ok(())
     }
 
-    fn store_var(&mut self, var: Variable) -> CompileResult<()> {
+    fn push_var_ref(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.push(Instruction::LoadVarRef(var.var, var.func_extern, count));
+        self.push(Instruction::LoadStr(var.var.into_string()));
+        match var.func_extern {
+            Some(e) => {
+                self.push(Instruction::LoadStr(e.into_string()));
+                self.push(Instruction::LoadExternVarRef(count));
+            }
+            None => {
+                self.push(Instruction::LoadVarRef(count));
+            }
+        }
+        Ok(())
+    }
+
+    fn store_var(&mut self, var: Variable) -> CompileResult<()> {
+        self.push_var_ref(var)?;
         self.push(Instruction::StoreVar);
 
         Ok(())
     }
 
     fn push_var(&mut self, var: Variable) -> CompileResult<()> {
-        let count = self.push_list(var.args)?;
-        self.push(Instruction::LoadVarRef(var.var, var.func_extern, count));
+        self.push_var_ref(var)?;
         self.push(Instruction::LoadVar);
 
         Ok(())
@@ -145,7 +158,7 @@ impl Compiler {
 
     fn push_form(&mut self, form: FormText) -> CompileResult<()> {
         let count = 1 + form.other.len() as u32 * 2;
-        self.push(Instruction::LoadStr(form.first));
+        self.push(Instruction::LoadStr(form.first.into()));
         for (
             FormExpr {
                 expr,
@@ -375,7 +388,7 @@ impl Compiler {
             }
             Stmt::Repeat(end, body) => self.push_for(
                 Variable {
-                    var: SmolStr::new_inline("COUNT"),
+                    var: "COUNT".into(),
                     func_extern: None,
                     args: Vec::new(),
                 },

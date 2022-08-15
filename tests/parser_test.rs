@@ -1223,7 +1223,7 @@ mod function {
             r#"
 Function {
     header: FunctionHeader {
-        file_path: "",
+        file_path: "tests/parse_tests/functions/call.erb",
         name: "FOO",
         args: [],
         infos: [],
@@ -1387,7 +1387,7 @@ Function {
             r#"
 Function {
     header: FunctionHeader {
-        file_path: "",
+        file_path: "tests/parse_tests/functions/dim.erb",
         name: "SYSTEM_TITLE",
         args: [],
         infos: [
@@ -1442,7 +1442,7 @@ Function {
             r#"
 Function {
     header: FunctionHeader {
-        file_path: "",
+        file_path: "tests/parse_tests/functions/function.erb",
         name: "FOO",
         args: [],
         infos: [
@@ -1486,7 +1486,7 @@ Function {
             r#"
 Function {
     header: FunctionHeader {
-        file_path: "",
+        file_path: "tests/parse_tests/functions/juel.erb",
         name: "COMMON_MOVE_JUEL",
         args: [
             (
@@ -1892,7 +1892,7 @@ mod program {
 [
     Function {
         header: FunctionHeader {
-            file_path: "",
+            file_path: "tests/parse_tests/programs/call_form.erb",
             name: "SYSTEM_TITLE",
             args: [],
             infos: [],
@@ -1918,7 +1918,7 @@ mod program {
     },
     Function {
         header: FunctionHeader {
-            file_path: "",
+            file_path: "tests/parse_tests/programs/call_form.erb",
             name: "FOO_123",
             args: [
                 (
@@ -1960,7 +1960,7 @@ mod program {
 [
     Function {
         header: FunctionHeader {
-            file_path: "",
+            file_path: "tests/parse_tests/programs/method_call.erb",
             name: "FOO",
             args: [],
             infos: [],
@@ -1985,7 +1985,7 @@ mod program {
     },
     Function {
         header: FunctionHeader {
-            file_path: "",
+            file_path: "tests/parse_tests/programs/method_call.erb",
             name: "BAR",
             args: [],
             infos: [
@@ -2022,7 +2022,7 @@ mod program {
 [
     Function {
         header: FunctionHeader {
-            file_path: "",
+            file_path: "tests/parse_tests/programs/simple.erb",
             name: "FOO",
             args: [],
             infos: [],
@@ -2041,7 +2041,7 @@ mod program {
     },
     Function {
         header: FunctionHeader {
-            file_path: "",
+            file_path: "tests/parse_tests/programs/simple.erb",
             name: "FOO",
             args: [],
             infos: [],
@@ -2060,7 +2060,7 @@ mod program {
     },
     Function {
         header: FunctionHeader {
-            file_path: "",
+            file_path: "tests/parse_tests/programs/simple.erb",
             name: "BAR",
             args: [],
             infos: [],

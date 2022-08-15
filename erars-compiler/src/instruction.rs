@@ -4,7 +4,6 @@ use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, NotNan, PrintFlags, UnaryOperator,
 };
 use serde::{Deserialize, Serialize};
-use smol_str::SmolStr;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum Instruction {
@@ -20,7 +19,8 @@ pub enum Instruction {
     LoadStr(String),
     EvalFormString,
     PadStr(Alignment),
-    LoadVarRef(SmolStr, Option<SmolStr>, u32),
+    LoadVarRef(u32),
+    LoadExternVarRef(u32),
     LoadVar,
     StoreVar,
     CallMethod(u32),

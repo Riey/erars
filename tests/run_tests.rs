@@ -7,6 +7,16 @@ mod test_util;
 
 #[test]
 fn run_test() {
+    {
+        use simplelog::*;
+        CombinedLogger::init(vec![TermLogger::new(
+            LevelFilter::Warn,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )])
+        .unwrap();
+    }
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
 
     for erb_file in erb_files {

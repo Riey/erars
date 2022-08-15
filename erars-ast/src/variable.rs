@@ -4,8 +4,8 @@ use smol_str::SmolStr;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Variable {
-    pub var: SmolStr,
-    pub func_extern: Option<SmolStr>,
+    pub var: Box<str>,
+    pub func_extern: Option<Box<str>>,
     pub args: Vec<Expr>,
 }
 

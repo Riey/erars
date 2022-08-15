@@ -280,7 +280,7 @@ fn paran_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<
     }
 }
 
-pub fn var_func_extern<'a>(i: &'a str) -> IResult<'a, Option<SmolStr>> {
+pub fn var_func_extern<'a>(i: &'a str) -> IResult<'a, Option<Box<str>>> {
     opt(map(preceded(char('@'), ident), |s| s.into()))(i)
 }
 
@@ -301,13 +301,13 @@ fn ident_or_method_expr<'c, 'a>(
             let (i, func_extern) = var_func_extern(i)?;
             match ident {
                 Cow::Borrowed(ident) => {
-                    let var = SmolStr::from(ident);
+                    let var = ident;
                     if !ctx.is_arg.get() {
                         let (i, args) = variable_arg(ctx, &var)(i)?;
                         Ok((
                             i,
                             Expr::Var(Variable {
-                                var,
+                                var: var.into(),
                                 func_extern,
                                 args,
                             }),
@@ -316,7 +316,7 @@ fn ident_or_method_expr<'c, 'a>(
                         Ok((
                             i,
                             Expr::Var(Variable {
-                                var,
+                                var: var.into(),
                                 func_extern,
                                 args: Vec::new(),
                             }),
@@ -325,12 +325,11 @@ fn ident_or_method_expr<'c, 'a>(
                 }
                 Cow::Owned(m) => {
                     if !ctx.is_arg.get() && is_ident(&m) {
-                        let var = SmolStr::from(m);
-                        let (i, args) = variable_arg(ctx, &var)(i)?;
+                        let (i, args) = variable_arg(ctx, &m)(i)?;
                         Ok((
                             i,
                             Expr::Var(Variable {
-                                var,
+                                var: m.into_boxed_str(),
                                 func_extern,
                                 args,
                             }),
@@ -658,7 +657,7 @@ pub fn assign_line<'c, 'a>(
     ident: &'c str,
 ) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |mut i| {
-        let var_name = SmolStr::from(ctx.replace(ident));
+        let var_name = ctx.replace(ident);
 
         if !is_ident(&var_name) {
             log::error!("Expanded variable name in assign line is incorrect `{var_name}`");
@@ -671,7 +670,7 @@ pub fn assign_line<'c, 'a>(
         let (i, args) = variable_arg(ctx, &var_name)(i)?;
 
         let var = Variable {
-            var: var_name,
+            var: var_name.into(),
             func_extern,
             args,
         };
@@ -783,14 +782,14 @@ pub fn function_line<'c, 'a>(
 
 fn variable_named_arg<'c, 'a>(
     ctx: &'c ParserContext,
-    var: &'c SmolStr,
+    var: &'c str,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         let (i, ident) = ident(i)?;
         if let Some(v) = ctx
             .header
             .var_names
-            .get(&(var.clone(), SmolStr::new_inline(ident)))
+            .get(&(SmolStr::new_inline(var), SmolStr::new_inline(ident)))
         {
             Ok((i, Expr::int(*v)))
         } else {
@@ -801,7 +800,7 @@ fn variable_named_arg<'c, 'a>(
 
 pub fn variable_arg<'c, 'a>(
     ctx: &'c ParserContext,
-    var: &'c SmolStr,
+    var: &'c str,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
     move |i| {
         let is_arg = ctx.is_arg.get();
@@ -821,19 +820,18 @@ pub fn variable<'c, 'a>(
 ) -> impl FnMut(&'a str) -> IResult<'a, Variable> + 'c {
     move |i| {
         let (i, name) = de_sp(ident)(i)?;
-        let name = SmolStr::from(ctx.replace(name));
 
         if !is_ident(&name) {
             panic!("Variable error");
         }
 
         let (i, func_extern) = var_func_extern(i)?;
-        let (i, args) = variable_arg(ctx, &name)(i)?;
+        let (i, args) = variable_arg(ctx, name)(i)?;
 
         Ok((
             i,
             Variable {
-                var: name,
+                var: name.into(),
                 func_extern,
                 args,
             },

@@ -13,14 +13,14 @@ pub struct FunctionBody {
     file_path: SmolStr,
     body: Vec<Instruction>,
     goto_labels: HashMap<SmolStr, u32>,
-    args: Vec<(SmolStr, Option<Value>, ArrayVec<usize, 4>)>,
+    args: Vec<(Box<str>, Option<Value>, ArrayVec<usize, 4>)>,
     local_vars: HashMap<SmolStr, VariableInfo>,
 }
 
 impl FunctionBody {
     pub fn push_arg(
         &mut self,
-        var: SmolStr,
+        var: Box<str>,
         default_value: Option<Value>,
         indices: ArrayVec<usize, 4>,
     ) {
@@ -35,7 +35,7 @@ impl FunctionBody {
         &self.goto_labels
     }
 
-    pub fn args(&self) -> &[(SmolStr, Option<Value>, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[(Box<str>, Option<Value>, ArrayVec<usize, 4>)] {
         &self.args
     }
 

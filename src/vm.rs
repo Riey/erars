@@ -268,8 +268,8 @@ struct Callstack {
 
 #[derive(Clone, Debug)]
 struct VariableRef {
-    name: SmolStr,
-    func_extern: Option<SmolStr>,
+    name: String,
+    func_extern: Option<String>,
     idxs: ArrayVec<usize, 4>,
 }
 
@@ -435,8 +435,8 @@ impl VmContext {
 
     fn push_var_ref(
         &mut self,
-        name: SmolStr,
-        func_extern: Option<SmolStr>,
+        name: String,
+        func_extern: Option<String>,
         idxs: ArrayVec<usize, 4>,
     ) {
         self.stack.push(LocalValue::VarRef(VariableRef {
@@ -522,9 +522,16 @@ impl TerminalVm {
             Instruction::GotoLabel => {
                 *cursor = goto_labels[ctx.pop_str()?.as_str()] as usize;
             }
-            Instruction::LoadVarRef(var_idx, func_extern, c) => {
+            Instruction::LoadExternVarRef(c) => {
+                let func_extern = ctx.pop_str()?;
+                let name = ctx.pop_str()?;
                 let args = ctx.take_arg_list(*c)?;
-                ctx.push_var_ref(var_idx.clone(), func_extern.clone(), args);
+                ctx.push_var_ref(name, Some(func_extern), args);
+            }
+            Instruction::LoadVarRef(c) => {
+                let name = ctx.pop_str()?;
+                let args = ctx.take_arg_list(*c)?;
+                ctx.push_var_ref(name, None, args);
             }
             Instruction::StoreVar => {
                 let target = *ctx
@@ -990,41 +997,41 @@ impl TerminalVm {
 
                     let mut call_stack = ctx.call_stack.iter();
 
-                    let first = call_stack.next().unwrap();
+                    if let Some(first) = call_stack.next() {
+                        for stack in call_stack.rev() {
+                            match &stack.func_name {
+                                Ok(name) => {
+                                    log::error!(
+                                        "    at function {name} `{}@{:?}`",
+                                        stack.file_path,
+                                        stack.span
+                                    )
+                                }
+                                Err(ty) => {
+                                    log::error!(
+                                        "    at EVENT{ty} `{}@{:?}`",
+                                        stack.file_path,
+                                        stack.span
+                                    )
+                                }
+                            }
+                        }
 
-                    for stack in call_stack.rev() {
-                        match &stack.func_name {
+                        match &first.func_name {
                             Ok(name) => {
                                 log::error!(
                                     "    at function {name} `{}@{:?}`",
-                                    stack.file_path,
-                                    stack.span
+                                    first.file_path,
+                                    ctx.current_span,
                                 )
                             }
                             Err(ty) => {
                                 log::error!(
                                     "    at EVENT{ty} `{}@{:?}`",
-                                    stack.file_path,
-                                    stack.span
+                                    first.file_path,
+                                    ctx.current_span
                                 )
                             }
-                        }
-                    }
-
-                    match &first.func_name {
-                        Ok(name) => {
-                            log::error!(
-                                "    at function {name} `{}@{:?}`",
-                                first.file_path,
-                                ctx.current_span,
-                            )
-                        }
-                        Err(ty) => {
-                            log::error!(
-                                "    at EVENT{ty} `{}@{:?}`",
-                                first.file_path,
-                                ctx.current_span
-                            )
                         }
                     }
 

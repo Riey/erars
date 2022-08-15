@@ -37,176 +37,178 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
     let inner_chan = chan.clone();
 
     std::thread::spawn(move || {
-        let mut args = std::env::args();
-
-        let target_path = if let Some(path) = args.nth(1) {
-            path
-        } else {
-            ".".into()
-        };
-
-        let infos: HashMap<SmolStr, VariableInfo> =
-            serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
-
-        let csvs = glob::glob_with(
-            &format!("{}/CSV/**/*.CSV", target_path),
-            glob::MatchOptions {
-                case_sensitive: false,
-                require_literal_leading_dot: true,
-                require_literal_separator: true,
-            },
-        )
-        .unwrap();
-
-        let erhs = glob::glob_with(
-            &format!("{}/ERB/**/*.ERH", target_path),
-            glob::MatchOptions {
-                case_sensitive: false,
-                require_literal_leading_dot: true,
-                require_literal_separator: true,
-            },
-        )
-        .unwrap();
-
-        let erbs = glob::glob_with(
-            &format!("{}/ERB/**/*.ERB", target_path),
-            glob::MatchOptions {
-                case_sensitive: false,
-                require_literal_leading_dot: true,
-                require_literal_separator: true,
-            },
-        )
-        .unwrap();
-
         let mut function_dic = FunctionDic::new();
+        let header_info;
+        {
+            let mut args = std::env::args();
 
-        let mut files = Mutex::new(SimpleFiles::new());
-        let mut diagnostic = Mutex::new(
-            Diagnostic::error()
-                .with_code("E0001")
-                .with_message("Compile ERROR"),
-        );
+            let target_path = if let Some(path) = args.nth(1) {
+                path
+            } else {
+                ".".into()
+            };
 
-        let mut header_info = HeaderInfo {
-            global_variables: infos,
-            ..Default::default()
-        };
+            let infos: HashMap<SmolStr, VariableInfo> =
+                serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
-        let csv_dic = csvs
-            .par_bridge()
-            .filter_map(|csv| match csv {
-                Ok(csv) => {
-                    log::trace!("Load {}", csv.display());
-                    let s = std::fs::read_to_string(&csv).ok()?;
+            let csvs = glob::glob_with(
+                &format!("{}/CSV/**/*.CSV", target_path),
+                glob::MatchOptions {
+                    case_sensitive: false,
+                    require_literal_leading_dot: true,
+                    require_literal_separator: true,
+                },
+            )
+            .unwrap();
 
-                    Some((
-                        csv.file_stem()
-                            .unwrap()
-                            .to_str()
-                            .unwrap()
-                            .to_ascii_uppercase(),
-                        s,
-                    ))
-                }
-                Err(_) => None,
-            })
-            .collect::<HashMap<_, _>>();
+            let erhs = glob::glob_with(
+                &format!("{}/ERB/**/*.ERH", target_path),
+                glob::MatchOptions {
+                    case_sensitive: false,
+                    require_literal_leading_dot: true,
+                    require_literal_separator: true,
+                },
+            )
+            .unwrap();
 
-        try_load_csv(&mut header_info, &csv_dic, "ABL");
-        try_load_csv(&mut header_info, &csv_dic, "BASE");
-        try_load_csv(&mut header_info, &csv_dic, "EQUIP");
-        try_load_csv(&mut header_info, &csv_dic, "TEQUIP");
-        try_load_csv(&mut header_info, &csv_dic, "PALAM");
-        try_load_csv(&mut header_info, &csv_dic, "EXP");
-        try_load_csv(&mut header_info, &csv_dic, "SOURCE");
-        try_load_csv(&mut header_info, &csv_dic, "EX");
-        try_load_csv(&mut header_info, &csv_dic, "FLAG");
-        try_load_csv(&mut header_info, &csv_dic, "CFLAG");
-        try_load_csv(&mut header_info, &csv_dic, "TFLAG");
-        try_load_csv(&mut header_info, &csv_dic, "TALENT");
-        try_load_csv(&mut header_info, &csv_dic, "ITEM");
-        try_load_csv(&mut header_info, &csv_dic, "STAIN");
+            let erbs = glob::glob_with(
+                &format!("{}/ERB/**/*.ERB", target_path),
+                glob::MatchOptions {
+                    case_sensitive: false,
+                    require_literal_leading_dot: true,
+                    require_literal_separator: true,
+                },
+            )
+            .unwrap();
 
-        try_load_csv(&mut header_info, &csv_dic, "TSTR");
-        try_load_csv(&mut header_info, &csv_dic, "CSTR");
-        try_load_csv(&mut header_info, &csv_dic, "STR");
+            let mut files = Mutex::new(SimpleFiles::new());
+            let mut diagnostic = Mutex::new(
+                Diagnostic::error()
+                    .with_code("E0001")
+                    .with_message("Compile ERROR"),
+            );
 
-        try_load_csv(&mut header_info, &csv_dic, "SAVESTR");
-        try_load_csv(&mut header_info, &csv_dic, "GLOBAL");
-        try_load_csv(&mut header_info, &csv_dic, "GLOBALS");
-        // try_load_csv(&mut header_info, &target_path, "CDFLAG");
+            let mut info = HeaderInfo {
+                global_variables: infos,
+                ..Default::default()
+            };
 
-        drop(csv_dic);
+            let csv_dic = csvs
+                .par_bridge()
+                .filter_map(|csv| match csv {
+                    Ok(csv) => {
+                        log::trace!("Load {}", csv.display());
+                        let s = std::fs::read_to_string(&csv).ok()?;
 
-        for erh in erhs {
-            let erh = erh.unwrap();
-            let source = std::fs::read_to_string(&erh).unwrap();
-            log::debug!("Parse {}", erh.display());
+                        Some((
+                            csv.file_stem()
+                                .unwrap()
+                                .to_str()
+                                .unwrap()
+                                .to_ascii_uppercase(),
+                            s,
+                        ))
+                    }
+                    Err(_) => None,
+                })
+                .collect::<HashMap<_, _>>();
 
-            match header_info.merge_header(&source) {
-                Ok(()) => (),
-                Err((err, span)) => {
-                    let file_id = files
-                        .get_mut()
-                        .add(erh.to_str().unwrap().to_string(), source);
-                    diagnostic
-                        .get_mut()
-                        .labels
-                        .push(Label::primary(file_id, span).with_message(format!("{}", err)));
-                }
-            }
-        }
+            try_load_csv(&mut info, &csv_dic, "ABL");
+            try_load_csv(&mut info, &csv_dic, "BASE");
+            try_load_csv(&mut info, &csv_dic, "EQUIP");
+            try_load_csv(&mut info, &csv_dic, "TEQUIP");
+            try_load_csv(&mut info, &csv_dic, "PALAM");
+            try_load_csv(&mut info, &csv_dic, "EXP");
+            try_load_csv(&mut info, &csv_dic, "SOURCE");
+            try_load_csv(&mut info, &csv_dic, "EX");
+            try_load_csv(&mut info, &csv_dic, "FLAG");
+            try_load_csv(&mut info, &csv_dic, "CFLAG");
+            try_load_csv(&mut info, &csv_dic, "TFLAG");
+            try_load_csv(&mut info, &csv_dic, "TALENT");
+            try_load_csv(&mut info, &csv_dic, "ITEM");
+            try_load_csv(&mut info, &csv_dic, "STAIN");
 
-        let header_info = Arc::new(header_info);
+            try_load_csv(&mut info, &csv_dic, "TSTR");
+            try_load_csv(&mut info, &csv_dic, "CSTR");
+            try_load_csv(&mut info, &csv_dic, "STR");
 
-        let funcs = erbs
-            // .into_iter()
-            .par_bridge()
-            .flat_map(|erb| {
-                let erb = erb.unwrap();
-                let source = std::fs::read_to_string(&erb).unwrap();
-                let ctx = ParserContext::new(header_info.clone(), erb.to_str().unwrap().into());
+            try_load_csv(&mut info, &csv_dic, "SAVESTR");
+            try_load_csv(&mut info, &csv_dic, "GLOBAL");
+            try_load_csv(&mut info, &csv_dic, "GLOBALS");
+            // try_load_csv(&mut header_info, &target_path, "CDFLAG");
 
-                log::debug!("Parse {}", erb.display());
+            drop(csv_dic);
 
-                let program = ctx.parse(&mut Lexer::new(source.as_str()));
+            for erh in erhs {
+                let erh = erh.unwrap();
+                let source = std::fs::read_to_string(&erh).unwrap();
+                log::debug!("Parse {}", erh.display());
 
-                let program = match program {
-                    Ok(p) => p,
+                match info.merge_header(&source) {
+                    Ok(()) => (),
                     Err((err, span)) => {
-                        let file_id = files.lock().add(erb.to_str().unwrap().to_string(), source);
+                        let file_id = files
+                            .get_mut()
+                            .add(erh.to_str().unwrap().to_string(), source);
                         diagnostic
-                            .lock()
+                            .get_mut()
                             .labels
                             .push(Label::primary(file_id, span).with_message(format!("{}", err)));
-                        Vec::new()
                     }
-                };
+                }
+            }
 
-                log::debug!("Compile {}", erb.display());
+            header_info = Arc::new(info);
 
-                program
-                    .into_iter()
-                    .map(|f| erars_compiler::compile(f).unwrap())
-                    .collect_vec()
-            })
-            .collect::<Vec<CompiledFunction>>();
+            let funcs = erbs
+                // .into_iter()
+                .par_bridge()
+                .flat_map(|erb| {
+                    let erb = erb.unwrap();
+                    let source = std::fs::read_to_string(&erb).unwrap();
+                    let ctx = ParserContext::new(header_info.clone(), erb.to_str().unwrap().into());
 
-        for func in funcs {
-            function_dic.insert_compiled_func(func);
-        }
+                    log::debug!("Parse {}", erb.display());
 
-        let diagnostic = diagnostic.into_inner();
-        let files = files.into_inner();
+                    let program = ctx.parse(&mut Lexer::new(source.as_str()));
 
-        if !diagnostic.labels.is_empty() {
-            let writer = StandardStream::stderr(ColorChoice::Always);
-            let config = Config::default();
-            codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
-                .unwrap();
-            inner_chan.exit();
-            log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
-            return;
+                    let program = match program {
+                        Ok(p) => p,
+                        Err((err, span)) => {
+                            let file_id =
+                                files.lock().add(erb.to_str().unwrap().to_string(), source);
+                            diagnostic.lock().labels.push(
+                                Label::primary(file_id, span).with_message(format!("{}", err)),
+                            );
+                            Vec::new()
+                        }
+                    };
+
+                    log::debug!("Compile {}", erb.display());
+
+                    program
+                        .into_iter()
+                        .map(|f| erars_compiler::compile(f).unwrap())
+                        .collect_vec()
+                })
+                .collect::<Vec<CompiledFunction>>();
+
+            for func in funcs {
+                function_dic.insert_compiled_func(func);
+            }
+
+            let diagnostic = diagnostic.into_inner();
+            let files = files.into_inner();
+
+            if !diagnostic.labels.is_empty() {
+                let writer = StandardStream::stderr(ColorChoice::Always);
+                let config = Config::default();
+                codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+                    .unwrap();
+                inner_chan.exit();
+                log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
+                return;
+            }
         }
 
         let mut ctx = VmContext::new(&header_info.global_variables);

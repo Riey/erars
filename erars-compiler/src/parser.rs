@@ -450,24 +450,24 @@ impl ParserContext {
                 Stmt::If(if_elses, block)
             }
             Token::Inc => {
-                let ident = SmolStr::from(self.replace(take_ident!(lex)));
+                let ident = self.replace(take_ident!(lex));
                 let left = cut_line(lex);
                 let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(left));
                 let args = try_nom!(lex, self::expr::variable_arg(self, &ident)(left)).1;
                 let var = Variable {
-                    var: ident,
+                    var: ident.into(),
                     func_extern,
                     args,
                 };
                 Stmt::Assign(var, Some(BinaryOperator::Add), Expr::Int(1))
             }
             Token::Dec => {
-                let ident = SmolStr::from(self.replace(take_ident!(lex)));
+                let ident = self.replace(take_ident!(lex));
                 let left = cut_line(lex);
                 let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(left));
                 let args = try_nom!(lex, self::expr::variable_arg(self, &ident)(left)).1;
                 let var = Variable {
-                    var: ident,
+                    var: ident.into(),
                     func_extern,
                     args,
                 };
