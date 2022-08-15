@@ -136,6 +136,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
         try_load_csv(&mut header_info, &csv_dic, "GLOBALS");
         // try_load_csv(&mut header_info, &target_path, "CDFLAG");
 
+        drop(csv_dic);
+
         for erh in erhs {
             let erh = erh.unwrap();
             let source = std::fs::read_to_string(&erh).unwrap();
