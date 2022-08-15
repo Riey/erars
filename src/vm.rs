@@ -317,6 +317,9 @@ pub struct VmContext {
     begin: Option<BeginType>,
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
+    color: u32,
+    hl_color: u32,
+    bg_color: u32,
 }
 
 impl VmContext {
@@ -326,6 +329,9 @@ impl VmContext {
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
+            color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
+            hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
+            bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
         }
     }
 
@@ -782,16 +788,37 @@ impl TerminalVm {
                     BuiltinCommand::SetColor => {
                         let c = pop!(@i64);
 
-                        match pop!(@opt @i64) {
+                        let (r, g, b) = match pop!(@opt @i64) {
                             Some(g) => {
                                 let b = pop!(@i64);
-                                chan.send_msg(ConsoleMessage::SetColor(c as u8, g as u8, b as u8));
+                                (c as u8, g as u8, b as u8)
                             }
                             None => {
                                 let [r, g, b, _] = (c as u32).to_le_bytes();
-                                chan.send_msg(ConsoleMessage::SetColor(r, g, b));
+                                (r, g, b)
                             }
                         };
+
+                        ctx.color = u32::from_le_bytes([r, g, b, 0x00]);
+
+                        chan.send_msg(ConsoleMessage::SetColor(r, g, b));
+                    }
+                    BuiltinCommand::ResetColor => {
+                        ctx.color = u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]);
+                        chan.send_msg(ConsoleMessage::SetColor(0xFF, 0xFF, 0xFF));
+                    }
+                    BuiltinCommand::ResetBgColor => {
+                        ctx.color = u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]);
+                        // chan.send_msg(ConsoleMessage::SetColor(0xFF, 0xFF, 0xFF));
+                    }
+                    BuiltinCommand::GetColor => {
+                        ctx.push(ctx.color as i64);
+                    }
+                    BuiltinCommand::GetBgColor => {
+                        ctx.push(ctx.bg_color as i64);
+                    }
+                    BuiltinCommand::GetFocusColor => {
+                        ctx.push(ctx.hl_color as i64);
                     }
                     BuiltinCommand::Input => {
                         chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
