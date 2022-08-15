@@ -29,6 +29,31 @@ CFLAG:
   is_chara: true
   is_str: false
 
+ABL:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
+BASE:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
+MAXBASE:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
+DOWNBASE:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
+TALENT:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
 NAME:
   size: []
   is_chara: true
@@ -49,17 +74,22 @@ MASTERNAME:
   is_chara: true
   is_str: true
 
+MASTER:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+ASSI:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
 TARGET:
   size: [1000]
   is_chara: false
   is_str: false
 
 COUNT:
-  size: [1000]
-  is_chara: false
-  is_str: false
-
-RESULT:
   size: [1000]
   is_chara: false
   is_str: false
@@ -75,6 +105,16 @@ DAY:
   is_str: false
 
 MONEY:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+ITEM:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+NOITEM:
   size: [1000]
   is_chara: false
   is_str: false
