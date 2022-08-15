@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -21,19 +21,13 @@ use erars_compiler::{CompiledFunction, HeaderInfo, Lexer, ParserContext};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
-fn try_load_csv(info: &mut HeaderInfo, target_path: &str, var: &str) {
-    let csv_path = Path::new(target_path)
-        .join("CSV")
-        .join(format!("{var}.CSV"));
-    log::trace!("Read {}", csv_path.display());
-
-    match std::fs::read_to_string(&csv_path) {
-        Ok(csv) => {
-            info.merge_name_csv(var, &csv).ok();
+fn try_load_csv(info: &mut HeaderInfo, csv_dic: &HashMap<String, String>, var: &str) {
+    match csv_dic.get(var) {
+        Some(csv) => {
+            log::debug!("Merge {var}.CSV");
+            info.merge_name_csv(var, csv).ok();
         }
-        Err(err) => {
-            log::warn!("Loading {var}.CSV: {err}");
-        }
+        None => {}
     }
 }
 
@@ -53,6 +47,16 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
 
         let infos: HashMap<SmolStr, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
+
+        let csvs = glob::glob_with(
+            &format!("{}/CSV/**/*.CSV", target_path),
+            glob::MatchOptions {
+                case_sensitive: false,
+                require_literal_leading_dot: true,
+                require_literal_separator: true,
+            },
+        )
+        .unwrap();
 
         let erhs = glob::glob_with(
             &format!("{}/ERB/**/*.ERH", target_path),
@@ -88,28 +92,48 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             ..Default::default()
         };
 
-        try_load_csv(&mut header_info, &target_path, "ABL");
-        try_load_csv(&mut header_info, &target_path, "BASE");
-        try_load_csv(&mut header_info, &target_path, "EQUIP");
-        try_load_csv(&mut header_info, &target_path, "TEQUIP");
-        try_load_csv(&mut header_info, &target_path, "PALAM");
-        try_load_csv(&mut header_info, &target_path, "EXP");
-        try_load_csv(&mut header_info, &target_path, "SOURCE");
-        try_load_csv(&mut header_info, &target_path, "EX");
-        try_load_csv(&mut header_info, &target_path, "FLAG");
-        try_load_csv(&mut header_info, &target_path, "CFLAG");
-        try_load_csv(&mut header_info, &target_path, "TFLAG");
-        try_load_csv(&mut header_info, &target_path, "TALENT");
-        try_load_csv(&mut header_info, &target_path, "ITEM");
-        try_load_csv(&mut header_info, &target_path, "STAIN");
+        let csv_dic = csvs
+            .par_bridge()
+            .filter_map(|csv| match csv {
+                Ok(csv) => {
+                    log::trace!("Load {}", csv.display());
+                    let s = std::fs::read_to_string(&csv).ok()?;
 
-        try_load_csv(&mut header_info, &target_path, "TSTR");
-        try_load_csv(&mut header_info, &target_path, "CSTR");
-        try_load_csv(&mut header_info, &target_path, "STR");
+                    Some((
+                        csv.file_stem()
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_ascii_uppercase(),
+                        s,
+                    ))
+                }
+                Err(_) => None,
+            })
+            .collect::<HashMap<_, _>>();
 
-        try_load_csv(&mut header_info, &target_path, "SAVESTR");
-        try_load_csv(&mut header_info, &target_path, "GLOBAL");
-        try_load_csv(&mut header_info, &target_path, "GLOBALS");
+        try_load_csv(&mut header_info, &csv_dic, "ABL");
+        try_load_csv(&mut header_info, &csv_dic, "BASE");
+        try_load_csv(&mut header_info, &csv_dic, "EQUIP");
+        try_load_csv(&mut header_info, &csv_dic, "TEQUIP");
+        try_load_csv(&mut header_info, &csv_dic, "PALAM");
+        try_load_csv(&mut header_info, &csv_dic, "EXP");
+        try_load_csv(&mut header_info, &csv_dic, "SOURCE");
+        try_load_csv(&mut header_info, &csv_dic, "EX");
+        try_load_csv(&mut header_info, &csv_dic, "FLAG");
+        try_load_csv(&mut header_info, &csv_dic, "CFLAG");
+        try_load_csv(&mut header_info, &csv_dic, "TFLAG");
+        try_load_csv(&mut header_info, &csv_dic, "TALENT");
+        try_load_csv(&mut header_info, &csv_dic, "ITEM");
+        try_load_csv(&mut header_info, &csv_dic, "STAIN");
+
+        try_load_csv(&mut header_info, &csv_dic, "TSTR");
+        try_load_csv(&mut header_info, &csv_dic, "CSTR");
+        try_load_csv(&mut header_info, &csv_dic, "STR");
+
+        try_load_csv(&mut header_info, &csv_dic, "SAVESTR");
+        try_load_csv(&mut header_info, &csv_dic, "GLOBAL");
+        try_load_csv(&mut header_info, &csv_dic, "GLOBALS");
         // try_load_csv(&mut header_info, &target_path, "CDFLAG");
 
         for erh in erhs {
