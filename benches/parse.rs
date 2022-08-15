@@ -15,10 +15,13 @@ fn gen_bench(count: usize) -> String {
 }
 
 fn make_ctx() -> ParserContext {
-    ParserContext::new(Arc::new(HeaderInfo {
-        global_variables: serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap(),
-        ..Default::default()
-    }))
+    ParserContext::new(
+        Arc::new(HeaderInfo {
+            global_variables: serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap(),
+            ..Default::default()
+        }),
+        "bench.ERB".into(),
+    )
 }
 
 fn parse_small(c: &mut Criterion) {

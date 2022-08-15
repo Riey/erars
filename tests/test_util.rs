@@ -10,8 +10,9 @@ use codespan_reporting::{
 };
 use erars_compiler::{HeaderInfo, ParserContext, ParserResult};
 use serde::de::DeserializeOwned;
+use smol_str::SmolStr;
 
-pub fn get_ctx() -> ParserContext {
+pub fn get_ctx(file_path: impl Into<SmolStr>) -> ParserContext {
     let mut info = HeaderInfo {
         global_variables: serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap(),
         ..Default::default()
@@ -20,7 +21,7 @@ pub fn get_ctx() -> ParserContext {
     info.merge_name_csv("FLAG", include_str!("../CSV/FLAG.CSV"))
         .unwrap();
 
-    ParserContext::new(Arc::new(info))
+    ParserContext::new(Arc::new(info), file_path.into())
 }
 
 #[track_caller]
@@ -30,7 +31,7 @@ pub fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
 ) -> T {
     let source = std::fs::read_to_string(path).unwrap();
 
-    let ctx = get_ctx();
+    let ctx = get_ctx(path);
     let mut files = SimpleFiles::new();
     let file_id = files.add(path, &source);
 

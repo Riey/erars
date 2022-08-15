@@ -2,7 +2,7 @@ mod expr;
 
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, Expr, Function, FunctionInfo,
-    Stmt, Variable, VariableInfo,
+    Stmt, StmtWithPos, Variable, VariableInfo,
 };
 use erars_lexer::{ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -118,18 +118,20 @@ pub struct ParserContext {
     pub local_strs: RefCell<HashSet<SmolStr>>,
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
+    pub file_path: SmolStr,
 }
 
 impl Default for ParserContext {
     fn default() -> Self {
-        Self::new(Arc::default())
+        Self::new(Arc::default(), "".into())
     }
 }
 
 impl ParserContext {
-    pub fn new(header: Arc<HeaderInfo>) -> Self {
+    pub fn new(header: Arc<HeaderInfo>, file_path: SmolStr) -> Self {
         Self {
             header,
+            file_path,
             local_strs: RefCell::default(),
             is_arg: Cell::new(false),
             ban_percent: Cell::new(false),
@@ -179,7 +181,8 @@ impl ParserContext {
         &self,
         first: Token<'s>,
         lex: &mut Lexer<'s, Token<'s>>,
-    ) -> ParserResult<Stmt> {
+    ) -> ParserResult<StmtWithPos> {
+        let first_pos = lex.span().start;
         let stmt = match first {
             Token::DirectStmt(stmt) => stmt,
             Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
@@ -318,7 +321,7 @@ impl ParserContext {
                 let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
                 let mut has_else = false;
                 let mut body = Vec::new();
-                let mut cases: Vec<(_, Vec<Stmt>)> = Vec::new();
+                let mut cases: Vec<(_, Vec<StmtWithPos>)> = Vec::new();
 
                 loop {
                     match self.next_token(lex)? {
@@ -481,7 +484,7 @@ impl ParserContext {
             other => error!(lex, format!("[Stmt] Invalid token: {:?}", other)),
         };
 
-        Ok(stmt)
+        Ok(StmtWithPos(stmt, first_pos..lex.span().end))
     }
 
     pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Vec<Function>> {
@@ -496,6 +499,7 @@ impl ParserContext {
                         out.push(mem::take(&mut current_func));
                     }
                     self.local_strs.borrow_mut().clear();
+                    current_func.header.file_path = self.file_path.clone();
                     current_func.header.name = label.into();
                     current_func.header.args = args;
                 }
@@ -585,7 +589,7 @@ impl ParserContext {
         Ok(try_nom!(lex, self::expr::expr(self)(s)).1)
     }
 
-    pub fn parse_body_str<'s>(&self, s: &'s str) -> ParserResult<Vec<Stmt>> {
+    pub fn parse_body_str<'s>(&self, s: &'s str) -> ParserResult<Vec<StmtWithPos>> {
         let mut lex = Lexer::<Token<'s>>::new(s);
         let mut body = Vec::new();
 
@@ -599,7 +603,7 @@ impl ParserContext {
         Ok(body)
     }
 
-    pub fn parse_stmt_str<'s>(&self, s: &'s str) -> ParserResult<Stmt> {
+    pub fn parse_stmt_str<'s>(&self, s: &'s str) -> ParserResult<StmtWithPos> {
         let mut lex = Lexer::new(s);
         let first = lex.next().unwrap();
         self.parse_stmt(first, &mut lex)

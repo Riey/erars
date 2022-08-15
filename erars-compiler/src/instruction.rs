@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, NotNan, PrintFlags, UnaryOperator,
 };
@@ -8,6 +10,8 @@ use smol_str::SmolStr;
 pub enum Instruction {
     Nop,
     Pop,
+    /// For debugging purpose
+    ReportSpan(Range<usize>),
     /// Duplicate first value in stack
     Duplicate,
     /// Duplicate second value in stack

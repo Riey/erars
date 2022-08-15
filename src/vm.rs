@@ -1,4 +1,5 @@
 use std::iter;
+use std::ops::Range;
 use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
@@ -258,6 +259,9 @@ enum Workflow {
 }
 
 struct Callstack {
+    func_name: Result<SmolStr, EventType>,
+    file_path: SmolStr,
+    span: Range<usize>,
     stack_base: usize,
     local_idxs: HashSet<SmolStr>,
 }
@@ -317,6 +321,7 @@ pub struct VmContext {
     begin: Option<BeginType>,
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
+    current_span: Range<usize>,
     color: u32,
     hl_color: u32,
     bg_color: u32,
@@ -332,6 +337,7 @@ impl VmContext {
             color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
             hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
             bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
+            current_span: 0..0,
         }
     }
 
@@ -370,9 +376,25 @@ impl VmContext {
             .contains(name)
     }
 
-    pub fn new_func(&mut self, label: &str, body: &FunctionBody) {
-        self.var.init_local(label, body);
+    pub fn new_func(
+        &mut self,
+        func_name: Result<SmolStr, EventType>,
+        body: &FunctionBody,
+        file_path: SmolStr,
+    ) {
+        match &func_name {
+            Ok(label) => self.var.init_local(label, body),
+            Err(ty) => self.var.init_local(ty.into(), body),
+        }
+
+        if let Some(last) = self.call_stack.last_mut() {
+            last.span = std::mem::replace(&mut self.current_span, 0..0);
+        }
+
         self.call_stack.push(Callstack {
+            func_name,
+            file_path,
+            span: 0..0,
             stack_base: self.stack.len(),
             local_idxs: body.local_vars().keys().cloned().collect(),
         });
@@ -478,6 +500,7 @@ impl TerminalVm {
         // eprintln!("stack: {:?}, inst: {:?}", ctx.stack, inst);
 
         match inst {
+            Instruction::ReportSpan(span) => ctx.current_span = span.clone(),
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s),
             Instruction::Nop => {}
@@ -486,7 +509,7 @@ impl TerminalVm {
             Instruction::DuplicatePrev => ctx.dup_prev(),
             Instruction::EvalFormString => {
                 let form = ctx.pop_str()?;
-                let parser_ctx = ParserContext::new(self.header_info.clone());
+                let parser_ctx = ParserContext::new(self.header_info.clone(), "FORMS.ERB".into());
                 let expr = erars_compiler::normal_form_str(&parser_ctx)(&form)
                     .unwrap()
                     .1;
@@ -906,7 +929,7 @@ impl TerminalVm {
     ) -> Result<Workflow> {
         let body = self.dic.get_func(label)?;
 
-        ctx.new_func(label, body);
+        ctx.new_func(Ok(label.into()), body, body.file_path().clone());
 
         let mut args = args.iter().cloned();
 
@@ -933,8 +956,8 @@ impl TerminalVm {
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         self.dic.get_event(ty).run(|body| {
-            let label = ty.into();
-            ctx.new_func(label, body);
+            let label: &str = ty.into();
+            ctx.new_func(Err(ty), body, body.file_path().clone());
             self.run_body(label, body.goto_labels(), body, chan, ctx)?;
             ctx.end_func();
 
@@ -947,7 +970,7 @@ impl TerminalVm {
 
         match ty {
             BeginType::Title => {
-                self.call("SYSTEM_TITLE", &[], chan, ctx)?;
+                self.call("SYSTEM_TITLE".into(), &[], chan, ctx)?;
                 Ok(())
             }
             BeginType::First => {
@@ -960,7 +983,54 @@ impl TerminalVm {
 
     pub fn start(&self, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         while let Some(begin) = ctx.begin.take() {
-            self.begin(begin, chan, ctx)?;
+            match self.begin(begin, chan, ctx) {
+                Ok(()) => {}
+                Err(err) => {
+                    log::error!("VM failed with :{err}");
+
+                    let mut call_stack = ctx.call_stack.iter();
+
+                    let first = call_stack.next().unwrap();
+
+                    for stack in call_stack.rev() {
+                        match &stack.func_name {
+                            Ok(name) => {
+                                log::error!(
+                                    "    at function {name} `{}@{:?}`",
+                                    stack.file_path,
+                                    stack.span
+                                )
+                            }
+                            Err(ty) => {
+                                log::error!(
+                                    "    at EVENT{ty} `{}@{:?}`",
+                                    stack.file_path,
+                                    stack.span
+                                )
+                            }
+                        }
+                    }
+
+                    match &first.func_name {
+                        Ok(name) => {
+                            log::error!(
+                                "    at function {name} `{}@{:?}`",
+                                first.file_path,
+                                ctx.current_span,
+                            )
+                        }
+                        Err(ty) => {
+                            log::error!(
+                                "    at EVENT{ty} `{}@{:?}`",
+                                first.file_path,
+                                ctx.current_span
+                            )
+                        }
+                    }
+
+                    break;
+                }
+            }
         }
 
         Ok(())

@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, ops::Range};
 
 use bitflags::bitflags;
 use ordered_float::NotNan;
@@ -15,8 +15,8 @@ pub enum Stmt {
     Label(SmolStr),
     SelectCase(
         Expr,
-        Vec<(Vec<SelectCaseCond>, Vec<Stmt>)>,
-        Option<Vec<Stmt>>,
+        Vec<(Vec<SelectCaseCond>, Vec<StmtWithPos>)>,
+        Option<Vec<StmtWithPos>>,
     ),
     Print(PrintFlags, Expr),
     PrintList(PrintFlags, Vec<Expr>),
@@ -24,26 +24,26 @@ pub enum Stmt {
     PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
     ReuseLastLine(String),
     Assign(Variable, Option<BinaryOperator>, Expr),
-    Sif(Expr, Box<Stmt>),
-    If(Vec<(Expr, Vec<Stmt>)>, Vec<Stmt>),
+    Sif(Expr, Box<StmtWithPos>),
+    If(Vec<(Expr, Vec<StmtWithPos>)>, Vec<StmtWithPos>),
     Times(Variable, NotNan<f32>),
     Goto {
         label: Expr,
-        catch_body: Option<Vec<Stmt>>,
+        catch_body: Option<Vec<StmtWithPos>>,
     },
     Call {
         name: Expr,
         args: Vec<Expr>,
         is_jump: bool,
 
-        try_body: Vec<Stmt>,
-        catch_body: Option<Vec<Stmt>>,
+        try_body: Vec<StmtWithPos>,
+        catch_body: Option<Vec<StmtWithPos>>,
     },
     Begin(BeginType),
-    Repeat(Expr, Vec<Stmt>),
-    Do(Expr, Vec<Stmt>),
-    While(Expr, Vec<Stmt>),
-    For(Variable, Expr, Expr, Expr, Vec<Stmt>),
+    Repeat(Expr, Vec<StmtWithPos>),
+    Do(Expr, Vec<StmtWithPos>),
+    While(Expr, Vec<StmtWithPos>),
+    For(Variable, Expr, Expr, Expr, Vec<StmtWithPos>),
     Continue,
     Break,
     Command(BuiltinCommand, Vec<Expr>),
@@ -52,14 +52,27 @@ pub enum Stmt {
     Alignment(Alignment),
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StmtWithPos(pub Stmt, pub Range<usize>);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
     pub header: FunctionHeader,
-    pub body: Vec<Stmt>,
+    pub body: Vec<StmtWithPos>,
+}
+
+impl Default for Function {
+    fn default() -> Self {
+        Self {
+            header: FunctionHeader::default(),
+            body: Vec::default(),
+        }
+    }
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
+    pub file_path: SmolStr,
     pub name: String,
     pub args: Vec<(Variable, Option<Expr>)>,
     pub infos: Vec<FunctionInfo>,

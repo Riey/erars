@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {
+    file_path: SmolStr,
     body: Vec<Instruction>,
     goto_labels: HashMap<SmolStr, u32>,
     args: Vec<(SmolStr, Option<Value>, ArrayVec<usize, 4>)>,
@@ -44,6 +45,10 @@ impl FunctionBody {
 
     pub fn body(&self) -> &[Instruction] {
         &self.body
+    }
+
+    pub fn file_path(&self) -> &SmolStr {
+        &self.file_path
     }
 }
 
@@ -99,6 +104,8 @@ impl FunctionDic {
         };
 
         let header = func.header;
+
+        body.file_path = header.file_path;
 
         for (var, default_value) in header.args {
             body.push_arg(

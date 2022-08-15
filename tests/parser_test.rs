@@ -12,26 +12,41 @@ mod body {
             ),
             r#"
 [
-    Alignment(
-        Left,
-    ),
-    Alignment(
-        Center,
-    ),
-    Alignment(
-        Right,
-    ),
-    Print(
-        NEWLINE,
-        FormText(
-            {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+    StmtWithPos(
+        Alignment(
+            Left,
         ),
+        0..14,
     ),
-    Print(
-        NEWLINE,
-        FormText(
-            {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+    StmtWithPos(
+        Alignment(
+            Center,
         ),
+        15..31,
+    ),
+    StmtWithPos(
+        Alignment(
+            Right,
+        ),
+        32..47,
+    ),
+    StmtWithPos(
+        Print(
+            NEWLINE,
+            FormText(
+                {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+            ),
+        ),
+        49..80,
+    ),
+    StmtWithPos(
+        Print(
+            NEWLINE,
+            FormText(
+                {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+            ),
+        ),
+        81..104,
     ),
 ]
 "#
@@ -47,32 +62,35 @@ mod body {
             ),
             r#"
 [
-    Assign(
-        Variable {
-            var: "COUNT",
-            func_extern: None,
-            args: [
-                BinopExpr(
-                    Int(
-                        1,
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "COUNT",
+                func_extern: None,
+                args: [
+                    BinopExpr(
+                        Int(
+                            1,
+                        ),
+                        Add,
+                        Int(
+                            3,
+                        ),
                     ),
-                    Add,
-                    Int(
-                        3,
-                    ),
+                ],
+            },
+            None,
+            BinopExpr(
+                Int(
+                    23,
                 ),
-            ],
-        },
-        None,
-        BinopExpr(
-            Int(
-                23,
-            ),
-            Add,
-            Int(
-                45,
+                Add,
+                Int(
+                    45,
+                ),
             ),
         ),
+        0..21,
     ),
 ]
 "#
@@ -88,22 +106,25 @@ mod body {
             ),
             r#"
 [
-    Assign(
-        Variable {
-            var: "FLAG",
-            func_extern: None,
-            args: [
-                Int(
-                    13,
-                ),
-            ],
-        },
-        Some(
-            BitOr,
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "FLAG",
+                func_extern: None,
+                args: [
+                    Int(
+                        13,
+                    ),
+                ],
+            },
+            Some(
+                BitOr,
+            ),
+            Int(
+                2,
+            ),
         ),
-        Int(
-            2,
-        ),
+        0..12,
     ),
 ]
 "#
@@ -119,68 +140,83 @@ mod body {
             ),
             r#"
 [
-    Assign(
-        Variable {
-            var: "LOCALS",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        FormText(
-            {Int(123)}456,
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCALS",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            FormText(
+                {Int(123)}456,
+            ),
         ),
+        0..17,
     ),
-    Assign(
-        Variable {
-            var: "LOCALS",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        FormText(
-            {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}.{Method("TOSTR", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), String("00")])},
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCALS",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            FormText(
+                {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}.{Method("TOSTR", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), String("00")])},
+            ),
         ),
+        18..58,
     ),
-    Assign(
-        Variable {
-            var: "LOCALS",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        FormText(
-            {FormText({BinopExpr(Int(1), Add, Int(1))})},
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCALS",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            FormText(
+                {FormText({BinopExpr(Int(1), Add, Int(1))})},
+            ),
         ),
+        59..78,
     ),
-    Assign(
-        Variable {
-            var: "NICKNAME",
-            func_extern: None,
-            args: [
-                Var(
-                    Variable {
-                        var: "MASTER",
-                        func_extern: None,
-                        args: [],
-                    },
-                ),
-            ],
-        },
-        None,
-        FormText(
-            {CondExpr(Var(Variable { var: "TALENT", func_extern: None, args: [Var(Variable { var: "MASTER", func_extern: None, args: [] }), Int(120)] }), FormText(신사), FormText(숙녀))},
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "NICKNAME",
+                func_extern: None,
+                args: [
+                    Var(
+                        Variable {
+                            var: "MASTER",
+                            func_extern: None,
+                            args: [],
+                        },
+                    ),
+                ],
+            },
+            None,
+            FormText(
+                {CondExpr(Var(Variable { var: "TALENT", func_extern: None, args: [Var(Variable { var: "MASTER", func_extern: None, args: [] }), Int(120)] }), FormText(신사), FormText(숙녀))},
+            ),
         ),
+        79..138,
     ),
-    Assign(
-        Variable {
-            var: "LOCALS",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        FormText(
-            ,
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCALS",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            FormText(
+                ,
+            ),
         ),
+        139..147,
     ),
 ]
 "#
@@ -196,33 +232,36 @@ mod body {
             ),
             r#"
 [
-    Call {
-        name: String(
-            "FOO",
-        ),
-        args: [
-            Int(
-                123,
+    StmtWithPos(
+        Call {
+            name: String(
+                "FOO",
             ),
-            Var(
-                Variable {
-                    var: "A",
-                    func_extern: None,
-                    args: [
-                        Int(
-                            634,
-                        ),
-                    ],
-                },
-            ),
-            String(
-                "123",
-            ),
-        ],
-        is_jump: false,
-        try_body: [],
-        catch_body: None,
-    },
+            args: [
+                Int(
+                    123,
+                ),
+                Var(
+                    Variable {
+                        var: "A",
+                        func_extern: None,
+                        args: [
+                            Int(
+                                634,
+                            ),
+                        ],
+                    },
+                ),
+                String(
+                    "123",
+                ),
+            ],
+            is_jump: false,
+            try_body: [],
+            catch_body: None,
+        },
+        0..28,
+    ),
 ]
 "#
         );
@@ -237,9 +276,12 @@ mod body {
             ),
             "
 [
-    Command(
-        CustomDrawLine,
-        [],
+    StmtWithPos(
+        Command(
+            CustomDrawLine,
+            [],
+        ),
+        0..17,
     ),
 ]
 "
@@ -255,35 +297,41 @@ mod body {
             ),
             r#"
 [
-    For(
-        Variable {
-            var: "COUNT",
-            func_extern: None,
-            args: [],
-        },
-        Int(
-            0,
-        ),
-        Int(
-            10,
-        ),
-        Int(
-            1,
-        ),
-        [
-            PrintList(
-                NEWLINE,
-                [
-                    Var(
-                        Variable {
-                            var: "COUNT",
-                            func_extern: None,
-                            args: [],
-                        },
-                    ),
-                ],
+    StmtWithPos(
+        For(
+            Variable {
+                var: "COUNT",
+                func_extern: None,
+                args: [],
+            },
+            Int(
+                0,
             ),
-        ],
+            Int(
+                10,
+            ),
+            Int(
+                1,
+            ),
+            [
+                StmtWithPos(
+                    PrintList(
+                        NEWLINE,
+                        [
+                            Var(
+                                Variable {
+                                    var: "COUNT",
+                                    func_extern: None,
+                                    args: [],
+                                },
+                            ),
+                        ],
+                    ),
+                    21..34,
+                ),
+            ],
+        ),
+        0..39,
     ),
 ]
 "#
@@ -299,11 +347,14 @@ mod body {
             ),
             r#"
 [
-    Print(
-        NEWLINE,
-        String(
-            "Hello, world!",
+    StmtWithPos(
+        Print(
+            NEWLINE,
+            String(
+                "Hello, world!",
+            ),
         ),
+        0..20,
     ),
 ]
 "#
@@ -319,63 +370,75 @@ mod body {
             ),
             r#"
 [
-    If(
-        [
-            (
-                BinopExpr(
-                    Var(
-                        Variable {
-                            var: "A",
-                            func_extern: None,
-                            args: [],
-                        },
+    StmtWithPos(
+        If(
+            [
+                (
+                    BinopExpr(
+                        Var(
+                            Variable {
+                                var: "A",
+                                func_extern: None,
+                                args: [],
+                            },
+                        ),
+                        Greater,
+                        Int(
+                            1,
+                        ),
                     ),
-                    Greater,
-                    Int(
-                        1,
-                    ),
+                    [
+                        StmtWithPos(
+                            Print(
+                                (empty),
+                                String(
+                                    "A > 1",
+                                ),
+                            ),
+                            13..24,
+                        ),
+                    ],
                 ),
-                [
+                (
+                    BinopExpr(
+                        Var(
+                            Variable {
+                                var: "A",
+                                func_extern: None,
+                                args: [],
+                            },
+                        ),
+                        Equal,
+                        Int(
+                            1,
+                        ),
+                    ),
+                    [
+                        StmtWithPos(
+                            Print(
+                                (empty),
+                                String(
+                                    "A == 1",
+                                ),
+                            ),
+                            43..55,
+                        ),
+                    ],
+                ),
+            ],
+            [
+                StmtWithPos(
                     Print(
                         (empty),
                         String(
-                            "A > 1",
+                            "A < 1",
                         ),
                     ),
-                ],
-            ),
-            (
-                BinopExpr(
-                    Var(
-                        Variable {
-                            var: "A",
-                            func_extern: None,
-                            args: [],
-                        },
-                    ),
-                    Equal,
-                    Int(
-                        1,
-                    ),
+                    65..76,
                 ),
-                [
-                    Print(
-                        (empty),
-                        String(
-                            "A == 1",
-                        ),
-                    ),
-                ],
-            ),
-        ],
-        [
-            Print(
-                (empty),
-                String(
-                    "A < 1",
-                ),
-            ),
-        ],
+            ],
+        ),
+        0..82,
     ),
 ]
 "#
@@ -391,102 +454,126 @@ mod body {
             ),
             r#"
 [
-    Assign(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        Int(
-            1,
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            Int(
+                1,
+            ),
         ),
+        0..7,
     ),
-    Assign(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        Int(
-            1234,
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            Int(
+                1234,
+            ),
         ),
+        8..18,
     ),
-    Assign(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        Int(
-            65535,
-        ),
-    ),
-    Assign(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        Int(
-            0,
-        ),
-    ),
-    Assign(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        Int(
-            3,
-        ),
-    ),
-    Assign(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        UnaryopExpr(
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            None,
             Int(
                 65535,
             ),
-            Minus,
         ),
+        19..31,
     ),
-    Assign(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        UnaryopExpr(
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            None,
             Int(
                 0,
             ),
-            Minus,
         ),
+        32..41,
     ),
-    Assign(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        None,
-        UnaryopExpr(
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            None,
             Int(
                 3,
             ),
-            Minus,
         ),
+        42..51,
+    ),
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            UnaryopExpr(
+                Int(
+                    65535,
+                ),
+                Minus,
+            ),
+        ),
+        52..66,
+    ),
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            UnaryopExpr(
+                Int(
+                    0,
+                ),
+                Minus,
+            ),
+        ),
+        67..78,
+    ),
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            None,
+            UnaryopExpr(
+                Int(
+                    3,
+                ),
+                Minus,
+            ),
+        ),
+        79..90,
     ),
 ]
 "#
@@ -502,29 +589,32 @@ mod body {
             ),
             r#"
 [
-    PrintData(
-        (empty),
-        None,
-        [
+    StmtWithPos(
+        PrintData(
+            (empty),
+            None,
             [
-                String(
-                    "data",
-                ),
+                [
+                    String(
+                        "data",
+                    ),
+                ],
+                [
+                    FormText(
+                        LOCAL={Var(Variable { var: "LOCAL", func_extern: None, args: [] })},
+                    ),
+                ],
+                [
+                    String(
+                        "list",
+                    ),
+                    String(
+                        "form",
+                    ),
+                ],
             ],
-            [
-                FormText(
-                    LOCAL={Var(Variable { var: "LOCAL", func_extern: None, args: [] })},
-                ),
-            ],
-            [
-                String(
-                    "list",
-                ),
-                String(
-                    "form",
-                ),
-            ],
-        ],
+        ),
+        0..119,
     ),
 ]
 "#
@@ -540,29 +630,41 @@ mod body {
             ),
             r#"
 [
-    Print(
-        NEWLINE,
-        FormText(
-            1 + 1 = {BinopExpr(Int(1), Add, Int(1))},
+    StmtWithPos(
+        Print(
+            NEWLINE,
+            FormText(
+                1 + 1 = {BinopExpr(Int(1), Add, Int(1))},
+            ),
         ),
+        0..26,
     ),
-    Print(
-        NEWLINE | WAIT,
-        FormText(
-            {Method("조사처리", [Var(Variable { var: "CALLNAME", func_extern: None, args: [Method("GET_CHARA_M", [])] }), String("와")])}같이 온 걸 보니, 단단히 각오하고 온 것 같다,
+    StmtWithPos(
+        Print(
+            NEWLINE | WAIT,
+            FormText(
+                {Method("조사처리", [Var(Variable { var: "CALLNAME", func_extern: None, args: [Method("GET_CHARA_M", [])] }), String("와")])}같이 온 걸 보니, 단단히 각오하고 온 것 같다,
+            ),
         ),
+        27..143,
     ),
-    Print(
-        NEWLINE,
-        FormText(
-            {Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })}의 교습 관찰 결과 완료  결과：임시 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}에 의한 실제 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })}증가⇒{CondExpr(BinopExpr(Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), Equal, Int(1)), FormText(성공), FormText(실패))}({Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(693)] })}％) 작업 내용：{Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(690)] })},
+    StmtWithPos(
+        Print(
+            NEWLINE,
+            FormText(
+                {Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })}의 교습 관찰 결과 완료  결과：임시 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}에 의한 실제 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })}증가⇒{CondExpr(BinopExpr(Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), Equal, Int(1)), FormText(성공), FormText(실패))}({Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(693)] })}％) 작업 내용：{Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(690)] })},
+            ),
         ),
+        144..372,
     ),
-    Print(
-        NEWLINE | WAIT,
-        FormText(
-            보지에서 애액을 흘렸{CondExpr(BinopExpr(Var(Variable { var: "TEQUIP", func_extern: None, args: [Int(42)] }), Equal, Int(0)), FormText(고, 작은 한숨을 토해냈), String(""))}다.,
+    StmtWithPos(
+        Print(
+            NEWLINE | WAIT,
+            FormText(
+                보지에서 애액을 흘렸{CondExpr(BinopExpr(Var(Variable { var: "TEQUIP", func_extern: None, args: [Int(42)] }), Equal, Int(0)), FormText(고, 작은 한숨을 토해냈), String(""))}다.,
+            ),
         ),
+        373..471,
     ),
 ]
 "#
@@ -578,59 +680,71 @@ mod body {
             ),
             r#"
 [
-    SelectCase(
-        Int(
-            1,
-        ),
-        [
-            (
-                [
-                    Single(
-                        Int(
-                            0,
-                        ),
-                    ),
-                ],
-                [
-                    Print(
-                        (empty),
-                        String(
-                            "FOO",
-                        ),
-                    ),
-                ],
+    StmtWithPos(
+        SelectCase(
+            Int(
+                1,
             ),
-            (
-                [
-                    To(
-                        Int(
-                            1,
-                        ),
-                        Int(
-                            2,
-                        ),
-                    ),
-                ],
-                [
-                    Print(
-                        (empty),
-                        String(
-                            "BAR",
-                        ),
-                    ),
-                ],
-            ),
-        ],
-        Some(
             [
-                Print(
-                    (empty),
-                    String(
-                        "BAZ",
-                    ),
+                (
+                    [
+                        Single(
+                            Int(
+                                0,
+                            ),
+                        ),
+                    ],
+                    [
+                        StmtWithPos(
+                            Print(
+                                (empty),
+                                String(
+                                    "FOO",
+                                ),
+                            ),
+                            32..41,
+                        ),
+                    ],
+                ),
+                (
+                    [
+                        To(
+                            Int(
+                                1,
+                            ),
+                            Int(
+                                2,
+                            ),
+                        ),
+                    ],
+                    [
+                        StmtWithPos(
+                            Print(
+                                (empty),
+                                String(
+                                    "BAR",
+                                ),
+                            ),
+                            66..75,
+                        ),
+                    ],
                 ),
             ],
+            Some(
+                [
+                    StmtWithPos(
+                        Print(
+                            (empty),
+                            String(
+                                "BAZ",
+                            ),
+                        ),
+                        97..106,
+                    ),
+                ],
+            ),
         ),
+        0..116,
     ),
 ]
 "#
@@ -646,43 +760,58 @@ mod body {
             ),
             r#"
 [
-    Sif(
-        Int(
-            12,
+    StmtWithPos(
+        Sif(
+            Int(
+                12,
+            ),
+            StmtWithPos(
+                Print(
+                    (empty),
+                    String(
+                        "45",
+                    ),
+                ),
+                11..19,
+            ),
         ),
+        0..19,
+    ),
+    StmtWithPos(
+        Sif(
+            BinopExpr(
+                Var(
+                    Variable {
+                        var: "LOCALS",
+                        func_extern: None,
+                        args: [],
+                    },
+                ),
+                NotEqual,
+                String(
+                    "",
+                ),
+            ),
+            StmtWithPos(
+                Print(
+                    NEWLINE,
+                    FormText(
+                        {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                    ),
+                ),
+                42..61,
+            ),
+        ),
+        20..61,
+    ),
+    StmtWithPos(
         Print(
             (empty),
             String(
-                "45",
+                "32",
             ),
         ),
-    ),
-    Sif(
-        BinopExpr(
-            Var(
-                Variable {
-                    var: "LOCALS",
-                    func_extern: None,
-                    args: [],
-                },
-            ),
-            NotEqual,
-            String(
-                "",
-            ),
-        ),
-        Print(
-            NEWLINE,
-            FormText(
-                {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
-            ),
-        ),
-    ),
-    Print(
-        (empty),
-        String(
-            "32",
-        ),
+        63..71,
     ),
 ]
 "#
@@ -698,15 +827,18 @@ mod body {
             ),
             r#"
 [
-    Times(
-        Variable {
-            var: "LOCAL",
-            func_extern: None,
-            args: [],
-        },
-        NotNan(
-            123.33,
+    StmtWithPos(
+        Times(
+            Variable {
+                var: "LOCAL",
+                func_extern: None,
+                args: [],
+            },
+            NotNan(
+                123.33,
+            ),
         ),
+        0..20,
     ),
 ]
 "#
@@ -1091,113 +1223,153 @@ mod function {
             r#"
 Function {
     header: FunctionHeader {
+        file_path: "",
         name: "FOO",
         args: [],
         infos: [],
     },
     body: [
-        Assign(
-            Variable {
-                var: "LOCALS",
-                func_extern: None,
-                args: [],
-            },
-            None,
-            FormText(
-                LABEL,
+        StmtWithPos(
+            Assign(
+                Variable {
+                    var: "LOCALS",
+                    func_extern: None,
+                    args: [],
+                },
+                None,
+                FormText(
+                    LABEL,
+                ),
             ),
+            6..20,
         ),
-        Goto {
-            label: String(
+        StmtWithPos(
+            Goto {
+                label: String(
+                    "LABEL",
+                ),
+                catch_body: None,
+            },
+            22..33,
+        ),
+        StmtWithPos(
+            Goto {
+                label: FormText(
+                    {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                ),
+                catch_body: None,
+            },
+            33..51,
+        ),
+        StmtWithPos(
+            Goto {
+                label: FormText(
+                    {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                ),
+                catch_body: Some(
+                    [],
+                ),
+            },
+            51..72,
+        ),
+        StmtWithPos(
+            Goto {
+                label: FormText(
+                    {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                ),
+                catch_body: Some(
+                    [
+                        StmtWithPos(
+                            Print(
+                                NEWLINE,
+                                String(
+                                    "CATCH",
+                                ),
+                            ),
+                            100..112,
+                        ),
+                    ],
+                ),
+            },
+            72..121,
+        ),
+        StmtWithPos(
+            Call {
+                name: String(
+                    "BAR",
+                ),
+                args: [],
+                is_jump: false,
+                try_body: [],
+                catch_body: None,
+            },
+            123..132,
+        ),
+        StmtWithPos(
+            Call {
+                name: String(
+                    "BAR",
+                ),
+                args: [],
+                is_jump: false,
+                try_body: [],
+                catch_body: None,
+            },
+            132..144,
+        ),
+        StmtWithPos(
+            Call {
+                name: String(
+                    "BAR",
+                ),
+                args: [],
+                is_jump: false,
+                try_body: [],
+                catch_body: None,
+            },
+            144..171,
+        ),
+        StmtWithPos(
+            Call {
+                name: String(
+                    "BAR",
+                ),
+                args: [],
+                is_jump: true,
+                try_body: [],
+                catch_body: None,
+            },
+            172..181,
+        ),
+        StmtWithPos(
+            Call {
+                name: String(
+                    "BAR",
+                ),
+                args: [],
+                is_jump: true,
+                try_body: [],
+                catch_body: None,
+            },
+            181..193,
+        ),
+        StmtWithPos(
+            Call {
+                name: FormText(
+                    BAR,
+                ),
+                args: [],
+                is_jump: true,
+                try_body: [],
+                catch_body: None,
+            },
+            193..224,
+        ),
+        StmtWithPos(
+            Label(
                 "LABEL",
             ),
-            catch_body: None,
-        },
-        Goto {
-            label: FormText(
-                {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
-            ),
-            catch_body: None,
-        },
-        Goto {
-            label: FormText(
-                {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
-            ),
-            catch_body: Some(
-                [],
-            ),
-        },
-        Goto {
-            label: FormText(
-                {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
-            ),
-            catch_body: Some(
-                [
-                    Print(
-                        NEWLINE,
-                        String(
-                            "CATCH",
-                        ),
-                    ),
-                ],
-            ),
-        },
-        Call {
-            name: String(
-                "BAR",
-            ),
-            args: [],
-            is_jump: false,
-            try_body: [],
-            catch_body: None,
-        },
-        Call {
-            name: String(
-                "BAR",
-            ),
-            args: [],
-            is_jump: false,
-            try_body: [],
-            catch_body: None,
-        },
-        Call {
-            name: String(
-                "BAR",
-            ),
-            args: [],
-            is_jump: false,
-            try_body: [],
-            catch_body: None,
-        },
-        Call {
-            name: String(
-                "BAR",
-            ),
-            args: [],
-            is_jump: true,
-            try_body: [],
-            catch_body: None,
-        },
-        Call {
-            name: String(
-                "BAR",
-            ),
-            args: [],
-            is_jump: true,
-            try_body: [],
-            catch_body: None,
-        },
-        Call {
-            name: FormText(
-                BAR,
-            ),
-            args: [],
-            is_jump: true,
-            try_body: [],
-            catch_body: None,
-        },
-        Label(
-            "LABEL",
+            226..233,
         ),
     ],
 }
@@ -1215,6 +1387,7 @@ Function {
             r#"
 Function {
     header: FunctionHeader {
+        file_path: "",
         name: "SYSTEM_TITLE",
         args: [],
         infos: [
@@ -1238,17 +1411,20 @@ Function {
         ],
     },
     body: [
-        PrintList(
-            (empty),
-            [
-                Var(
-                    Variable {
-                        var: "FOO",
-                        func_extern: None,
-                        args: [],
-                    },
-                ),
-            ],
+        StmtWithPos(
+            PrintList(
+                (empty),
+                [
+                    Var(
+                        Variable {
+                            var: "FOO",
+                            func_extern: None,
+                            args: [],
+                        },
+                    ),
+                ],
+            ),
+            27..37,
         ),
     ],
 }
@@ -1266,6 +1442,7 @@ Function {
             r#"
 Function {
     header: FunctionHeader {
+        file_path: "",
         name: "FOO",
         args: [],
         infos: [
@@ -1275,17 +1452,23 @@ Function {
         ],
     },
     body: [
-        Print(
-            NEWLINE,
-            String(
-                "Hello",
+        StmtWithPos(
+            Print(
+                NEWLINE,
+                String(
+                    "Hello",
+                ),
             ),
+            10..22,
         ),
-        Print(
-            NEWLINE,
-            FormText(
-                {Int(123)},
+        StmtWithPos(
+            Print(
+                NEWLINE,
+                FormText(
+                    {Int(123)},
+                ),
             ),
+            23..39,
         ),
     ],
 }
@@ -1303,6 +1486,7 @@ Function {
             r#"
 Function {
     header: FunctionHeader {
+        file_path: "",
         name: "COMMON_MOVE_JUEL",
         args: [
             (
@@ -1365,90 +1549,177 @@ Function {
         infos: [],
     },
     body: [
-        Assign(
-            Variable {
-                var: "LOCAL",
-                func_extern: None,
-                args: [
-                    Int(
-                        1,
+        StmtWithPos(
+            Assign(
+                Variable {
+                    var: "LOCAL",
+                    func_extern: None,
+                    args: [
+                        Int(
+                            1,
+                        ),
+                    ],
+                },
+                None,
+                Method(
+                    "LIMIT",
+                    [
+                        BinopExpr(
+                            Var(
+                                Variable {
+                                    var: "JUEL",
+                                    func_extern: None,
+                                    args: [
+                                        Var(
+                                            Variable {
+                                                var: "ARG",
+                                                func_extern: None,
+                                                args: [],
+                                            },
+                                        ),
+                                        Var(
+                                            Variable {
+                                                var: "ARG",
+                                                func_extern: None,
+                                                args: [
+                                                    Int(
+                                                        1,
+                                                    ),
+                                                ],
+                                            },
+                                        ),
+                                    ],
+                                },
+                            ),
+                            Add,
+                            Var(
+                                Variable {
+                                    var: "ARG",
+                                    func_extern: None,
+                                    args: [
+                                        Int(
+                                            2,
+                                        ),
+                                    ],
+                                },
+                            ),
+                        ),
+                        Int(
+                            0,
+                        ),
+                        BinopExpr(
+                            UnaryopExpr(
+                                Int(
+                                    62,
+                                ),
+                                Minus,
+                            ),
+                            Sub,
+                            Int(
+                                1,
+                            ),
+                        ),
+                    ],
+                ),
+            ),
+            307..358,
+        ),
+        StmtWithPos(
+            Assign(
+                Variable {
+                    var: "LOCAL",
+                    func_extern: None,
+                    args: [
+                        Int(
+                            2,
+                        ),
+                    ],
+                },
+                None,
+                BinopExpr(
+                    Var(
+                        Variable {
+                            var: "LOCAL",
+                            func_extern: None,
+                            args: [
+                                Int(
+                                    1,
+                                ),
+                            ],
+                        },
                     ),
-                ],
-            },
-            None,
-            Method(
-                "LIMIT",
-                [
-                    BinopExpr(
+                    Sub,
+                    Var(
+                        Variable {
+                            var: "JUEL",
+                            func_extern: None,
+                            args: [
+                                Var(
+                                    Variable {
+                                        var: "ARG",
+                                        func_extern: None,
+                                        args: [],
+                                    },
+                                ),
+                                Var(
+                                    Variable {
+                                        var: "ARG",
+                                        func_extern: None,
+                                        args: [
+                                            Int(
+                                                1,
+                                            ),
+                                        ],
+                                    },
+                                ),
+                            ],
+                        },
+                    ),
+                ),
+            ),
+            382..416,
+        ),
+        StmtWithPos(
+            Assign(
+                Variable {
+                    var: "LOCALS",
+                    func_extern: None,
+                    args: [],
+                },
+                None,
+                FormText(
+                    {Var(Variable { var: "PALAMNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [Int(1)] })] })}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [] }), NotEqual, Var(Variable { var: "TARGET", func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {Method("ABS", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })])},
+                ),
+            ),
+            556..701,
+        ),
+        StmtWithPos(
+            Assign(
+                Variable {
+                    var: "JUEL",
+                    func_extern: None,
+                    args: [
                         Var(
                             Variable {
-                                var: "JUEL",
+                                var: "ARG",
                                 func_extern: None,
-                                args: [
-                                    Var(
-                                        Variable {
-                                            var: "ARG",
-                                            func_extern: None,
-                                            args: [],
-                                        },
-                                    ),
-                                    Var(
-                                        Variable {
-                                            var: "ARG",
-                                            func_extern: None,
-                                            args: [
-                                                Int(
-                                                    1,
-                                                ),
-                                            ],
-                                        },
-                                    ),
-                                ],
+                                args: [],
                             },
                         ),
-                        Add,
                         Var(
                             Variable {
                                 var: "ARG",
                                 func_extern: None,
                                 args: [
                                     Int(
-                                        2,
+                                        1,
                                     ),
                                 ],
                             },
                         ),
-                    ),
-                    Int(
-                        0,
-                    ),
-                    BinopExpr(
-                        UnaryopExpr(
-                            Int(
-                                62,
-                            ),
-                            Minus,
-                        ),
-                        Sub,
-                        Int(
-                            1,
-                        ),
-                    ),
-                ],
-            ),
-        ),
-        Assign(
-            Variable {
-                var: "LOCAL",
-                func_extern: None,
-                args: [
-                    Int(
-                        2,
-                    ),
-                ],
-            },
-            None,
-            BinopExpr(
+                    ],
+                },
+                None,
                 Var(
                     Variable {
                         var: "LOCAL",
@@ -1460,199 +1731,145 @@ Function {
                         ],
                     },
                 ),
-                Sub,
-                Var(
-                    Variable {
-                        var: "JUEL",
-                        func_extern: None,
-                        args: [
-                            Var(
-                                Variable {
-                                    var: "ARG",
-                                    func_extern: None,
-                                    args: [],
-                                },
-                            ),
-                            Var(
-                                Variable {
-                                    var: "ARG",
-                                    func_extern: None,
-                                    args: [
-                                        Int(
-                                            1,
-                                        ),
-                                    ],
-                                },
-                            ),
-                        ],
-                    },
-                ),
             ),
+            727..753,
         ),
-        Assign(
-            Variable {
-                var: "LOCALS",
-                func_extern: None,
-                args: [],
-            },
-            None,
-            FormText(
-                {Var(Variable { var: "PALAMNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [Int(1)] })] })}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [] }), NotEqual, Var(Variable { var: "TARGET", func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {Method("ABS", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })])},
-            ),
-        ),
-        Assign(
-            Variable {
-                var: "JUEL",
-                func_extern: None,
-                args: [
-                    Var(
-                        Variable {
-                            var: "ARG",
-                            func_extern: None,
-                            args: [],
-                        },
-                    ),
-                    Var(
-                        Variable {
-                            var: "ARG",
-                            func_extern: None,
-                            args: [
-                                Int(
-                                    1,
-                                ),
-                            ],
-                        },
-                    ),
-                ],
-            },
-            None,
-            Var(
-                Variable {
-                    var: "LOCAL",
-                    func_extern: None,
-                    args: [
-                        Int(
-                            1,
-                        ),
-                    ],
-                },
-            ),
-        ),
-        If(
-            [
-                (
-                    BinopExpr(
-                        Method(
-                            "ABS",
-                            [
-                                Var(
-                                    Variable {
-                                        var: "LOCAL",
-                                        func_extern: None,
-                                        args: [
-                                            Int(
-                                                2,
-                                            ),
-                                        ],
-                                    },
-                                ),
-                            ],
-                        ),
-                        Greater,
-                        Int(
-                            0,
-                        ),
-                    ),
-                    [
-                        SelectCase(
-                            Var(
-                                Variable {
-                                    var: "ARG",
-                                    func_extern: None,
-                                    args: [
-                                        Int(
-                                            3,
-                                        ),
-                                    ],
-                                },
-                            ),
-                            [
-                                (
-                                    [
-                                        Single(
-                                            Int(
-                                                0,
-                                            ),
-                                        ),
-                                    ],
-                                    [
-                                        Print(
-                                            NEWLINE,
-                                            Var(
-                                                Variable {
-                                                    var: "LOCALS",
-                                                    func_extern: None,
-                                                    args: [],
-                                                },
-                                            ),
-                                        ),
-                                        Command(
-                                            Return,
-                                            [
-                                                Int(
-                                                    1,
-                                                ),
-                                            ],
-                                        ),
-                                    ],
-                                ),
-                                (
-                                    [
-                                        Single(
-                                            Int(
-                                                1,
-                                            ),
-                                        ),
-                                    ],
-                                    [
-                                        Print(
-                                            NEWLINE | WAIT,
-                                            Var(
-                                                Variable {
-                                                    var: "LOCALS",
-                                                    func_extern: None,
-                                                    args: [],
-                                                },
-                                            ),
-                                        ),
-                                        Command(
-                                            Return,
-                                            [
-                                                Int(
-                                                    1,
-                                                ),
-                                            ],
-                                        ),
-                                    ],
-                                ),
-                            ],
-                            Some(
+        StmtWithPos(
+            If(
+                [
+                    (
+                        BinopExpr(
+                            Method(
+                                "ABS",
                                 [
-                                    Command(
-                                        Return,
-                                        [
-                                            Int(
-                                                0,
-                                            ),
-                                        ],
+                                    Var(
+                                        Variable {
+                                            var: "LOCAL",
+                                            func_extern: None,
+                                            args: [
+                                                Int(
+                                                    2,
+                                                ),
+                                            ],
+                                        },
                                     ),
                                 ],
                             ),
+                            Greater,
+                            Int(
+                                0,
+                            ),
                         ),
-                    ],
-                ),
-            ],
-            [],
+                        [
+                            StmtWithPos(
+                                SelectCase(
+                                    Var(
+                                        Variable {
+                                            var: "ARG",
+                                            func_extern: None,
+                                            args: [
+                                                Int(
+                                                    3,
+                                                ),
+                                            ],
+                                        },
+                                    ),
+                                    [
+                                        (
+                                            [
+                                                Single(
+                                                    Int(
+                                                        0,
+                                                    ),
+                                                ),
+                                            ],
+                                            [
+                                                StmtWithPos(
+                                                    Print(
+                                                        NEWLINE,
+                                                        Var(
+                                                            Variable {
+                                                                var: "LOCALS",
+                                                                func_extern: None,
+                                                                args: [],
+                                                            },
+                                                        ),
+                                                    ),
+                                                    902..916,
+                                                ),
+                                                StmtWithPos(
+                                                    Command(
+                                                        Return,
+                                                        [
+                                                            Int(
+                                                                1,
+                                                            ),
+                                                        ],
+                                                    ),
+                                                    929..938,
+                                                ),
+                                            ],
+                                        ),
+                                        (
+                                            [
+                                                Single(
+                                                    Int(
+                                                        1,
+                                                    ),
+                                                ),
+                                            ],
+                                            [
+                                                StmtWithPos(
+                                                    Print(
+                                                        NEWLINE | WAIT,
+                                                        Var(
+                                                            Variable {
+                                                                var: "LOCALS",
+                                                                func_extern: None,
+                                                                args: [],
+                                                            },
+                                                        ),
+                                                    ),
+                                                    991..1005,
+                                                ),
+                                                StmtWithPos(
+                                                    Command(
+                                                        Return,
+                                                        [
+                                                            Int(
+                                                                1,
+                                                            ),
+                                                        ],
+                                                    ),
+                                                    1018..1027,
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                    Some(
+                                        [
+                                            StmtWithPos(
+                                                Command(
+                                                    Return,
+                                                    [
+                                                        Int(
+                                                            0,
+                                                        ),
+                                                    ],
+                                                ),
+                                                1085..1094,
+                                            ),
+                                        ],
+                                    ),
+                                ),
+                                829..1107,
+                            ),
+                        ],
+                    ),
+                ],
+                [],
+            ),
+            805..1113,
         ),
     ],
 }
@@ -1675,28 +1892,33 @@ mod program {
 [
     Function {
         header: FunctionHeader {
+            file_path: "",
             name: "SYSTEM_TITLE",
             args: [],
             infos: [],
         },
         body: [
-            Call {
-                name: FormText(
-                    FOO_{Int(123)},
-                ),
-                args: [
-                    Int(
-                        345,
+            StmtWithPos(
+                Call {
+                    name: FormText(
+                        FOO_{Int(123)},
                     ),
-                ],
-                is_jump: false,
-                try_body: [],
-                catch_body: None,
-            },
+                    args: [
+                        Int(
+                            345,
+                        ),
+                    ],
+                    is_jump: false,
+                    try_body: [],
+                    catch_body: None,
+                },
+                14..38,
+            ),
         ],
     },
     Function {
         header: FunctionHeader {
+            file_path: "",
             name: "FOO_123",
             args: [
                 (
@@ -1711,11 +1933,14 @@ mod program {
             infos: [],
         },
         body: [
-            Print(
-                (empty),
-                FormText(
-                    FOO_{Var(Variable { var: "ARG", func_extern: None, args: [] })},
+            StmtWithPos(
+                Print(
+                    (empty),
+                    FormText(
+                        FOO_{Var(Variable { var: "ARG", func_extern: None, args: [] })},
+                    ),
                 ),
+                53..72,
             ),
         ],
     },
@@ -1735,27 +1960,32 @@ mod program {
 [
     Function {
         header: FunctionHeader {
+            file_path: "",
             name: "FOO",
             args: [],
             infos: [],
         },
         body: [
-            Assign(
-                Variable {
-                    var: "A",
-                    func_extern: None,
-                    args: [],
-                },
-                None,
-                Method(
-                    "BAR",
-                    [],
+            StmtWithPos(
+                Assign(
+                    Variable {
+                        var: "A",
+                        func_extern: None,
+                        args: [],
+                    },
+                    None,
+                    Method(
+                        "BAR",
+                        [],
+                    ),
                 ),
+                5..14,
             ),
         ],
     },
     Function {
         header: FunctionHeader {
+            file_path: "",
             name: "BAR",
             args: [],
             infos: [
@@ -1763,13 +1993,16 @@ mod program {
             ],
         },
         body: [
-            Command(
-                Return,
-                [
-                    Int(
-                        123,
-                    ),
-                ],
+            StmtWithPos(
+                Command(
+                    Return,
+                    [
+                        Int(
+                            123,
+                        ),
+                    ],
+                ),
+                31..43,
             ),
         ],
     },
@@ -1789,46 +2022,58 @@ mod program {
 [
     Function {
         header: FunctionHeader {
+            file_path: "",
             name: "FOO",
             args: [],
             infos: [],
         },
         body: [
-            Print(
-                (empty),
-                String(
-                    "foo",
+            StmtWithPos(
+                Print(
+                    (empty),
+                    String(
+                        "foo",
+                    ),
                 ),
+                5..14,
             ),
         ],
     },
     Function {
         header: FunctionHeader {
+            file_path: "",
             name: "FOO",
             args: [],
             infos: [],
         },
         body: [
-            Print(
-                (empty),
-                String(
-                    "foo",
+            StmtWithPos(
+                Print(
+                    (empty),
+                    String(
+                        "foo",
+                    ),
                 ),
+                21..30,
             ),
         ],
     },
     Function {
         header: FunctionHeader {
+            file_path: "",
             name: "BAR",
             args: [],
             infos: [],
         },
         body: [
-            Print(
-                (empty),
-                String(
-                    "bar",
+            StmtWithPos(
+                Print(
+                    (empty),
+                    String(
+                        "bar",
+                    ),
                 ),
+                37..46,
             ),
         ],
     },

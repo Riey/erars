@@ -163,9 +163,9 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             // .into_iter()
             .par_bridge()
             .flat_map(|erb| {
-                let ctx = ParserContext::new(header_info.clone());
                 let erb = erb.unwrap();
                 let source = std::fs::read_to_string(&erb).unwrap();
+                let ctx = ParserContext::new(header_info.clone(), erb.to_str().unwrap().into());
 
                 log::debug!("Parse {}", erb.display());
 
