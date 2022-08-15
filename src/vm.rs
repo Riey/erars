@@ -538,6 +538,7 @@ impl TerminalVm {
                     "GAMEBASE_YEAR" => ctx.push(2022),
                     "GAMEBASE_TITLE" => ctx.push("eraTHYMKR"),
                     "GAMEBASE_INFO" => ctx.push(""),
+                    "NO" => ctx.push(0),
                     _ => {
                         let target = *ctx
                             .var
