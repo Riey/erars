@@ -11,10 +11,9 @@ use codespan_reporting::{
         Config,
     },
 };
-use eframe::NativeOptions;
 use erars::{
     function::FunctionDic,
-    ui::{ConsoleChannel, ConsoleMessage, EraApp},
+    ui::{ConsoleChannel, ConsoleMessage, EraApp, StdioBackend},
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::VariableInfo;
@@ -22,27 +21,7 @@ use erars_compiler::{CompiledFunction, HeaderInfo, Lexer, ParserContext};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
-fn main() {
-    {
-        use simplelog::*;
-        CombinedLogger::init(vec![
-            TermLogger::new(
-                LevelFilter::Info,
-                Config::default(),
-                TerminalMode::Mixed,
-                ColorChoice::Auto,
-            ),
-            WriteLogger::new(
-                LevelFilter::Trace,
-                Config::default(),
-                std::fs::File::create("erars.log").unwrap(),
-            ),
-        ])
-        .unwrap();
-    }
-
-    log_panics::init();
-
+fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
     let chan = Arc::new(ConsoleChannel::new());
     let mut args = std::env::args();
 
@@ -175,12 +154,29 @@ fn main() {
         log::info!("Program Terminated");
     });
 
-    let app = EraApp::new(chan);
+    backend.run(chan)
+}
 
-    eframe::run_native(
-        Box::new(app),
-        NativeOptions {
-            ..Default::default()
-        },
-    );
+fn main() {
+    {
+        use simplelog::*;
+        CombinedLogger::init(vec![
+            // TermLogger::new(
+            //     LevelFilter::Info,
+            //     Config::default(),
+            //     TerminalMode::Mixed,
+            //     ColorChoice::Auto,
+            // ),
+            WriteLogger::new(
+                LevelFilter::Trace,
+                Config::default(),
+                std::fs::File::create("erars.log").unwrap(),
+            ),
+        ])
+        .unwrap();
+    }
+
+    log_panics::init();
+
+    run(StdioBackend::new()).unwrap();
 }
