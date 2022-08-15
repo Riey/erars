@@ -153,44 +153,34 @@ impl FunctionDic {
         body.push_local(
             LOCAL.clone(),
             VariableInfo {
-                default_int: 0,
-                is_chara: false,
-                is_str: false,
                 size: vec![local_size],
-                init: Vec::new(),
+                ..Default::default()
             },
         );
 
         body.push_local(
             LOCALS.clone(),
             VariableInfo {
-                default_int: 0,
-                is_chara: false,
                 is_str: true,
                 size: vec![locals_size],
-                init: Vec::new(),
+                ..Default::default()
             },
         );
 
         body.push_local(
             ARG.clone(),
             VariableInfo {
-                default_int: 0,
-                is_chara: false,
-                is_str: false,
                 size: vec![1000],
-                init: Vec::new(),
+                ..Default::default()
             },
         );
 
         body.push_local(
             ARGS.clone(),
             VariableInfo {
-                default_int: 0,
-                is_chara: false,
                 is_str: true,
                 size: vec![100],
-                init: Vec::new(),
+                ..Default::default()
             },
         );
 
