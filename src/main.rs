@@ -14,7 +14,7 @@ use codespan_reporting::{
 use eframe::NativeOptions;
 use erars::{
     function::FunctionDic,
-    ui::{ConsoleChannel, EraApp},
+    ui::{ConsoleChannel, ConsoleMessage, EraApp},
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::VariableInfo;
@@ -168,11 +168,11 @@ fn main() {
         let ret = vm.start(&inner_chan, &mut ctx);
 
         if let Err(err) = ret {
-            eprintln!("{}", err);
-            inner_chan.exit();
+            log::error!("{}", err);
+            inner_chan.send_msg(ConsoleMessage::Print(format!("VM 에러 발생: {err}")));
         }
 
-        println!("Program Terminated");
+        log::info!("Program Terminated");
     });
 
     let app = EraApp::new(chan);
