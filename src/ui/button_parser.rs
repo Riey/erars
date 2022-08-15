@@ -1,4 +1,5 @@
 use super::ConsoleLinePart;
+use egui::Color32;
 use erars_ast::Value;
 use pest::Parser;
 
@@ -14,14 +15,14 @@ fn parse_value(s: &str) -> Value {
     }
 }
 
-pub(super) fn parse_button(s: String, out: &mut Vec<ConsoleLinePart>) {
+pub(super) fn parse_button(s: String, color: Color32, out: &mut Vec<ConsoleLinePart>) {
     match ErbButtonParser::parse(Rule::print_button_text, &s) {
         Ok(mut text) => {
             let mut parts = text.next().unwrap().into_inner();
 
             let plain = parts.next().unwrap();
             if !plain.as_str().is_empty() {
-                out.push(ConsoleLinePart::Normal(plain.as_str().into()));
+                out.push(ConsoleLinePart::Normal(plain.as_str().into(), color));
             }
 
             for button in parts {
@@ -30,12 +31,12 @@ pub(super) fn parse_button(s: String, out: &mut Vec<ConsoleLinePart>) {
                 let value = parse_value(value_pair.as_str());
                 let text_pair = button_parts.next().unwrap();
                 let text = format!("[{}]{}", value_pair.as_str(), text_pair.as_str());
-                out.push(ConsoleLinePart::Button(value, text));
+                out.push(ConsoleLinePart::Button(value, color, text));
             }
         }
         Err(err) => {
             log::error!("Can't parse button text {}", err);
-            out.push(ConsoleLinePart::Normal(s));
+            out.push(ConsoleLinePart::Normal(s, color));
         }
     }
 }

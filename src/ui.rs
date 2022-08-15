@@ -74,7 +74,11 @@ impl App for EraApp {
 
         if self.req.is_none() {
             while let Some(msg) = self.chan.recv_msg() {
+                log::trace!("[UI] Recv: {msg:?}");
                 match msg {
+                    ConsoleMessage::SetColor(r, g, b) => {
+                        self.console.color = Color32::from_rgb(r, g, b);
+                    }
                     ConsoleMessage::Input(req) => self.req = Some(req),
                     ConsoleMessage::NewLine => self.console.new_line(),
                     ConsoleMessage::Print(s) => self.console.print(s),
@@ -124,17 +128,29 @@ impl App for EraApp {
                             }
                         });
                     }
-                    Alignment::Right => todo!(),
+                    Alignment::Right => {
+                        todo!()
+                    }
                 }
             }
         });
     }
 }
 
-#[derive(Default)]
 struct EraConsole {
+    color: Color32,
     lines: Vec<ConsoleLine>,
     last_line: ConsoleLine,
+}
+
+impl Default for EraConsole {
+    fn default() -> Self {
+        Self {
+            color: Color32::WHITE,
+            lines: Vec::new(),
+            last_line: ConsoleLine::default(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -145,25 +161,29 @@ struct ConsoleLine {
 }
 
 enum ConsoleLinePart {
-    Normal(String),
-    Line,
-    Button(Value, String),
+    Normal(String, Color32),
+    Line(Color32),
+    Button(Value, Color32, String),
 }
 
 impl ConsoleLinePart {
     pub fn display(&self, ui: &mut egui::Ui, ret: impl FnOnce(&Value)) {
         match self {
-            ConsoleLinePart::Normal(s) => {
-                ui.label(s);
+            ConsoleLinePart::Normal(s, color) => {
+                ui.colored_label(*color, s);
             }
-            ConsoleLinePart::Line => {
+            ConsoleLinePart::Line(color) => {
                 let width = ui.available_width();
                 let char_width = ui.fonts().glyph_width(&egui::FontId::monospace(14.0), '=');
                 let s = "=".repeat((width / char_width) as usize);
-                ui.label(s);
+                ui.colored_label(*color, s);
             }
-            ConsoleLinePart::Button(value, text) => {
-                if ui.small_button(text).clicked() {
+            ConsoleLinePart::Button(value, color, text) => {
+                if ui
+                    .button(egui::RichText::new(text).color(*color))
+                    .on_hover_cursor(egui::CursorIcon::PointingHand)
+                    .clicked()
+                {
                     ret(value);
                 }
             }
@@ -173,7 +193,9 @@ impl ConsoleLinePart {
 
 impl EraConsole {
     pub fn print_button(&mut self, value: Value, s: String) {
-        self.last_line.parts.push(ConsoleLinePart::Button(value, s));
+        self.last_line
+            .parts
+            .push(ConsoleLinePart::Button(value, self.color, s));
     }
 
     // pub fn print_plain_text(&mut self, s: String) {
@@ -181,7 +203,7 @@ impl EraConsole {
     // }
 
     pub fn print(&mut self, s: String) {
-        button_parser::parse_button(s, &mut self.last_line.parts);
+        button_parser::parse_button(s, self.color, &mut self.last_line.parts);
     }
     pub fn new_line(&mut self) {
         let prev_line = std::mem::take(&mut self.last_line);
@@ -194,7 +216,7 @@ impl EraConsole {
     }
 
     pub fn draw_line(&mut self) {
-        self.last_line.parts.push(ConsoleLinePart::Line);
+        self.last_line.parts.push(ConsoleLinePart::Line(self.color));
         self.new_line();
     }
 
@@ -219,6 +241,7 @@ pub enum ConsoleMessage {
     ReuseLastLine(String),
     Alignment(Alignment),
     Input(InputRequest),
+    SetColor(u8, u8, u8),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

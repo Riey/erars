@@ -176,6 +176,7 @@ impl VariableStorage {
             character_len: 0,
             variables,
             local_variables: HashMap::new(),
+            global_variables,
         }
     }
 
@@ -600,25 +601,36 @@ impl TerminalVm {
             }
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
-                let mut args = ctx.take_value_list(*c);
+                let ret: Value;
 
-                match func.as_str() {
-                    "TOSTR" => {
-                        let value = args.next().unwrap().try_into_int()?;
-                        let format = args.next();
+                {
+                    let mut args = ctx.take_value_list(*c);
+                    match func.as_str() {
+                        "TOSTR" => {
+                            let value = args.next().unwrap().try_into_int()?;
+                            let format = args.next();
 
-                        let ret = if let Some(_format) = format {
-                            format!("{00}", value)
-                        } else {
-                            value.to_string()
-                        };
+                            ret = if let Some(_format) = format {
+                                format!("{00}", value)
+                            } else {
+                                value.to_string()
+                            }
+                            .into();
+                        }
+                        "MAX" => {
+                            let mut max = args.next().unwrap().try_into_int()?;
 
-                        drop(args);
+                            for arg in args {
+                                max = max.max(arg.try_into_int()?);
+                            }
 
-                        ctx.push(ret);
+                            ret = max.into();
+                        }
+                        other => bail!("TODO: CallMethod {}", other),
                     }
-                    other => bail!("TODO: CallMethod {}", other),
                 }
+
+                ctx.push(ret);
             }
             Instruction::Call(c) => {
                 let func = ctx.pop_str()?;
@@ -632,7 +644,6 @@ impl TerminalVm {
             }
             Instruction::Begin(b) => {
                 ctx.begin = Some(*b);
-                chan.exit();
                 return Ok(Some(Workflow::Exit));
             }
             Instruction::ConcatString(c) => {
@@ -687,7 +698,7 @@ impl TerminalVm {
                     BinaryOperator::And => Value::Int(i64::from(lhs.as_bool() && rhs.as_bool())),
                     BinaryOperator::Or => Value::Int(i64::from(lhs.as_bool() || rhs.as_bool())),
                     BinaryOperator::Xor => Value::Int(i64::from(lhs.as_bool() ^ rhs.as_bool())),
-                    _ => todo!("{:?}", op),
+                    _ => todo!("Todo {:?}", op),
                 };
 
                 ctx.push(ret);
@@ -729,7 +740,7 @@ impl TerminalVm {
                         }
                     };
                     (@$t:ty) => {
-                        $t::try_from(Value::try_from(pop!())?)?
+                        <$t>::try_from(Value::try_from(pop!())?)?
                     };
                     (@opt @$t:ty) => {
                         match pop!(@opt) {
@@ -768,10 +779,30 @@ impl TerminalVm {
                         chan.send_msg(ConsoleMessage::DrawLine);
                         chan.request_redraw();
                     }
+                    BuiltinCommand::SetColor => {
+                        let c = pop!(@i64);
+
+                        match pop!(@opt @i64) {
+                            Some(g) => {
+                                let b = pop!(@i64);
+                                chan.send_msg(ConsoleMessage::SetColor(c as u8, g as u8, b as u8));
+                            }
+                            None => {
+                                let [r, g, b, _] = (c as u32).to_le_bytes();
+                                chan.send_msg(ConsoleMessage::SetColor(r, g, b));
+                            }
+                        };
+                    }
                     BuiltinCommand::Input => {
                         chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
-                        match chan.recv_ret() {
-                            ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
+                        chan.request_redraw();
+                        let ret = chan.recv_ret();
+                        log::trace!("Console Recv {ret:?}");
+                        match ret {
+                            ConsoleResult::Quit => {
+                                log::info!("User Quit");
+                                return Ok(Some(Workflow::Exit));
+                            }
                             ConsoleResult::Value(ret) => {
                                 ctx.var
                                     .get_var("RESULT".into())
@@ -781,9 +812,9 @@ impl TerminalVm {
                                     .set(iter::empty(), ret)?;
                             }
                         }
-                        chan.request_redraw();
                     }
                     BuiltinCommand::Quit => {
+                        log::info!("Run QUIT");
                         chan.exit();
                         return Ok(Some(Workflow::Exit));
                     }
@@ -793,8 +824,14 @@ impl TerminalVm {
                     BuiltinCommand::ResetData => {
                         ctx.var.reset_data();
                     }
+                    BuiltinCommand::LoadGlobal
+                    | BuiltinCommand::SaveGlobal
+                    | BuiltinCommand::SaveData
+                    | BuiltinCommand::LoadData => {
+                        log::warn!("TODO: Save/Load");
+                    }
                     _ => {
-                        bail!("{}({:?})", com, args)
+                        bail!("TODO: {}({:?})", com, args)
                     }
                 }
             }
@@ -817,11 +854,12 @@ impl TerminalVm {
         let insts = body.body();
 
         while let Some(inst) = insts.get(cursor) {
+            log::trace!("[{func_name}] run instruction {inst:?}");
             cursor += 1;
             match self.run_instruction(func_name, goto_labels, inst, &mut cursor, chan, ctx) {
                 Ok(None) => {}
-                Ok(Some(Workflow::Exit)) => return Ok(Workflow::Exit),
                 Ok(Some(Workflow::Return)) => break,
+                Ok(Some(flow)) => return Ok(flow),
                 Err(err) => {
                     return Err(err);
                 }
@@ -877,6 +915,8 @@ impl TerminalVm {
     }
 
     fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
+        log::trace!("Begin {ty}");
+
         match ty {
             BeginType::Title => {
                 self.call("SYSTEM_TITLE", &[], chan, ctx)?;

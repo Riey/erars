@@ -23,25 +23,25 @@ use hashbrown::HashMap;
 use smol_str::SmolStr;
 
 fn main() {
-    log_panics::init();
-
     {
         use simplelog::*;
         CombinedLogger::init(vec![
             TermLogger::new(
-                LevelFilter::Trace,
+                LevelFilter::Info,
                 Config::default(),
                 TerminalMode::Mixed,
                 ColorChoice::Auto,
             ),
             WriteLogger::new(
-                LevelFilter::Info,
+                LevelFilter::Trace,
                 Config::default(),
                 std::fs::File::create("erars.log").unwrap(),
             ),
         ])
         .unwrap();
     }
+
+    log_panics::init();
 
     let chan = Arc::new(ConsoleChannel::new());
     let mut args = std::env::args();
@@ -95,7 +95,7 @@ fn main() {
         for erh in erhs {
             let erh = erh.unwrap();
             let source = std::fs::read_to_string(&erh).unwrap();
-            log::info!("Parse {}", erh.display());
+            log::debug!("Parse {}", erh.display());
 
             match header_info.merge_header(&source) {
                 Ok(()) => (),
@@ -121,7 +121,7 @@ fn main() {
                 let erb = erb.unwrap();
                 let source = std::fs::read_to_string(&erb).unwrap();
 
-                log::info!("Parse {}", erb.display());
+                log::debug!("Parse {}", erb.display());
 
                 let program = ctx.parse(&mut Lexer::new(source.as_str()));
 
@@ -137,7 +137,7 @@ fn main() {
                     }
                 };
 
-                log::info!("Compile {}", erb.display());
+                log::debug!("Compile {}", erb.display());
 
                 program
                     .into_iter()

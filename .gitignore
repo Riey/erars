@@ -2,4 +2,5 @@
 /.direnv
 /.idea
 erars.log
+massif*
 *~undo-tree~
