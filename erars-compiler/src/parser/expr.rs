@@ -753,18 +753,24 @@ pub fn form_arg_expr<'c, 'a>(
 
 fn function_arg_list<'c, 'a>(
     ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, Vec<(Variable, Option<Expr>)>> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<(Variable, Option<Value>)>> + 'c {
     move |i| {
         separated_list0(
             char(','),
-            de_sp(pair(variable(ctx), opt(preceded(char_sp('='), expr(ctx))))),
+            de_sp(pair(
+                variable(ctx),
+                opt(preceded(
+                    char_sp('='),
+                    map(expr(ctx), |expr| const_eval(ctx, expr)),
+                )),
+            )),
         )(i)
     }
 }
 
 pub fn function_line<'c, 'a>(
     ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, (&'a str, Vec<(Variable, Option<Expr>)>)> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, (&'a str, Vec<(Variable, Option<Value>)>)> + 'c {
     move |i| {
         pair(
             ident,

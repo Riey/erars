@@ -110,11 +110,7 @@ impl FunctionDic {
         for (var, default_value) in header.args {
             body.push_arg(
                 var.var,
-                default_value.map(|v| match v {
-                    Expr::Int(i) => i.into(),
-                    Expr::String(s) => s.into_string().into(),
-                    _ => panic!("default arg must be constant"),
-                }),
+                default_value,
                 var.args
                     .into_iter()
                     .map(|v| {

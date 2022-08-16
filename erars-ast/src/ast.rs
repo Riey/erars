@@ -7,7 +7,8 @@ use smol_str::SmolStr;
 use strum::{Display, EnumString};
 
 use crate::{
-    Alignment, BinaryOperator, BuiltinCommand, EventFlags, LocalVariable, UnaryOperator, Variable,
+    Alignment, BinaryOperator, BuiltinCommand, EventFlags, LocalVariable, UnaryOperator, Value,
+    Variable,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,7 +75,7 @@ impl Default for Function {
 pub struct FunctionHeader {
     pub file_path: SmolStr,
     pub name: String,
-    pub args: Vec<(Variable, Option<Expr>)>,
+    pub args: Vec<(Variable, Option<Value>)>,
     pub infos: Vec<FunctionInfo>,
 }
 
