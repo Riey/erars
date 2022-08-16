@@ -82,26 +82,31 @@ impl VmVariable {
     }
 
     pub fn get_int(&mut self, mut args: impl Iterator<Item = usize>) -> Result<&mut i64> {
+        let mut last_arg;
+
         macro_rules! a {
-            () => {
-                args.next().unwrap_or(0)
-            };
+            () => {{
+                last_arg = args.next().unwrap_or(0);
+                last_arg
+            }};
         }
         match self {
             VmVariable::Int0D(s) => Ok(s),
-            VmVariable::Int1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
+            VmVariable::Int1D(s) => s
+                .get_mut(a!())
+                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
             VmVariable::Int2D(s) => s
                 .get_mut(a!())
-                .unwrap()
+                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
                 .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index out of range")),
+                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
             VmVariable::Int3D(s) => s
                 .get_mut(a!())
-                .unwrap()
+                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
                 .get_mut(a!())
-                .unwrap()
+                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
                 .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index out of range")),
+                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
             _ => bail!("Variable is Str type"),
         }
     }
