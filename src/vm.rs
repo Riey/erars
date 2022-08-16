@@ -890,8 +890,13 @@ impl TerminalVm {
                     BuiltinCommand::GetFocusColor => {
                         ctx.push(ctx.hl_color as i64);
                     }
-                    BuiltinCommand::Input => {
-                        chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
+                    BuiltinCommand::Input | BuiltinCommand::InputS => {
+                        let req = match com {
+                            BuiltinCommand::InputS => InputRequest::Str,
+                            BuiltinCommand::Input => InputRequest::Int,
+                            _ => unreachable!(),
+                        };
+                        chan.send_msg(ConsoleMessage::Input(req));
                         chan.request_redraw();
                         let ret = chan.recv_ret();
                         log::trace!("Console Recv {ret:?}");
@@ -902,7 +907,11 @@ impl TerminalVm {
                             }
                             ConsoleResult::Value(ret) => {
                                 ctx.var
-                                    .get_var("RESULT".into())
+                                    .get_var(if req == InputRequest::Int {
+                                        "RESULT"
+                                    } else {
+                                        "RESULTS"
+                                    })
                                     .unwrap()
                                     .1
                                     .assume_normal()
