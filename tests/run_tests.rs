@@ -52,6 +52,6 @@ fn test_runner(dic: FunctionDic) -> Vec<ConsoleMessage> {
     let vm = TerminalVm::new(dic, test_util::get_ctx("").header);
     let chan = ConsoleChannel::new();
 
-    vm.start(&chan, &mut ctx).unwrap();
+    vm.start(&chan, &mut ctx);
     chan.take_all_msg()
 }

@@ -1019,7 +1019,7 @@ impl TerminalVm {
                     );
                 }
             },
-            Err(ty) => match dbg!(std::fs::read_to_string(stack.file_path.as_str())) {
+            Err(ty) => match std::fs::read_to_string(stack.file_path.as_str()) {
                 Ok(s) => {
                     report_error!(
                         chan,
