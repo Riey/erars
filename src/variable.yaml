@@ -101,7 +101,7 @@ FLAG:
 
 TFLAG:
   size: [10000]
-  is_chara: true
+  is_chara: false
   is_str: false
 
 DAY:

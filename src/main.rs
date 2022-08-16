@@ -39,6 +39,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
     std::thread::spawn(move || {
         let mut function_dic = FunctionDic::new();
         let header_info;
+        let mut ctx: VmContext;
+
         {
             let mut args = std::env::args();
 
@@ -193,8 +195,10 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
                 })
                 .collect::<Vec<CompiledFunction>>();
 
+            ctx = VmContext::new(&header_info.global_variables);
+
             for func in funcs {
-                function_dic.insert_compiled_func(func);
+                function_dic.insert_compiled_func(&mut ctx.var_mut(), func);
             }
 
             let diagnostic = diagnostic.into_inner();
@@ -211,9 +215,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             }
         }
 
-        let mut ctx = VmContext::new(&header_info.global_variables);
         let vm = TerminalVm::new(function_dic, header_info);
-        vm.start(&inner_chan, &mut ctx);
+        vm.start(&inner_chan, &mut ctx).unwrap();
 
         inner_chan.exit();
 

@@ -1995,7 +1995,7 @@ mod program {
         body: [
             StmtWithPos(
                 Command(
-                    Return,
+                    ReturnF,
                     [
                         Int(
                             123,

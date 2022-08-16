@@ -8,13 +8,14 @@ use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, Variabl
 use erars_compiler::{CompiledFunction, Instruction};
 use serde::{Deserialize, Serialize};
 
+use crate::vm::VariableStorage;
+
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {
     file_path: SmolStr,
     body: Box<[Instruction]>,
     goto_labels: HashMap<SmolStr, u32>,
     args: Vec<(Box<str>, Option<Value>, ArrayVec<usize, 4>)>,
-    local_vars: HashMap<SmolStr, VariableInfo>,
 }
 
 impl FunctionBody {
@@ -27,20 +28,12 @@ impl FunctionBody {
         self.args.push((var, default_value, indices));
     }
 
-    pub fn push_local(&mut self, var: SmolStr, info: VariableInfo) {
-        self.local_vars.insert(var, info);
-    }
-
     pub fn goto_labels(&self) -> &HashMap<SmolStr, u32> {
         &self.goto_labels
     }
 
     pub fn args(&self) -> &[(Box<str>, Option<Value>, ArrayVec<usize, 4>)] {
         &self.args
-    }
-
-    pub fn local_vars(&self) -> &HashMap<SmolStr, VariableInfo> {
-        &self.local_vars
     }
 
     pub fn body(&self) -> &[Instruction] {
@@ -84,7 +77,7 @@ impl EventCollection {
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionDic {
-    normal: HashMap<String, FunctionBody>,
+    normal: HashMap<SmolStr, FunctionBody>,
     event: EnumMap<EventType, EventCollection>,
 }
 
@@ -96,7 +89,7 @@ impl FunctionDic {
         }
     }
 
-    pub fn insert_compiled_func(&mut self, func: CompiledFunction) {
+    pub fn insert_compiled_func(&mut self, var_dic: &mut VariableStorage, func: CompiledFunction) {
         let mut body = FunctionBody {
             body: func.body,
             goto_labels: func.goto_labels,
@@ -141,7 +134,7 @@ impl FunctionDic {
                 }
                 FunctionInfo::Function | FunctionInfo::FunctionS => {}
                 FunctionInfo::Dim(local) => {
-                    body.push_local(local.var, local.info);
+                    var_dic.add_local_info(header.name.clone(), local.var, local.info);
                 }
             }
         }
@@ -153,7 +146,8 @@ impl FunctionDic {
         static ARG: SmolStr = SmolStr::new_inline("ARG");
         static ARGS: SmolStr = SmolStr::new_inline("ARGS");
 
-        body.push_local(
+        var_dic.add_local_info(
+            header.name.clone(),
             LOCAL.clone(),
             VariableInfo {
                 size: vec![local_size],
@@ -161,7 +155,8 @@ impl FunctionDic {
             },
         );
 
-        body.push_local(
+        var_dic.add_local_info(
+            header.name.clone(),
             LOCALS.clone(),
             VariableInfo {
                 is_str: true,
@@ -170,7 +165,8 @@ impl FunctionDic {
             },
         );
 
-        body.push_local(
+        var_dic.add_local_info(
+            header.name.clone(),
             ARG.clone(),
             VariableInfo {
                 size: vec![1000],
@@ -178,7 +174,8 @@ impl FunctionDic {
             },
         );
 
-        body.push_local(
+        var_dic.add_local_info(
+            header.name.clone(),
             ARGS.clone(),
             VariableInfo {
                 is_str: true,
@@ -194,7 +191,7 @@ impl FunctionDic {
         }
     }
 
-    pub fn insert_func(&mut self, name: String, body: FunctionBody) {
+    pub fn insert_func(&mut self, name: SmolStr, body: FunctionBody) {
         self.normal.insert(name, body);
     }
 

@@ -7,7 +7,7 @@ use arrayvec::ArrayVec;
 use smol_str::SmolStr;
 use strum::Display;
 
-use hashbrown::{HashMap, HashSet};
+use hashbrown::HashMap;
 
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, UnaryOperator, Value,
@@ -137,6 +137,7 @@ impl VmVariable {
     }
 }
 
+#[derive(Clone)]
 enum UniformVariable {
     Normal(VmVariable),
     Character(Vec<VmVariable>),
@@ -165,10 +166,11 @@ impl UniformVariable {
     }
 }
 
-struct VariableStorage {
+#[derive(Clone)]
+pub struct VariableStorage {
     character_len: usize,
     variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, UniformVariable)>>,
+    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
     global_variables: HashMap<SmolStr, VmVariable>,
 }
 
@@ -194,42 +196,65 @@ impl VariableStorage {
         }
     }
 
-    fn init_local(&mut self, name: &str, body: &FunctionBody) {
-        self.local_variables.entry(name.into()).or_insert_with(|| {
-            body.local_vars()
-                .iter()
-                .map(|(idx, info)| {
-                    let mut var = UniformVariable::new(info);
-
-                    if !info.init.is_empty() {
-                        let var = var.assume_normal();
-                        for (idx, init_var) in info.init.iter().enumerate() {
-                            var.set(iter::once(idx), init_var.clone()).unwrap();
-                        }
-                    }
-
-                    (idx.clone(), (info.clone(), var))
-                })
-                .collect()
-        });
+    pub fn add_local_info(&mut self, func: SmolStr, var_name: SmolStr, info: VariableInfo) {
+        self.local_variables
+            .entry(func)
+            .or_default()
+            .insert(var_name, (info, None));
     }
 
     fn get_local_var(
         &mut self,
-        name: &str,
+        func_name: &str,
         var: &str,
-    ) -> Result<&mut (VariableInfo, UniformVariable)> {
-        self.local_variables
-            .get_mut(name)
+    ) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
+        let (info, var) = self
+            .local_variables
+            .get_mut(func_name)
             .unwrap()
             .get_mut(var)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", var))
+            .ok_or_else(|| anyhow!("Variable {} is not exists", var))?;
+
+        if var.is_none() {
+            let mut var_ = UniformVariable::new(info);
+            if !info.init.is_empty() {
+                let var_ = var_.assume_normal();
+                for (idx, init_var) in info.init.iter().enumerate() {
+                    var_.set(iter::once(idx), init_var.clone()).unwrap();
+                }
+            }
+            *var = Some(var_);
+        }
+
+        Ok((info, var.as_mut().unwrap()))
     }
 
-    fn get_var(&mut self, var: &str) -> Result<&mut (VariableInfo, UniformVariable)> {
-        self.variables
+    fn is_local_var(&self, func: &str, var: &str) -> bool {
+        match self.local_variables.get(func) {
+            Some(v) => v.contains_key(var),
+            None => false,
+        }
+    }
+
+    fn get_maybe_local_var(
+        &mut self,
+        func: &str,
+        var: &str,
+    ) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
+        if self.is_local_var(func, var) {
+            self.get_local_var(func, var)
+        } else {
+            self.get_var(var)
+        }
+    }
+
+    fn get_var(&mut self, var: &str) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
+        let (l, r) = self
+            .variables
             .get_mut(var)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", var))
+            .ok_or_else(|| anyhow!("Variable {} is not exists", var))?;
+
+        Ok((l, r))
     }
 
     fn get_var2(
@@ -237,13 +262,13 @@ impl VariableStorage {
         l: &str,
         r: &str,
     ) -> Result<(
-        &mut (VariableInfo, UniformVariable),
-        &mut (VariableInfo, UniformVariable),
+        (&mut VariableInfo, &mut UniformVariable),
+        (&mut VariableInfo, &mut UniformVariable),
     )> {
         assert_ne!(l, r);
 
         match self.variables.get_many_mut([l, r]) {
-            Some([l, r]) => Ok((l, r)),
+            Some([(ll, lr), (rl, rr)]) => Ok(((ll, lr), (rl, rr))),
             None => {
                 bail!("Variable {l} or {r} is not exists");
             }
@@ -271,19 +296,18 @@ enum Workflow {
     Exit,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct Callstack {
     func_name: Result<SmolStr, EventType>,
     file_path: SmolStr,
     span: Range<usize>,
     stack_base: usize,
-    local_idxs: HashSet<SmolStr>,
 }
 
 #[derive(Clone, Debug)]
 struct VariableRef {
     name: String,
-    func_extern: Option<String>,
+    func_name: String,
     idxs: ArrayVec<usize, 4>,
 }
 
@@ -330,6 +354,7 @@ impl TryFrom<LocalValue> for VariableRef {
     }
 }
 
+#[derive(Clone)]
 pub struct VmContext {
     var: VariableStorage,
     begin: Option<BeginType>,
@@ -355,52 +380,61 @@ impl VmContext {
         }
     }
 
+    pub fn var_mut(&mut self) -> &mut VariableStorage {
+        &mut self.var
+    }
+
+    fn read_var_ref(&mut self, var_ref: VariableRef) -> Result<Value> {
+        let value = match var_ref.name.as_str() {
+            "GAMEBASE_VERSION" => 0.into(),
+            "GAMEBASE_AUTHOR" => "Riey".into(),
+            "GAMEBASE_YEAR" => 2022.into(),
+            "GAMEBASE_TITLE" => "eraTHYMKR".into(),
+            "GAMEBASE_INFO" => "".into(),
+            "NO" => 0.into(),
+            "CHARANUM" => (self.var.character_len as i64).into(),
+            _ => {
+                let target = *self
+                    .var
+                    .get_var("TARGET".into())
+                    .unwrap()
+                    .1
+                    .assume_normal()
+                    .get_int(iter::empty())?;
+
+                let (info, var, mut args) = self.resolve_var_ref(&var_ref)?;
+                let value = match var {
+                    UniformVariable::Character(c) => {
+                        let no = if args.len() < info.arg_len() {
+                            target as usize
+                        } else {
+                            args.next().unwrap()
+                        };
+                        c[no].get(args)?
+                    }
+                    UniformVariable::Normal(v) => v.get(args)?,
+                };
+
+                value
+            }
+        };
+        Ok(value)
+    }
+
     fn resolve_var_ref<'c>(
         &'c mut self,
-        dic: &FunctionDic,
-        func_name: &str,
         r: &VariableRef,
     ) -> Result<(
         &'c mut VariableInfo,
         &'c mut UniformVariable,
         arrayvec::IntoIter<usize, 4>,
     )> {
-        let (info, var) = match r.func_extern.as_deref() {
-            Some(ex_func) => {
-                self.var.init_local(ex_func, dic.get_func(ex_func)?);
-                self.var.get_local_var(ex_func, &r.name)
-            }
-            None => {
-                if self.is_local_var(&r.name) {
-                    self.var.get_local_var(func_name, &r.name)
-                } else {
-                    self.var.get_var(&r.name)
-                }
-            }
-        }?;
+        let (info, var) = self.var.get_maybe_local_var(&r.func_name, &r.name)?;
 
         Ok((info, var, r.idxs.clone().into_iter()))
     }
 
-    pub fn is_local_var(&self, name: &str) -> bool {
-        self.call_stack
-            .last()
-            .expect("Call stack is empty")
-            .local_idxs
-            .contains(name)
-    }
-
-    pub fn new_func(
-        &mut self,
-        func_name: Result<SmolStr, EventType>,
-        body: &FunctionBody,
-        file_path: SmolStr,
-    ) {
-        match &func_name {
-            Ok(label) => self.var.init_local(label, body),
-            Err(ty) => self.var.init_local(ty.into(), body),
-        }
-
+    pub fn new_func(&mut self, func_name: Result<SmolStr, EventType>, file_path: SmolStr) {
         if let Some(last) = self.call_stack.last_mut() {
             last.span = std::mem::replace(&mut self.current_span, 0..0);
         }
@@ -410,7 +444,6 @@ impl VmContext {
             file_path,
             span: 0..0,
             stack_base: self.stack.len(),
-            local_idxs: body.local_vars().keys().cloned().collect(),
         });
     }
 
@@ -426,11 +459,26 @@ impl VmContext {
     }
 
     fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
-        self.take_value_list(count).map(usize::try_from).collect()
+        self.take_value_list(count)?
+            .into_iter()
+            .map(usize::try_from)
+            .collect()
     }
 
-    fn take_value_list(&mut self, count: u32) -> impl Iterator<Item = Value> + '_ {
-        self.take_list(count).map(|l| l.try_into().unwrap())
+    fn take_value_list(&mut self, count: u32) -> Result<ArrayVec<Value, 8>> {
+        let mut ret = ArrayVec::new();
+        let list = self.take_list(count).collect::<ArrayVec<LocalValue, 8>>();
+
+        for arg in list {
+            match arg {
+                LocalValue::Value(v) => ret.push(v),
+                LocalValue::VarRef(var) => {
+                    ret.push(self.read_var_ref(var)?);
+                }
+            }
+        }
+
+        Ok(ret)
     }
 
     fn take_list(&mut self, count: u32) -> impl Iterator<Item = LocalValue> + '_ {
@@ -447,17 +495,13 @@ impl VmContext {
         self.stack.push(prev);
     }
 
-    fn push_var_ref(
-        &mut self,
-        name: String,
-        func_extern: Option<String>,
-        idxs: ArrayVec<usize, 4>,
-    ) {
-        self.stack.push(LocalValue::VarRef(VariableRef {
+    fn push_var_ref(&mut self, name: String, func_name: String, idxs: ArrayVec<usize, 4>) {
+        let var_ref = VariableRef {
+            func_name,
             name,
-            func_extern,
             idxs,
-        }));
+        };
+        self.stack.push(LocalValue::VarRef(var_ref));
     }
 
     fn push(&mut self, value: impl Into<Value>) {
@@ -471,8 +515,12 @@ impl VmContext {
             .unwrap_or_else(|| unreachable!("Unknown compiler error"))
     }
 
-    fn pop_value(&mut self) -> Value {
-        self.pop().try_into().unwrap()
+    fn pop_value(&mut self) -> Result<Value> {
+        match self.stack.pop() {
+            Some(LocalValue::Value(v)) => Ok(v),
+            Some(LocalValue::VarRef(var_ref)) => self.read_var_ref(var_ref),
+            None => bail!("Stack is empty"),
+        }
     }
 
     fn pop_var_ref(&mut self) -> Result<VariableRef> {
@@ -480,12 +528,12 @@ impl VmContext {
     }
 
     fn pop_str(&mut self) -> Result<String> {
-        self.pop_value().try_into()
+        self.pop_value().and_then(|v| v.try_into_str())
     }
 
     #[allow(unused)]
     fn pop_int(&mut self) -> Result<i64> {
-        self.pop_value().try_into()
+        self.pop_value().and_then(|v| v.try_into_int())
     }
 }
 
@@ -511,7 +559,7 @@ impl TerminalVm {
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        // eprintln!("stack: {:?}, inst: {:?}", ctx.stack, inst);
+        eprintln!("stack: {:?}, inst: {:?}", ctx.stack, inst);
 
         match inst {
             Instruction::ReportSpan(span) => ctx.current_span = span.clone(),
@@ -521,6 +569,10 @@ impl TerminalVm {
             Instruction::Pop => drop(ctx.pop()),
             Instruction::Duplicate => ctx.dup(),
             Instruction::DuplicatePrev => ctx.dup_prev(),
+            Instruction::ReadVar => {
+                let value = ctx.pop_value()?;
+                ctx.push(value);
+            }
             Instruction::EvalFormString => {
                 let form = ctx.pop_str()?;
                 let parser_ctx = ParserContext::new(self.header_info.clone(), "FORMS.ERB".into());
@@ -540,12 +592,12 @@ impl TerminalVm {
                 let func_extern = ctx.pop_str()?;
                 let name = ctx.pop_str()?;
                 let args = ctx.take_arg_list(*c)?;
-                ctx.push_var_ref(name, Some(func_extern), args);
+                ctx.push_var_ref(name, func_extern, args);
             }
             Instruction::LoadVarRef(c) => {
                 let name = ctx.pop_str()?;
                 let args = ctx.take_arg_list(*c)?;
-                ctx.push_var_ref(name, None, args);
+                ctx.push_var_ref(name, func_name.to_string(), args);
             }
             Instruction::StoreVar => {
                 let target = *ctx
@@ -556,9 +608,9 @@ impl TerminalVm {
                     .assume_normal()
                     .get_int(iter::empty())?;
                 let var_ref = ctx.pop_var_ref()?;
-                let value = ctx.pop_value();
+                let value = ctx.pop_value()?;
 
-                let (info, var, mut args) = ctx.resolve_var_ref(&self.dic, func_name, &var_ref)?;
+                let (info, var, mut args) = ctx.resolve_var_ref(&var_ref)?;
                 match var {
                     UniformVariable::Character(c) => {
                         let c_len = c.len();
@@ -576,43 +628,6 @@ impl TerminalVm {
                     }
                     UniformVariable::Normal(v) => {
                         v.set(args, value)?;
-                    }
-                }
-            }
-            Instruction::LoadVar => {
-                let var_ref = ctx.pop_var_ref()?;
-                match var_ref.name.as_str() {
-                    "GAMEBASE_VERSION" => ctx.push(0),
-                    "GAMEBASE_AUTHOR" => ctx.push("Riey"),
-                    "GAMEBASE_YEAR" => ctx.push(2022),
-                    "GAMEBASE_TITLE" => ctx.push("eraTHYMKR"),
-                    "GAMEBASE_INFO" => ctx.push(""),
-                    "NO" => ctx.push(0),
-                    "CHARANUM" => ctx.push(ctx.var.character_len as i64),
-                    _ => {
-                        let target = *ctx
-                            .var
-                            .get_var("TARGET".into())
-                            .unwrap()
-                            .1
-                            .assume_normal()
-                            .get_int(iter::empty())?;
-
-                        let (info, var, mut args) =
-                            ctx.resolve_var_ref(&self.dic, func_name, &var_ref)?;
-                        let value = match var {
-                            UniformVariable::Character(c) => {
-                                let no = if args.len() < info.arg_len() {
-                                    target as usize
-                                } else {
-                                    args.next().unwrap()
-                                };
-                                c[no].get(args)?
-                            }
-                            UniformVariable::Normal(v) => v.get(args)?,
-                        };
-
-                        ctx.push(value);
                     }
                 }
             }
@@ -634,7 +649,7 @@ impl TerminalVm {
                 let ret: Value;
 
                 {
-                    let mut args = ctx.take_value_list(*c);
+                    let mut args = ctx.take_value_list(*c)?.into_iter();
                     match func.as_str() {
                         "TOSTR" => {
                             let value = args.next().unwrap().try_into_int()?;
@@ -664,7 +679,7 @@ impl TerminalVm {
             }
             Instruction::Call(c) => {
                 let func = ctx.pop_str()?;
-                let args = ctx.take_value_list(*c).collect::<ArrayVec<_, 8>>();
+                let args = ctx.take_value_list(*c)?;
 
                 match func.as_str() {
                     _ => {
@@ -677,7 +692,7 @@ impl TerminalVm {
                 return Ok(Some(Workflow::Exit));
             }
             Instruction::ConcatString(c) => {
-                let args = ctx.take_value_list(*c);
+                let args = ctx.take_value_list(*c)?;
                 let ret = args
                     .into_iter()
                     .fold(String::new(), |s, l| s + l.into_str().as_str());
@@ -690,7 +705,7 @@ impl TerminalVm {
             }
             Instruction::UnaryOperator(op) => match op {
                 UnaryOperator::Not => {
-                    let operand = ctx.pop_value().as_bool();
+                    let operand = ctx.pop_value()?.as_bool();
                     ctx.push(!operand);
                 }
                 UnaryOperator::Minus => {
@@ -699,8 +714,8 @@ impl TerminalVm {
                 }
             },
             Instruction::BinaryOperator(op) => {
-                let rhs = ctx.pop_value();
-                let lhs = ctx.pop_value();
+                let rhs = ctx.pop_value()?;
+                let lhs = ctx.pop_value()?;
 
                 let ret = match op {
                     BinaryOperator::Add => match lhs {
@@ -751,7 +766,7 @@ impl TerminalVm {
                 *cursor = *no as usize;
             }
             Instruction::GotoIfNot(no) => {
-                let cond = ctx.pop_value().as_bool();
+                let cond = ctx.pop_value()?.as_bool();
                 if !cond {
                     *cursor = *no as usize;
                 }
@@ -797,7 +812,7 @@ impl TerminalVm {
                 match com {
                     BuiltinCommand::Varset => {
                         let var = pop!(@var);
-                        let (info, var, args) = ctx.resolve_var_ref(&self.dic, func_name, &var)?;
+                        let (info, var, args) = ctx.resolve_var_ref(&var)?;
                         let value = pop!(@opt @value);
                         let start = pop!(@opt @usize);
                         let end = pop!(@opt @usize);
@@ -1025,16 +1040,12 @@ impl TerminalVm {
     ) -> Result<Workflow> {
         let body = self.dic.get_func(label)?;
 
-        ctx.new_func(Ok(label.into()), body, body.file_path().clone());
+        ctx.new_func(Ok(label.into()), body.file_path().clone());
 
         let mut args = args.iter().cloned();
 
         for (var_idx, default_value, arg_indices) in body.args().iter() {
-            let var = if ctx.is_local_var(var_idx) {
-                ctx.var.get_local_var(label, var_idx)?
-            } else {
-                ctx.var.get_var(var_idx)?
-            };
+            let var = ctx.var.get_maybe_local_var(label, var_idx)?;
 
             var.1.assume_normal().set(
                 arg_indices.iter().copied(),
@@ -1053,7 +1064,7 @@ impl TerminalVm {
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         self.dic.get_event(ty).run(|body| {
             let label: &str = ty.into();
-            ctx.new_func(Err(ty), body, body.file_path().clone());
+            ctx.new_func(Err(ty), body.file_path().clone());
             self.run_body(label, body.goto_labels(), body, chan, ctx)?;
             ctx.end_func();
 
@@ -1171,7 +1182,7 @@ impl TerminalVm {
         }
     }
 
-    pub fn start(&self, chan: &ConsoleChannel, ctx: &mut VmContext) {
+    pub fn start(&self, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         while let Some(begin) = ctx.begin.take() {
             match self.begin(begin, chan, ctx) {
                 Ok(()) => {}
@@ -1188,10 +1199,12 @@ impl TerminalVm {
                         Self::report_stack(first, chan, Some(ctx.current_span.clone()));
                     }
 
-                    break;
+                    return Err(err);
                 }
             }
         }
+
+        Ok(())
     }
 }
 

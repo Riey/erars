@@ -18,8 +18,10 @@ fn run_test() {
         .unwrap();
     }
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
+    let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
 
     for erb_file in erb_files {
+        let mut ctx = VmContext::new(&infos);
         let erb_file = erb_file.unwrap();
         let ron_file = erb_file.parent().unwrap().join(format!(
             "{}.ron",
@@ -34,24 +36,22 @@ fn run_test() {
         let mut dic = FunctionDic::new();
 
         for func in program {
-            dic.insert_compiled_func(compile(func).unwrap());
+            dic.insert_compiled_func(ctx.var_mut(), compile(func).unwrap());
         }
 
         eprintln!("FunctionDic: {dic:?}");
 
-        let ret = test_runner(dic);
+        let ret = test_runner(dic, ctx);
         let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();
 
         k9::assert_equal!(ret, expected_ret);
     }
 }
 
-fn test_runner(dic: FunctionDic) -> Vec<ConsoleMessage> {
-    let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
-    let mut ctx = VmContext::new(&infos);
+fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> Vec<ConsoleMessage> {
     let vm = TerminalVm::new(dic, test_util::get_ctx("").header);
     let chan = ConsoleChannel::new();
 
-    vm.start(&chan, &mut ctx);
+    vm.start(&chan, &mut ctx).unwrap();
     chan.take_all_msg()
 }

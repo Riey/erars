@@ -21,7 +21,9 @@ pub enum Instruction {
     PadStr(Alignment),
     LoadVarRef(u32),
     LoadExternVarRef(u32),
-    LoadVar,
+    /// Read VarRef into Value
+    /// If value is not VarRef, This is noop
+    ReadVar,
     StoreVar,
     CallMethod(u32),
     Call(u32),

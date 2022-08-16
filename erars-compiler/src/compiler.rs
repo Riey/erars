@@ -85,6 +85,7 @@ impl Compiler {
                     self.store_var(var.clone())?;
                 } else {
                     self.push_var(var.clone())?;
+                    self.push(Instruction::ReadVar);
                     self.push(Instruction::Duplicate);
                     self.push(Instruction::LoadInt(1));
                     self.push(Instruction::BinaryOperator(op));
@@ -151,7 +152,6 @@ impl Compiler {
 
     fn push_var(&mut self, var: Variable) -> CompileResult<()> {
         self.push_var_ref(var)?;
-        self.push(Instruction::LoadVar);
 
         Ok(())
     }
@@ -204,7 +204,9 @@ impl Compiler {
         self.push_expr(init)?;
         self.store_var(var.clone())?;
         self.push_expr(step)?;
+        self.push(Instruction::ReadVar);
         self.push_expr(end)?;
+        self.push(Instruction::ReadVar);
 
         let loop_mark = self.current_no();
 
@@ -314,6 +316,7 @@ impl Compiler {
             }
             Stmt::SelectCase(cond, cases, case_else) => {
                 self.push_expr(cond)?;
+                self.push(Instruction::ReadVar);
 
                 let mut ends = Vec::new();
                 let mut nexts = Vec::new();

@@ -72,7 +72,7 @@ impl Default for Function {
 #[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
     pub file_path: SmolStr,
-    pub name: String,
+    pub name: SmolStr,
     pub args: Vec<(Variable, Option<Value>)>,
     pub infos: Vec<FunctionInfo>,
 }
