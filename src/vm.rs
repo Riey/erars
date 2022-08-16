@@ -1042,11 +1042,11 @@ impl TerminalVm {
             )?;
         }
 
-        let ret = self.run_body(label, body.goto_labels(), body, chan, ctx);
+        let ret = self.run_body(label, body.goto_labels(), body, chan, ctx)?;
 
         ctx.end_func();
 
-        ret
+        Ok(ret)
     }
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
