@@ -921,11 +921,7 @@ impl TerminalVm {
                             BuiltinCommand::Input => InputRequest::Int,
                             _ => unreachable!(),
                         };
-                        chan.send_msg(ConsoleMessage::Input(req));
-                        chan.request_redraw();
-                        let ret = chan.recv_ret();
-                        log::trace!("Console Recv {ret:?}");
-                        match ret {
+                        match input(chan, req) {
                             ConsoleResult::Quit => {
                                 log::info!("User Quit");
                                 return Ok(Some(Workflow::Exit));
@@ -1057,6 +1053,61 @@ impl TerminalVm {
                 self.call_event(EventType::First, chan, ctx)?;
                 Ok(())
             }
+            BeginType::Shop => {
+                self.call_event(EventType::Shop, chan, ctx)?;
+
+                while ctx.begin.is_none() {
+                    self.call("SHOW_SHOP", &[], chan, ctx)?;
+
+                    match input(chan, InputRequest::Int) {
+                        ConsoleResult::Quit => break,
+                        ConsoleResult::Value(Value::Int(i)) => {
+                            ctx.var
+                                .get_var("RESULT")?
+                                .1
+                                .assume_normal()
+                                .set(iter::empty(), Value::Int(i))?;
+
+                            if i >= 0 && i < 100 {
+                                let sales = *ctx
+                                    .var
+                                    .get_var("ITEMSALES")?
+                                    .1
+                                    .assume_normal()
+                                    .get_int(iter::once(i as usize))?;
+
+                                if sales != 0 {
+                                    let price = todo!("ITEMPRICE");
+                                    let money = ctx
+                                        .var
+                                        .get_var("MONEY")?
+                                        .1
+                                        .assume_normal()
+                                        .get_int(iter::empty())?;
+
+                                    if *money >= price {
+                                        *money -= price;
+                                        drop(money);
+                                        *ctx.var
+                                            .get_var("ITEM")?
+                                            .1
+                                            .assume_normal()
+                                            .get_int(iter::once(i as usize))? += 1;
+                                    }
+                                }
+                            } else {
+                                self.call("USERSHOP", &[], chan, ctx)?;
+                            }
+                        }
+                        ConsoleResult::Value(Value::String(_)) => {
+                            log::error!("콘솔에서 잘못된 타입의 응답을 보냈습니다.");
+                            break;
+                        }
+                    }
+                }
+
+                Ok(())
+            }
             _ => bail!("TODO: {}", ty),
         }
     }
@@ -1120,4 +1171,11 @@ impl TerminalVm {
             }
         }
     }
+}
+
+fn input(chan: &ConsoleChannel, req: InputRequest) -> ConsoleResult {
+    chan.send_msg(ConsoleMessage::Input(req));
+    let ret = chan.recv_ret();
+    log::trace!("Console Recv {ret:?}");
+    ret
 }
