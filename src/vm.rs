@@ -560,13 +560,18 @@ impl TerminalVm {
                 let (info, var, mut args) = ctx.resolve_var_ref(&self.dic, func_name, &var_ref)?;
                 match var {
                     UniformVariable::Character(c) => {
+                        let c_len = c.len();
                         let no = if args.len() < info.arg_len() {
                             target as usize
                         } else {
                             args.next().unwrap()
                         };
 
-                        c[no].set(args, value)?;
+                        if no >= c_len {
+                            bail!("Index out of range {no} over {}", c_len);
+                        } else {
+                            c[no].set(args, value)?
+                        }
                     }
                     UniformVariable::Normal(v) => {
                         v.set(args, value)?;
