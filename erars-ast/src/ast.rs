@@ -48,8 +48,6 @@ pub enum Stmt {
     Continue,
     Break,
     Command(BuiltinCommand, Vec<Expr>),
-    Return(Vec<Expr>),
-    ReturnF(Expr),
     Alignment(Alignment),
 }
 

@@ -30,6 +30,7 @@ pub enum BuiltinCommand {
     WaitAnykey,
 
     Return,
+    ReturnF,
     Restart,
     Quit,
     Throw,

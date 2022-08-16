@@ -340,7 +340,7 @@ pub enum Token<'s> {
     #[token("TONEINPUT", |lex| normal_expr_command(lex, BuiltinCommand::TOneInput))]
     #[token("TONEINPUTS", |lex| normal_expr_command(lex, BuiltinCommand::TOneInputS))]
     #[token("RETURN", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
-    #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
+    #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::ReturnF))]
     #[token("CALLTRAIN", |lex| normal_expr_command(lex, BuiltinCommand::CallTrain))]
     #[token("STRLENS", |lex| normal_expr_command(lex, BuiltinCommand::StrLenS))]
     #[token("STRLENSU", |lex| normal_expr_command(lex, BuiltinCommand::StrLenSU))]

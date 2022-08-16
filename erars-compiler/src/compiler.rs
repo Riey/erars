@@ -447,14 +447,6 @@ impl Compiler {
 
                 self.store_var(var)?;
             }
-            Stmt::Return(exprs) => {
-                self.push_list(exprs)?;
-                self.push(Instruction::Return);
-            }
-            Stmt::ReturnF(expr) => {
-                self.push_expr(expr)?;
-                self.push(Instruction::ReturnF);
-            }
             Stmt::Call {
                 name,
                 args,

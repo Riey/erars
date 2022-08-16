@@ -623,33 +623,6 @@ impl TerminalVm {
 
                 // TODO: PRINTW
             }
-            Instruction::ReturnF => return Ok(Some(Workflow::Return)),
-            Instruction::Return => {
-                let values = ctx.return_func().collect::<ArrayVec<_, 16>>();
-
-                let mut result_idx = 0usize;
-                let mut results_idx = 0usize;
-
-                let ((_, result), (_, results)) =
-                    ctx.var.get_var2("RESULT".into(), "RESULTS".into()).unwrap();
-                let result = result.assume_normal();
-                let results = results.assume_normal();
-
-                for value in values {
-                    match value {
-                        Value::Int(_) => {
-                            result.set(iter::once(result_idx), value)?;
-                            result_idx += 1;
-                        }
-                        Value::String(_) => {
-                            results.set(iter::once(results_idx), value)?;
-                            results_idx += 1;
-                        }
-                    }
-                }
-
-                return Ok(Some(Workflow::Return));
-            }
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
                 let ret: Value;
@@ -767,7 +740,7 @@ impl TerminalVm {
                 chan.send_msg(ConsoleMessage::Alignment(*align));
             }
             Instruction::Command(com, c) => {
-                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 4>>().into_iter();
+                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 16>>().into_iter();
                 macro_rules! pop {
                     () => {
                         match args.next() {
@@ -825,6 +798,58 @@ impl TerminalVm {
                             }
                             _ => unreachable!(),
                         }
+                    }
+                    BuiltinCommand::ReturnF => {
+                        let left_stack = ctx.return_func().collect::<ArrayVec<_, 8>>();
+
+                        if !left_stack.is_empty() {
+                            log::warn!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
+                        }
+
+                        if args.len() > 1 {
+                            log::warn!("RETURNF는 한개의 값만 반환할 수 있습니다.");
+                        }
+
+                        match args.next() {
+                            Some(LocalValue::Value(ret)) => {
+                                ctx.push(ret);
+                            }
+                            Some(LocalValue::VarRef(_)) => bail!("VarRef를 반환할 수 없습니다"),
+                            None => {}
+                        }
+                    }
+                    BuiltinCommand::Return => {
+                        let left_stack = ctx.return_func().collect::<ArrayVec<_, 8>>();
+
+                        if !left_stack.is_empty() {
+                            log::warn!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
+                        }
+
+                        let mut result_idx = 0usize;
+                        let mut results_idx = 0usize;
+
+                        let ((_, result), (_, results)) =
+                            ctx.var.get_var2("RESULT".into(), "RESULTS".into()).unwrap();
+                        let result = result.assume_normal();
+                        let results = results.assume_normal();
+
+                        for value in args {
+                            match value {
+                                LocalValue::Value(value @ Value::Int(_)) => {
+                                    result.set(iter::once(result_idx), value)?;
+                                    result_idx += 1;
+                                }
+                                LocalValue::Value(value @ Value::String(_)) => {
+                                    results.set(iter::once(results_idx), value)?;
+                                    results_idx += 1;
+                                }
+                                LocalValue::VarRef(_) => {
+                                    log::error!("VarRef를 반환할 수 없습니다.");
+                                }
+                            }
+                        }
+
+                        return Ok(Some(Workflow::Return));
                     }
                     BuiltinCommand::StrLenS => {
                         let s = pop!(@String);
