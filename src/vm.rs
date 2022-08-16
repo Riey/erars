@@ -271,6 +271,7 @@ enum Workflow {
     Exit,
 }
 
+#[derive(Debug)]
 struct Callstack {
     func_name: Result<SmolStr, EventType>,
     file_path: SmolStr,
@@ -1095,6 +1096,8 @@ impl TerminalVm {
                                     .assume_normal()
                                     .get_int(iter::once(i as usize))?;
 
+                                #[allow(unreachable_code)]
+                                #[allow(unused_variables)]
                                 if sales != 0 {
                                     let price = todo!("ITEMPRICE");
                                     let money = ctx
