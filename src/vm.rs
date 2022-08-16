@@ -582,6 +582,7 @@ impl TerminalVm {
                     "GAMEBASE_TITLE" => ctx.push("eraTHYMKR"),
                     "GAMEBASE_INFO" => ctx.push(""),
                     "NO" => ctx.push(0),
+                    "CHARANUM" => ctx.push(ctx.var.character_len as i64),
                     _ => {
                         let target = *ctx
                             .var
