@@ -310,6 +310,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f107b87b6afc2a64fd13cac55fe06d6c8859f12d4b14cbcdd2c67d0976781be"
 
 [[package]]
+name = "encoding_rs"
+version = "0.8.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9852635589dc9f9ea1b6fe9f05b50ef208c85c834a562f0c6abb1c475736ec2b"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "enum-map"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -342,6 +351,7 @@ dependencies = [
  "codespan-reporting",
  "criterion",
  "crossbeam-channel",
+ "encoding_rs",
  "enum-map",
  "erars-ast",
  "erars-compiler",
@@ -362,6 +372,7 @@ dependencies = [
  "smartstring",
  "smol_str",
  "strum 0.23.0",
+ "unicode-width",
 ]
 
 [[package]]

@@ -826,6 +826,31 @@ impl TerminalVm {
                             _ => unreachable!(),
                         }
                     }
+                    BuiltinCommand::StrLenS => {
+                        let s = pop!(@String);
+
+                        ctx.var
+                            .get_var("RESULT".into())
+                            .unwrap()
+                            .1
+                            .assume_normal()
+                            .set(
+                                iter::empty(),
+                                Value::Int(
+                                    encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64
+                                ),
+                            )?;
+                    }
+                    BuiltinCommand::StrLenSU => {
+                        let s = pop!(@String);
+
+                        ctx.var
+                            .get_var("RESULT".into())
+                            .unwrap()
+                            .1
+                            .assume_normal()
+                            .set(iter::empty(), Value::Int(s.len() as i64))?;
+                    }
                     BuiltinCommand::DrawLine => {
                         chan.send_msg(ConsoleMessage::DrawLine);
                         chan.request_redraw();
