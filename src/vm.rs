@@ -722,7 +722,21 @@ impl TerminalVm {
                     BinaryOperator::And => Value::Int(i64::from(lhs.as_bool() && rhs.as_bool())),
                     BinaryOperator::Or => Value::Int(i64::from(lhs.as_bool() || rhs.as_bool())),
                     BinaryOperator::Xor => Value::Int(i64::from(lhs.as_bool() ^ rhs.as_bool())),
-                    _ => todo!("Todo {:?}", op),
+                    BinaryOperator::BitAnd => {
+                        Value::Int(i64::from(lhs.try_into_int()? & rhs.try_into_int()?))
+                    }
+                    BinaryOperator::BitOr => {
+                        Value::Int(i64::from(lhs.try_into_int()? | rhs.try_into_int()?))
+                    }
+                    BinaryOperator::BitXor => {
+                        Value::Int(i64::from(lhs.try_into_int()? ^ rhs.try_into_int()?))
+                    }
+                    BinaryOperator::Lhs => {
+                        Value::Int(i64::from(lhs.try_into_int()? << rhs.try_into_int()?))
+                    }
+                    BinaryOperator::Rhs => {
+                        Value::Int(i64::from(lhs.try_into_int()? >> rhs.try_into_int()?))
+                    }
                 };
 
                 ctx.push(ret);
