@@ -1008,35 +1008,32 @@ impl TerminalVm {
         match &stack.func_name {
             Ok(name) => match std::fs::read_to_string(stack.file_path.as_str()) {
                 Ok(s) => {
+                    let source = s[span.clone()].replace("\n", "\\n");
                     report_error!(
                         chan,
-                        "    at function {name}@{:?} `{}` [{}]",
-                        span,
+                        "    at function {name}@{span:?} `{}` [{source}]",
                         stack.file_path,
-                        &s[span.clone()]
                     );
                 }
                 Err(_) => {
                     report_error!(
                         chan,
-                        "    at function {name}@{:?} `{}`",
-                        span,
+                        "    at function {name}@{span:?} `{}`",
                         stack.file_path,
                     );
                 }
             },
             Err(ty) => match std::fs::read_to_string(stack.file_path.as_str()) {
                 Ok(s) => {
+                    let source = s[span.clone()].replace("\n", "\\n");
                     report_error!(
                         chan,
-                        "    at {ty}@{:?} `{}` [{}]",
-                        span,
+                        "    at {ty}@{span:?} `{}` [{source}]",
                         stack.file_path,
-                        &s[span.clone()]
                     );
                 }
                 Err(_) => {
-                    report_error!(chan, "    at {ty}@{:?} `{}`", span, stack.file_path,);
+                    report_error!(chan, "    at {ty}@{span:?} `{}`", stack.file_path,);
                 }
             },
         }
