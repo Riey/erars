@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
+use itertools::Itertools;
 use smol_str::SmolStr;
 use strum::Display;
 
@@ -332,17 +333,6 @@ impl From<VariableRef> for LocalValue {
     }
 }
 
-impl TryFrom<LocalValue> for Value {
-    type Error = anyhow::Error;
-
-    fn try_from(value: LocalValue) -> Result<Self, Self::Error> {
-        match value {
-            LocalValue::Value(v) => Ok(v),
-            _ => bail!("LocalValue type is not Value"),
-        }
-    }
-}
-
 impl TryFrom<LocalValue> for VariableRef {
     type Error = anyhow::Error;
 
@@ -451,11 +441,10 @@ impl VmContext {
         self.call_stack.pop();
     }
 
-    pub fn return_func(&mut self) -> impl Iterator<Item = Value> + '_ {
+    pub fn return_func(&mut self) -> Result<impl Iterator<Item = Value>> {
         let call_stack = self.call_stack.last().unwrap();
-        self.stack
-            .drain(call_stack.stack_base..)
-            .map(|v| v.try_into().unwrap())
+        let count = self.stack.len() - call_stack.stack_base;
+        Ok(self.take_value_list(count as u32)?.into_iter())
     }
 
     fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
@@ -559,7 +548,7 @@ impl TerminalVm {
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        eprintln!("stack: {:?}, inst: {:?}", ctx.stack, inst);
+        // eprintln!("stack: {:?}, inst: {:?}", ctx.stack, inst);
 
         match inst {
             Instruction::ReportSpan(span) => ctx.current_span = span.clone(),
@@ -775,47 +764,48 @@ impl TerminalVm {
                 chan.send_msg(ConsoleMessage::Alignment(*align));
             }
             Instruction::Command(com, c) => {
-                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 16>>().into_iter();
+                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
+
                 macro_rules! pop {
                     () => {
-                        match args.next() {
-                            Some(v) => v,
-                            None => bail!("매개변수가 부족합니다"),
-                        }
+                        pop!(@opt).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
                     };
                     (@opt) => {
                         args.next()
                     };
                     (@var) => {
-                        VariableRef::try_from(pop!())?
+                        match args.next() {
+                            Some(LocalValue::VarRef(r)) => r,
+                            Some(LocalValue::Value(_)) => bail!("매개변수가 VarRef가 아닙니다"),
+                            None => bail!("매개변수가 부족합니다"),
+                        }
                     };
                     (@value) => {
-                        Value::try_from(pop!())?
+                        pop!(@opt @value).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
                     };
                     (@opt @value) => {
-                        match pop!(@opt) {
-                            Some(v) => Some(Value::try_from(v)?),
+                        match args.next() {
+                            Some(LocalValue::VarRef(r)) => Some(ctx.read_var_ref(r)?),
+                            Some(LocalValue::Value(v)) => Some(v),
                             None => None,
                         }
                     };
                     (@$t:ty) => {
-                        <$t>::try_from(Value::try_from(pop!())?)?
+                        pop!(@opt @$t).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
                     };
                     (@opt @$t:ty) => {
-                        match pop!(@opt) {
-                            Some(v) => Some(<$t>::try_from(Value::try_from(v)?)?),
-                            None => None,
-                        }
+                        pop!(@opt @value).and_then(|v| <$t>::try_from(v).ok())
                     };
                 }
 
                 match com {
                     BuiltinCommand::Varset => {
                         let var = pop!(@var);
-                        let (info, var, args) = ctx.resolve_var_ref(&var)?;
                         let value = pop!(@opt @value);
                         let start = pop!(@opt @usize);
                         let end = pop!(@opt @usize);
+
+                        let (info, var, args) = ctx.resolve_var_ref(&var)?;
 
                         match (value, start, end) {
                             (None, None, None) => {
@@ -835,26 +825,24 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::ReturnF => {
-                        let left_stack = ctx.return_func().collect::<ArrayVec<_, 8>>();
+                        let ret = pop!(@value);
+
+                        if args.next().is_some() {
+                            log::warn!("RETURNF는 한개의 값만 반환할 수 있습니다.");
+                        }
+
+                        drop(args);
+
+                        let left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
 
                         if !left_stack.is_empty() {
                             log::warn!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
                         }
 
-                        if args.len() > 1 {
-                            log::warn!("RETURNF는 한개의 값만 반환할 수 있습니다.");
-                        }
-
-                        match args.next() {
-                            Some(LocalValue::Value(ret)) => {
-                                ctx.push(ret);
-                            }
-                            Some(LocalValue::VarRef(_)) => bail!("VarRef를 반환할 수 없습니다"),
-                            None => {}
-                        }
+                        ctx.push(ret);
                     }
                     BuiltinCommand::Return => {
-                        let left_stack = ctx.return_func().collect::<ArrayVec<_, 8>>();
+                        let left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
 
                         if !left_stack.is_empty() {
                             log::warn!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
@@ -863,23 +851,27 @@ impl TerminalVm {
                         let mut result_idx = 0usize;
                         let mut results_idx = 0usize;
 
+                        let args: ArrayVec<_, 8> = args
+                            .map(|v| match v {
+                                LocalValue::Value(v) => Ok(v),
+                                LocalValue::VarRef(v) => ctx.read_var_ref(v),
+                            })
+                            .try_collect()?;
+
                         let ((_, result), (_, results)) =
                             ctx.var.get_var2("RESULT".into(), "RESULTS".into()).unwrap();
                         let result = result.assume_normal();
                         let results = results.assume_normal();
 
-                        for value in args {
-                            match value {
-                                LocalValue::Value(value @ Value::Int(_)) => {
+                        for arg in args {
+                            match arg {
+                                value @ Value::Int(_) => {
                                     result.set(iter::once(result_idx), value)?;
                                     result_idx += 1;
                                 }
-                                LocalValue::Value(value @ Value::String(_)) => {
+                                value @ Value::String(_) => {
                                     results.set(iter::once(results_idx), value)?;
                                     results_idx += 1;
-                                }
-                                LocalValue::VarRef(_) => {
-                                    log::error!("VarRef를 반환할 수 없습니다.");
                                 }
                             }
                         }
@@ -993,7 +985,7 @@ impl TerminalVm {
                         log::warn!("TODO: Save/Load");
                     }
                     _ => {
-                        bail!("TODO: {}({:?})", com, args)
+                        bail!("TODO: {}({:?})", com, args.collect_vec());
                     }
                 }
             }
