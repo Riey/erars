@@ -1,6 +1,5 @@
-use std::ops::Range;
 use std::sync::Arc;
-use std::{io, iter};
+use std::{io, iter, fmt};
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -305,11 +304,35 @@ struct Callstack {
     stack_base: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct VariableRef {
     name: String,
     func_name: String,
     idxs: ArrayVec<usize, 4>,
+}
+
+impl fmt::Debug for VariableRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}@{}", self.name, self.func_name)?;
+
+        for idx in self.idxs.iter() {
+            write!(f, ":{}", idx)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl fmt::Display for VariableRef {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)?;
+
+        for idx in self.idxs.iter() {
+            write!(f, ":{}", idx)?;
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug)]
