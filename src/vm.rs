@@ -922,6 +922,9 @@ impl TerminalVm {
                         chan.send_msg(ConsoleMessage::DrawLine);
                         chan.request_redraw();
                     }
+                    BuiltinCommand::FontStyle => {
+                        log::warn!("TODO: fontstyle({})", pop!(@i64));
+                    }
                     BuiltinCommand::SetColor => {
                         let c = pop!(@i64);
 
@@ -946,6 +949,7 @@ impl TerminalVm {
                     }
                     BuiltinCommand::ResetBgColor => {
                         ctx.color = u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]);
+                        log::warn!("TODO: RESETBGCOLOR");
                         // chan.send_msg(ConsoleMessage::SetColor(0xFF, 0xFF, 0xFF));
                     }
                     BuiltinCommand::GetColor => {
