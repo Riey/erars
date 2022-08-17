@@ -374,7 +374,7 @@ impl VmContext {
         &mut self.var
     }
 
-    fn read_var_ref(&mut self, var_ref: VariableRef) -> Result<Value> {
+    fn read_var_ref(&mut self, var_ref: &VariableRef) -> Result<Value> {
         let value = match var_ref.name.as_str() {
             "GAMEBASE_VERSION" => 0.into(),
             "GAMEBASE_AUTHOR" => "Riey".into(),
@@ -384,34 +384,48 @@ impl VmContext {
             "NO" => 0.into(),
             "CHARANUM" => (self.var.character_len as i64).into(),
             _ => {
-                let target = *self
-                    .var
-                    .get_var("TARGET".into())
-                    .unwrap()
-                    .1
-                    .assume_normal()
-                    .get_int(iter::empty())?;
+                let (var, args) = self.resolve_var_ref(&var_ref)?;
 
-                let (info, var, mut args) = self.resolve_var_ref(&var_ref)?;
-                let value = match var {
-                    UniformVariable::Character(c) => {
-                        let no = if args.len() < info.arg_len() {
-                            target as usize
-                        } else {
-                            args.next().unwrap()
-                        };
-                        c[no].get(args)?
-                    }
-                    UniformVariable::Normal(v) => v.get(args)?,
-                };
-
-                value
+                var.get(args)?
             }
         };
         Ok(value)
     }
 
+    fn set_var_ref(&mut self, var_ref: &VariableRef, value: Value) -> Result<()> {
+        let (var, args) = self.resolve_var_ref(var_ref)?;
+        var.set(args, value)?;
+        Ok(())
+    }
+
     fn resolve_var_ref<'c>(
+        &'c mut self,
+        r: &VariableRef,
+    ) -> Result<(&'c mut VmVariable, arrayvec::IntoIter<usize, 4>)> {
+        let target = *self
+            .var
+            .get_var("TARGET".into())
+            .unwrap()
+            .1
+            .assume_normal()
+            .get_int(iter::empty())?;
+
+        let (info, var, mut args) = self.resolve_var_ref_raw(r)?;
+
+        match var {
+            UniformVariable::Character(c) => {
+                let no = if args.len() < info.arg_len() {
+                    target as usize
+                } else {
+                    args.next().unwrap()
+                };
+                Ok((&mut c[no], args))
+            }
+            UniformVariable::Normal(v) => Ok((v, args)),
+        }
+    }
+
+    fn resolve_var_ref_raw<'c>(
         &'c mut self,
         r: &VariableRef,
     ) -> Result<(
@@ -462,7 +476,7 @@ impl VmContext {
             match arg {
                 LocalValue::Value(v) => ret.push(v),
                 LocalValue::VarRef(var) => {
-                    ret.push(self.read_var_ref(var)?);
+                    ret.push(self.read_var_ref(&var)?);
                 }
             }
         }
@@ -507,7 +521,7 @@ impl VmContext {
     fn pop_value(&mut self) -> Result<Value> {
         match self.stack.pop() {
             Some(LocalValue::Value(v)) => Ok(v),
-            Some(LocalValue::VarRef(var_ref)) => self.read_var_ref(var_ref),
+            Some(LocalValue::VarRef(var_ref)) => self.read_var_ref(&var_ref),
             None => bail!("Stack is empty"),
         }
     }
@@ -599,26 +613,7 @@ impl TerminalVm {
                 let var_ref = ctx.pop_var_ref()?;
                 let value = ctx.pop_value()?;
 
-                let (info, var, mut args) = ctx.resolve_var_ref(&var_ref)?;
-                match var {
-                    UniformVariable::Character(c) => {
-                        let c_len = c.len();
-                        let no = if args.len() < info.arg_len() {
-                            target as usize
-                        } else {
-                            args.next().unwrap()
-                        };
-
-                        if no >= c_len {
-                            bail!("Index out of range {no} over {}", c_len);
-                        } else {
-                            c[no].set(args, value)?
-                        }
-                    }
-                    UniformVariable::Normal(v) => {
-                        v.set(args, value)?;
-                    }
-                }
+                ctx.set_var_ref(&var_ref, value)?;
             }
             Instruction::ReuseLastLine => {
                 chan.send_msg(ConsoleMessage::ReuseLastLine(ctx.pop_str()?));
@@ -785,7 +780,7 @@ impl TerminalVm {
                     };
                     (@opt @value) => {
                         match args.next() {
-                            Some(LocalValue::VarRef(r)) => Some(ctx.read_var_ref(r)?),
+                            Some(LocalValue::VarRef(r)) => Some(ctx.read_var_ref(&r)?),
                             Some(LocalValue::Value(v)) => Some(v),
                             None => None,
                         }
@@ -805,7 +800,7 @@ impl TerminalVm {
                         let start = pop!(@opt @usize);
                         let end = pop!(@opt @usize);
 
-                        let (info, var, args) = ctx.resolve_var_ref(&var)?;
+                        let (info, var, args) = ctx.resolve_var_ref_raw(&var)?;
 
                         match (value, start, end) {
                             (None, None, None) => {
@@ -824,14 +819,25 @@ impl TerminalVm {
                             _ => unreachable!(),
                         }
                     }
+                    BuiltinCommand::Split => {
+                        let s = pop!(@String);
+                        let delimiter = pop!(@String);
+                        let mut var = pop!(@var);
+
+                        for (idx, part) in s.split(delimiter.as_str()).enumerate() {
+                            var.idxs.push(idx);
+
+                            ctx.set_var_ref(&var, part.into())?;
+
+                            var.idxs.pop();
+                        }
+                    }
                     BuiltinCommand::ReturnF => {
                         let ret = pop!(@value);
 
                         if args.next().is_some() {
                             log::warn!("RETURNF는 한개의 값만 반환할 수 있습니다.");
                         }
-
-                        drop(args);
 
                         let left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
 
@@ -854,7 +860,7 @@ impl TerminalVm {
                         let args: ArrayVec<_, 8> = args
                             .map(|v| match v {
                                 LocalValue::Value(v) => Ok(v),
-                                LocalValue::VarRef(v) => ctx.read_var_ref(v),
+                                LocalValue::VarRef(v) => ctx.read_var_ref(&v),
                             })
                             .try_collect()?;
 
