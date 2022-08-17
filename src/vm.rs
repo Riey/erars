@@ -1194,7 +1194,14 @@ impl TerminalVm {
             var.1.assume_normal().set(
                 arg_indices.iter().copied(),
                 args.next()
-                    .unwrap_or_else(|| default_value.clone().unwrap()),
+                    .or_else(|| default_value.clone())
+                    .unwrap_or_else(|| {
+                        if var.0.is_str {
+                            Value::String("".into())
+                        } else {
+                            Value::Int(0)
+                        }
+                    }),
             )?;
         }
 
