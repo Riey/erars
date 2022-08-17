@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::{io, iter, fmt};
+use std::{fmt, io, iter};
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;

@@ -39,7 +39,7 @@ fn run_test() {
             dic.insert_compiled_func(ctx.var_mut(), compile(func).unwrap());
         }
 
-        eprintln!("FunctionDic: {dic:?}");
+        eprintln!("FunctionDic: {dic:#?}");
 
         let ret = test_runner(dic, ctx);
         let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();

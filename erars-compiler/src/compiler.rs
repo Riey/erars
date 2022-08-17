@@ -534,7 +534,7 @@ impl Compiler {
         for line in body {
             self.push_stmt_with_pos(line)?;
         }
-        self.insert(begin, Instruction::GotoIfNot(self.current_no()));
+        self.insert(begin, Instruction::GotoIfNot(self.current_no() + 1));
 
         Ok(())
     }
