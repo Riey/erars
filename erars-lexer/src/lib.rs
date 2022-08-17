@@ -326,6 +326,8 @@ pub enum Token<'s> {
     StrLenFormU(&'s str),
     #[token("TIMES", lex_line_left)]
     Times(&'s str),
+    #[token("THROW", lex_line_left)]
+    Throw(&'s str),
 
     #[token("VARSET", |lex| normal_expr_command(lex, BuiltinCommand::Varset))]
     #[token("CVARSET", |lex| normal_expr_command(lex, BuiltinCommand::CVarset))]
@@ -363,7 +365,6 @@ pub enum Token<'s> {
     #[token("SUBSTRING", |lex| normal_expr_command(lex, BuiltinCommand::SubString))]
     #[token("SUBSTRINGU", |lex| normal_expr_command(lex, BuiltinCommand::SubStringU))]
     #[token("SPLIT", |lex| normal_expr_command(lex, BuiltinCommand::Split))]
-    #[token("THROW", |lex| normal_expr_command(lex, BuiltinCommand::Throw))]
     #[token("SWAP", |lex| normal_expr_command(lex, BuiltinCommand::Swap))]
     #[token("REDRAW", |lex| normal_expr_command(lex, BuiltinCommand::Redraw))]
     #[token("CHKFONT", |lex| normal_expr_command(lex, BuiltinCommand::ChkFont))]

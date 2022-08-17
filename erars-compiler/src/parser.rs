@@ -216,6 +216,10 @@ impl ParserContext {
                 Stmt::Command(BuiltinCommand::StrLenFormU, vec![form])
             }
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
+            Token::Throw(left) => Stmt::Command(
+                BuiltinCommand::Throw,
+                vec![try_nom!(lex, self::expr::normal_form_str(self)(left)).1],
+            ),
             Token::Print((flags, PrintType::Plain, form)) => Stmt::Print(flags, Expr::str(form)),
             Token::Print((flags, PrintType::Data, form)) => {
                 let form = form.trim();

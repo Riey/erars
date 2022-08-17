@@ -856,6 +856,14 @@ impl TerminalVm {
                 }
 
                 match com {
+                    BuiltinCommand::Throw => {
+                        let msg = pop!(@opt @String);
+
+                        match msg {
+                            Some(msg) => bail!("스크립트에서 예외발생: {msg}"),
+                            None => bail!("스크립트에서 예외발생"),
+                        }
+                    }
                     BuiltinCommand::Varset => {
                         let var = pop!(@var);
                         let value = pop!(@opt @value);
