@@ -170,7 +170,7 @@ fn parse_form_normal_str<'a>(
             }
         };
 
-        if ty != FormStrType::Normal {
+        if matches!(ty, FormStrType::FirstCond | FormStrType::SecondCond) {
             while ret.chars().next_back() == Some(' ') {
                 ret.pop();
             }
@@ -208,7 +208,7 @@ pub fn form_str<'c, 'a>(
                     } else {
                         (i, None)
                     };
-                    let (i, _) = char_sp('%')(i)?;
+                    let (i, _) = char('%')(i)?;
                     ctx.ban_percent.set(ban_percent);
 
                     (i, ex, padding, align)
@@ -221,7 +221,7 @@ pub fn form_str<'c, 'a>(
                     } else {
                         (i, None)
                     };
-                    let (i, _) = char_sp('}')(i)?;
+                    let (i, _) = char('}')(i)?;
 
                     (i, ex, padding, align)
                 }
