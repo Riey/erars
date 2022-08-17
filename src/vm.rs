@@ -585,7 +585,10 @@ impl TerminalVm {
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        // eprintln!("stack: {:?}, inst: {:?}", ctx.stack, inst);
+        log::trace!(
+            "[{func_name}] `{inst:?}`, stack: {stack:?}",
+            stack = ctx.stack
+        );
 
         match inst {
             Instruction::ReportPosition(pos) => ctx.current_pos = pos.clone(),
@@ -626,13 +629,6 @@ impl TerminalVm {
                 ctx.push_var_ref(name, func_name.to_string(), args);
             }
             Instruction::StoreVar => {
-                let target = *ctx
-                    .var
-                    .get_var("TARGET".into())
-                    .unwrap()
-                    .1
-                    .assume_normal()
-                    .get_int(iter::empty())?;
                 let var_ref = ctx.pop_var_ref()?;
                 let value = ctx.pop_value()?;
 
@@ -1049,7 +1045,6 @@ impl TerminalVm {
         let insts = body.body();
 
         while let Some(inst) = insts.get(cursor) {
-            log::trace!("[{func_name}] run instruction {inst:?}");
             cursor += 1;
             match self.run_instruction(func_name, goto_labels, inst, &mut cursor, chan, ctx) {
                 Ok(None) => {}
