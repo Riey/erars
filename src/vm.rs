@@ -630,45 +630,44 @@ impl TerminalVm {
             }
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
-                let ret: Value;
+                match func.as_str() {
+                    "TOSTR" => {
+                        let ret;
 
-                {
-                    let mut args = ctx.take_value_list(*c)?.into_iter();
-                    match func.as_str() {
-                        "TOSTR" => {
-                            let value = args.next().unwrap().try_into_int()?;
-                            let format = args.next();
-
-                            ret = if let Some(_format) = format {
-                                format!("{00}", value)
-                            } else {
-                                value.to_string()
+                        match *c {
+                            1 => {
+                                let value = ctx.pop_int()?;
+                                ret = value.to_string();
                             }
-                            .into();
-                        }
-                        "MAX" => {
-                            let mut max = args.next().unwrap().try_into_int()?;
-
-                            for arg in args {
-                                max = max.max(arg.try_into_int()?);
+                            2 => {
+                                let _format = ctx.pop_str()?;
+                                let value = ctx.pop_int()?;
+                                ret = format!("{00}", value);
                             }
-
-                            ret = max.into();
+                            _ => bail!("TOSTR의 매개변수는 1개 또는 2개여야 합니다."),
                         }
-                        "MIN" => {
-                            let mut max = args.next().unwrap().try_into_int()?;
 
-                            for arg in args {
-                                max = max.min(arg.try_into_int()?);
-                            }
+                        ctx.push(ret);
+                    }
+                    "MAX" => {
+                        let args = ctx.take_value_list(*c)?.into_iter();
 
-                            ret = max.into();
+                        ctx.push(args.max().unwrap_or(Value::Int(0)));
+                    }
+                    "MIN" => {
+                        let args = ctx.take_value_list(*c)?.into_iter();
+
+                        ctx.push(args.min().unwrap_or(Value::Int(0)));
+                    }
+                    label => {
+                        let args = ctx.take_value_list(*c)?;
+
+                        match self.call(label, args.as_slice(), chan, ctx)? {
+                            Workflow::Exit => return Ok(Some(Workflow::Exit)),
+                            Workflow::Return => {}
                         }
-                        other => bail!("TODO: CallMethod {}", other),
                     }
                 }
-
-                ctx.push(ret);
             }
             Instruction::Call(c) => {
                 let func = ctx.pop_str()?;

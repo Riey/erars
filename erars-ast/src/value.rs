@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 //     VarRef(SmolStr, ArrayVec<usize, 4>),
 // }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Value {
     Int(i64),
     String(String),

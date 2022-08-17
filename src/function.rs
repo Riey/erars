@@ -209,9 +209,12 @@ impl FunctionDic {
         &self.event[ty]
     }
 
+    pub fn get_func_opt(&self, name: &str) -> Option<&FunctionBody> {
+        self.normal.get(name)
+    }
+
     pub fn get_func(&self, name: &str) -> Result<&FunctionBody> {
-        self.normal
-            .get(name)
+        self.get_func_opt(name)
             .ok_or_else(|| anyhow!("Function {} is not exists", name))
     }
 }
