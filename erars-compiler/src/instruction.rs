@@ -1,7 +1,6 @@
-use std::ops::Range;
-
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, NotNan, PrintFlags, UnaryOperator,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, NotNan, PrintFlags, ScriptPosition,
+    UnaryOperator,
 };
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +9,7 @@ pub enum Instruction {
     Nop,
     Pop,
     /// For debugging purpose
-    ReportSpan(Range<usize>),
+    ReportPosition(ScriptPosition),
     /// Duplicate first value in stack
     Duplicate,
     /// Duplicate second value in stack

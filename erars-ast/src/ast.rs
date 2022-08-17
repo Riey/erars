@@ -1,4 +1,4 @@
-use std::{fmt, ops::Range};
+use std::fmt;
 
 use bitflags::bitflags;
 use ordered_float::NotNan;
@@ -52,7 +52,19 @@ pub enum Stmt {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct StmtWithPos(pub Stmt, pub Range<usize>);
+pub struct StmtWithPos(pub Stmt, pub ScriptPosition);
+
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScriptPosition {
+    /// 0 based line index
+    pub line: u32,
+}
+
+impl fmt::Display for ScriptPosition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "@{}", self.line + 1)
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {

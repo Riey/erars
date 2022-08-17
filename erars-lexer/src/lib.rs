@@ -92,7 +92,7 @@ fn lex_line_left_erh<'s>(lex: &mut Lexer<'s, ErhToken<'s>>) -> &'s str {
     let args = lex.remainder();
     let s = match args.split_once('\n') {
         Some((args, _)) => {
-            lex.bump_unchecked(args.len() + 1);
+            lex.bump_unchecked(args.len());
             args
         }
         None => {
@@ -108,7 +108,7 @@ fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
     let args = lex.remainder();
     let s = match args.split_once('\n') {
         Some((args, _)) => {
-            lex.bump_unchecked(args.len() + 1);
+            lex.bump_unchecked(args.len());
             args
         }
         None => {
@@ -430,10 +430,13 @@ pub enum Token<'s> {
     #[regex(r"\[[^\]]+\]")]
     Preprocess(&'s str),
 
+    #[token("\n")]
+    Newline,
+
     #[error]
     // BOM
     #[token("\u{FEFF}", logos::skip)]
-    #[regex(r"[ \t\r\n　]+", logos::skip)]
+    #[regex(r"[ \t\r　]+", logos::skip)]
     #[regex(r";[^\n]*", logos::skip)]
     Error,
 }

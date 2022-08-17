@@ -16,19 +16,25 @@ mod body {
         Alignment(
             Left,
         ),
-        0..14,
+        ScriptPosition {
+            line: 0,
+        },
     ),
     StmtWithPos(
         Alignment(
             Center,
         ),
-        15..31,
+        ScriptPosition {
+            line: 1,
+        },
     ),
     StmtWithPos(
         Alignment(
             Right,
         ),
-        32..47,
+        ScriptPosition {
+            line: 2,
+        },
     ),
     StmtWithPos(
         Print(
@@ -37,7 +43,9 @@ mod body {
                 {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
             ),
         ),
-        49..80,
+        ScriptPosition {
+            line: 4,
+        },
     ),
     StmtWithPos(
         Print(
@@ -46,7 +54,9 @@ mod body {
                 {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
             ),
         ),
-        81..104,
+        ScriptPosition {
+            line: 5,
+        },
     ),
 ]
 "#
@@ -90,7 +100,9 @@ mod body {
                 ),
             ),
         ),
-        0..21,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -124,7 +136,9 @@ mod body {
                 2,
             ),
         ),
-        0..12,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -152,7 +166,9 @@ mod body {
                 {Int(123)}456,
             ),
         ),
-        0..17,
+        ScriptPosition {
+            line: 0,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -166,7 +182,9 @@ mod body {
                 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}.{Method("TOSTR", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), String("00")])},
             ),
         ),
-        18..58,
+        ScriptPosition {
+            line: 1,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -180,7 +198,9 @@ mod body {
                 {FormText({BinopExpr(Int(1), Add, Int(1))})},
             ),
         ),
-        59..78,
+        ScriptPosition {
+            line: 2,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -202,7 +222,9 @@ mod body {
                 {CondExpr(Var(Variable { var: "TALENT", func_extern: None, args: [Var(Variable { var: "MASTER", func_extern: None, args: [] }), Int(120)] }), FormText(신사), FormText(숙녀))},
             ),
         ),
-        79..138,
+        ScriptPosition {
+            line: 3,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -216,7 +238,9 @@ mod body {
                 ,
             ),
         ),
-        139..147,
+        ScriptPosition {
+            line: 4,
+        },
     ),
 ]
 "#
@@ -260,7 +284,9 @@ mod body {
             try_body: [],
             catch_body: None,
         },
-        0..28,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -281,7 +307,9 @@ mod body {
             CustomDrawLine,
             [],
         ),
-        0..17,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "
@@ -327,11 +355,15 @@ mod body {
                             ),
                         ],
                     ),
-                    21..34,
+                    ScriptPosition {
+                        line: 1,
+                    },
                 ),
             ],
         ),
-        0..39,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -354,7 +386,9 @@ mod body {
                 "Hello, world!",
             ),
         ),
-        0..20,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -395,7 +429,9 @@ mod body {
                                     "A > 1",
                                 ),
                             ),
-                            13..24,
+                            ScriptPosition {
+                                line: 1,
+                            },
                         ),
                     ],
                 ),
@@ -421,7 +457,9 @@ mod body {
                                     "A == 1",
                                 ),
                             ),
-                            43..55,
+                            ScriptPosition {
+                                line: 3,
+                            },
                         ),
                     ],
                 ),
@@ -434,11 +472,15 @@ mod body {
                             "A < 1",
                         ),
                     ),
-                    65..76,
+                    ScriptPosition {
+                        line: 5,
+                    },
                 ),
             ],
         ),
-        0..82,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -466,7 +508,9 @@ mod body {
                 1,
             ),
         ),
-        0..7,
+        ScriptPosition {
+            line: 0,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -480,7 +524,9 @@ mod body {
                 1234,
             ),
         ),
-        8..18,
+        ScriptPosition {
+            line: 1,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -494,7 +540,9 @@ mod body {
                 65535,
             ),
         ),
-        19..31,
+        ScriptPosition {
+            line: 2,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -508,7 +556,9 @@ mod body {
                 0,
             ),
         ),
-        32..41,
+        ScriptPosition {
+            line: 3,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -522,7 +572,9 @@ mod body {
                 3,
             ),
         ),
-        42..51,
+        ScriptPosition {
+            line: 4,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -539,7 +591,9 @@ mod body {
                 Minus,
             ),
         ),
-        52..66,
+        ScriptPosition {
+            line: 5,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -556,7 +610,9 @@ mod body {
                 Minus,
             ),
         ),
-        67..78,
+        ScriptPosition {
+            line: 6,
+        },
     ),
     StmtWithPos(
         Assign(
@@ -573,7 +629,9 @@ mod body {
                 Minus,
             ),
         ),
-        79..90,
+        ScriptPosition {
+            line: 7,
+        },
     ),
 ]
 "#
@@ -614,7 +672,9 @@ mod body {
                 ],
             ],
         ),
-        0..119,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -637,7 +697,9 @@ mod body {
                 1 + 1 = {BinopExpr(Int(1), Add, Int(1))},
             ),
         ),
-        0..26,
+        ScriptPosition {
+            line: 0,
+        },
     ),
     StmtWithPos(
         Print(
@@ -646,7 +708,9 @@ mod body {
                 {Method("조사처리", [Var(Variable { var: "CALLNAME", func_extern: None, args: [Method("GET_CHARA_M", [])] }), String("와")])}같이 온 걸 보니, 단단히 각오하고 온 것 같다,
             ),
         ),
-        27..143,
+        ScriptPosition {
+            line: 1,
+        },
     ),
     StmtWithPos(
         Print(
@@ -655,7 +719,9 @@ mod body {
                 {Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })}의 교습 관찰 결과 완료  결과：임시 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}에 의한 실제 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })}증가⇒{CondExpr(BinopExpr(Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), Equal, Int(1)), FormText(성공), FormText(실패))}({Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(693)] })}％) 작업 내용：{Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(690)] })},
             ),
         ),
-        144..372,
+        ScriptPosition {
+            line: 2,
+        },
     ),
     StmtWithPos(
         Print(
@@ -664,7 +730,9 @@ mod body {
                 보지에서 애액을 흘렸{CondExpr(BinopExpr(Var(Variable { var: "TEQUIP", func_extern: None, args: [Int(42)] }), Equal, Int(0)), FormText(고, 작은 한숨을 토해냈), String(""))}다.,
             ),
         ),
-        373..471,
+        ScriptPosition {
+            line: 3,
+        },
     ),
 ]
 "#
@@ -702,7 +770,9 @@ mod body {
                                     "FOO",
                                 ),
                             ),
-                            32..41,
+                            ScriptPosition {
+                                line: 2,
+                            },
                         ),
                     ],
                 ),
@@ -725,7 +795,9 @@ mod body {
                                     "BAR",
                                 ),
                             ),
-                            66..75,
+                            ScriptPosition {
+                                line: 4,
+                            },
                         ),
                     ],
                 ),
@@ -739,12 +811,16 @@ mod body {
                                 "BAZ",
                             ),
                         ),
-                        97..106,
+                        ScriptPosition {
+                            line: 6,
+                        },
                     ),
                 ],
             ),
         ),
-        0..116,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -772,10 +848,14 @@ mod body {
                         "45",
                     ),
                 ),
-                11..19,
+                ScriptPosition {
+                    line: 1,
+                },
             ),
         ),
-        0..19,
+        ScriptPosition {
+            line: 0,
+        },
     ),
     StmtWithPos(
         Sif(
@@ -799,10 +879,14 @@ mod body {
                         {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
                     ),
                 ),
-                42..61,
+                ScriptPosition {
+                    line: 3,
+                },
             ),
         ),
-        20..61,
+        ScriptPosition {
+            line: 2,
+        },
     ),
     StmtWithPos(
         Print(
@@ -811,7 +895,9 @@ mod body {
                 "32",
             ),
         ),
-        63..71,
+        ScriptPosition {
+            line: 5,
+        },
     ),
 ]
 "#
@@ -838,7 +924,9 @@ mod body {
                 123.33,
             ),
         ),
-        0..20,
+        ScriptPosition {
+            line: 0,
+        },
     ),
 ]
 "#
@@ -1241,7 +1329,9 @@ Function {
                     LABEL,
                 ),
             ),
-            6..20,
+            ScriptPosition {
+                line: 2,
+            },
         ),
         StmtWithPos(
             Goto {
@@ -1250,7 +1340,9 @@ Function {
                 ),
                 catch_body: None,
             },
-            22..33,
+            ScriptPosition {
+                line: 4,
+            },
         ),
         StmtWithPos(
             Goto {
@@ -1259,7 +1351,9 @@ Function {
                 ),
                 catch_body: None,
             },
-            33..51,
+            ScriptPosition {
+                line: 5,
+            },
         ),
         StmtWithPos(
             Goto {
@@ -1270,7 +1364,9 @@ Function {
                     [],
                 ),
             },
-            51..72,
+            ScriptPosition {
+                line: 6,
+            },
         ),
         StmtWithPos(
             Goto {
@@ -1286,12 +1382,16 @@ Function {
                                     "CATCH",
                                 ),
                             ),
-                            100..112,
+                            ScriptPosition {
+                                line: 9,
+                            },
                         ),
                     ],
                 ),
             },
-            72..121,
+            ScriptPosition {
+                line: 7,
+            },
         ),
         StmtWithPos(
             Call {
@@ -1303,7 +1403,9 @@ Function {
                 try_body: [],
                 catch_body: None,
             },
-            123..132,
+            ScriptPosition {
+                line: 12,
+            },
         ),
         StmtWithPos(
             Call {
@@ -1315,7 +1417,9 @@ Function {
                 try_body: [],
                 catch_body: None,
             },
-            132..144,
+            ScriptPosition {
+                line: 13,
+            },
         ),
         StmtWithPos(
             Call {
@@ -1327,7 +1431,9 @@ Function {
                 try_body: [],
                 catch_body: None,
             },
-            144..171,
+            ScriptPosition {
+                line: 14,
+            },
         ),
         StmtWithPos(
             Call {
@@ -1339,7 +1445,9 @@ Function {
                 try_body: [],
                 catch_body: None,
             },
-            172..181,
+            ScriptPosition {
+                line: 17,
+            },
         ),
         StmtWithPos(
             Call {
@@ -1351,7 +1459,9 @@ Function {
                 try_body: [],
                 catch_body: None,
             },
-            181..193,
+            ScriptPosition {
+                line: 18,
+            },
         ),
         StmtWithPos(
             Call {
@@ -1363,13 +1473,17 @@ Function {
                 try_body: [],
                 catch_body: None,
             },
-            193..224,
+            ScriptPosition {
+                line: 19,
+            },
         ),
         StmtWithPos(
             Label(
                 "LABEL",
             ),
-            226..233,
+            ScriptPosition {
+                line: 23,
+            },
         ),
     ],
 }
@@ -1424,7 +1538,9 @@ Function {
                     ),
                 ],
             ),
-            27..37,
+            ScriptPosition {
+                line: 2,
+            },
         ),
     ],
 }
@@ -1459,7 +1575,9 @@ Function {
                     "Hello",
                 ),
             ),
-            10..22,
+            ScriptPosition {
+                line: 2,
+            },
         ),
         StmtWithPos(
             Print(
@@ -1468,7 +1586,9 @@ Function {
                     {Int(123)},
                 ),
             ),
-            23..39,
+            ScriptPosition {
+                line: 3,
+            },
         ),
     ],
 }
@@ -1622,7 +1742,9 @@ Function {
                     ],
                 ),
             ),
-            307..358,
+            ScriptPosition {
+                line: 6,
+            },
         ),
         StmtWithPos(
             Assign(
@@ -1677,7 +1799,9 @@ Function {
                     ),
                 ),
             ),
-            382..416,
+            ScriptPosition {
+                line: 8,
+            },
         ),
         StmtWithPos(
             Assign(
@@ -1691,7 +1815,9 @@ Function {
                     {Var(Variable { var: "PALAMNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [Int(1)] })] })}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [] }), NotEqual, Var(Variable { var: "TARGET", func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {Method("ABS", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })])},
                 ),
             ),
-            556..701,
+            ScriptPosition {
+                line: 12,
+            },
         ),
         StmtWithPos(
             Assign(
@@ -1732,7 +1858,9 @@ Function {
                     },
                 ),
             ),
-            727..753,
+            ScriptPosition {
+                line: 14,
+            },
         ),
         StmtWithPos(
             If(
@@ -1795,7 +1923,9 @@ Function {
                                                             },
                                                         ),
                                                     ),
-                                                    902..916,
+                                                    ScriptPosition {
+                                                        line: 20,
+                                                    },
                                                 ),
                                                 StmtWithPos(
                                                     Command(
@@ -1806,7 +1936,9 @@ Function {
                                                             ),
                                                         ],
                                                     ),
-                                                    929..938,
+                                                    ScriptPosition {
+                                                        line: 21,
+                                                    },
                                                 ),
                                             ],
                                         ),
@@ -1830,7 +1962,9 @@ Function {
                                                             },
                                                         ),
                                                     ),
-                                                    991..1005,
+                                                    ScriptPosition {
+                                                        line: 24,
+                                                    },
                                                 ),
                                                 StmtWithPos(
                                                     Command(
@@ -1841,7 +1975,9 @@ Function {
                                                             ),
                                                         ],
                                                     ),
-                                                    1018..1027,
+                                                    ScriptPosition {
+                                                        line: 25,
+                                                    },
                                                 ),
                                             ],
                                         ),
@@ -1857,19 +1993,25 @@ Function {
                                                         ),
                                                     ],
                                                 ),
-                                                1085..1094,
+                                                ScriptPosition {
+                                                    line: 28,
+                                                },
                                             ),
                                         ],
                                     ),
                                 ),
-                                829..1107,
+                                ScriptPosition {
+                                    line: 17,
+                                },
                             ),
                         ],
                     ),
                 ],
                 [],
             ),
-            805..1113,
+            ScriptPosition {
+                line: 16,
+            },
         ),
     ],
 }
@@ -1912,7 +2054,9 @@ mod program {
                     try_body: [],
                     catch_body: None,
                 },
-                14..38,
+                ScriptPosition {
+                    line: 1,
+                },
             ),
         ],
     },
@@ -1940,7 +2084,9 @@ mod program {
                         FOO_{Var(Variable { var: "ARG", func_extern: None, args: [] })},
                     ),
                 ),
-                53..72,
+                ScriptPosition {
+                    line: 4,
+                },
             ),
         ],
     },
@@ -1979,7 +2125,9 @@ mod program {
                         [],
                     ),
                 ),
-                5..14,
+                ScriptPosition {
+                    line: 1,
+                },
             ),
         ],
     },
@@ -2002,7 +2150,9 @@ mod program {
                         ),
                     ],
                 ),
-                31..43,
+                ScriptPosition {
+                    line: 5,
+                },
             ),
         ],
     },
@@ -2035,7 +2185,9 @@ mod program {
                         "foo",
                     ),
                 ),
-                5..14,
+                ScriptPosition {
+                    line: 1,
+                },
             ),
         ],
     },
@@ -2054,7 +2206,9 @@ mod program {
                         "foo",
                     ),
                 ),
-                21..30,
+                ScriptPosition {
+                    line: 4,
+                },
             ),
         ],
     },
@@ -2073,7 +2227,9 @@ mod program {
                         "bar",
                     ),
                 ),
-                37..46,
+                ScriptPosition {
+                    line: 7,
+                },
             ),
         ],
     },

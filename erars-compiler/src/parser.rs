@@ -2,7 +2,7 @@ mod expr;
 
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, Expr, Function, FunctionInfo,
-    Stmt, StmtWithPos, Variable, VariableInfo,
+    ScriptPosition, Stmt, StmtWithPos, Variable, VariableInfo,
 };
 use erars_lexer::{ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -119,6 +119,7 @@ pub struct ParserContext {
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
     pub file_path: SmolStr,
+    pub line: Cell<u32>,
 }
 
 impl Default for ParserContext {
@@ -135,6 +136,13 @@ impl ParserContext {
             local_strs: RefCell::default(),
             is_arg: Cell::new(false),
             ban_percent: Cell::new(false),
+            line: Cell::new(0),
+        }
+    }
+
+    fn current_pos(&self) -> ScriptPosition {
+        ScriptPosition {
+            line: self.line.get(),
         }
     }
 
@@ -144,11 +152,17 @@ impl ParserContext {
                 Some(Token::Preprocess("[SKIPSTART]")) => loop {
                     match lex.next() {
                         Some(Token::Preprocess("[SKIPEND]")) => break,
+                        Some(Token::Newline) => {
+                            self.line.set(self.line.get() + 1);
+                        }
                         None => error!(lex, "[SKIPSTART]가 [SKIPEND]없이 끝났습니다."),
                         _ => {}
                     }
                 },
                 Some(Token::Preprocess(_)) => {}
+                Some(Token::Newline) => {
+                    self.line.set(self.line.get() + 1);
+                }
                 Some(tok) => break Ok(Some(tok)),
                 None => break Ok(None),
             }
@@ -182,7 +196,8 @@ impl ParserContext {
         first: Token<'s>,
         lex: &mut Lexer<'s, Token<'s>>,
     ) -> ParserResult<StmtWithPos> {
-        let first_pos = lex.span().start;
+        let first_pos = self.current_pos();
+
         let stmt = match first {
             Token::DirectStmt(stmt) => stmt,
             Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
@@ -484,7 +499,7 @@ impl ParserContext {
             other => error!(lex, format!("[Stmt] Invalid token: {:?}", other)),
         };
 
-        Ok(StmtWithPos(stmt, first_pos..lex.span().end))
+        Ok(StmtWithPos(stmt, first_pos))
     }
 
     pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Vec<Function>> {
@@ -605,7 +620,7 @@ impl ParserContext {
 
     pub fn parse_stmt_str<'s>(&self, s: &'s str) -> ParserResult<StmtWithPos> {
         let mut lex = Lexer::new(s);
-        let first = lex.next().unwrap();
+        let first = self.next_token(&mut lex)?.unwrap();
         self.parse_stmt(first, &mut lex)
     }
 }

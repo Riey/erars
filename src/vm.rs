@@ -1,6 +1,6 @@
-use std::iter;
 use std::ops::Range;
 use std::sync::Arc;
+use std::{io, iter};
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -11,8 +11,8 @@ use strum::Display;
 use hashbrown::HashMap;
 
 use erars_ast::{
-    BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, UnaryOperator, Value,
-    VariableInfo,
+    BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, ScriptPosition,
+    UnaryOperator, Value, VariableInfo,
 };
 use erars_compiler::{HeaderInfo, Instruction, ParserContext};
 
@@ -301,7 +301,7 @@ enum Workflow {
 struct Callstack {
     func_name: Result<SmolStr, EventType>,
     file_path: SmolStr,
-    span: Range<usize>,
+    script_position: ScriptPosition,
     stack_base: usize,
 }
 
@@ -350,7 +350,7 @@ pub struct VmContext {
     begin: Option<BeginType>,
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
-    current_span: Range<usize>,
+    current_pos: ScriptPosition,
     color: u32,
     hl_color: u32,
     bg_color: u32,
@@ -366,7 +366,7 @@ impl VmContext {
             color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
             hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
             bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
-            current_span: 0..0,
+            current_pos: ScriptPosition::default(),
         }
     }
 
@@ -426,13 +426,13 @@ impl VmContext {
 
     pub fn new_func(&mut self, func_name: Result<SmolStr, EventType>, file_path: SmolStr) {
         if let Some(last) = self.call_stack.last_mut() {
-            last.span = std::mem::replace(&mut self.current_span, 0..0);
+            last.script_position = std::mem::take(&mut self.current_pos);
         }
 
         self.call_stack.push(Callstack {
             func_name,
             file_path,
-            span: 0..0,
+            script_position: ScriptPosition::default(),
             stack_base: self.stack.len(),
         });
     }
@@ -551,7 +551,7 @@ impl TerminalVm {
         // eprintln!("stack: {:?}, inst: {:?}", ctx.stack, inst);
 
         match inst {
-            Instruction::ReportSpan(span) => ctx.current_span = span.clone(),
+            Instruction::ReportPosition(pos) => ctx.current_pos = pos.clone(),
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s.to_string()),
             Instruction::Nop => {}
@@ -1137,38 +1137,46 @@ impl TerminalVm {
         }
     }
 
-    fn report_stack(stack: &Callstack, chan: &ConsoleChannel, span: Option<Range<usize>>) {
-        let span = span.unwrap_or(stack.span.clone());
+    fn report_stack(stack: &Callstack, chan: &ConsoleChannel, position: Option<ScriptPosition>) {
+        fn read_source(path: &str, pos: &ScriptPosition) -> io::Result<Option<String>> {
+            use io::{BufRead, BufReader};
+            BufReader::new(std::fs::File::open(path)?)
+                .lines()
+                .nth(pos.line as usize)
+                .transpose()
+        }
+
+        let position = position.unwrap_or(stack.script_position.clone());
 
         match &stack.func_name {
-            Ok(name) => match std::fs::read_to_string(stack.file_path.as_str()) {
-                Ok(s) => {
-                    let source = s[span.clone()].replace("\n", "\\n");
+            Ok(name) => match read_source(stack.file_path.as_str(), &position) {
+                Ok(Some(s)) => {
+                    let source = s.replace("\n", "\\n");
                     report_error!(
                         chan,
-                        "    at function {name}@{span:?} `{}` [{source}]",
+                        "    at function {name}{position} `{}` [{source}]",
                         stack.file_path,
                     );
                 }
-                Err(_) => {
+                _ => {
                     report_error!(
                         chan,
-                        "    at function {name}@{span:?} `{}`",
+                        "    at function {name}@{position} `{}`",
                         stack.file_path,
                     );
                 }
             },
-            Err(ty) => match std::fs::read_to_string(stack.file_path.as_str()) {
-                Ok(s) => {
-                    let source = s[span.clone()].replace("\n", "\\n");
+            Err(ty) => match read_source(stack.file_path.as_str(), &position) {
+                Ok(Some(s)) => {
+                    let source = s.replace("\n", "\\n");
                     report_error!(
                         chan,
-                        "    at {ty}@{span:?} `{}` [{source}]",
+                        "    at {ty}{position} `{}` [{source}]",
                         stack.file_path,
                     );
                 }
-                Err(_) => {
-                    report_error!(chan, "    at {ty}@{span:?} `{}`", stack.file_path,);
+                _ => {
+                    report_error!(chan, "    at {ty}@{position} `{}`", stack.file_path,);
                 }
             },
         }
@@ -1181,14 +1189,14 @@ impl TerminalVm {
                 Err(err) => {
                     report_error!(chan, "VM failed with: {err}");
 
-                    let mut call_stack = ctx.call_stack.iter();
+                    let mut call_stack = ctx.call_stack.iter().rev();
 
                     if let Some(first) = call_stack.next() {
-                        for stack in call_stack.rev() {
+                        for stack in call_stack {
                             Self::report_stack(stack, chan, None);
                         }
 
-                        Self::report_stack(first, chan, Some(ctx.current_span.clone()));
+                        Self::report_stack(first, chan, Some(ctx.current_pos.clone()));
                     }
 
                     return Err(err);

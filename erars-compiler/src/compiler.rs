@@ -241,7 +241,7 @@ impl Compiler {
 
     #[inline]
     pub fn push_stmt_with_pos(&mut self, stmt: StmtWithPos) -> CompileResult<()> {
-        self.push(Instruction::ReportSpan(stmt.1));
+        self.push(Instruction::ReportPosition(stmt.1));
         self.push_stmt(stmt.0)
     }
 
