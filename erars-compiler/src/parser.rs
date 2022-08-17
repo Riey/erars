@@ -68,6 +68,7 @@ macro_rules! try_nom {
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
     pub var_names: HashMap<(SmolStr, SmolStr), u32>,
+    pub var_name_var: HashMap<SmolStr, HashMap<u32, SmolStr>>,
     pub global_variables: HashMap<SmolStr, VariableInfo>,
 }
 
@@ -78,7 +79,11 @@ impl HeaderInfo {
         let ret = self::expr::name_csv(s).unwrap().1;
 
         for (n, s) in ret {
-            self.var_names.insert((var.clone(), s), n);
+            self.var_names.insert((var.clone(), s.clone()), n);
+            self.var_name_var
+                .entry(var.clone())
+                .or_default()
+                .insert(n, s);
         }
 
         Ok(())

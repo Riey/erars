@@ -370,6 +370,7 @@ impl TryFrom<LocalValue> for VariableRef {
 #[derive(Clone)]
 pub struct VmContext {
     var: VariableStorage,
+    header_info: Arc<HeaderInfo>,
     begin: Option<BeginType>,
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
@@ -380,9 +381,10 @@ pub struct VmContext {
 }
 
 impl VmContext {
-    pub fn new(infos: &HashMap<SmolStr, VariableInfo>) -> Self {
+    pub fn new(header_info: Arc<HeaderInfo>) -> Self {
         Self {
-            var: VariableStorage::new(infos),
+            var: VariableStorage::new(&header_info.global_variables),
+            header_info,
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
@@ -406,6 +408,10 @@ impl VmContext {
             "GAMEBASE_INFO" => "".into(),
             "NO" => 0.into(),
             "CHARANUM" => (self.var.character_len as i64).into(),
+            "ITEMNAME" => {
+                let arg = var_ref.idxs[0] as u32;
+                self.header_info.var_name_var["ITEM"][&arg].as_str().into()
+            }
             _ => {
                 let (var, args) = self.resolve_var_ref(&var_ref)?;
 
@@ -571,15 +577,11 @@ impl VmContext {
 
 pub struct TerminalVm {
     dic: FunctionDic,
-    header_info: Arc<HeaderInfo>,
 }
 
 impl TerminalVm {
-    pub fn new(function_dic: FunctionDic, header_info: Arc<HeaderInfo>) -> Self {
-        Self {
-            dic: function_dic,
-            header_info,
-        }
+    pub fn new(function_dic: FunctionDic) -> Self {
+        Self { dic: function_dic }
     }
 
     fn run_instruction(
@@ -610,7 +612,7 @@ impl TerminalVm {
             }
             Instruction::EvalFormString => {
                 let form = ctx.pop_str()?;
-                let parser_ctx = ParserContext::new(self.header_info.clone(), "FORMS.ERB".into());
+                let parser_ctx = ParserContext::new(ctx.header_info.clone(), "FORMS.ERB".into());
                 let expr = erars_compiler::normal_form_str(&parser_ctx)(&form)
                     .unwrap()
                     .1;

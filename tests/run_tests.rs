@@ -18,10 +18,10 @@ fn run_test() {
         .unwrap();
     }
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
-    let infos = serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap();
+    let header = test_util::get_ctx("").header;
 
     for erb_file in erb_files {
-        let mut ctx = VmContext::new(&infos);
+        let mut ctx = VmContext::new(header.clone());
         let erb_file = erb_file.unwrap();
         let ron_file = erb_file.parent().unwrap().join(format!(
             "{}.ron",
@@ -49,7 +49,7 @@ fn run_test() {
 }
 
 fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> Vec<ConsoleMessage> {
-    let vm = TerminalVm::new(dic, test_util::get_ctx("").header);
+    let vm = TerminalVm::new(dic);
     let chan = ConsoleChannel::new();
 
     vm.start(&chan, &mut ctx).unwrap();

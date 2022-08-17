@@ -195,7 +195,7 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
                 })
                 .collect::<Vec<CompiledFunction>>();
 
-            ctx = VmContext::new(&header_info.global_variables);
+            ctx = VmContext::new(header_info.clone());
 
             for func in funcs {
                 function_dic.insert_compiled_func(&mut ctx.var_mut(), func);
@@ -215,7 +215,7 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             }
         }
 
-        let vm = TerminalVm::new(function_dic, header_info);
+        let vm = TerminalVm::new(function_dic);
         vm.start(&inner_chan, &mut ctx).unwrap();
 
         inner_chan.exit();
