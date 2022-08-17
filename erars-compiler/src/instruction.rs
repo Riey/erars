@@ -52,4 +52,5 @@ pub enum Instruction {
     TryGotoLabel,
     Goto(u32),
     GotoIfNot(u32),
+    GotoIf(u32),
 }

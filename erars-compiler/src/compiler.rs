@@ -95,9 +95,33 @@ impl Compiler {
             Expr::String(s) => self.push(Instruction::LoadStr(s)),
             Expr::Int(i) => self.push(Instruction::LoadInt(i)),
             Expr::BinopExpr(lhs, op, rhs) => {
-                self.push_expr(*lhs)?;
-                self.push_expr(*rhs)?;
-                self.push(Instruction::BinaryOperator(op));
+                match op {
+                    // short circuit
+                    BinaryOperator::And => {
+                        self.push_expr(*lhs)?;
+                        let lhs_end = self.mark();
+                        self.push_expr(*rhs)?;
+                        let rhs_end = self.mark();
+                        self.insert(lhs_end, Instruction::GotoIfNot(self.current_no()));
+                        self.push(Instruction::LoadInt(0));
+                        self.insert(rhs_end, Instruction::Goto(self.current_no()));
+                    }
+                    // short circuit
+                    BinaryOperator::Or => {
+                        self.push_expr(*lhs)?;
+                        let lhs_end = self.mark();
+                        self.push_expr(*rhs)?;
+                        let rhs_end = self.mark();
+                        self.insert(lhs_end, Instruction::GotoIf(self.current_no()));
+                        self.push(Instruction::LoadInt(1));
+                        self.insert(rhs_end, Instruction::Goto(self.current_no()));
+                    }
+                    _ => {
+                        self.push_expr(*lhs)?;
+                        self.push_expr(*rhs)?;
+                        self.push(Instruction::BinaryOperator(op));
+                    }
+                }
             }
             Expr::UnaryopExpr(expr, op) => {
                 self.push_expr(*expr)?;

@@ -799,6 +799,12 @@ impl TerminalVm {
                     *cursor = *no as usize;
                 }
             }
+            Instruction::GotoIf(no) => {
+                let cond = ctx.pop_value()?.as_bool();
+                if cond {
+                    *cursor = *no as usize;
+                }
+            }
             Instruction::SetAlignment(align) => {
                 chan.send_msg(ConsoleMessage::Alignment(*align));
             }
