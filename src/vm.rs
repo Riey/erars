@@ -678,6 +678,17 @@ impl TerminalVm {
 
                         ctx.push(args.min().unwrap_or(Value::Int(0)));
                     }
+                    "LIMIT" => {
+                        if *c != 3 {
+                            bail!("LIMIT의 매개변수는 3개여야합니다");
+                        } else {
+                            let high = ctx.pop_int()?;
+                            let low = ctx.pop_int()?;
+                            let v = ctx.pop_int()?;
+
+                            ctx.push(v.clamp(low, high));
+                        }
+                    }
                     label => {
                         let args = ctx.take_value_list(*c)?;
 
