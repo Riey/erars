@@ -468,9 +468,9 @@ impl VmContext {
             .collect()
     }
 
-    fn take_value_list(&mut self, count: u32) -> Result<ArrayVec<Value, 8>> {
+    fn take_value_list(&mut self, count: u32) -> Result<ArrayVec<Value, 16>> {
         let mut ret = ArrayVec::new();
-        let list = self.take_list(count).collect::<ArrayVec<LocalValue, 8>>();
+        let list = self.take_list(count).collect::<ArrayVec<LocalValue, 16>>();
 
         for arg in list {
             match arg {
@@ -651,6 +651,15 @@ impl TerminalVm {
 
                             for arg in args {
                                 max = max.max(arg.try_into_int()?);
+                            }
+
+                            ret = max.into();
+                        }
+                        "MIN" => {
+                            let mut max = args.next().unwrap().try_into_int()?;
+
+                            for arg in args {
+                                max = max.min(arg.try_into_int()?);
                             }
 
                             ret = max.into();
