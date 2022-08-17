@@ -411,7 +411,12 @@ impl VmContext {
             "CHARANUM" => (self.var.character_len as i64).into(),
             "ITEMPRICE" => {
                 let arg = var_ref.idxs[0] as u32;
-                self.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
+                self.header_info
+                    .item_price
+                    .get(&arg)
+                    .copied()
+                    .unwrap_or(0)
+                    .into()
             }
             "ITEMNAME" | "FLAGNAME" | "ABLNAME" => {
                 let name = var_ref.name.as_str().strip_suffix("NAME").unwrap();
@@ -669,6 +674,14 @@ impl TerminalVm {
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
                 match func.as_str() {
+                    "STRLENS" => {
+                        let s = ctx.pop_str()?;
+                        ctx.push(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
+                    }
+                    "STRLENSU" => {
+                        let s = ctx.pop_str()?;
+                        ctx.push(s.len() as i64);
+                    }
                     "TOSTR" => {
                         let ret;
 
