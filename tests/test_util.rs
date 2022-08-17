@@ -21,6 +21,11 @@ pub fn get_ctx(file_path: impl Into<SmolStr>) -> ParserContext {
     info.merge_name_csv("FLAG", include_str!("../CSV/FLAG.CSV"))
         .unwrap();
 
+    info.merge_item_csv(include_str!("../CSV/ITEM.CSV"))
+        .unwrap();
+
+    dbg!(&info);
+
     ParserContext::new(Arc::new(info), file_path.into())
 }
 

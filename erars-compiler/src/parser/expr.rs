@@ -59,6 +59,16 @@ fn name_csv_line<'a>(i: &'a str) -> IResult<'a, (u32, SmolStr)> {
     Ok((i, (u, name.into())))
 }
 
+fn item_csv_line<'a>(i: &'a str) -> IResult<'a, (u32, SmolStr, u32)> {
+    let (i, u) = u32(i)?;
+    let (i, _) = char_sp(',')(i)?;
+    let (i, name) = ident(i)?;
+    let (i, _) = char_sp(',')(i)?;
+    let (i, price) = u32(i)?;
+
+    Ok((i, (u, name.into(), price)))
+}
+
 fn comment_line<'a>(i: &'a str) -> IResult<'a, ()> {
     let (i, _) = char(';')(i)?;
     let (i, _) = take_until("\n")(i)?;
@@ -67,6 +77,10 @@ fn comment_line<'a>(i: &'a str) -> IResult<'a, ()> {
 
 pub fn name_csv<'a>(i: &'a str) -> IResult<'a, Vec<(u32, SmolStr)>> {
     many0(preceded(opt(alt((comment_line, sp_nl))), name_csv_line))(i)
+}
+
+pub fn item_csv<'a>(i: &'a str) -> IResult<'a, Vec<(u32, SmolStr, u32)>> {
+    many0(preceded(opt(alt((comment_line, sp_nl))), item_csv_line))(i)
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {

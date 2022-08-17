@@ -27,7 +27,9 @@ fn try_load_csv(info: &mut HeaderInfo, csv_dic: &HashMap<String, String>, var: &
             log::debug!("Merge {var}.CSV");
             info.merge_name_csv(var, csv).ok();
         }
-        None => {}
+        None => {
+            log::info!("{var}.CSV not exists");
+        }
     }
 }
 
@@ -127,7 +129,6 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             try_load_csv(&mut info, &csv_dic, "CFLAG");
             try_load_csv(&mut info, &csv_dic, "TFLAG");
             try_load_csv(&mut info, &csv_dic, "TALENT");
-            try_load_csv(&mut info, &csv_dic, "ITEM");
             try_load_csv(&mut info, &csv_dic, "STAIN");
 
             try_load_csv(&mut info, &csv_dic, "TSTR");
@@ -138,6 +139,10 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             try_load_csv(&mut info, &csv_dic, "GLOBAL");
             try_load_csv(&mut info, &csv_dic, "GLOBALS");
             // try_load_csv(&mut header_info, &target_path, "CDFLAG");
+
+            if let Some(item) = csv_dic.get("CSV") {
+                info.merge_item_csv(item).unwrap();
+            }
 
             drop(csv_dic);
 

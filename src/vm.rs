@@ -171,6 +171,7 @@ pub struct VariableStorage {
     character_len: usize,
     variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
     local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
+    #[allow(unused)]
     global_variables: HashMap<SmolStr, VmVariable>,
 }
 
@@ -401,16 +402,26 @@ impl VmContext {
 
     fn read_var_ref(&mut self, var_ref: &VariableRef) -> Result<Value> {
         let value = match var_ref.name.as_str() {
-            "GAMEBASE_VERSION" => 0.into(),
+            "GAMEBASE_VERSION" => Value::Int(0),
             "GAMEBASE_AUTHOR" => "Riey".into(),
-            "GAMEBASE_YEAR" => 2022.into(),
+            "GAMEBASE_YEAR" => Value::Int(2022),
             "GAMEBASE_TITLE" => "eraTHYMKR".into(),
             "GAMEBASE_INFO" => "".into(),
-            "NO" => 0.into(),
+            "NO" => Value::Int(0),
             "CHARANUM" => (self.var.character_len as i64).into(),
-            "ITEMNAME" => {
+            "ITEMPRICE" => {
                 let arg = var_ref.idxs[0] as u32;
-                self.header_info.var_name_var["ITEM"][&arg].as_str().into()
+                self.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
+            }
+            "ITEMNAME" | "FLAGNAME" | "ABLNAME" => {
+                let name = var_ref.name.as_str().strip_suffix("NAME").unwrap();
+                let arg = var_ref.idxs[0] as u32;
+                self.header_info
+                    .var_name_var
+                    .get(name)
+                    .and_then(|d| Some(d.get(&arg)?.as_str()))
+                    .unwrap_or("")
+                    .into()
             }
             _ => {
                 let (var, args) = self.resolve_var_ref(&var_ref)?;
