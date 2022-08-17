@@ -1189,14 +1189,10 @@ impl TerminalVm {
                 Err(err) => {
                     report_error!(chan, "VM failed with: {err}");
 
-                    let mut call_stack = ctx.call_stack.iter().rev();
+                    ctx.call_stack.last_mut().unwrap().script_position = ctx.current_pos.clone();
 
-                    if let Some(first) = call_stack.next() {
-                        for stack in call_stack {
-                            Self::report_stack(stack, chan, None);
-                        }
-
-                        Self::report_stack(first, chan, Some(ctx.current_pos.clone()));
+                    for stack in ctx.call_stack.iter().rev() {
+                        Self::report_stack(stack, chan, None);
                     }
 
                     return Err(err);
