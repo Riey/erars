@@ -208,7 +208,7 @@ pub fn form_str<'c, 'a>(
                     } else {
                         (i, None)
                     };
-                    let (i, _) = char('%')(i)?;
+                    let (i, _) = preceded(sp, char('%'))(i)?;
                     ctx.ban_percent.set(ban_percent);
 
                     (i, ex, padding, align)
@@ -221,7 +221,7 @@ pub fn form_str<'c, 'a>(
                     } else {
                         (i, None)
                     };
-                    let (i, _) = char('}')(i)?;
+                    let (i, _) = preceded(sp, char('}'))(i)?;
 
                     (i, ex, padding, align)
                 }
