@@ -870,6 +870,36 @@ impl TerminalVm {
                             var.idxs.pop();
                         }
                     }
+                    BuiltinCommand::Bar => {
+                        let length = pop!(@i64);
+                        let max = pop!(@i64);
+                        let var = pop!(@i64);
+
+                        let mut ret = String::with_capacity(length as usize);
+
+                        ret.push('[');
+
+                        let i = var * length;
+                        let fill = (i.checked_div(max).unwrap_or(length)).clamp(0, length);
+
+                        let blank = length - fill;
+
+                        const FILL_CHAR: char = '*';
+                        const BLANK_CHAR: char = '.';
+
+                        for _ in 0..fill {
+                            ret.push(FILL_CHAR);
+                        }
+
+                        for _ in 0..blank {
+                            ret.push(BLANK_CHAR);
+                        }
+
+                        ret.push(']');
+
+                        chan.send_msg(ConsoleMessage::Print(ret));
+                        chan.send_msg(ConsoleMessage::NewLine);
+                    }
                     BuiltinCommand::ReturnF => {
                         let ret = pop!(@value);
 
