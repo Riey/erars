@@ -862,6 +862,17 @@ impl TerminalVm {
                 }
 
                 match com {
+                    BuiltinCommand::Unicode => {
+                        let code = pop!(@i64).try_into()?;
+
+                        ctx.push(
+                            char::from_u32(code)
+                                .ok_or_else(|| {
+                                    anyhow!("u32 {code} is not valid unicode codepoint")
+                                })?
+                                .to_string(),
+                        );
+                    }
                     BuiltinCommand::Throw => {
                         let msg = pop!(@opt @String);
 
