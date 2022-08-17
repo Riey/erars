@@ -796,6 +796,21 @@ impl TerminalVm {
             Instruction::SetAlignment(align) => {
                 chan.send_msg(ConsoleMessage::Alignment(*align));
             }
+            Instruction::PadStr(align) => {
+                use erars_ast::Alignment;
+                use pad::{Alignment as PadAlign, PadStr};
+
+                let size = ctx.pop_int()?;
+                let text = ctx.pop_str()?;
+
+                let align = match align {
+                    Alignment::Left => PadAlign::Left,
+                    Alignment::Center => PadAlign::Middle,
+                    Alignment::Right => PadAlign::Right,
+                };
+
+                ctx.push(text.pad_to_width_with_alignment(size as usize, align));
+            }
             Instruction::Command(com, c) => {
                 let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
 
