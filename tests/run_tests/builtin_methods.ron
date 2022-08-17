@@ -1,1 +1,5 @@
-[Print("LIMIT 0 35 100"), NewLine]
+[
+    Print("MAX 0 1999"), NewLine,
+    Print("MIN 0 -23423"), NewLine,
+    Print("LIMIT 0 35 100"), NewLine,
+]
