@@ -438,11 +438,17 @@ impl VmContext {
         match var {
             UniformVariable::Character(c) => {
                 let no = if args.len() < info.arg_len() {
-                    target as usize
+                    target.try_into()?
                 } else {
                     args.next().unwrap()
                 };
-                Ok((&mut c[no], args))
+                let c_len = c.len();
+                Ok((
+                    c.get_mut(no).ok_or_else(|| {
+                        anyhow!("캐릭터 번호가 너무 큽니다. {no}, 최대 {}", c_len)
+                    })?,
+                    args,
+                ))
             }
             UniformVariable::Normal(v) => Ok((v, args)),
         }
@@ -801,7 +807,10 @@ impl TerminalVm {
                 use pad::{Alignment as PadAlign, PadStr};
 
                 let size = ctx.pop_int()?;
-                let text = ctx.pop_str()?;
+                let text = match ctx.pop_value()? {
+                    Value::String(s) => s,
+                    Value::Int(i) => i.to_string(),
+                };
 
                 let align = match align {
                     Alignment::Left => PadAlign::Left,

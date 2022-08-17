@@ -17,10 +17,14 @@ pub enum Instruction {
     LoadInt(i64),
     LoadStr(Box<str>),
     EvalFormString,
+    /// Padding first value
+    ///
+    /// Int value will converted into String
     PadStr(Alignment),
     LoadVarRef(u32),
     LoadExternVarRef(u32),
     /// Read VarRef into Value
+    ///
     /// If value is not VarRef, This is noop
     ReadVar,
     StoreVar,
@@ -32,6 +36,7 @@ pub enum Instruction {
     /// if name is not exists, push 1
     TryJump(u32),
     Begin(BeginType),
+    /// Print first value
     Print(PrintFlags),
     ReuseLastLine,
     ConcatString(u32),
