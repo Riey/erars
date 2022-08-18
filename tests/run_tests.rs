@@ -40,7 +40,6 @@ fn run_test() {
         }
 
         eprintln!("FunctionDic: {dic:#?}");
-        eprintln!("Header: {header:#?}");
 
         let ret = test_runner(dic, ctx);
         let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();

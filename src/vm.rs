@@ -926,9 +926,9 @@ impl TerminalVm {
             Instruction::Command(com, c) => {
                 let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
 
-                macro_rules! pop {
+                macro_rules! get_arg {
                     () => {
-                        pop!(@opt).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
+                        get_arg!(@opt).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
                     };
                     (@opt) => {
                         args.next()
@@ -941,7 +941,7 @@ impl TerminalVm {
                         }
                     };
                     (@value) => {
-                        pop!(@opt @value).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
+                        get_arg!(@opt @value).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
                     };
                     (@opt @value) => {
                         match args.next() {
@@ -951,16 +951,16 @@ impl TerminalVm {
                         }
                     };
                     (@$t:ty) => {
-                        pop!(@opt @$t).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
+                        get_arg!(@opt @$t).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
                     };
                     (@opt @$t:ty) => {
-                        pop!(@opt @value).and_then(|v| <$t>::try_from(v).ok())
+                        get_arg!(@opt @value).and_then(|v| <$t>::try_from(v).ok())
                     };
                 }
 
                 match com {
                     BuiltinCommand::Unicode => {
-                        let code = pop!(@i64).try_into()?;
+                        let code = get_arg!(@i64).try_into()?;
 
                         ctx.push(
                             char::from_u32(code)
@@ -971,7 +971,7 @@ impl TerminalVm {
                         );
                     }
                     BuiltinCommand::Throw => {
-                        let msg = pop!(@opt @String);
+                        let msg = get_arg!(@opt @String);
 
                         match msg {
                             Some(msg) => bail!("스크립트에서 예외발생: {msg}"),
@@ -979,10 +979,10 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::Varset => {
-                        let var = pop!(@var);
-                        let value = pop!(@opt @value);
-                        let start = pop!(@opt @usize);
-                        let end = pop!(@opt @usize);
+                        let var = get_arg!(@var);
+                        let value = get_arg!(@opt @value);
+                        let start = get_arg!(@opt @usize);
+                        let end = get_arg!(@opt @usize);
 
                         let (info, var, args) = ctx.resolve_var_ref_raw(&var)?;
 
@@ -1004,9 +1004,9 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::Split => {
-                        let s = pop!(@String);
-                        let delimiter = pop!(@String);
-                        let mut var = pop!(@var);
+                        let s = get_arg!(@String);
+                        let delimiter = get_arg!(@String);
+                        let mut var = get_arg!(@var);
 
                         for (idx, part) in s.split(delimiter.as_str()).enumerate() {
                             var.idxs.push(idx);
@@ -1017,23 +1017,21 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::Bar => {
-                        let length = pop!(@i64);
-                        let max = pop!(@i64);
-                        let var = pop!(@i64);
+                        let var = get_arg!(@i64);
+                        let max = get_arg!(@i64).max(1);
+                        let length = get_arg!(@i64).max(0);
+
+                        let bar_length = ((var as f32 / max as f32).clamp(0.0, 1.0) * length as f32) as usize;
+                        let blank = length as usize - bar_length;
 
                         let mut ret = String::with_capacity(length as usize);
 
                         ret.push('[');
 
-                        let i = var * length;
-                        let fill = (i.checked_div(max).unwrap_or(length)).clamp(0, length);
-
-                        let blank = length - fill;
-
                         const FILL_CHAR: char = '*';
                         const BLANK_CHAR: char = '.';
 
-                        for _ in 0..fill {
+                        for _ in 0..bar_length {
                             ret.push(FILL_CHAR);
                         }
 
@@ -1044,10 +1042,9 @@ impl TerminalVm {
                         ret.push(']');
 
                         chan.send_msg(ConsoleMessage::Print(ret));
-                        chan.send_msg(ConsoleMessage::NewLine);
                     }
                     BuiltinCommand::ReturnF => {
-                        let ret = pop!(@value);
+                        let ret = get_arg!(@value);
 
                         if args.next().is_some() {
                             log::warn!("RETURNF는 한개의 값만 반환할 수 있습니다.");
@@ -1099,7 +1096,7 @@ impl TerminalVm {
                         return Ok(Some(Workflow::Return));
                     }
                     BuiltinCommand::StrLenS => {
-                        let s = pop!(@String);
+                        let s = get_arg!(@String);
 
                         ctx.var
                             .get_var("RESULT".into())
@@ -1114,7 +1111,7 @@ impl TerminalVm {
                             )?;
                     }
                     BuiltinCommand::StrLenSU => {
-                        let s = pop!(@String);
+                        let s = get_arg!(@String);
 
                         ctx.var
                             .get_var("RESULT".into())
@@ -1128,14 +1125,14 @@ impl TerminalVm {
                         chan.request_redraw();
                     }
                     BuiltinCommand::FontStyle => {
-                        log::warn!("TODO: fontstyle({})", pop!(@i64));
+                        log::warn!("TODO: fontstyle({})", get_arg!(@i64));
                     }
                     BuiltinCommand::SetColor => {
-                        let c = pop!(@i64);
+                        let c = get_arg!(@i64);
 
-                        let (r, g, b) = match pop!(@opt @i64) {
+                        let (r, g, b) = match get_arg!(@opt @i64) {
                             Some(g) => {
-                                let b = pop!(@i64);
+                                let b = get_arg!(@i64);
                                 (c as u8, g as u8, b as u8)
                             }
                             None => {
@@ -1197,7 +1194,7 @@ impl TerminalVm {
                         return Ok(Some(Workflow::Exit));
                     }
                     BuiltinCommand::AddChara => {
-                        let no = pop!(@i64).try_into()?;
+                        let no = get_arg!(@i64).try_into()?;
                         let template = ctx
                             .header_info
                             .character_templates

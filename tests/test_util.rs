@@ -29,8 +29,6 @@ pub fn get_ctx(file_path: impl Into<SmolStr>) -> ParserContext {
     info.merge_chara_csv(include_str!("../CSV/CHARA3.CSV"))
         .unwrap();
 
-    dbg!(&info);
-
     ParserContext::new(Arc::new(info), file_path.into())
 }
 
