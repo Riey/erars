@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use super::ParserContext;
+use super::{CharacterTemplate, ParserContext};
 use erars_ast::{
     Alignment, BinaryOperator, Expr, FormText, LocalVariable, NotNan, SelectCaseCond, Stmt,
     UnaryOperator, Value, Variable, VariableInfo,
@@ -27,9 +27,9 @@ fn sp<'a>(i: &'a str) -> IResult<'a, ()> {
     map(take_while(move |c| " \t\r".contains(c)), |_| ())(i)
 }
 
-fn sp_nl<'a>(i: &'a str) -> IResult<'a, ()> {
-    map(take_while(move |c| " \t\r\n".contains(c)), |_| ())(i)
-}
+// fn sp_nl<'a>(i: &'a str) -> IResult<'a, ()> {
+//     map(take_while(move |c| " \t\r\n".contains(c)), |_| ())(i)
+// }
 
 fn char_sp<'a>(ch: char) -> impl FnMut(&'a str) -> IResult<'a, char> {
     delimited(sp, char(ch), sp)
@@ -49,38 +49,6 @@ fn de_sp<'a, T>(p: impl Parser<&'a str, T, Error<'a>>) -> impl FnMut(&'a str) ->
 
 fn is_ident(i: &str) -> bool {
     i.chars().all(|c| c.is_xid_continue() || c == '_')
-}
-
-fn name_csv_line<'a>(i: &'a str) -> IResult<'a, (u32, SmolStr)> {
-    let (i, u) = u32(i)?;
-    let (i, _) = char_sp(',')(i)?;
-    let (i, name) = ident(i)?;
-
-    Ok((i, (u, name.into())))
-}
-
-fn item_csv_line<'a>(i: &'a str) -> IResult<'a, (u32, SmolStr, u32)> {
-    let (i, u) = u32(i)?;
-    let (i, _) = char_sp(',')(i)?;
-    let (i, name) = ident(i)?;
-    let (i, _) = char_sp(',')(i)?;
-    let (i, price) = u32(i)?;
-
-    Ok((i, (u, name.into(), price)))
-}
-
-fn comment_line<'a>(i: &'a str) -> IResult<'a, ()> {
-    let (i, _) = char(';')(i)?;
-    let (i, _) = take_until("\n")(i)?;
-    Ok((i, ()))
-}
-
-pub fn name_csv<'a>(i: &'a str) -> IResult<'a, Vec<(u32, SmolStr)>> {
-    many0(preceded(opt(alt((comment_line, sp_nl))), name_csv_line))(i)
-}
-
-pub fn item_csv<'a>(i: &'a str) -> IResult<'a, Vec<(u32, SmolStr, u32)>> {
-    many0(preceded(opt(alt((comment_line, sp_nl))), item_csv_line))(i)
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {

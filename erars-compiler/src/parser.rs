@@ -1,3 +1,4 @@
+mod csv;
 mod expr;
 
 use erars_ast::{
@@ -65,8 +66,25 @@ macro_rules! try_nom {
 // }
 
 #[derive(Debug, Default)]
+pub struct CharacterTemplate {
+    pub no: u32,
+    pub name: String,
+    pub call_name: String,
+    pub nick_name: String,
+    pub base: HashMap<u32, u32>,
+    pub abl: HashMap<u32, u32>,
+    pub cflag: HashMap<u32, u32>,
+    pub cstr: HashMap<u32, String>,
+    pub talent: HashMap<u32, u32>,
+    pub exp: HashMap<u32, u32>,
+    pub ex: HashMap<u32, u32>,
+    pub relation: HashMap<u32, u32>,
+}
+
+#[derive(Debug, Default)]
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
+    pub character_templates: HashMap<u32, CharacterTemplate>,
     pub item_price: HashMap<u32, u32>,
     pub var_names: HashMap<(SmolStr, SmolStr), u32>,
     pub var_name_var: HashMap<SmolStr, HashMap<u32, SmolStr>>,
@@ -74,12 +92,65 @@ pub struct HeaderInfo {
 }
 
 impl HeaderInfo {
+    pub fn merge_chara_csv(&mut self, s: &str) -> ParserResult<()> {
+        let mut lex = Lexer::new(s);
+        let mut template = CharacterTemplate::default();
+
+        macro_rules! insert_template {
+            ($name:expr, $var:ident, $val1:expr, $val2:expr) => {{
+                let idx = match $val1.parse::<u32>() {
+                    Ok(idx) => idx,
+                    Err(_) => {
+                        match self
+                            .var_names
+                            .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
+                            .copied()
+                        {
+                            Some(idx) => idx,
+                            None => error!(lex, "잘못된 숫자입니다."),
+                        }
+                    }
+                };
+
+                template.$var.insert(idx, $val2.parse().unwrap());
+            }};
+            (@str $name:expr, $var:ident, $val1:expr, $val2:expr) => {{
+                let idx = self
+                    .var_names
+                    .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
+                    .copied()
+                    .unwrap_or_else(|| $val1.parse().unwrap());
+                template.$var.insert(idx, $val2.into());
+            }};
+        }
+
+        while let Some((name, val1, val2)) = self::csv::chara_line(&mut lex)? {
+            match name {
+                "番号" => template.no = val1.parse().unwrap(),
+                "名前" => template.name = val1.into(),
+                "呼び名" => template.call_name = val1.into(),
+                "あだ名" => template.nick_name = val1.into(),
+
+                "CSTR" => insert_template!(@str "CSTR", cstr, val1, val2),
+
+                "基礎" => insert_template!("BASE", base, val1, val2),
+                "能力" => insert_template!("ABL", abl, val1, val2),
+                "経験" => insert_template!("EXP", exp, val1, val2),
+                "素質" => insert_template!("TALENT", talent, val1, val2),
+                "相性" => insert_template!("RELATION", relation, val1, val2),
+                "フラグ" => insert_template!("CFLAG", cflag, val1, val2),
+                other => log::warn!("Unknown character template name: {other}"),
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn merge_name_csv(&mut self, var: &str, s: &str) -> ParserResult<()> {
+        let mut lex = Lexer::new(s);
         let var = SmolStr::from(var);
 
-        let ret = self::expr::name_csv(s).unwrap().1;
-
-        for (n, s) in ret {
+        while let Some((n, s)) = self::csv::name_csv_line(&mut lex)? {
             self.var_names.insert((var.clone(), s.clone()), n);
             self.var_name_var
                 .entry(var.clone())
@@ -91,11 +162,10 @@ impl HeaderInfo {
     }
 
     pub fn merge_item_csv(&mut self, s: &str) -> ParserResult<()> {
+        let mut lex = Lexer::new(s);
         let var = SmolStr::new_inline("ITEM");
 
-        let ret = self::expr::item_csv(s).unwrap().1;
-
-        for (n, s, price) in ret {
+        while let Some((n, s, price)) = self::csv::name_item_line(&mut lex)? {
             self.item_price.insert(n, price);
             self.var_names.insert((var.clone(), s.clone()), n);
             self.var_name_var
