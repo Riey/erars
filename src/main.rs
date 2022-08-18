@@ -13,7 +13,7 @@ use codespan_reporting::{
 };
 use erars::{
     function::FunctionDic,
-    ui::{ConsoleChannel, EraApp, ConsoleMessage, StdioBackend},
+    ui::{ConsoleChannel, ConsoleMessage, EraApp, StdioBackend},
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::VariableInfo;
@@ -38,6 +38,7 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
         };
     }
 
+    #[allow(unused_assignments)]
     std::thread::spawn(move || {
         let mut function_dic = FunctionDic::new();
         let header_info;
