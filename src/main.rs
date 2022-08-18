@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::sync::Arc;
+use std::{sync::Arc, time::Instant};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -13,7 +13,7 @@ use codespan_reporting::{
 };
 use erars::{
     function::FunctionDic,
-    ui::{ConsoleChannel, EraApp, StdioBackend},
+    ui::{ConsoleChannel, EraApp, ConsoleMessage, StdioBackend},
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::VariableInfo;
@@ -22,9 +22,21 @@ use hashbrown::HashMap;
 use smol_str::SmolStr;
 
 fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
+    let mut time = Instant::now();
+
     let chan = Arc::new(ConsoleChannel::new());
 
     let inner_chan = chan.clone();
+
+    macro_rules! check_time {
+        ($work:expr) => {
+            let m = time.elapsed().as_millis();
+            time = Instant::now();
+
+            inner_chan.send_msg(ConsoleMessage::Print(format!("[{}]: {}ms", $work, m)));
+            inner_chan.send_msg(ConsoleMessage::NewLine);
+        };
+    }
 
     std::thread::spawn(move || {
         let mut function_dic = FunctionDic::new();
@@ -32,6 +44,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
         let mut ctx: VmContext;
 
         {
+            check_time!("Initialize");
+
             let mut args = std::env::args();
 
             let target_path = if let Some(path) = args.nth(1) {
@@ -73,6 +87,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             )
             .unwrap();
 
+            check_time!("Glob files");
+
             let mut files = Mutex::new(SimpleFiles::new());
             let mut diagnostic = Mutex::new(
                 Diagnostic::error()
@@ -104,6 +120,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
                     Err(_) => None,
                 })
                 .collect::<HashMap<_, _>>();
+
+            check_time!("Load CSV");
 
             for (k, (path, v)) in csv_dic.iter() {
                 match k.as_str() {
@@ -156,6 +174,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
 
             drop(csv_dic);
 
+            check_time!("Merge CSV");
+
             for erh in erhs {
                 let erh = erh.unwrap();
                 let source = std::fs::read_to_string(&erh).unwrap();
@@ -174,6 +194,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
                     }
                 }
             }
+
+            check_time!("Merge ERH");
 
             // log::trace!("Header: {info:#?}");
 
@@ -217,6 +239,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             for func in funcs {
                 function_dic.insert_compiled_func(&mut ctx.var_mut(), func);
             }
+
+            check_time!("Parse/Compile ERB");
 
             let diagnostic = diagnostic.into_inner();
             let files = files.into_inner();

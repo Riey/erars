@@ -1021,7 +1021,8 @@ impl TerminalVm {
                         let max = get_arg!(@i64).max(1);
                         let length = get_arg!(@i64).max(0);
 
-                        let bar_length = ((var as f32 / max as f32).clamp(0.0, 1.0) * length as f32) as usize;
+                        let bar_length =
+                            ((var as f32 / max as f32).clamp(0.0, 1.0) * length as f32) as usize;
                         let blank = length as usize - bar_length;
 
                         let mut ret = String::with_capacity(length as usize);
