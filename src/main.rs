@@ -87,8 +87,6 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
             )
             .unwrap();
 
-            check_time!("Glob files");
-
             let mut files = Mutex::new(SimpleFiles::new());
             let mut diagnostic = Mutex::new(
                 Diagnostic::error()
