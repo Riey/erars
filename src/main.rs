@@ -98,33 +98,55 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
                                 .to_str()
                                 .unwrap()
                                 .to_ascii_uppercase(),
-                            s,
+                            (csv, s),
                         ))
                     }
                     Err(_) => None,
                 })
                 .collect::<HashMap<_, _>>();
 
-            if let Some(item) = csv_dic.get("CSV") {
-                info.merge_item_csv(item).unwrap();
-            }
-
-            for (k, v) in csv_dic.iter() {
+            for (k, (path, v)) in csv_dic.iter() {
                 match k.as_str() {
                     "ABL" | "BASE" | "CFLAG" | "EQUIP" | "TEQUIP" | "PALAM" | "EXP" | "EX"
                     | "FLAG" | "TFLAG" | "TALENT" | "STAIN" | "SOURCE" | "TSTR" | "CSTR"
                     | "STR" | "SAVESTR" | "GLOBAL" | "GLOBALS" => {
                         log::debug!("Merge {k}.CSV");
-                        info.merge_name_csv(k, v).ok();
+                        match info.merge_name_csv(k, v) {
+                            Ok(()) => {}
+                            Err((err, span)) => {
+                                let file_id =
+                                    files.lock().add(path.display().to_string(), v.clone());
+                                diagnostic.lock().labels.push(
+                                    Label::primary(file_id, span).with_message(format!("{}", err)),
+                                );
+                            }
+                        }
                     }
                     "ITEM" => {
                         log::debug!("Merge ITEM.CSV");
-                        info.merge_item_csv(v).ok();
+                        match info.merge_item_csv(v) {
+                            Ok(()) => {}
+                            Err((err, span)) => {
+                                let file_id = files.lock().add(format!("{k}.CSV"), v.clone());
+                                diagnostic.lock().labels.push(
+                                    Label::primary(file_id, span).with_message(format!("{}", err)),
+                                );
+                            }
+                        }
                     }
                     other => {
                         if k.starts_with("CHARA") {
                             log::debug!("Merge {k}.CSV");
-                            info.merge_chara_csv(v).ok();
+                            match info.merge_chara_csv(v) {
+                                Ok(()) => {}
+                                Err((err, span)) => {
+                                    let file_id = files.lock().add(format!("{k}.CSV"), v.clone());
+                                    diagnostic.lock().labels.push(
+                                        Label::primary(file_id, span)
+                                            .with_message(format!("{}", err)),
+                                    );
+                                }
+                            }
                         } else {
                             log::warn!("Unknown csv name {other}");
                         }
@@ -152,6 +174,8 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
                     }
                 }
             }
+
+            // log::trace!("Header: {info:#?}");
 
             header_info = Arc::new(info);
 
