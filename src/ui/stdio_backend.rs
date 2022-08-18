@@ -70,13 +70,15 @@ impl StdioBackend {
     }
 
     fn draw(&mut self, mut out: impl io::Write) -> anyhow::Result<()> {
-        for line in self.lines.iter() {
-            for part in line.iter() {
-                part.draw("LINE", &mut out)?;
+        if self.lines.len() > 1 {
+            for line in self.lines.iter() {
+                for part in line.iter() {
+                    part.draw("LINE", &mut out)?;
+                }
+                writeln!(out)?;
             }
-            writeln!(out)?;
+            self.need_redraw = false;
         }
-        self.need_redraw = false;
 
         Ok(())
     }

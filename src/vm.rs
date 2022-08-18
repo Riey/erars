@@ -349,8 +349,10 @@ impl VariableStorage {
 
         set!(@intarr "ABL", abl);
         set!(@intarr "MAXBASE", base);
+        set!(@intarr "BASE", base);
         set!(@intarr "EXP", exp);
         set!(@intarr "EX", ex);
+        set!(@intarr "MARK", mark);
         set!(@intarr "TALENT", talent);
         set!(@intarr "CFLAG", cflag);
         set!(@intarr "RELATION", relation);
@@ -1208,7 +1210,16 @@ impl TerminalVm {
                         ctx.var.set_character_template(idx, template)?;
                     }
                     BuiltinCommand::AddDefChara => {
+                        let idx = ctx.var.character_len;
+
                         ctx.var.add_chara();
+
+                        match ctx.header_info.character_templates.get(&0) {
+                            Some(template) => {
+                                ctx.var.set_character_template(idx, template)?;
+                            }
+                            None => {}
+                        }
                     }
                     BuiltinCommand::ResetData => {
                         ctx.var.reset_data();

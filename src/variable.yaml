@@ -54,6 +54,11 @@ RELATION:
   is_chara: true
   is_str: false
 
+MARK:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
 BASE:
   size: [1000]
   is_chara: true

@@ -467,12 +467,12 @@ fn csv4<'s>(lex: &mut Lexer<'s, CsvToken<'s>>) -> (&'s str, &'s str, &'s str, &'
 
 #[derive(Logos, Debug)]
 pub enum CsvToken<'s> {
-    #[regex(r"[^,; \u{FEFF}\r\n\t　]+,[^,; \r\n\t　]+,?", csv2)]
+    #[regex(r"[^,;\u{FEFF}\r\n\t　]+,[^,;\r\n\t　]*,?", csv2)]
     Csv2((&'s str, &'s str)),
-    #[regex(r"[^,; \u{FEFF}\r\n\t　]+,[^,; \r\n\t　]+,[^,; \r\n\t　]+,?", csv3)]
+    #[regex(r"[^,;\u{FEFF}\r\n\t　]+,[^,;\r\n\t　]*,[^,;\r\n\t　]+,?", csv3)]
     Csv3((&'s str, &'s str, &'s str)),
     #[regex(
-        r"[^,; \u{FEFF}\r\n\t　]+,[^,; \r\n\t　]+,[^,; \r\n\t　]+,[^,; \r\n\t　]+,?",
+        r"[^,;\u{FEFF}\r\n\t　]+,[^,;\r\n\t　]+,[^,;\r\n\t　]+,[^,;\r\n\t　]+,?",
         csv4
     )]
     Csv4((&'s str, &'s str, &'s str, &'s str)),

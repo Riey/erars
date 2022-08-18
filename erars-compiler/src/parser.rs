@@ -78,6 +78,7 @@ pub struct CharacterTemplate {
     pub talent: HashMap<u32, u32>,
     pub exp: HashMap<u32, u32>,
     pub ex: HashMap<u32, u32>,
+    pub mark: HashMap<u32, u32>,
     pub relation: HashMap<u32, u32>,
 }
 
@@ -119,12 +120,36 @@ impl HeaderInfo {
 
                 template.$var.insert(idx, value);
             }};
+            (@bool $name:expr, $var:ident, $val1:expr, $val2:expr) => {{
+                let idx = match $val1.parse::<u32>() {
+                    Ok(idx) => idx,
+                    Err(_) => {
+                        match self
+                            .var_names
+                            .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
+                            .copied()
+                        {
+                            Some(idx) => idx,
+                            None => error!(lex, "잘못된 숫자입니다."),
+                        }
+                    }
+                };
+                template.$var.insert(idx, 1);
+            }};
             (@str $name:expr, $var:ident, $val1:expr, $val2:expr) => {{
-                let idx = self
-                    .var_names
-                    .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
-                    .copied()
-                    .unwrap_or_else(|| $val1.parse().unwrap());
+                let idx = match $val1.parse::<u32>() {
+                    Ok(idx) => idx,
+                    Err(_) => {
+                        match self
+                            .var_names
+                            .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
+                            .copied()
+                        {
+                            Some(idx) => idx,
+                            None => error!(lex, "잘못된 숫자입니다."),
+                        }
+                    }
+                };
                 template.$var.insert(idx, $val2.into());
             }};
         }
@@ -138,10 +163,12 @@ impl HeaderInfo {
 
                 "CSTR" => insert_template!(@str "CSTR", cstr, val1, val2),
 
+                "素質" => insert_template!(@bool "TALENT", talent, val1, val2),
+
                 "基礎" => insert_template!("BASE", base, val1, val2),
+                "刻印" => insert_template!("MARK", mark, val1, val2),
                 "能力" => insert_template!("ABL", abl, val1, val2),
                 "経験" => insert_template!("EXP", exp, val1, val2),
-                "素質" => insert_template!("TALENT", talent, val1, val2),
                 "相性" => insert_template!("RELATION", relation, val1, val2),
                 "フラグ" => insert_template!("CFLAG", cflag, val1, val2),
                 other => log::warn!("Unknown character template name: {other}"),

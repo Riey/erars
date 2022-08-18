@@ -246,19 +246,11 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
 fn main() {
     {
         use simplelog::*;
-        CombinedLogger::init(vec![
-            // TermLogger::new(
-            //     LevelFilter::Info,
-            //     Config::default(),
-            //     TerminalMode::Mixed,
-            //     ColorChoice::Auto,
-            // ),
-            WriteLogger::new(
-                LevelFilter::Trace,
-                Config::default(),
-                std::fs::File::create("erars.log").unwrap(),
-            ),
-        ])
+        CombinedLogger::init(vec![WriteLogger::new(
+            LevelFilter::Debug,
+            Config::default(),
+            std::fs::File::create("erars.log").unwrap(),
+        )])
         .unwrap();
     }
 
