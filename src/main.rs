@@ -21,18 +21,6 @@ use erars_compiler::{CompiledFunction, HeaderInfo, Lexer, ParserContext};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
-fn try_load_csv(info: &mut HeaderInfo, csv_dic: &HashMap<String, String>, var: &str) {
-    match csv_dic.get(var) {
-        Some(csv) => {
-            log::debug!("Merge {var}.CSV");
-            info.merge_name_csv(var, csv).ok();
-        }
-        None => {
-            log::info!("{var}.CSV not exists");
-        }
-    }
-}
-
 fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
     let chan = Arc::new(ConsoleChannel::new());
 
@@ -117,31 +105,31 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
                 })
                 .collect::<HashMap<_, _>>();
 
-            try_load_csv(&mut info, &csv_dic, "ABL");
-            try_load_csv(&mut info, &csv_dic, "BASE");
-            try_load_csv(&mut info, &csv_dic, "EQUIP");
-            try_load_csv(&mut info, &csv_dic, "TEQUIP");
-            try_load_csv(&mut info, &csv_dic, "PALAM");
-            try_load_csv(&mut info, &csv_dic, "EXP");
-            try_load_csv(&mut info, &csv_dic, "SOURCE");
-            try_load_csv(&mut info, &csv_dic, "EX");
-            try_load_csv(&mut info, &csv_dic, "FLAG");
-            try_load_csv(&mut info, &csv_dic, "CFLAG");
-            try_load_csv(&mut info, &csv_dic, "TFLAG");
-            try_load_csv(&mut info, &csv_dic, "TALENT");
-            try_load_csv(&mut info, &csv_dic, "STAIN");
-
-            try_load_csv(&mut info, &csv_dic, "TSTR");
-            try_load_csv(&mut info, &csv_dic, "CSTR");
-            try_load_csv(&mut info, &csv_dic, "STR");
-
-            try_load_csv(&mut info, &csv_dic, "SAVESTR");
-            try_load_csv(&mut info, &csv_dic, "GLOBAL");
-            try_load_csv(&mut info, &csv_dic, "GLOBALS");
-            // try_load_csv(&mut header_info, &target_path, "CDFLAG");
-
             if let Some(item) = csv_dic.get("CSV") {
                 info.merge_item_csv(item).unwrap();
+            }
+
+            for (k, v) in csv_dic.iter() {
+                match k.as_str() {
+                    "ABL" | "BASE" | "CFLAG" | "EQUIP" | "TEQUIP" | "PALAM" | "EXP" | "EX"
+                    | "FLAG" | "TFLAG" | "TALENT" | "STAIN" | "SOURCE" | "TSTR" | "CSTR"
+                    | "STR" | "SAVESTR" | "GLOBAL" | "GLOBALS" => {
+                        log::debug!("Merge {k}.CSV");
+                        info.merge_name_csv(k, v).ok();
+                    }
+                    "ITEM" => {
+                        log::debug!("Merge ITEM.CSV");
+                        info.merge_item_csv(v).ok();
+                    }
+                    other => {
+                        if k.starts_with("CHARA") {
+                            log::debug!("Merge {k}.CSV");
+                            info.merge_chara_csv(v).ok();
+                        } else {
+                            log::warn!("Unknown csv name {other}");
+                        }
+                    }
+                }
             }
 
             drop(csv_dic);

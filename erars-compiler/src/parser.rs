@@ -112,7 +112,12 @@ impl HeaderInfo {
                     }
                 };
 
-                template.$var.insert(idx, $val2.parse().unwrap());
+                let value = match $val2.parse::<u32>() {
+                    Ok(idx) => idx,
+                    Err(_) => error!(lex, "잘못된 숫자입니다."),
+                };
+
+                template.$var.insert(idx, value);
             }};
             (@str $name:expr, $var:ident, $val1:expr, $val2:expr) => {{
                 let idx = self
