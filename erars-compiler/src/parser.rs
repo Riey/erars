@@ -143,6 +143,8 @@ impl HeaderInfo {
             }
         }
 
+        self.character_templates.insert(template.no, template);
+
         Ok(())
     }
 

@@ -13,7 +13,7 @@ use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, ScriptPosition,
     UnaryOperator, Value, VariableInfo,
 };
-use erars_compiler::{HeaderInfo, Instruction, ParserContext};
+use erars_compiler::{CharacterTemplate, HeaderInfo, Instruction, ParserContext};
 
 use crate::function::{FunctionBody, FunctionDic};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
@@ -158,6 +158,13 @@ impl UniformVariable {
         }
     }
 
+    pub fn assume_chara(&mut self, idx: usize) -> &mut VmVariable {
+        match self {
+            Self::Character(c) => &mut c[idx],
+            _ => panic!("Variable is not character variable"),
+        }
+    }
+
     pub fn add_chara(&mut self, info: &VariableInfo) {
         match self {
             UniformVariable::Character(c) => c.push(VmVariable::new(info)),
@@ -289,6 +296,69 @@ impl VariableStorage {
             var.add_chara(info);
         });
     }
+
+    pub fn set_character_template(
+        &mut self,
+        idx: usize,
+        template: &CharacterTemplate,
+    ) -> Result<()> {
+        macro_rules! set {
+            (@int $name:expr, $field:ident) => {
+                self.get_var($name)?
+                    .1
+                    .assume_chara(idx)
+                    .set(iter::empty(), Value::Int(template.$field as i64))?;
+            };
+            (@str $name:expr, $field:ident) => {
+                self.get_var($name)?
+                    .1
+                    .assume_chara(idx)
+                    .set(iter::empty(), Value::String(template.$field.clone()))?;
+            };
+            (@intarr $name:expr, $field:ident) => {
+                let var = self.get_var($name)?.1.assume_chara(idx);
+
+                match var {
+                    VmVariable::Int1D(arr) => {
+                        for (k, v) in template.$field.iter() {
+                            arr[*k as usize] = *v as i64;
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            };
+            (@strarr $name:expr, $field:ident) => {
+                let var = self.get_var($name)?.1.assume_chara(idx);
+
+                match var {
+                    VmVariable::Str1D(arr) => {
+                        for (k, v) in template.$field.iter() {
+                            arr[*k as usize] = v.clone();
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            };
+        }
+
+        set!(@int "NO", no);
+
+        set!(@str "NAME", name);
+        set!(@str "CALLNAME", call_name);
+        set!(@str "NICKNAME", nick_name);
+
+        set!(@intarr "ABL", abl);
+        set!(@intarr "MAXBASE", base);
+        set!(@intarr "EXP", exp);
+        set!(@intarr "EX", ex);
+        set!(@intarr "TALENT", talent);
+        set!(@intarr "CFLAG", cflag);
+        set!(@intarr "RELATION", relation);
+
+        set!(@strarr "CSTR", cstr);
+
+        Ok(())
+    }
 }
 
 #[derive(Display, Debug, Clone, Copy)]
@@ -407,7 +477,6 @@ impl VmContext {
             "GAMEBASE_YEAR" => Value::Int(2022),
             "GAMEBASE_TITLE" => "eraTHYMKR".into(),
             "GAMEBASE_INFO" => "".into(),
-            "NO" => Value::Int(0),
             "CHARANUM" => (self.var.character_len as i64).into(),
             "ITEMPRICE" => {
                 let arg = var_ref.idxs[0] as u32;
@@ -1124,6 +1193,19 @@ impl TerminalVm {
                         log::info!("Run QUIT");
                         chan.exit();
                         return Ok(Some(Workflow::Exit));
+                    }
+                    BuiltinCommand::AddChara => {
+                        let no = pop!(@i64).try_into()?;
+                        let template = ctx
+                            .header_info
+                            .character_templates
+                            .get(&no)
+                            .ok_or_else(|| anyhow!("존재하지 않는 캐릭터 번호입니다({no})"))?;
+
+                        let idx = ctx.var.character_len;
+
+                        ctx.var.add_chara();
+                        ctx.var.set_character_template(idx, template)?;
                     }
                     BuiltinCommand::AddDefChara => {
                         ctx.var.add_chara();

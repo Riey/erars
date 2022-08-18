@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 
-use super::{CharacterTemplate, ParserContext};
+use super::ParserContext;
 use erars_ast::{
     Alignment, BinaryOperator, Expr, FormText, LocalVariable, NotNan, SelectCaseCond, Stmt,
     UnaryOperator, Value, Variable, VariableInfo,
 };
 use nom::{
     branch::alt,
-    bytes::complete::{escaped, is_not, tag, take_until, take_while},
+    bytes::complete::{escaped, is_not, tag, take_while},
     character::complete::*,
     combinator::{eof, map, opt, success, value, verify},
     error::{context, ErrorKind, VerboseError},
@@ -773,6 +773,15 @@ fn variable_named_arg<'c, 'a>(
     var: &'c str,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
+        // alias
+        let var = match var {
+            "MAXBASE" | "UPBASE" | "DOWNBASE" | "LOSEBASE" => "BASE",
+            "GOTJUEL" | "JUEL" | "UP" | "DOWN" => "PALAM",
+            "ITEMSALES" | "ITEMPRICE" => "ITEM",
+            "NOWEX" => "EX",
+            _ => var,
+        };
+
         let (i, ident) = ident(i)?;
         if let Some(v) = ctx
             .header

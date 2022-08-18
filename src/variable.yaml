@@ -24,12 +24,32 @@ CSTR:
   is_chara: true
   is_str: true
 
+NO:
+  size: []
+  is_chara: true
+  is_str: false
+
 CFLAG:
   size: [10000]
   is_chara: true
   is_str: false
 
 ABL:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
+EX:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
+EXP:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
+RELATION:
   size: [1000]
   is_chara: true
   is_str: false

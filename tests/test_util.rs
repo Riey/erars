@@ -26,7 +26,7 @@ pub fn get_ctx(file_path: impl Into<SmolStr>) -> ParserContext {
     info.merge_item_csv(include_str!("../CSV/ITEM.CSV"))
         .unwrap();
 
-    info.merge_chara_csv(include_str!("../CSV/CHARA0.CSV"))
+    info.merge_chara_csv(include_str!("../CSV/CHARA3.CSV"))
         .unwrap();
 
     dbg!(&info);
