@@ -1,0 +1,9 @@
+REPEAT CHARANUM
+    MARK:COUNT:98 = 0
+    ;주인은 제외
+    SIF COUNT == MASTER
+        CONTINUE
+    ;실종 중이라거나 이 자리에 없으면 제외
+    SIF CFLAG:COUNT:4 == 1
+        CONTINUE
+REND

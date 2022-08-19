@@ -17,7 +17,7 @@ pub struct CompiledFunction {
 struct Compiler {
     out: Vec<Instruction>,
     goto_labels: HashMap<SmolStr, u32>,
-    continue_marks: Vec<u32>,
+    continue_marks: Vec<Vec<u32>>,
     break_marks: Vec<Vec<u32>>,
 }
 
@@ -232,29 +232,33 @@ impl Compiler {
         self.push_expr(end)?;
         self.push(Instruction::ReadVar);
 
-        let loop_mark = self.current_no();
+        self.begin_loop_block();
+
+        let start = self.current_no();
 
         // compare var with end
         self.push_var(var.clone())?;
         self.push(Instruction::DuplicatePrev);
         self.push(Instruction::BinaryOperator(BinaryOperator::Less));
 
-        let start_mark = self.begin_loop_block();
+        let exit = self.mark();
 
         for stmt in body {
             self.push_stmt_with_pos(stmt)?;
         }
+
+        let continue_mark = self.current_no();
 
         // add step to var
         self.push(Instruction::DuplicatePrev);
         self.push_var(var.clone())?;
         self.push(Instruction::BinaryOperator(BinaryOperator::Add));
         self.store_var(var)?;
-        self.push(Instruction::Goto(loop_mark));
+        self.push(Instruction::Goto(start));
 
-        self.insert(start_mark, Instruction::GotoIfNot(self.current_no()));
+        self.insert(exit, Instruction::GotoIfNot(self.current_no()));
 
-        self.end_loop_block();
+        self.end_loop_block(continue_mark);
 
         // remove pinned values
         self.push(Instruction::Pop);
@@ -400,12 +404,13 @@ impl Compiler {
                     self.insert(end, Instruction::Goto(self.current_no()));
                 }
             }
-            Stmt::Continue => self.push(Instruction::Goto(
-                *self
-                    .continue_marks
-                    .last()
-                    .ok_or(CompileError::ContinueNotLoop)?,
-            )),
+            Stmt::Continue => {
+                let mark = self.mark();
+                self.continue_marks
+                    .last_mut()
+                    .ok_or(CompileError::ContinueNotLoop)?
+                    .push(mark);
+            }
             Stmt::Break => {
                 let mark = self.mark();
                 self.break_marks
@@ -425,26 +430,28 @@ impl Compiler {
                 body,
             )?,
             Stmt::Do(cond, body) => {
-                let start_mark = self.begin_loop_block();
+                self.begin_loop_block();
+                let start = self.current_no();
                 for line in body {
                     self.push_stmt_with_pos(line)?;
                 }
                 self.push_expr(cond)?;
                 let end = self.mark();
-                self.push(Instruction::Goto(start_mark));
+                self.push(Instruction::Goto(start));
                 self.insert(end, Instruction::GotoIfNot(self.current_no()));
-                self.end_loop_block();
+                self.end_loop_block(start);
             }
             Stmt::While(cond, body) => {
-                let start_mark = self.begin_loop_block();
+                self.begin_loop_block();
+                let start = self.current_no();
                 self.push_expr(cond)?;
                 let end = self.mark();
                 for line in body {
                     self.push_stmt_with_pos(line)?;
                 }
-                self.push(Instruction::Goto(start_mark));
+                self.push(Instruction::Goto(start));
                 self.insert(end, Instruction::GotoIfNot(self.current_no()));
-                self.end_loop_block();
+                self.end_loop_block(start);
             }
             Stmt::For(var, init, end, step, body) => self.push_for(var, init, end, step, body)?,
             Stmt::If(else_ifs, else_part) => {
@@ -563,15 +570,15 @@ impl Compiler {
         Ok(())
     }
 
-    fn begin_loop_block(&mut self) -> u32 {
-        let start_mark = self.mark();
-        self.continue_marks.push(start_mark);
+    fn begin_loop_block(&mut self) {
+        self.continue_marks.push(Vec::new());
         self.break_marks.push(Vec::new());
-        start_mark
     }
 
-    fn end_loop_block(&mut self) {
-        self.continue_marks.pop();
+    fn end_loop_block(&mut self, continue_no: u32) {
+        for continue_mark in self.continue_marks.pop().unwrap() {
+            self.insert(continue_mark, Instruction::Goto(continue_no));
+        }
 
         for break_mark in self.break_marks.pop().unwrap() {
             self.insert(break_mark, Instruction::Goto(self.current_no()));

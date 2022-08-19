@@ -10,13 +10,14 @@ fn run_test() {
     {
         use simplelog::*;
         CombinedLogger::init(vec![TermLogger::new(
-            LevelFilter::Warn,
+            LevelFilter::Trace,
             Config::default(),
-            TerminalMode::Mixed,
+            TerminalMode::Stderr,
             ColorChoice::Auto,
         )])
         .unwrap();
     }
+
     let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
     let header = test_util::get_ctx("").header;
 

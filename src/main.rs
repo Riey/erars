@@ -270,7 +270,8 @@ fn main() {
     {
         use simplelog::*;
         CombinedLogger::init(vec![WriteLogger::new(
-            LevelFilter::Debug,
+            LevelFilter::Trace,
+            // LevelFilter::Debug,
             Config::default(),
             std::fs::File::create("erars.log").unwrap(),
         )])

@@ -740,6 +740,130 @@ mod body {
     }
 
     #[test]
+    fn test_repeat() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/repeat.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    StmtWithPos(
+        Repeat(
+            Var(
+                Variable {
+                    var: "CHARANUM",
+                    func_extern: None,
+                    args: [],
+                },
+            ),
+            [
+                StmtWithPos(
+                    Assign(
+                        Variable {
+                            var: "MARK",
+                            func_extern: None,
+                            args: [
+                                Var(
+                                    Variable {
+                                        var: "COUNT",
+                                        func_extern: None,
+                                        args: [],
+                                    },
+                                ),
+                                Int(
+                                    98,
+                                ),
+                            ],
+                        },
+                        None,
+                        Int(
+                            0,
+                        ),
+                    ),
+                    ScriptPosition {
+                        line: 1,
+                    },
+                ),
+                StmtWithPos(
+                    Sif(
+                        BinopExpr(
+                            Var(
+                                Variable {
+                                    var: "COUNT",
+                                    func_extern: None,
+                                    args: [],
+                                },
+                            ),
+                            Equal,
+                            Var(
+                                Variable {
+                                    var: "MASTER",
+                                    func_extern: None,
+                                    args: [],
+                                },
+                            ),
+                        ),
+                        StmtWithPos(
+                            Continue,
+                            ScriptPosition {
+                                line: 4,
+                            },
+                        ),
+                    ),
+                    ScriptPosition {
+                        line: 3,
+                    },
+                ),
+                StmtWithPos(
+                    Sif(
+                        BinopExpr(
+                            Var(
+                                Variable {
+                                    var: "CFLAG",
+                                    func_extern: None,
+                                    args: [
+                                        Var(
+                                            Variable {
+                                                var: "COUNT",
+                                                func_extern: None,
+                                                args: [],
+                                            },
+                                        ),
+                                        Int(
+                                            4,
+                                        ),
+                                    ],
+                                },
+                            ),
+                            Equal,
+                            Int(
+                                1,
+                            ),
+                        ),
+                        StmtWithPos(
+                            Continue,
+                            ScriptPosition {
+                                line: 7,
+                            },
+                        ),
+                    ),
+                    ScriptPosition {
+                        line: 6,
+                    },
+                ),
+            ],
+        ),
+        ScriptPosition {
+            line: 0,
+        },
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
     fn test_selectcase() {
         k9::snapshot!(
             do_test(
