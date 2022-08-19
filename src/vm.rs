@@ -1058,6 +1058,8 @@ impl TerminalVm {
                         }
 
                         ctx.push(ret);
+
+                        return Ok(Some(Workflow::Return));
                     }
                     BuiltinCommand::Return => {
                         let left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
