@@ -126,7 +126,7 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
                 match k.as_str() {
                     "ABL" | "BASE" | "CFLAG" | "EQUIP" | "TEQUIP" | "PALAM" | "EXP" | "EX"
                     | "FLAG" | "TFLAG" | "TALENT" | "STAIN" | "SOURCE" | "TSTR" | "CSTR"
-                    | "STR" | "SAVESTR" | "GLOBAL" | "GLOBALS" => {
+                    | "STR" | "SAVESTR" | "GLOBAL" | "GLOBALS" | "TRAIN" => {
                         log::debug!("Merge {k}.CSV");
                         match info.merge_name_csv(k, v) {
                             Ok(()) => {}
