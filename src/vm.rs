@@ -847,9 +847,14 @@ impl TerminalVm {
                         Value::Int(i) => Value::Int(i + rhs.try_into_int()?),
                         Value::String(s) => Value::String(s + rhs.into_str().as_str()),
                     },
+                    BinaryOperator::Mul => match lhs {
+                        Value::Int(i) => Value::Int(i * rhs.try_into_int()?),
+                        Value::String(s) => {
+                            Value::String(s.repeat(usize::try_from(rhs.try_into_int()?)?))
+                        }
+                    },
                     BinaryOperator::Sub => Value::Int(lhs.try_into_int()? - rhs.try_into_int()?),
                     BinaryOperator::Div => Value::Int(lhs.try_into_int()? / rhs.try_into_int()?),
-                    BinaryOperator::Mul => Value::Int(lhs.try_into_int()? * rhs.try_into_int()?),
                     BinaryOperator::Rem => Value::Int(lhs.try_into_int()? % rhs.try_into_int()?),
                     BinaryOperator::Less => {
                         Value::Int((lhs.try_into_int()? < rhs.try_into_int()?).into())
