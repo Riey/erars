@@ -967,6 +967,9 @@ impl TerminalVm {
                 }
 
                 match com {
+                    BuiltinCommand::Restart => {
+                        *cursor = 0;
+                    }
                     BuiltinCommand::Unicode => {
                         let code = get_arg!(@i64).try_into()?;
 
