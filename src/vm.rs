@@ -1354,6 +1354,8 @@ impl TerminalVm {
                                 .assume_normal()
                                 .set(iter::empty(), Value::Int(i))?;
 
+                            log::debug!("SHOP: get {i}");
+
                             if i >= 0 && i < 100 {
                                 let sales = *ctx
                                     .var
@@ -1361,6 +1363,8 @@ impl TerminalVm {
                                     .1
                                     .assume_normal()
                                     .get_int(iter::once(i as usize))?;
+
+                                log::debug!("sales: {sales}");
 
                                 #[allow(unreachable_code)]
                                 #[allow(unused_variables)]

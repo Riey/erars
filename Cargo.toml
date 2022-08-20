@@ -39,6 +39,7 @@ ansi_term = { version = "0.12.1", optional = true }
 unicode-width = "0.1.9"
 encoding_rs = "0.8.31"
 pad = "0.1.6"
+clap = { version = "3.2.17", features = ["suggestions", "derive"] }
 
 [dev-dependencies]
 criterion = "0.3.5"

@@ -21,7 +21,7 @@ use erars_compiler::{CompiledFunction, HeaderInfo, Lexer, ParserContext};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
-fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
+fn run(mut backend: impl EraApp, target_path: String) -> anyhow::Result<()> {
     let mut time = Instant::now();
 
     let chan = Arc::new(ConsoleChannel::new());
@@ -47,13 +47,7 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
         {
             check_time!("Initialize");
 
-            let mut args = std::env::args();
-
-            let target_path = if let Some(path) = args.nth(1) {
-                path
-            } else {
-                ".".into()
-            };
+            check_time!("Parse args");
 
             let infos: HashMap<SmolStr, VariableInfo> =
                 serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
@@ -266,12 +260,28 @@ fn run(mut backend: impl EraApp) -> anyhow::Result<()> {
     backend.run(chan)
 }
 
+#[derive(clap::Parser)]
+#[clap(author, version, about)]
+struct Args {
+    #[clap(value_parser, default_value = ".", help = "ERA game path default is current path")]
+    target_path: String,
+
+    #[clap(long, help = "Show more verbose log")]
+    verbose: bool,
+}
+
 fn main() {
+    let args: Args = clap::Parser::parse();
+
     {
+        let level = if args.verbose {
+            LevelFilter::Trace
+        } else {
+            LevelFilter::Debug
+        };
         use simplelog::*;
         CombinedLogger::init(vec![WriteLogger::new(
-            LevelFilter::Trace,
-            // LevelFilter::Debug,
+            level,
             Config::default(),
             std::fs::File::create("erars.log").unwrap(),
         )])
@@ -280,5 +290,5 @@ fn main() {
 
     log_panics::init();
 
-    run(StdioBackend::new()).unwrap();
+    run(StdioBackend::new(), args.target_path).unwrap();
 }
