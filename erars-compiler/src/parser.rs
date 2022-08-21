@@ -450,6 +450,7 @@ impl ParserContext {
                         try_body,
                         catch_body: None,
                         is_jump: info.ty == JumpType::Jump,
+                        is_method: info.is_method,
                     },
                 }
             }

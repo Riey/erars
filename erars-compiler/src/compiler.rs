@@ -487,6 +487,7 @@ impl Compiler {
                 try_body,
                 catch_body: catch,
                 is_jump,
+                is_method,
             } => {
                 let count = self.push_list(args)?;
                 self.push_expr(name)?;
@@ -498,6 +499,7 @@ impl Compiler {
                         self.push(Instruction::TryCall(count));
                     }
                     let try_top = self.mark();
+                    let try_top2 = self.mark();
                     for try_body in try_body {
                         self.push_stmt_with_pos(try_body)?;
                     }
@@ -507,12 +509,18 @@ impl Compiler {
                         self.push_stmt_with_pos(stmt)?;
                     }
                     self.insert(try_top, Instruction::GotoIfNot(catch_top));
+                    if is_method {
+                        self.insert(try_top2, Instruction::Pop);
+                    }
                     self.insert(try_end, Instruction::Goto(self.current_no()));
                 } else {
                     if is_jump {
                         self.push(Instruction::Jump(count));
                     } else {
                         self.push(Instruction::Call(count));
+                        if is_method {
+                            self.push(Instruction::Pop);
+                        }
                     }
                 }
             }

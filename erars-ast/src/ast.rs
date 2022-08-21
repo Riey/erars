@@ -36,6 +36,7 @@ pub enum Stmt {
         name: Expr,
         args: Vec<Expr>,
         is_jump: bool,
+        is_method: bool,
 
         try_body: Vec<StmtWithPos>,
         catch_body: Option<Vec<StmtWithPos>>,

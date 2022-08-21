@@ -1286,6 +1286,7 @@ impl TerminalVm {
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
+        log::trace!("CALL {label}({args:?})");
         let body = self.dic.get_func(label)?;
 
         ctx.new_func(Ok(label.into()), body.file_path().clone());

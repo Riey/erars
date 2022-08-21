@@ -127,6 +127,7 @@ fn call_jump_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> (CallJumpInfo, &'s str)
         is_catch: false,
         is_form: false,
         is_try: false,
+        is_method: false,
     };
 
     if let Some(c) = com.strip_prefix("TRY") {
@@ -153,8 +154,13 @@ fn call_jump_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> (CallJumpInfo, &'s str)
         unreachable!()
     }
 
-    if com.starts_with("FORM") {
+    if let Some(c) = com.strip_prefix("FORM") {
         info.is_form = true;
+        com = c;
+    }
+
+    if com == "F" {
+        info.is_method = true;
     }
 
     let args = lex_line_left(lex);
@@ -175,6 +181,7 @@ pub struct CallJumpInfo {
     pub is_try: bool,
     pub is_form: bool,
     pub is_catch: bool,
+    pub is_method: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

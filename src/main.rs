@@ -263,7 +263,11 @@ fn run(mut backend: impl EraApp, target_path: String) -> anyhow::Result<()> {
 #[derive(clap::Parser)]
 #[clap(author, version, about)]
 struct Args {
-    #[clap(value_parser, default_value = ".", help = "ERA game path default is current path")]
+    #[clap(
+        value_parser,
+        default_value = ".",
+        help = "ERA game path default is current path"
+    )]
     target_path: String,
 
     #[clap(long, help = "Show more verbose log")]
