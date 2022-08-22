@@ -1,5 +1,7 @@
-use std::sync::Arc;
-use std::{fmt, io, iter};
+mod context;
+mod variable;
+
+use std::{io, iter};
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -11,9 +13,14 @@ use hashbrown::HashMap;
 
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, ScriptPosition,
-    UnaryOperator, Value, VariableInfo,
+    UnaryOperator, Value,
 };
-use erars_compiler::{CharacterTemplate, HeaderInfo, Instruction, ParserContext};
+use erars_compiler::{Instruction, ParserContext};
+
+pub use self::{
+    context::{Callstack, LocalValue, VmContext},
+    variable::{UniformVariable, VariableStorage, VmVariable},
+};
 
 use crate::function::{FunctionBody, FunctionDic};
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
@@ -26,643 +33,10 @@ macro_rules! report_error {
     };
 }
 
-#[derive(Clone, Debug)]
-enum VmVariable {
-    Int0D(i64),
-    Int1D(Vec<i64>),
-    Int2D(Vec<Vec<i64>>),
-    Int3D(Vec<Vec<Vec<i64>>>),
-    Str0D(String),
-    Str1D(Vec<String>),
-    Str2D(Vec<Vec<String>>),
-    Str3D(Vec<Vec<Vec<String>>>),
-}
-
-impl VmVariable {
-    pub fn new(info: &VariableInfo) -> Self {
-        match (info.is_str, info.size.as_slice()) {
-            (false, []) => Self::Int0D(info.default_int),
-            (false, [a]) => Self::Int1D(vec![info.default_int; *a]),
-            (false, [a, b]) => Self::Int2D(vec![vec![info.default_int; *a]; *b]),
-            (false, [a, b, c]) => Self::Int3D(vec![vec![vec![info.default_int; *a]; *b]; *c]),
-            (true, []) => Self::Str0D(String::new()),
-            (true, [a]) => Self::Str1D(vec![String::new(); *a]),
-            (true, [a, b]) => Self::Str2D(vec![vec![String::new(); *a]; *b]),
-            (true, [a, b, c]) => Self::Str3D(vec![vec![vec![String::new(); *a]; *b]; *c]),
-            _ => panic!("size length can't be greater than 3"),
-        }
-    }
-
-    pub fn set(&mut self, args: impl Iterator<Item = usize>, value: Value) -> Result<()> {
-        match self {
-            VmVariable::Int0D(..)
-            | VmVariable::Int1D(..)
-            | VmVariable::Int2D(..)
-            | VmVariable::Int3D(..) => *self.get_int(args)? = value.try_into()?,
-            VmVariable::Str0D(..)
-            | VmVariable::Str1D(..)
-            | VmVariable::Str2D(..)
-            | VmVariable::Str3D(..) => *self.get_str(args)? = value.try_into()?,
-        }
-
-        Ok(())
-    }
-
-    pub fn get(&mut self, args: impl Iterator<Item = usize>) -> Result<Value> {
-        match self {
-            VmVariable::Int0D(..)
-            | VmVariable::Int1D(..)
-            | VmVariable::Int2D(..)
-            | VmVariable::Int3D(..) => self.get_int(args).map(Value::from),
-            VmVariable::Str0D(..)
-            | VmVariable::Str1D(..)
-            | VmVariable::Str2D(..)
-            | VmVariable::Str3D(..) => self.get_str(args).map(Value::from),
-        }
-    }
-
-    pub fn get_int(&mut self, mut args: impl Iterator<Item = usize>) -> Result<&mut i64> {
-        let mut last_arg;
-
-        macro_rules! a {
-            () => {{
-                last_arg = args.next().unwrap_or(0);
-                last_arg
-            }};
-        }
-        match self {
-            VmVariable::Int0D(s) => Ok(s),
-            VmVariable::Int1D(s) => s
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
-            VmVariable::Int2D(s) => s
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
-            VmVariable::Int3D(s) => s
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
-            _ => bail!("Variable is Str type"),
-        }
-    }
-
-    pub fn get_str(&mut self, mut args: impl Iterator<Item = usize>) -> Result<&mut String> {
-        macro_rules! a {
-            () => {
-                args.next().unwrap_or(0)
-            };
-        }
-        match self {
-            VmVariable::Str0D(s) => Ok(s),
-            VmVariable::Str1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
-            VmVariable::Str2D(s) => s
-                .get_mut(a!())
-                .unwrap()
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index out of range")),
-            VmVariable::Str3D(s) => s
-                .get_mut(a!())
-                .unwrap()
-                .get_mut(a!())
-                .unwrap()
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index out of range")),
-            _ => bail!("Variable is Int type"),
-        }
-    }
-}
-
-#[derive(Clone)]
-enum UniformVariable {
-    Normal(VmVariable),
-    Character(Vec<VmVariable>),
-}
-
-impl UniformVariable {
-    pub fn new(info: &VariableInfo) -> Self {
-        match info.is_chara {
-            false => UniformVariable::Normal(VmVariable::new(info)),
-            true => UniformVariable::Character(Vec::new()),
-        }
-    }
-
-    pub fn assume_normal(&mut self) -> &mut VmVariable {
-        match self {
-            Self::Normal(v) => v,
-            _ => panic!("Variable is not normal variable"),
-        }
-    }
-
-    pub fn assume_chara(&mut self, idx: usize) -> &mut VmVariable {
-        match self {
-            Self::Character(c) => &mut c[idx],
-            _ => panic!("Variable is not character variable"),
-        }
-    }
-
-    pub fn add_chara(&mut self, info: &VariableInfo) {
-        match self {
-            UniformVariable::Character(c) => c.push(VmVariable::new(info)),
-            _ => {}
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct VariableStorage {
-    character_len: usize,
-    variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
-    #[allow(unused)]
-    global_variables: HashMap<SmolStr, VmVariable>,
-}
-
-impl VariableStorage {
-    pub fn new(infos: &HashMap<SmolStr, VariableInfo>) -> Self {
-        let mut variables = HashMap::new();
-        let mut global_variables = HashMap::new();
-
-        for (k, v) in infos {
-            if v.is_global {
-                assert!(!v.is_chara, "전역변수는 캐릭터변수일수 없습니다.");
-                global_variables.insert(k.clone(), VmVariable::new(v));
-            } else {
-                variables.insert(k.clone(), (v.clone(), UniformVariable::new(v)));
-            }
-        }
-
-        Self {
-            character_len: 0,
-            variables,
-            local_variables: HashMap::new(),
-            global_variables,
-        }
-    }
-
-    pub fn add_local_info(&mut self, func: SmolStr, var_name: SmolStr, info: VariableInfo) {
-        self.local_variables
-            .entry(func)
-            .or_default()
-            .insert(var_name, (info, None));
-    }
-
-    fn get_local_var(
-        &mut self,
-        func_name: &str,
-        var: &str,
-    ) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
-        let (info, var) = self
-            .local_variables
-            .get_mut(func_name)
-            .unwrap()
-            .get_mut(var)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", var))?;
-
-        if var.is_none() {
-            let mut var_ = UniformVariable::new(info);
-            if !info.init.is_empty() {
-                let var_ = var_.assume_normal();
-                for (idx, init_var) in info.init.iter().enumerate() {
-                    var_.set(iter::once(idx), init_var.clone()).unwrap();
-                }
-            }
-            *var = Some(var_);
-        }
-
-        Ok((info, var.as_mut().unwrap()))
-    }
-
-    fn is_local_var(&self, func: &str, var: &str) -> bool {
-        match self.local_variables.get(func) {
-            Some(v) => v.contains_key(var),
-            None => false,
-        }
-    }
-
-    fn get_maybe_local_var(
-        &mut self,
-        func: &str,
-        var: &str,
-    ) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
-        if self.is_local_var(func, var) {
-            self.get_local_var(func, var)
-        } else {
-            self.get_var(var)
-        }
-    }
-
-    fn get_var(&mut self, var: &str) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
-        let (l, r) = self
-            .variables
-            .get_mut(var)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", var))?;
-
-        Ok((l, r))
-    }
-
-    fn get_var2(
-        &mut self,
-        l: &str,
-        r: &str,
-    ) -> Result<(
-        (&mut VariableInfo, &mut UniformVariable),
-        (&mut VariableInfo, &mut UniformVariable),
-    )> {
-        assert_ne!(l, r);
-
-        match self.variables.get_many_mut([l, r]) {
-            Some([(ll, lr), (rl, rr)]) => Ok(((ll, lr), (rl, rr))),
-            None => {
-                bail!("Variable {l} or {r} is not exists");
-            }
-        }
-    }
-
-    pub fn reset_data(&mut self) {
-        self.character_len = 0;
-        for var in self.variables.values_mut() {
-            var.1 = UniformVariable::new(&var.0);
-        }
-    }
-
-    pub fn add_chara(&mut self) {
-        self.character_len += 1;
-        self.variables.values_mut().for_each(|(info, var)| {
-            var.add_chara(info);
-        });
-    }
-
-    pub fn set_character_template(
-        &mut self,
-        idx: usize,
-        template: &CharacterTemplate,
-    ) -> Result<()> {
-        macro_rules! set {
-            (@int $name:expr, $field:ident) => {
-                self.get_var($name)?
-                    .1
-                    .assume_chara(idx)
-                    .set(iter::empty(), Value::Int(template.$field as i64))?;
-            };
-            (@str $name:expr, $field:ident) => {
-                self.get_var($name)?
-                    .1
-                    .assume_chara(idx)
-                    .set(iter::empty(), Value::String(template.$field.clone()))?;
-            };
-            (@intarr $name:expr, $field:ident) => {
-                let var = self.get_var($name)?.1.assume_chara(idx);
-
-                match var {
-                    VmVariable::Int1D(arr) => {
-                        for (k, v) in template.$field.iter() {
-                            arr[*k as usize] = *v as i64;
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            };
-            (@strarr $name:expr, $field:ident) => {
-                let var = self.get_var($name)?.1.assume_chara(idx);
-
-                match var {
-                    VmVariable::Str1D(arr) => {
-                        for (k, v) in template.$field.iter() {
-                            arr[*k as usize] = v.clone();
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            };
-        }
-
-        set!(@int "NO", no);
-
-        set!(@str "NAME", name);
-        set!(@str "CALLNAME", call_name);
-        set!(@str "NICKNAME", nick_name);
-
-        set!(@intarr "ABL", abl);
-        set!(@intarr "MAXBASE", base);
-        set!(@intarr "BASE", base);
-        set!(@intarr "EXP", exp);
-        set!(@intarr "EX", ex);
-        set!(@intarr "MARK", mark);
-        set!(@intarr "TALENT", talent);
-        set!(@intarr "CFLAG", cflag);
-        set!(@intarr "RELATION", relation);
-
-        set!(@strarr "CSTR", cstr);
-
-        Ok(())
-    }
-}
-
 #[derive(Display, Debug, Clone, Copy)]
 enum Workflow {
     Return,
     Exit,
-}
-
-#[derive(Debug, Clone)]
-struct Callstack {
-    func_name: Result<SmolStr, EventType>,
-    file_path: SmolStr,
-    script_position: ScriptPosition,
-    stack_base: usize,
-}
-
-#[derive(Clone)]
-struct VariableRef {
-    name: String,
-    func_name: String,
-    idxs: ArrayVec<usize, 4>,
-}
-
-impl fmt::Debug for VariableRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}@{}", self.name, self.func_name)?;
-
-        for idx in self.idxs.iter() {
-            write!(f, ":{}", idx)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl fmt::Display for VariableRef {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.name)?;
-
-        for idx in self.idxs.iter() {
-            write!(f, ":{}", idx)?;
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Clone, Debug)]
-enum LocalValue {
-    Value(Value),
-    VarRef(VariableRef),
-}
-
-impl<T> From<T> for LocalValue
-where
-    Value: From<T>,
-{
-    fn from(v: T) -> Self {
-        Self::Value(Value::from(v))
-    }
-}
-
-impl From<VariableRef> for LocalValue {
-    fn from(r: VariableRef) -> Self {
-        Self::VarRef(r)
-    }
-}
-
-impl TryFrom<LocalValue> for VariableRef {
-    type Error = anyhow::Error;
-
-    fn try_from(value: LocalValue) -> Result<VariableRef, Self::Error> {
-        match value {
-            LocalValue::VarRef(v) => Ok(v),
-            _ => bail!("LocalValue type is not VariableRef"),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct VmContext {
-    var: VariableStorage,
-    header_info: Arc<HeaderInfo>,
-    begin: Option<BeginType>,
-    stack: Vec<LocalValue>,
-    call_stack: Vec<Callstack>,
-    current_pos: ScriptPosition,
-    color: u32,
-    hl_color: u32,
-    bg_color: u32,
-}
-
-impl VmContext {
-    pub fn new(header_info: Arc<HeaderInfo>) -> Self {
-        Self {
-            var: VariableStorage::new(&header_info.global_variables),
-            header_info,
-            begin: Some(BeginType::Title),
-            stack: Vec::with_capacity(1024),
-            call_stack: Vec::with_capacity(512),
-            color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
-            hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
-            bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
-            current_pos: ScriptPosition::default(),
-        }
-    }
-
-    pub fn var_mut(&mut self) -> &mut VariableStorage {
-        &mut self.var
-    }
-
-    fn read_var_ref(&mut self, var_ref: &VariableRef) -> Result<Value> {
-        let value = match var_ref.name.as_str() {
-            "GAMEBASE_VERSION" => Value::Int(0),
-            "GAMEBASE_AUTHOR" => "Riey".into(),
-            "GAMEBASE_YEAR" => Value::Int(2022),
-            "GAMEBASE_TITLE" => "eraTHYMKR".into(),
-            "GAMEBASE_INFO" => "".into(),
-            "CHARANUM" => (self.var.character_len as i64).into(),
-            "ITEMPRICE" => {
-                let arg = var_ref.idxs[0] as u32;
-                self.header_info
-                    .item_price
-                    .get(&arg)
-                    .copied()
-                    .unwrap_or(0)
-                    .into()
-            }
-            "TRAINNAME" | "ITEMNAME" | "FLAGNAME" | "ABLNAME" | "TALENTNAME" | "MARKNAME"
-            | "EXNAME" | "EXPNAME" | "CFLAGNAME" | "CSTRNAME" | "STRNAME" | "SAVESTRNAME"
-            | "TSTRNAME" | "EQUIPNAME" | "TEQUIPNAME" | "SOURCENAME" | "STAINNAME"
-            | "TCVARNAME" | "GLOBALNAME" | "GLOBALSNAME" => {
-                let name = var_ref.name.as_str().strip_suffix("NAME").unwrap();
-                let arg = var_ref.idxs[0] as u32;
-                self.header_info
-                    .var_name_var
-                    .get(name)
-                    .and_then(|d| Some(d.get(&arg)?.as_str()))
-                    .unwrap_or("")
-                    .into()
-            }
-            _ => {
-                let (var, args) = self.resolve_var_ref(&var_ref)?;
-
-                var.get(args)?
-            }
-        };
-        Ok(value)
-    }
-
-    fn set_var_ref(&mut self, var_ref: &VariableRef, value: Value) -> Result<()> {
-        let (var, args) = self.resolve_var_ref(var_ref)?;
-        var.set(args, value)?;
-        Ok(())
-    }
-
-    fn resolve_var_ref<'c>(
-        &'c mut self,
-        r: &VariableRef,
-    ) -> Result<(&'c mut VmVariable, arrayvec::IntoIter<usize, 4>)> {
-        let target = *self
-            .var
-            .get_var("TARGET".into())
-            .unwrap()
-            .1
-            .assume_normal()
-            .get_int(iter::empty())?;
-
-        let (info, var, mut args) = self.resolve_var_ref_raw(r)?;
-
-        match var {
-            UniformVariable::Character(c) => {
-                let no = if args.len() < info.arg_len() {
-                    target.try_into()?
-                } else {
-                    args.next().unwrap()
-                };
-                let c_len = c.len();
-                Ok((
-                    c.get_mut(no).ok_or_else(|| {
-                        anyhow!("캐릭터 번호가 너무 큽니다. {no}, 최대 {}", c_len)
-                    })?,
-                    args,
-                ))
-            }
-            UniformVariable::Normal(v) => Ok((v, args)),
-        }
-    }
-
-    fn resolve_var_ref_raw<'c>(
-        &'c mut self,
-        r: &VariableRef,
-    ) -> Result<(
-        &'c mut VariableInfo,
-        &'c mut UniformVariable,
-        arrayvec::IntoIter<usize, 4>,
-    )> {
-        let (info, var) = self.var.get_maybe_local_var(&r.func_name, &r.name)?;
-
-        Ok((info, var, r.idxs.clone().into_iter()))
-    }
-
-    pub fn new_func(&mut self, func_name: Result<SmolStr, EventType>, file_path: SmolStr) {
-        if let Some(last) = self.call_stack.last_mut() {
-            last.script_position = std::mem::take(&mut self.current_pos);
-        }
-
-        self.call_stack.push(Callstack {
-            func_name,
-            file_path,
-            script_position: ScriptPosition::default(),
-            stack_base: self.stack.len(),
-        });
-    }
-
-    pub fn end_func(&mut self) {
-        self.call_stack.pop();
-    }
-
-    pub fn return_func(&mut self) -> Result<impl Iterator<Item = Value>> {
-        let call_stack = self.call_stack.last().unwrap();
-        let count = self.stack.len() - call_stack.stack_base;
-        Ok(self.take_value_list(count as u32)?.into_iter())
-    }
-
-    fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
-        self.take_value_list(count)?
-            .into_iter()
-            .map(usize::try_from)
-            .collect()
-    }
-
-    fn take_value_list(&mut self, count: u32) -> Result<ArrayVec<Value, 16>> {
-        let mut ret = ArrayVec::new();
-        let list = self.take_list(count).collect::<ArrayVec<LocalValue, 16>>();
-
-        for arg in list {
-            match arg {
-                LocalValue::Value(v) => ret.push(v),
-                LocalValue::VarRef(var) => {
-                    ret.push(self.read_var_ref(&var)?);
-                }
-            }
-        }
-
-        Ok(ret)
-    }
-
-    fn take_list(&mut self, count: u32) -> impl Iterator<Item = LocalValue> + '_ {
-        self.stack.drain(self.stack.len() - count as usize..)
-    }
-
-    fn dup(&mut self) {
-        let last = self.stack.last().unwrap().clone();
-        self.stack.push(last);
-    }
-
-    fn dup_prev(&mut self) {
-        let prev = self.stack[self.stack.len() - 2].clone();
-        self.stack.push(prev);
-    }
-
-    fn push_var_ref(&mut self, name: String, func_name: String, idxs: ArrayVec<usize, 4>) {
-        let var_ref = VariableRef {
-            func_name,
-            name,
-            idxs,
-        };
-        self.stack.push(LocalValue::VarRef(var_ref));
-    }
-
-    fn push(&mut self, value: impl Into<Value>) {
-        self.stack.push(LocalValue::Value(value.into()));
-    }
-
-    fn pop(&mut self) -> LocalValue {
-        // if this failed, it must be compiler error
-        self.stack
-            .pop()
-            .unwrap_or_else(|| unreachable!("Unknown compiler error"))
-    }
-
-    fn pop_value(&mut self) -> Result<Value> {
-        match self.stack.pop() {
-            Some(LocalValue::Value(v)) => Ok(v),
-            Some(LocalValue::VarRef(var_ref)) => self.read_var_ref(&var_ref),
-            None => bail!("Stack is empty"),
-        }
-    }
-
-    fn pop_var_ref(&mut self) -> Result<VariableRef> {
-        self.pop().try_into()
-    }
-
-    fn pop_str(&mut self) -> Result<String> {
-        self.pop_value().and_then(|v| v.try_into_str())
-    }
-
-    #[allow(unused)]
-    fn pop_int(&mut self) -> Result<i64> {
-        self.pop_value().and_then(|v| v.try_into_int())
-    }
 }
 
 pub struct TerminalVm {
@@ -685,11 +59,11 @@ impl TerminalVm {
     ) -> Result<Option<Workflow>> {
         log::trace!(
             "[{func_name}] `{inst:?}`, stack: {stack:?}",
-            stack = ctx.stack
+            stack = ctx.stack()
         );
 
         match inst {
-            Instruction::ReportPosition(pos) => ctx.current_pos = pos.clone(),
+            Instruction::ReportPosition(pos) => ctx.update_position(pos.clone()),
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s.to_string()),
             Instruction::Nop => {}
@@ -737,9 +111,10 @@ impl TerminalVm {
                 chan.request_redraw();
             }
             Instruction::Print(flags) => {
-                chan.send_msg(ConsoleMessage::Print(ctx.pop_str()?));
+                let s = ctx.pop_str()?;
+                ctx.print(chan, s);
                 if flags.contains(PrintFlags::NEWLINE) {
-                    chan.send_msg(ConsoleMessage::NewLine);
+                    ctx.new_line(chan);
                 }
                 chan.request_redraw();
 
@@ -795,6 +170,7 @@ impl TerminalVm {
                             ctx.push(v.clamp(low, high));
                         }
                     }
+                    "LINEISEMPTY" => {}
                     label => {
                         let args = ctx.take_value_list(*c)?;
 
@@ -1155,27 +531,23 @@ impl TerminalVm {
                             }
                         };
 
-                        ctx.color = u32::from_le_bytes([r, g, b, 0x00]);
-
-                        chan.send_msg(ConsoleMessage::SetColor(r, g, b));
+                        ctx.set_color(chan, r, g, b);
                     }
                     BuiltinCommand::ResetColor => {
-                        ctx.color = u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]);
-                        chan.send_msg(ConsoleMessage::SetColor(0xFF, 0xFF, 0xFF));
+                        ctx.set_color(chan, 0xFF, 0xFF, 0xFF);
                     }
                     BuiltinCommand::ResetBgColor => {
-                        ctx.color = u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]);
                         log::warn!("TODO: RESETBGCOLOR");
                         // chan.send_msg(ConsoleMessage::SetColor(0xFF, 0xFF, 0xFF));
                     }
                     BuiltinCommand::GetColor => {
-                        ctx.push(ctx.color as i64);
+                        ctx.push(ctx.color() as i64);
                     }
                     BuiltinCommand::GetBgColor => {
-                        ctx.push(ctx.bg_color as i64);
+                        ctx.push(ctx.bg_color() as i64);
                     }
                     BuiltinCommand::GetFocusColor => {
-                        ctx.push(ctx.hl_color as i64);
+                        ctx.push(ctx.hl_color() as i64);
                     }
                     BuiltinCommand::Input | BuiltinCommand::InputS => {
                         let req = match com {
@@ -1215,13 +587,13 @@ impl TerminalVm {
                             .get(&no)
                             .ok_or_else(|| anyhow!("존재하지 않는 캐릭터 번호입니다({no})"))?;
 
-                        let idx = ctx.var.character_len;
+                        let idx = ctx.var.character_len();
 
                         ctx.var.add_chara();
                         ctx.var.set_character_template(idx, template)?;
                     }
                     BuiltinCommand::AddDefChara => {
-                        let idx = ctx.var.character_len;
+                        let idx = ctx.var.character_len();
 
                         ctx.var.add_chara();
 
@@ -1451,15 +823,15 @@ impl TerminalVm {
     }
 
     pub fn start(&self, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
-        while let Some(begin) = ctx.begin.take() {
+        while let Some(begin) = ctx.take_begin() {
             match self.begin(begin, chan, ctx) {
                 Ok(()) => {}
                 Err(err) => {
                     report_error!(chan, "VM failed with: {err}");
 
-                    ctx.call_stack.last_mut().unwrap().script_position = ctx.current_pos.clone();
+                    ctx.update_last_call_stack();
 
-                    for stack in ctx.call_stack.iter().rev() {
+                    for stack in ctx.call_stack().iter().rev() {
                         Self::report_stack(stack, chan, None);
                     }
 
