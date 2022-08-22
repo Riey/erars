@@ -36,6 +36,24 @@ impl VariableStorage {
         }
     }
 
+    pub fn set_result(&mut self, i: i64) {
+        self.get_var("RESULT")
+            .unwrap()
+            .1
+            .assume_normal()
+            .set(iter::empty(), Value::Int(i))
+            .unwrap();
+    }
+
+    pub fn set_results(&mut self, s: String) {
+        self.get_var("RESULTS")
+            .unwrap()
+            .1
+            .assume_normal()
+            .set(iter::empty(), Value::String(s))
+            .unwrap();
+    }
+
     pub fn character_len(&self) -> usize {
         self.character_len
     }
@@ -131,6 +149,22 @@ impl VariableStorage {
         self.variables.values_mut().for_each(|(info, var)| {
             var.add_chara(info);
         });
+    }
+
+    pub fn get_chara(&mut self, target: i64) -> Result<Option<usize>> {
+        let (_, no_var) = self.variables.get_mut("NO").unwrap();
+        match no_var {
+            UniformVariable::Character(c) => {
+                for (idx, var) in c.iter_mut().enumerate() {
+                    if *var.get_int(iter::empty())? == target {
+                        return Ok(Some(idx));
+                    }
+                }
+
+                Ok(None)
+            }
+            UniformVariable::Normal(_) => bail!("NO can't be normal variable"),
+        }
     }
 
     pub fn set_character_template(

@@ -263,7 +263,6 @@ impl VmContext {
         self.pop_value().and_then(|v| v.try_into_str())
     }
 
-    #[allow(unused)]
     pub fn pop_int(&mut self) -> Result<i64> {
         self.pop_value().and_then(|v| v.try_into_int())
     }

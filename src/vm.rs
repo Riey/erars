@@ -175,6 +175,13 @@ impl TerminalVm {
                         let line_is_empty = ctx.line_is_empty();
                         ctx.push(line_is_empty);
                     }
+                    "GETCHARA" => {
+                        let no = ctx.pop_int()?;
+
+                        let idx = ctx.var.get_chara(no)?;
+
+                        ctx.push(idx.map(|i| i as i64).unwrap_or(-1));
+                    }
                     label => {
                         let args = ctx.take_value_list(*c)?;
 
@@ -493,26 +500,12 @@ impl TerminalVm {
                         let s = get_arg!(@String);
 
                         ctx.var
-                            .get_var("RESULT".into())
-                            .unwrap()
-                            .1
-                            .assume_normal()
-                            .set(
-                                iter::empty(),
-                                Value::Int(
-                                    encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64
-                                ),
-                            )?;
+                            .set_result(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
                     }
                     BuiltinCommand::StrLenSU => {
                         let s = get_arg!(@String);
 
-                        ctx.var
-                            .get_var("RESULT".into())
-                            .unwrap()
-                            .1
-                            .assume_normal()
-                            .set(iter::empty(), Value::Int(s.len() as i64))?;
+                        ctx.var.set_result(s.len() as i64);
                     }
                     BuiltinCommand::DrawLine => {
                         chan.send_msg(ConsoleMessage::DrawLine);
@@ -607,6 +600,13 @@ impl TerminalVm {
                             }
                             None => {}
                         }
+                    }
+                    BuiltinCommand::GetChara => {
+                        let no = get_arg!(@i64);
+
+                        let idx = ctx.var.get_chara(no)?;
+
+                        ctx.var.set_result(idx.map(|i| i as i64).unwrap_or(-1));
                     }
                     BuiltinCommand::ResetData => {
                         ctx.var.reset_data();
@@ -725,11 +725,7 @@ impl TerminalVm {
                     match input(chan, InputRequest::Int) {
                         ConsoleResult::Quit => break,
                         ConsoleResult::Value(Value::Int(i)) => {
-                            ctx.var
-                                .get_var("RESULT")?
-                                .1
-                                .assume_normal()
-                                .set(iter::empty(), Value::Int(i))?;
+                            ctx.var.set_result(i);
 
                             log::debug!("SHOP: get {i}");
 
