@@ -4,7 +4,7 @@ use smol_str::SmolStr;
 use std::sync::Arc;
 use std::{fmt, iter};
 
-use erars_ast::{BeginType, ScriptPosition, Value, VariableInfo, EventType};
+use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
 use erars_compiler::HeaderInfo;
 
 use crate::ui::{ConsoleChannel, ConsoleMessage};
@@ -50,6 +50,10 @@ impl VmContext {
 
     pub fn var_mut(&mut self) -> &mut VariableStorage {
         &mut self.var
+    }
+
+    pub fn line_is_empty(&self) -> bool {
+        self.line_is_empty
     }
 
     pub fn update_last_call_stack(&mut self) {
@@ -264,9 +268,14 @@ impl VmContext {
         self.pop_value().and_then(|v| v.try_into_int())
     }
 
-    pub fn print(&mut self, chan: &ConsoleChannel, s: impl Into<String>) {
+    pub fn reuse_last_line(&mut self, chan: &ConsoleChannel, s: String) {
         self.line_is_empty = false;
-        chan.send_msg(ConsoleMessage::Print(s.into()));
+        chan.send_msg(ConsoleMessage::ReuseLastLine(s));
+    }
+
+    pub fn print(&mut self, chan: &ConsoleChannel, s: String) {
+        self.line_is_empty = false;
+        chan.send_msg(ConsoleMessage::Print(s));
     }
 
     pub fn new_line(&mut self, chan: &ConsoleChannel) {

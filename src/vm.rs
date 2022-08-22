@@ -107,7 +107,8 @@ impl TerminalVm {
                 ctx.set_var_ref(&var_ref, value)?;
             }
             Instruction::ReuseLastLine => {
-                chan.send_msg(ConsoleMessage::ReuseLastLine(ctx.pop_str()?));
+                let s = ctx.pop_str()?;
+                ctx.reuse_last_line(chan, s);
                 chan.request_redraw();
             }
             Instruction::Print(flags) => {
@@ -170,7 +171,10 @@ impl TerminalVm {
                             ctx.push(v.clamp(low, high));
                         }
                     }
-                    "LINEISEMPTY" => {}
+                    "LINEISEMPTY" => {
+                        let line_is_empty = ctx.line_is_empty();
+                        ctx.push(line_is_empty);
+                    }
                     label => {
                         let args = ctx.take_value_list(*c)?;
 
@@ -429,7 +433,7 @@ impl TerminalVm {
 
                         ret.push(']');
 
-                        chan.send_msg(ConsoleMessage::Print(ret));
+                        ctx.print(chan, ret);
                     }
                     BuiltinCommand::ReturnF => {
                         let ret = get_arg!(@value);

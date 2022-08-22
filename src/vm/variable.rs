@@ -1,8 +1,8 @@
-use erars_ast::{VariableInfo, Value};
+use anyhow::{anyhow, bail, Result};
+use erars_ast::{Value, VariableInfo};
 use erars_compiler::CharacterTemplate;
-use smol_str::SmolStr;
 use hashbrown::HashMap;
-use anyhow::{Result, anyhow, bail};
+use smol_str::SmolStr;
 use std::iter;
 
 #[derive(Clone)]
