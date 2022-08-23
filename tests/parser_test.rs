@@ -1542,7 +1542,9 @@ Function {
                 is_jump: false,
                 is_method: false,
                 try_body: [],
-                catch_body: None,
+                catch_body: Some(
+                    [],
+                ),
             },
             ScriptPosition {
                 line: 13,
@@ -1557,7 +1559,9 @@ Function {
                 is_jump: false,
                 is_method: false,
                 try_body: [],
-                catch_body: None,
+                catch_body: Some(
+                    [],
+                ),
             },
             ScriptPosition {
                 line: 14,
@@ -1587,7 +1591,9 @@ Function {
                 is_jump: true,
                 is_method: false,
                 try_body: [],
-                catch_body: None,
+                catch_body: Some(
+                    [],
+                ),
             },
             ScriptPosition {
                 line: 18,
@@ -1602,7 +1608,9 @@ Function {
                 is_jump: true,
                 is_method: false,
                 try_body: [],
-                catch_body: None,
+                catch_body: Some(
+                    [],
+                ),
             },
             ScriptPosition {
                 line: 19,

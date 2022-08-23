@@ -192,14 +192,25 @@ impl TerminalVm {
                     }
                 }
             }
+            Instruction::TryCall(c) => {
+                let func = ctx.pop_str()?;
+                let args = ctx.take_value_list(*c)?;
+
+                match self.try_call(&func, &args, chan, ctx)? {
+                    Some(Workflow::Return) => ctx.push(true),
+                    Some(Workflow::Exit) => return Ok(Some(Workflow::Exit)),
+                    None => {
+                        ctx.push(false);
+                    }
+                }
+            }
             Instruction::Call(c) => {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_value_list(*c)?;
 
-                match func.as_str() {
-                    _ => {
-                        self.call(&func, &args, chan, ctx)?;
-                    }
+                match self.call(&func, &args, chan, ctx)? {
+                    Workflow::Return => {}
+                    Workflow::Exit => return Ok(Some(Workflow::Exit)),
                 }
             }
             Instruction::Begin(b) => {
@@ -655,16 +666,15 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    fn call(
+    fn call_internal(
         &self,
         label: &str,
         args: &[Value],
         chan: &ConsoleChannel,
         ctx: &mut VmContext,
+        body: &FunctionBody,
     ) -> Result<Workflow> {
         log::trace!("CALL {label}({args:?})");
-        let body = self.dic.get_func(label)?;
-
         ctx.new_func(Ok(label.into()), body.file_path().clone());
 
         let mut args = args.iter().cloned();
@@ -691,6 +701,31 @@ impl TerminalVm {
         ctx.end_func();
 
         Ok(ret)
+    }
+
+    #[inline]
+    fn call(
+        &self,
+        label: &str,
+        args: &[Value],
+        chan: &ConsoleChannel,
+        ctx: &mut VmContext,
+    ) -> Result<Workflow> {
+        self.call_internal(label, args, chan, ctx, self.dic.get_func(label)?)
+    }
+
+    #[inline]
+    fn try_call(
+        &self,
+        label: &str,
+        args: &[Value],
+        chan: &ConsoleChannel,
+        ctx: &mut VmContext,
+    ) -> Result<Option<Workflow>> {
+        match self.dic.get_func_opt(label) {
+            Some(body) => self.call_internal(label, args, chan, ctx, body).map(Some),
+            None => Ok(None),
+        }
     }
 
     fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
