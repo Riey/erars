@@ -75,6 +75,7 @@ pub struct CharacterTemplate {
     pub base: HashMap<u32, u32>,
     pub abl: HashMap<u32, u32>,
     pub cflag: HashMap<u32, u32>,
+    pub juel: HashMap<u32, u32>,
     pub cstr: HashMap<u32, String>,
     pub talent: HashMap<u32, u32>,
     pub exp: HashMap<u32, u32>,

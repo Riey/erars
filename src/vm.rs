@@ -123,41 +123,22 @@ impl TerminalVm {
             }
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
-                match func.as_str() {
-                    "CSVNAME" => {
+
+                macro_rules! csv_method {
+                    ($field:ident) => {
                         let no = ctx.pop_int()? as u32;
 
                         let csv = ctx
                             .header_info
                             .character_templates
                             .get(&no)
-                            .map(|csv| csv.name.clone())
+                            .map(|csv| csv.$field.clone())
                             .unwrap_or_default();
-                        ctx.push(csv);
-                    }
-                    "CSVNICKNAME" => {
-                        let no = ctx.pop_int()? as u32;
 
-                        let csv = ctx
-                            .header_info
-                            .character_templates
-                            .get(&no)
-                            .map(|csv| csv.nick_name.clone())
-                            .unwrap_or_default();
                         ctx.push(csv);
-                    }
-                    "CSVCALLNAME" => {
-                        let no = ctx.pop_int()? as u32;
+                    };
 
-                        let csv = ctx
-                            .header_info
-                            .character_templates
-                            .get(&no)
-                            .map(|csv| csv.call_name.clone())
-                            .unwrap_or_default();
-                        ctx.push(csv);
-                    }
-                    "CSVCSTR" => {
+                    (@arr $field:ident) => {
                         let idx = ctx.pop_int()? as u32;
                         let no = ctx.pop_int()? as u32;
 
@@ -165,9 +146,52 @@ impl TerminalVm {
                             .header_info
                             .character_templates
                             .get(&no)
-                            .and_then(|csv| csv.cstr.get(&idx).cloned())
+                            .and_then(|csv| csv.$field.get(&idx).cloned())
                             .unwrap_or_default();
+
                         ctx.push(csv);
+                    }
+                }
+
+                match func.as_str() {
+                    "CSVNAME" => {
+                        csv_method!(name);
+                    }
+                    "CSVNICKNAME" => {
+                        csv_method!(nick_name);
+                    }
+                    "CSVCALLNAME" => {
+                        csv_method!(call_name);
+                    }
+                    "CSVCSTR" => {
+                        csv_method!(@arr cstr);
+                    }
+                    "CSVTALENT" => {
+                        csv_method!(@arr talent);
+                    }
+                    "CSVABL" => {
+                        csv_method!(@arr abl);
+                    }
+                    "CSVBASE" => {
+                        csv_method!(@arr base);
+                    }
+                    "CSVEX" => {
+                        csv_method!(@arr ex);
+                    }
+                    "CSVEXP" => {
+                        csv_method!(@arr exp);
+                    }
+                    "CSVMARK" => {
+                        csv_method!(@arr mark);
+                    }
+                    "CSVRELATION" => {
+                        csv_method!(@arr relation);
+                    }
+                    "CSVJUEL" => {
+                        csv_method!(@arr juel);
+                    }
+                    "CSVCFLAG" => {
+                        csv_method!(@arr cflag);
                     }
                     "STRLENS" => {
                         let s = ctx.pop_str()?;
