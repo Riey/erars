@@ -448,7 +448,7 @@ impl ParserContext {
                         name,
                         args,
                         try_body,
-                        catch_body: None,
+                        catch_body,
                         is_jump: info.ty == JumpType::Jump,
                         is_method: info.is_method,
                     },
