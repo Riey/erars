@@ -68,6 +68,7 @@ macro_rules! try_nom {
 #[derive(Debug, Default)]
 pub struct CharacterTemplate {
     pub no: u32,
+    pub is_assi: bool,
     pub name: String,
     pub call_name: String,
     pub nick_name: String,
@@ -160,6 +161,7 @@ impl HeaderInfo {
                 "名前" => template.name = val1.into(),
                 "呼び名" => template.call_name = val1.into(),
                 "あだ名" => template.nick_name = val1.into(),
+                "助手" => template.is_assi = val1.trim() == "1",
 
                 "CSTR" => insert_template!(@str "CSTR", cstr, val1, val2),
 

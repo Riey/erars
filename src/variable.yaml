@@ -29,6 +29,11 @@ NO:
   is_chara: true
   is_str: false
 
+ISASSI:
+  size: []
+  is_chara: true
+  is_str: false
+
 CFLAG:
   size: [10000]
   is_chara: true

@@ -151,6 +151,13 @@ impl VariableStorage {
         });
     }
 
+    pub fn del_chara(&mut self, idx: usize) {
+        self.character_len -= 1;
+        self.variables.values_mut().for_each(|(_, var)| {
+            var.del_chara(idx);
+        });
+    }
+
     pub fn get_chara(&mut self, target: i64) -> Result<Option<usize>> {
         let (_, no_var) = self.variables.get_mut("NO").unwrap();
         match no_var {
@@ -212,6 +219,7 @@ impl VariableStorage {
         }
 
         set!(@int "NO", no);
+        set!(@int "ISASSI", is_assi);
 
         set!(@str "NAME", name);
         set!(@str "CALLNAME", call_name);
@@ -375,6 +383,15 @@ impl UniformVariable {
     pub fn add_chara(&mut self, info: &VariableInfo) {
         match self {
             UniformVariable::Character(c) => c.push(VmVariable::new(info)),
+            _ => {}
+        }
+    }
+
+    pub fn del_chara(&mut self, idx: usize) {
+        match self {
+            Self::Character(c) => {
+                c.remove(idx);
+            }
             _ => {}
         }
     }

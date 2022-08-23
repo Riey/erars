@@ -124,6 +124,51 @@ impl TerminalVm {
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
                 match func.as_str() {
+                    "CSVNAME" => {
+                        let no = ctx.pop_int()? as u32;
+
+                        let csv = ctx
+                            .header_info
+                            .character_templates
+                            .get(&no)
+                            .map(|csv| csv.name.clone())
+                            .unwrap_or_default();
+                        ctx.push(csv);
+                    }
+                    "CSVNICKNAME" => {
+                        let no = ctx.pop_int()? as u32;
+
+                        let csv = ctx
+                            .header_info
+                            .character_templates
+                            .get(&no)
+                            .map(|csv| csv.nick_name.clone())
+                            .unwrap_or_default();
+                        ctx.push(csv);
+                    }
+                    "CSVCALLNAME" => {
+                        let no = ctx.pop_int()? as u32;
+
+                        let csv = ctx
+                            .header_info
+                            .character_templates
+                            .get(&no)
+                            .map(|csv| csv.call_name.clone())
+                            .unwrap_or_default();
+                        ctx.push(csv);
+                    }
+                    "CSVCSTR" => {
+                        let idx = ctx.pop_int()? as u32;
+                        let no = ctx.pop_int()? as u32;
+
+                        let csv = ctx
+                            .header_info
+                            .character_templates
+                            .get(&no)
+                            .and_then(|csv| csv.cstr.get(&idx).cloned())
+                            .unwrap_or_default();
+                        ctx.push(csv);
+                    }
                     "STRLENS" => {
                         let s = ctx.pop_str()?;
                         ctx.push(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
@@ -525,6 +570,11 @@ impl TerminalVm {
                     BuiltinCommand::FontStyle => {
                         log::warn!("TODO: fontstyle({})", get_arg!(@i64));
                     }
+                    BuiltinCommand::FontBold
+                    | BuiltinCommand::FontRegular
+                    | BuiltinCommand::FontItalic => {
+                        log::warn!("TODO: {com}");
+                    }
                     BuiltinCommand::SetColor => {
                         let c = get_arg!(@i64);
 
@@ -618,6 +668,10 @@ impl TerminalVm {
                         let idx = ctx.var.get_chara(no)?;
 
                         ctx.var.set_result(idx.map(|i| i as i64).unwrap_or(-1));
+                    }
+                    BuiltinCommand::DelChara => {
+                        let idx = get_arg!(@i64);
+                        ctx.var.del_chara(idx.try_into()?);
                     }
                     BuiltinCommand::ResetData => {
                         ctx.var.reset_data();
