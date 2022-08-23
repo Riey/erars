@@ -3,4 +3,5 @@
     Print("MIN 5 -23423"), NewLine,
     Print("LIMIT 0 35 100"), NewLine,
     Print("GROUPMATCH 3 2"), NewLine,
+    Print("SUBSTRINGU 무"), NewLine,
 ]

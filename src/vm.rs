@@ -255,13 +255,13 @@ impl TerminalVm {
                     }
                     "STRLENS" => {
                         check_arg_count!(1);
-                        let s = ctx.pop_str()?;
+                        let s = get_arg!(@String: args, ctx);
                         ctx.push(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
                     }
                     "STRLENSU" => {
                         check_arg_count!(1);
-                        let s = ctx.pop_str()?;
-                        ctx.push(s.len() as i64);
+                        let s = get_arg!(@String: args, ctx);
+                        ctx.push(s.chars().count() as i64);
                     }
                     "TOSTR" => {
                         check_arg_count!(1, 2);
@@ -487,10 +487,34 @@ impl TerminalVm {
                     BuiltinCommand::Restart => {
                         *cursor = 0;
                     }
+                    BuiltinCommand::SubStringU => {
+                        let text = get_arg!(@String: args, ctx);
+                        let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                        let length = get_arg!(@opt @usize: args, ctx);
+
+                        let mut chars = text.chars().skip(start);
+
+                        let mut ret = String::new();
+
+                        match length {
+                            Some(length) => {
+                                for _ in 0..length {
+                                    ret.push(chars.next().unwrap());
+                                }
+                            }
+                            None => {
+                                for ch in chars {
+                                    ret.push(ch);
+                                }
+                            }
+                        };
+
+                        ctx.var.set_results(ret);
+                    }
                     BuiltinCommand::Unicode => {
                         let code = get_arg!(@i64: args, ctx).try_into()?;
 
-                        ctx.push(
+                        ctx.var.set_results(
                             char::from_u32(code)
                                 .ok_or_else(|| {
                                     anyhow!("u32 {code} is not valid unicode codepoint")
@@ -635,7 +659,7 @@ impl TerminalVm {
                     BuiltinCommand::StrLenSU => {
                         let s = get_arg!(@String: args, ctx);
 
-                        ctx.var.set_result(s.len() as i64);
+                        ctx.var.set_result(s.chars().count() as i64);
                     }
                     BuiltinCommand::DrawLine => {
                         chan.send_msg(ConsoleMessage::DrawLine);
@@ -757,7 +781,7 @@ impl TerminalVm {
                         log::warn!("TODO: Save/Load");
                     }
                     _ => {
-                        bail!("TODO: {}({:?})", com, args.collect_vec());
+                        bail!("TODO: Command {}({:?})", com, args.collect_vec());
                     }
                 }
             }
