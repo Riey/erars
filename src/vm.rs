@@ -264,20 +264,15 @@ impl TerminalVm {
                         ctx.push(s.len() as i64);
                     }
                     "TOSTR" => {
-                        let ret;
-
-                        match *c {
-                            1 => {
-                                let value = ctx.pop_int()?;
-                                ret = value.to_string();
+                        check_arg_count!(1, 2);
+                        let value = get_arg!(@i64: args, ctx);
+                        let format = get_arg!(@opt @String: args, ctx);
+                        let ret = match format {
+                            Some(_) => {
+                                format!("{00}", value)
                             }
-                            2 => {
-                                let _format = ctx.pop_str()?;
-                                let value = ctx.pop_int()?;
-                                ret = format!("{00}", value);
-                            }
-                            _ => bail!("TOSTR의 매개변수는 1개 또는 2개여야 합니다."),
-                        }
+                            None => value.to_string(),
+                        };
 
                         ctx.push(ret);
                     }
