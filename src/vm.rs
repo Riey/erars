@@ -124,8 +124,22 @@ impl TerminalVm {
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
 
+                macro_rules! check_arg_count {
+                    ($expect:expr) => {
+                        if *c != $expect {
+                            bail!("메소드 {func}의 매개변수는 {}개여야합니다.", $expect);
+                        }
+                    };
+                    (@atleast $expect:expr) => {
+                        if *c < $expect {
+                            bail!("메소드 {func}의 매개변수는 {}개 이상이여야합니다.", $expect);
+                        }
+                    };
+                }
+
                 macro_rules! csv_method {
                     ($field:ident) => {
+                        check_arg_count!(1);
                         let no = ctx.pop_int()? as u32;
 
                         let csv = ctx
@@ -139,6 +153,7 @@ impl TerminalVm {
                     };
 
                     (@arr $field:ident) => {
+                        check_arg_count!(2);
                         let idx = ctx.pop_int()? as u32;
                         let no = ctx.pop_int()? as u32;
 
@@ -150,7 +165,7 @@ impl TerminalVm {
                             .unwrap_or_default();
 
                         ctx.push(csv);
-                    }
+                    };
                 }
 
                 match func.as_str() {
@@ -194,10 +209,12 @@ impl TerminalVm {
                         csv_method!(@arr cflag);
                     }
                     "STRLENS" => {
+                        check_arg_count!(1);
                         let s = ctx.pop_str()?;
                         ctx.push(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
                     }
                     "STRLENSU" => {
+                        check_arg_count!(1);
                         let s = ctx.pop_str()?;
                         ctx.push(s.len() as i64);
                     }
@@ -220,31 +237,46 @@ impl TerminalVm {
                         ctx.push(ret);
                     }
                     "MAX" => {
+                        check_arg_count!(@atleast 1);
                         let args = ctx.take_value_list(*c)?.into_iter();
 
                         ctx.push(args.max().unwrap_or(Value::Int(0)));
                     }
                     "MIN" => {
+                        check_arg_count!(@atleast 1);
                         let args = ctx.take_value_list(*c)?.into_iter();
 
                         ctx.push(args.min().unwrap_or(Value::Int(0)));
                     }
                     "LIMIT" => {
-                        if *c != 3 {
-                            bail!("LIMIT의 매개변수는 3개여야합니다");
-                        } else {
-                            let high = ctx.pop_int()?;
-                            let low = ctx.pop_int()?;
-                            let v = ctx.pop_int()?;
+                        check_arg_count!(3);
+                        let high = ctx.pop_int()?;
+                        let low = ctx.pop_int()?;
+                        let v = ctx.pop_int()?;
 
-                            ctx.push(v.clamp(low, high));
-                        }
+                        ctx.push(v.clamp(low, high));
                     }
                     "LINEISEMPTY" => {
+                        check_arg_count!(0);
                         let line_is_empty = ctx.line_is_empty();
                         ctx.push(line_is_empty);
                     }
+                    "GROUPMATCH" => {
+                        check_arg_count!(@atleast 1);
+                        let mut args = ctx.take_value_list(*c)?.into_iter();
+                        let value = args.next().unwrap();
+                        let mut ret = 0i64;
+
+                        for arg in args {
+                            if value == arg {
+                                ret += 1;
+                            }
+                        }
+
+                        ctx.push(ret);
+                    }
                     "GETCHARA" => {
+                        check_arg_count!(1);
                         let no = ctx.pop_int()?;
 
                         let idx = ctx.var.get_chara(no)?;

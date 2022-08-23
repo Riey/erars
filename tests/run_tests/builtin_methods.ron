@@ -1,5 +1,6 @@
 [
-    Print("MAX 0 1999"), NewLine,
-    Print("MIN 0 -23423"), NewLine,
+    Print("MAX 6 1999"), NewLine,
+    Print("MIN 5 -23423"), NewLine,
     Print("LIMIT 0 35 100"), NewLine,
+    Print("GROUPMATCH 3 2"), NewLine,
 ]
