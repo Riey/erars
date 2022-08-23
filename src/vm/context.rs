@@ -76,6 +76,13 @@ impl VmContext {
         self.current_pos = pos;
     }
 
+    pub fn reduce_local_value(&mut self, value: LocalValue) -> Result<Value> {
+        match value {
+            LocalValue::Value(v) => Ok(v),
+            LocalValue::VarRef(r) => self.read_var_ref(&r),
+        }
+    }
+
     pub fn read_var_ref(&mut self, var_ref: &VariableRef) -> Result<Value> {
         let value = match var_ref.name.as_str() {
             "GAMEBASE_VERSION" => Value::Int(0),

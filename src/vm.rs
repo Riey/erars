@@ -32,6 +32,37 @@ macro_rules! report_error {
         $chan.send_msg(ConsoleMessage::NewLine);
     };
 }
+macro_rules! get_arg {
+    ($arg:expr) => {
+        get_arg!(@opt $arg).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
+    };
+    (@opt $arg:expr) => {
+        $arg.next()
+    };
+    (@var $arg:expr) => {
+        match $arg.next() {
+            Some(LocalValue::VarRef(r)) => r,
+            Some(LocalValue::Value(_)) => bail!("매개변수가 VarRef가 아닙니다"),
+            None => bail!("매개변수가 부족합니다"),
+        }
+    };
+    (@value $arg:expr, $ctx:expr) => {
+        get_arg!(@opt @value $arg, $ctx).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
+    };
+    (@opt @value $arg:expr, $ctx:expr) => {
+        match $arg.next() {
+            Some(LocalValue::VarRef(r)) => Some($ctx.read_var_ref(&r)?),
+            Some(LocalValue::Value(v)) => Some(v),
+            None => None,
+        }
+    };
+    (@$t:ty: $arg:expr, $ctx:expr) => {
+        get_arg!(@opt @$t: $arg, $ctx).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
+    };
+    (@opt @$t:ty: $arg:expr, $ctx:expr) => {
+        get_arg!(@opt @value $arg, $ctx).and_then(|v| <$t>::try_from(v).ok())
+    };
+}
 
 #[derive(Display, Debug, Clone, Copy)]
 enum Workflow {
@@ -123,10 +154,16 @@ impl TerminalVm {
             }
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
+                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 16>>().into_iter();
 
                 macro_rules! check_arg_count {
                     ($expect:expr) => {
                         if *c != $expect {
+                            bail!("메소드 {func}의 매개변수는 {}개여야합니다.", $expect);
+                        }
+                    };
+                    ($expect:expr, $expect2:expr) => {
+                        if *c != $expect && *c != $expect2 {
                             bail!("메소드 {func}의 매개변수는 {}개여야합니다.", $expect);
                         }
                     };
@@ -139,8 +176,12 @@ impl TerminalVm {
 
                 macro_rules! csv_method {
                     ($field:ident) => {
-                        check_arg_count!(1);
-                        let no = ctx.pop_int()? as u32;
+                        check_arg_count!(1, 2);
+                        let no = get_arg!(@i64: args, ctx) as u32;
+
+                        if *c == 2 {
+                            log::warn!("Ignore SP feature");
+                        }
 
                         let csv = ctx
                             .header_info
@@ -153,9 +194,13 @@ impl TerminalVm {
                     };
 
                     (@arr $field:ident) => {
-                        check_arg_count!(2);
-                        let idx = ctx.pop_int()? as u32;
-                        let no = ctx.pop_int()? as u32;
+                        check_arg_count!(2, 3);
+                        let no = get_arg!(@i64: args, ctx) as u32;
+                        let idx = get_arg!(@i64: args, ctx) as u32;
+
+                        if *c == 3 {
+                            log::warn!("Ignore SP feature");
+                        }
 
                         let csv = ctx
                             .header_info
@@ -238,21 +283,31 @@ impl TerminalVm {
                     }
                     "MAX" => {
                         check_arg_count!(@atleast 1);
-                        let args = ctx.take_value_list(*c)?.into_iter();
 
-                        ctx.push(args.max().unwrap_or(Value::Int(0)));
+                        let mut max = get_arg!(@value args, ctx);
+
+                        for arg in args {
+                            max = max.max(ctx.reduce_local_value(arg)?);
+                        }
+
+                        ctx.push(max);
                     }
                     "MIN" => {
                         check_arg_count!(@atleast 1);
-                        let args = ctx.take_value_list(*c)?.into_iter();
 
-                        ctx.push(args.min().unwrap_or(Value::Int(0)));
+                        let mut min = get_arg!(@value args, ctx);
+
+                        for arg in args {
+                            min = min.min(ctx.reduce_local_value(arg)?);
+                        }
+
+                        ctx.push(min);
                     }
                     "LIMIT" => {
                         check_arg_count!(3);
-                        let high = ctx.pop_int()?;
-                        let low = ctx.pop_int()?;
-                        let v = ctx.pop_int()?;
+                        let v = get_arg!(@i64: args, ctx);
+                        let low = get_arg!(@i64: args, ctx);
+                        let high = get_arg!(@i64: args, ctx);
 
                         ctx.push(v.clamp(low, high));
                     }
@@ -263,12 +318,11 @@ impl TerminalVm {
                     }
                     "GROUPMATCH" => {
                         check_arg_count!(@atleast 1);
-                        let mut args = ctx.take_value_list(*c)?.into_iter();
-                        let value = args.next().unwrap();
+                        let value = ctx.reduce_local_value(args.next().unwrap())?;
                         let mut ret = 0i64;
 
                         for arg in args {
-                            if value == arg {
+                            if value == ctx.reduce_local_value(arg)? {
                                 ret += 1;
                             }
                         }
@@ -277,15 +331,16 @@ impl TerminalVm {
                     }
                     "GETCHARA" => {
                         check_arg_count!(1);
-                        let no = ctx.pop_int()?;
+                        let no = get_arg!(@i64: args, ctx);
 
                         let idx = ctx.var.get_chara(no)?;
 
                         ctx.push(idx.map(|i| i as i64).unwrap_or(-1));
                     }
                     label => {
-                        let args = ctx.take_value_list(*c)?;
-
+                        let args = args
+                            .map(|arg| ctx.reduce_local_value(arg))
+                            .collect::<Result<Vec<Value>>>()?;
                         match self.call(label, args.as_slice(), chan, ctx)? {
                             Workflow::Exit => return Ok(Some(Workflow::Exit)),
                             Workflow::Return => {}
@@ -433,44 +488,12 @@ impl TerminalVm {
             Instruction::Command(com, c) => {
                 let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
 
-                macro_rules! get_arg {
-                    () => {
-                        get_arg!(@opt).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
-                    };
-                    (@opt) => {
-                        args.next()
-                    };
-                    (@var) => {
-                        match args.next() {
-                            Some(LocalValue::VarRef(r)) => r,
-                            Some(LocalValue::Value(_)) => bail!("매개변수가 VarRef가 아닙니다"),
-                            None => bail!("매개변수가 부족합니다"),
-                        }
-                    };
-                    (@value) => {
-                        get_arg!(@opt @value).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
-                    };
-                    (@opt @value) => {
-                        match args.next() {
-                            Some(LocalValue::VarRef(r)) => Some(ctx.read_var_ref(&r)?),
-                            Some(LocalValue::Value(v)) => Some(v),
-                            None => None,
-                        }
-                    };
-                    (@$t:ty) => {
-                        get_arg!(@opt @$t).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
-                    };
-                    (@opt @$t:ty) => {
-                        get_arg!(@opt @value).and_then(|v| <$t>::try_from(v).ok())
-                    };
-                }
-
                 match com {
                     BuiltinCommand::Restart => {
                         *cursor = 0;
                     }
                     BuiltinCommand::Unicode => {
-                        let code = get_arg!(@i64).try_into()?;
+                        let code = get_arg!(@i64: args, ctx).try_into()?;
 
                         ctx.push(
                             char::from_u32(code)
@@ -481,7 +504,7 @@ impl TerminalVm {
                         );
                     }
                     BuiltinCommand::Throw => {
-                        let msg = get_arg!(@opt @String);
+                        let msg = get_arg!(@opt @String: args, ctx);
 
                         match msg {
                             Some(msg) => bail!("스크립트에서 예외발생: {msg}"),
@@ -489,10 +512,10 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::Varset => {
-                        let var = get_arg!(@var);
-                        let value = get_arg!(@opt @value);
-                        let start = get_arg!(@opt @usize);
-                        let end = get_arg!(@opt @usize);
+                        let var = get_arg!(@var args);
+                        let value = get_arg!(@opt @value args, ctx);
+                        let start = get_arg!(@opt @usize: args, ctx);
+                        let end = get_arg!(@opt @usize: args, ctx);
 
                         let (info, var, args) = ctx.resolve_var_ref_raw(&var)?;
 
@@ -514,9 +537,9 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::Split => {
-                        let s = get_arg!(@String);
-                        let delimiter = get_arg!(@String);
-                        let mut var = get_arg!(@var);
+                        let s = get_arg!(@String: args, ctx);
+                        let delimiter = get_arg!(@String: args, ctx);
+                        let mut var = get_arg!(@var args);
 
                         for (idx, part) in s.split(delimiter.as_str()).enumerate() {
                             var.idxs.push(idx);
@@ -527,9 +550,9 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::Bar => {
-                        let var = get_arg!(@i64);
-                        let max = get_arg!(@i64).max(1);
-                        let length = get_arg!(@i64).max(0);
+                        let var = get_arg!(@i64: args, ctx);
+                        let max = get_arg!(@i64: args, ctx).max(1);
+                        let length = get_arg!(@i64: args, ctx).max(0);
 
                         let bar_length =
                             ((var as f32 / max as f32).clamp(0.0, 1.0) * length as f32) as usize;
@@ -555,7 +578,7 @@ impl TerminalVm {
                         ctx.print(chan, ret);
                     }
                     BuiltinCommand::ReturnF => {
-                        let ret = get_arg!(@value);
+                        let ret = get_arg!(@value args, ctx);
 
                         if args.next().is_some() {
                             log::warn!("RETURNF는 한개의 값만 반환할 수 있습니다.");
@@ -609,13 +632,13 @@ impl TerminalVm {
                         return Ok(Some(Workflow::Return));
                     }
                     BuiltinCommand::StrLenS => {
-                        let s = get_arg!(@String);
+                        let s = get_arg!(@String: args, ctx);
 
                         ctx.var
                             .set_result(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
                     }
                     BuiltinCommand::StrLenSU => {
-                        let s = get_arg!(@String);
+                        let s = get_arg!(@String: args, ctx);
 
                         ctx.var.set_result(s.len() as i64);
                     }
@@ -624,7 +647,7 @@ impl TerminalVm {
                         chan.request_redraw();
                     }
                     BuiltinCommand::FontStyle => {
-                        log::warn!("TODO: fontstyle({})", get_arg!(@i64));
+                        log::warn!("TODO: fontstyle({})", get_arg!(@i64: args, ctx));
                     }
                     BuiltinCommand::FontBold
                     | BuiltinCommand::FontRegular
@@ -632,11 +655,11 @@ impl TerminalVm {
                         log::warn!("TODO: {com}");
                     }
                     BuiltinCommand::SetColor => {
-                        let c = get_arg!(@i64);
+                        let c = get_arg!(@i64: args, ctx);
 
-                        let (r, g, b) = match get_arg!(@opt @i64) {
+                        let (r, g, b) = match get_arg!(@opt @i64: args, ctx) {
                             Some(g) => {
-                                let b = get_arg!(@i64);
+                                let b = get_arg!(@i64: args, ctx);
                                 (c as u8, g as u8, b as u8)
                             }
                             None => {
@@ -694,7 +717,7 @@ impl TerminalVm {
                         return Ok(Some(Workflow::Exit));
                     }
                     BuiltinCommand::AddChara => {
-                        let no = get_arg!(@i64).try_into()?;
+                        let no = get_arg!(@i64: args, ctx).try_into()?;
                         let template = ctx
                             .header_info
                             .character_templates
@@ -719,14 +742,14 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::GetChara => {
-                        let no = get_arg!(@i64);
+                        let no = get_arg!(@i64: args, ctx);
 
                         let idx = ctx.var.get_chara(no)?;
 
                         ctx.var.set_result(idx.map(|i| i as i64).unwrap_or(-1));
                     }
                     BuiltinCommand::DelChara => {
-                        let idx = get_arg!(@i64);
+                        let idx = get_arg!(@i64: args, ctx);
                         ctx.var.del_chara(idx.try_into()?);
                     }
                     BuiltinCommand::ResetData => {
