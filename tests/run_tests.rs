@@ -9,11 +9,10 @@ mod test_util;
 fn run_test() {
     {
         use simplelog::*;
-        CombinedLogger::init(vec![TermLogger::new(
+        CombinedLogger::init(vec![WriteLogger::new(
             LevelFilter::Trace,
             Config::default(),
-            TerminalMode::Stderr,
-            ColorChoice::Auto,
+            std::fs::File::create("erars.log").unwrap(),
         )])
         .unwrap();
     }
@@ -29,7 +28,7 @@ fn run_test() {
             erb_file.file_stem().unwrap().to_str().unwrap()
         ));
 
-        eprintln!("Run {}", erb_file.display());
+        log::info!("Run {}", erb_file.display());
 
         let ron_source = std::fs::read_to_string(ron_file).unwrap();
         let program =
@@ -40,7 +39,7 @@ fn run_test() {
             dic.insert_compiled_func(ctx.var_mut(), compile(func).unwrap());
         }
 
-        eprintln!("FunctionDic: {dic:#?}");
+        log::info!("FunctionDic: {dic:#?}");
 
         let ret = test_runner(dic, ctx);
         let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();
