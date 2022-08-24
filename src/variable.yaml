@@ -39,6 +39,11 @@ CFLAG:
   is_chara: true
   is_str: false
 
+EQUIP:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
 ABL:
   size: [1000]
   is_chara: true
