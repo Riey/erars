@@ -36,6 +36,50 @@ impl VariableStorage {
         }
     }
 
+    pub fn reset_train_data(&mut self) -> Result<()> {
+        macro_rules! set_var {
+            ($name:expr, $value:expr) => {
+                self.get_var($name)?
+                    .1
+                    .assume_normal()
+                    .set(iter::empty(), Value::Int($value))?;
+            };
+            (@all $name:expr, $value:expr) => {
+                match self.get_var($name)?.1 {
+                    UniformVariable::Character(ref mut cvar) => {
+                        for var in cvar {
+                            match var {
+                                VmVariable::Int1D(ref mut arr) => {
+                                    arr.fill($value);
+                                }
+                                _ => bail!("Variable {} is not Int1D", $name),
+                            }
+                        }
+                    }
+                    UniformVariable::Normal(ref mut var) => match var {
+                        VmVariable::Int1D(ref mut arr) => {
+                            arr.fill($value);
+                        }
+                        _ => bail!("Variable {} is not Int1D", $name),
+                    },
+                }
+            };
+        }
+
+        set_var!("ASSIPLAY", 0);
+        set_var!("PREVCOM", -1);
+        set_var!("NEXTCOM", -1);
+
+        set_var!(@all "TFLAG", 0);
+        set_var!(@all "TEQUIP", 0);
+        set_var!(@all "PALAM", 0);
+        set_var!(@all "STAIN", 0);
+        set_var!(@all "SOURCE", 0);
+        set_var!(@all "GOTJUEL", 0);
+
+        Ok(())
+    }
+
     pub fn set_result(&mut self, i: i64) {
         self.get_var("RESULT")
             .unwrap()

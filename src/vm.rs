@@ -903,6 +903,21 @@ impl TerminalVm {
                 self.call_event(EventType::First, chan, ctx)?;
                 Ok(())
             }
+            BeginType::Train => {
+                ctx.var.reset_train_data()?;
+                self.call_event(EventType::Train, chan, ctx)?;
+                //if ctx
+                //    .var
+                //    .get_var("NEXTCOM")?
+                //    .1
+                //    .assume_normal()
+                //    .get_int(iter::empty())?
+                //    >= 0
+                //{
+                //    
+                //}
+                Ok(())
+            }
             BeginType::Shop => {
                 self.call_event(EventType::Shop, chan, ctx)?;
 

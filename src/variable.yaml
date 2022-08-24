@@ -179,6 +179,70 @@ RESULTS:
   is_chara: false
   is_str: true
 
+PALAM:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+STAIN:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+SOURCE:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+JUEL:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+GOTJUEL:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+SOURCE:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+UP:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+DOWN:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+TEQUIP:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+ASSIPLAY:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+SELECTCOM:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+PREVCOM:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+NEXTCOM:
+  size: [1000]
+  is_chara: false
+  is_str: false
 
 # GLOBAL:
 #   is_global: true

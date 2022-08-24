@@ -77,4 +77,6 @@ pub enum EventType {
     TurnEnd,
     #[strum(to_string = "EVENTLOAD")]
     Load,
+    #[strum(to_string = "EVENTTRAIN")]
+    Train,
 }
