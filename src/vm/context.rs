@@ -1,13 +1,14 @@
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use smol_str::SmolStr;
+use std::collections::VecDeque;
 use std::sync::Arc;
 use std::{fmt, iter};
 
 use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
 use erars_compiler::HeaderInfo;
 
-use crate::ui::{ConsoleChannel, ConsoleMessage};
+use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 use crate::vm::{UniformVariable, VariableStorage, VmVariable};
 
 #[derive(Clone)]
@@ -22,6 +23,7 @@ pub struct VmContext {
     color: u32,
     hl_color: u32,
     bg_color: u32,
+    inputs: VecDeque<Value>,
 }
 
 impl VmContext {
@@ -37,6 +39,22 @@ impl VmContext {
             hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
             bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
             current_pos: ScriptPosition::default(),
+            inputs: VecDeque::new(),
+        }
+    }
+
+    pub fn push_input(&mut self, value: Value) {
+        self.inputs.push_back(value);
+    }
+
+    pub fn input(&mut self, chan: &ConsoleChannel, req: InputRequest) -> ConsoleResult {
+        if let Some(i) = self.inputs.pop_front() {
+            ConsoleResult::Value(i)
+        } else {
+            chan.send_msg(ConsoleMessage::Input(req));
+            let ret = chan.recv_ret();
+            log::trace!("Console Recv {ret:?}");
+            ret
         }
     }
 

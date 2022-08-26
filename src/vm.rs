@@ -711,7 +711,7 @@ impl TerminalVm {
                             BuiltinCommand::Input => InputRequest::Int,
                             _ => unreachable!(),
                         };
-                        match input(chan, req) {
+                        match ctx.input(chan, req) {
                             ConsoleResult::Quit => {
                                 log::info!("User Quit");
                                 return Ok(Some(Workflow::Exit));
@@ -914,7 +914,7 @@ impl TerminalVm {
                 //    .get_int(iter::empty())?
                 //    >= 0
                 //{
-                //    
+                //
                 //}
                 Ok(())
             }
@@ -924,7 +924,7 @@ impl TerminalVm {
                 while ctx.begin.is_none() {
                     self.call("SHOW_SHOP", &[], chan, ctx)?;
 
-                    match input(chan, InputRequest::Int) {
+                    match ctx.input(chan, InputRequest::Int) {
                         ConsoleResult::Quit => break,
                         ConsoleResult::Value(Value::Int(i)) => {
                             ctx.var.set_result(i);
@@ -1044,11 +1044,4 @@ impl TerminalVm {
 
         Ok(())
     }
-}
-
-fn input(chan: &ConsoleChannel, req: InputRequest) -> ConsoleResult {
-    chan.send_msg(ConsoleMessage::Input(req));
-    let ret = chan.recv_ret();
-    log::trace!("Console Recv {ret:?}");
-    ret
 }

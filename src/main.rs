@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::{sync::Arc, time::Instant};
+use std::{path::PathBuf, sync::Arc, time::Instant};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -16,12 +16,12 @@ use erars::{
     ui::{ConsoleChannel, ConsoleMessage, EraApp, StdioBackend},
     vm::{TerminalVm, VmContext},
 };
-use erars_ast::VariableInfo;
+use erars_ast::{Value, VariableInfo};
 use erars_compiler::{CompiledFunction, HeaderInfo, Lexer, ParserContext};
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
-fn run(mut backend: impl EraApp, target_path: String) -> anyhow::Result<()> {
+fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> anyhow::Result<()> {
     let mut time = Instant::now();
 
     let chan = Arc::new(ConsoleChannel::new());
@@ -229,6 +229,10 @@ fn run(mut backend: impl EraApp, target_path: String) -> anyhow::Result<()> {
 
             ctx = VmContext::new(header_info.clone());
 
+            for input in inputs {
+                ctx.push_input(input);
+            }
+
             for func in funcs {
                 function_dic.insert_compiled_func(&mut ctx.var_mut(), func);
             }
@@ -270,6 +274,9 @@ struct Args {
     )]
     target_path: String,
 
+    #[clap(long, help = "Accept input value from file")]
+    use_input: Option<PathBuf>,
+
     #[clap(long, help = "Show more verbose log")]
     verbose: bool,
 }
@@ -294,5 +301,12 @@ fn main() {
 
     log_panics::init();
 
-    run(StdioBackend::new(), args.target_path).unwrap();
+    let inputs = match args.use_input {
+        Some(input) => {
+            ron::from_str::<Vec<Value>>(&std::fs::read_to_string(input).unwrap()).unwrap()
+        }
+        None => Vec::new(),
+    };
+
+    run(StdioBackend::new(), args.target_path, inputs).unwrap();
 }
