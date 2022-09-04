@@ -1,7 +1,7 @@
 mod context;
 mod variable;
 
-use std::{io, iter};
+use std::io;
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -64,8 +64,8 @@ macro_rules! get_arg {
     };
 }
 
-#[derive(Display, Debug, Clone, Copy)]
-enum Workflow {
+#[derive(Display, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Workflow {
     Return,
     Exit,
 }
@@ -536,20 +536,26 @@ impl TerminalVm {
                         let start = get_arg!(@opt @usize: args, ctx);
                         let end = get_arg!(@opt @usize: args, ctx);
 
-                        let (info, var, args) = ctx.resolve_var_ref_raw(&var)?;
+                        let target = ctx.var.read_int("TARGET", &[])?;
+                        let (info, var, idx) = ctx.resolve_var_ref_raw(&var)?;
+                        let (chara_idx, idx) = info.calculate_single_idx(&idx);
 
                         match (value, start, end) {
                             (None, None, None) => {
                                 *var = UniformVariable::new(info);
                             }
                             (Some(value), start, end) => {
-                                let var = var.assume_normal();
+                                let var = match var {
+                                    UniformVariable::Character(cvar) => {
+                                        &mut cvar[chara_idx.unwrap_or_else(|| target as usize)]
+                                    }
+                                    UniformVariable::Normal(var) => var,
+                                };
                                 let start = start.unwrap_or(0);
                                 let end = end.unwrap_or(info.size.last().copied().unwrap_or(1));
 
                                 for i in start..end {
-                                    let args = args.clone().chain(Some(i));
-                                    var.set(args, value.clone())?;
+                                    var.set(idx + i, value.clone())?;
                                 }
                             }
                             _ => unreachable!(),
@@ -637,12 +643,12 @@ impl TerminalVm {
 
                         for arg in args {
                             match arg {
-                                value @ Value::Int(_) => {
-                                    result.set(iter::once(result_idx), value)?;
+                                Value::Int(i) => {
+                                    result.as_int()?[result_idx] = i;
                                     result_idx += 1;
                                 }
-                                value @ Value::String(_) => {
-                                    results.set(iter::once(results_idx), value)?;
+                                Value::String(s) => {
+                                    results.as_str()?[results_idx] = s;
                                     results_idx += 1;
                                 }
                             }
@@ -716,18 +722,10 @@ impl TerminalVm {
                                 log::info!("User Quit");
                                 return Ok(Some(Workflow::Exit));
                             }
-                            ConsoleResult::Value(ret) => {
-                                ctx.var
-                                    .get_var(if req == InputRequest::Int {
-                                        "RESULT"
-                                    } else {
-                                        "RESULTS"
-                                    })
-                                    .unwrap()
-                                    .1
-                                    .assume_normal()
-                                    .set(iter::empty(), ret)?;
-                            }
+                            ConsoleResult::Value(ret) => match ret {
+                                Value::Int(i) => *ctx.var.ref_int("RESULT", &[])? = i,
+                                Value::String(s) => *ctx.var.ref_str("RESULTS", &[])? = s,
+                            },
                         }
                     }
                     BuiltinCommand::Quit => {
@@ -832,20 +830,25 @@ impl TerminalVm {
         let mut args = args.iter().cloned();
 
         for (var_idx, default_value, arg_indices) in body.args().iter() {
-            let var = ctx.var.get_maybe_local_var(label, var_idx)?;
+            let (info, var) = ctx.var.get_maybe_local_var(label, var_idx)?;
+            let var = var.assume_normal();
+            let idx = info.calculate_single_idx(arg_indices).1;
 
-            var.1.assume_normal().set(
-                arg_indices.iter().copied(),
-                args.next()
-                    .or_else(|| default_value.clone())
-                    .unwrap_or_else(|| {
-                        if var.0.is_str {
-                            Value::String("".into())
-                        } else {
-                            Value::Int(0)
-                        }
-                    }),
-            )?;
+            let arg = args.next().or_else(|| default_value.clone());
+
+            if info.is_str {
+                var.as_str()?[idx] = match arg {
+                    Some(Value::String(s)) => s,
+                    Some(_) => bail!("Argument type mismatched"),
+                    None => String::new(),
+                };
+            } else {
+                var.as_int()?[idx] = match arg {
+                    Some(Value::Int(s)) => s,
+                    Some(_) => bail!("Argument type mismatched"),
+                    None => 0,
+                };
+            }
         }
 
         let ret = self.run_body(label, body.goto_labels(), body, chan, ctx)?;
@@ -880,14 +883,19 @@ impl TerminalVm {
         }
     }
 
-    fn call_event(&self, ty: EventType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
+    fn call_event(
+        &self,
+        ty: EventType,
+        chan: &ConsoleChannel,
+        ctx: &mut VmContext,
+    ) -> Result<Workflow> {
         self.dic.get_event(ty).run(|body| {
             let label: &str = ty.into();
             ctx.new_func(Err(ty), body.file_path().clone());
-            self.run_body(label, body.goto_labels(), body, chan, ctx)?;
+            let ret = self.run_body(label, body.goto_labels(), body, chan, ctx)?;
             ctx.end_func();
 
-            Ok(())
+            Ok(ret)
         })
     }
 
@@ -905,17 +913,31 @@ impl TerminalVm {
             }
             BeginType::Train => {
                 ctx.var.reset_train_data()?;
-                self.call_event(EventType::Train, chan, ctx)?;
-                //if ctx
-                //    .var
-                //    .get_var("NEXTCOM")?
-                //    .1
-                //    .assume_normal()
-                //    .get_int(iter::empty())?
-                //    >= 0
-                //{
+                //                self.call_event(EventType::Train, chan, ctx)?;
                 //
-                //}
+                //                loop {
+                //                    let no = ctx
+                //                        .var
+                //                        .get_int_normal_var("NEXTCOM", &[])?;
+                //                    if no >= 0 {
+                //                        ctx.var.set_normal_var("NOWEX", &[], 0)?;
+                //                        self.call_event(EventType::Com, chan, ctx)?;
+                //                        if self.call(&format!("@COM{no}"), &[], chan, ctx)? == Workflow::Exit {
+                //                            return Ok(());
+                //                        };
+                //
+                //                        if ctx.var.get_result() == 0 {
+                //                            continue;
+                //                        }
+                //
+                //                        if self.call("SOURCE_CHECK", &[], chan, ctx)? == Workflow::Exit {
+                //                            return Ok(());
+                //                        }
+                //
+                //                        ctx.var.get_var("SOURCE")?.1.assume_normal().
+                //                    }
+                //                }
+
                 Ok(())
             }
             BeginType::Shop => {
@@ -932,12 +954,7 @@ impl TerminalVm {
                             log::debug!("SHOP: get {i}");
 
                             if i >= 0 && i < 100 {
-                                let sales = *ctx
-                                    .var
-                                    .get_var("ITEMSALES")?
-                                    .1
-                                    .assume_normal()
-                                    .get_int(iter::once(i as usize))?;
+                                let sales = ctx.var.read_int("ITEMSALES", &[i as usize])?;
 
                                 log::debug!("sales: {sales}");
 
@@ -945,21 +962,12 @@ impl TerminalVm {
                                 #[allow(unused_variables)]
                                 if sales != 0 {
                                     let price = todo!("ITEMPRICE");
-                                    let money = ctx
-                                        .var
-                                        .get_var("MONEY")?
-                                        .1
-                                        .assume_normal()
-                                        .get_int(iter::empty())?;
+                                    let money = ctx.var.ref_int("MONEY", &[])?;
 
                                     if *money >= price {
                                         *money -= price;
                                         drop(money);
-                                        *ctx.var
-                                            .get_var("ITEM")?
-                                            .1
-                                            .assume_normal()
-                                            .get_int(iter::once(i as usize))? += 1;
+                                        *ctx.var.ref_int("ITEM", &[])? += 1;
                                     }
                                 }
                             } else {

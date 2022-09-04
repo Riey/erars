@@ -110,6 +110,12 @@ impl From<u32> for Value {
     }
 }
 
+impl From<i32> for Value {
+    fn from(v: i32) -> Self {
+        Self::Int(v as i64)
+    }
+}
+
 impl From<i64> for Value {
     fn from(v: i64) -> Self {
         Self::Int(v)

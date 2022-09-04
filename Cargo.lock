@@ -421,6 +421,7 @@ dependencies = [
  "bitflags",
  "enum-map",
  "hashbrown",
+ "k9",
  "num-derive",
  "num-traits",
  "option_set",

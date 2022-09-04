@@ -3,7 +3,6 @@ use erars_ast::{Value, VariableInfo};
 use erars_compiler::CharacterTemplate;
 use hashbrown::HashMap;
 use smol_str::SmolStr;
-use std::iter;
 
 #[derive(Clone)]
 pub struct VariableStorage {
@@ -39,29 +38,18 @@ impl VariableStorage {
     pub fn reset_train_data(&mut self) -> Result<()> {
         macro_rules! set_var {
             ($name:expr, $value:expr) => {
-                self.get_var($name)?
-                    .1
-                    .assume_normal()
-                    .set(iter::empty(), Value::Int($value))?;
+                *self.ref_int($name, &[])? = $value;
             };
             (@all $name:expr, $value:expr) => {
                 match self.get_var($name)?.1 {
                     UniformVariable::Character(ref mut cvar) => {
                         for var in cvar {
-                            match var {
-                                VmVariable::Int1D(ref mut arr) => {
-                                    arr.fill($value);
-                                }
-                                _ => bail!("Variable {} is not Int1D", $name),
-                            }
+                            var.as_int()?.fill($value);
                         }
                     }
-                    UniformVariable::Normal(ref mut var) => match var {
-                        VmVariable::Int1D(ref mut arr) => {
-                            arr.fill($value);
-                        }
-                        _ => bail!("Variable {} is not Int1D", $name),
-                    },
+                    UniformVariable::Normal(ref mut var) => {
+                        var.as_int()?.fill($value);
+                    }
                 }
             };
         }
@@ -80,22 +68,20 @@ impl VariableStorage {
         Ok(())
     }
 
+    pub fn get_result(&mut self) -> i64 {
+        self.read_int("RESULT", &[]).unwrap()
+    }
+
+    pub fn get_results(&mut self) -> String {
+        self.read_str("RESULTS", &[]).unwrap()
+    }
+
     pub fn set_result(&mut self, i: i64) {
-        self.get_var("RESULT")
-            .unwrap()
-            .1
-            .assume_normal()
-            .set(iter::empty(), Value::Int(i))
-            .unwrap();
+        *self.ref_int("RESULT", &[]).unwrap() = i;
     }
 
     pub fn set_results(&mut self, s: String) {
-        self.get_var("RESULTS")
-            .unwrap()
-            .1
-            .assume_normal()
-            .set(iter::empty(), Value::String(s))
-            .unwrap();
+        *self.ref_str("RESULTS", &[]).unwrap() = s;
     }
 
     pub fn character_len(&self) -> usize {
@@ -107,6 +93,155 @@ impl VariableStorage {
             .entry(func)
             .or_default()
             .insert(var_name, (info, None));
+    }
+
+    pub fn ref_int(&mut self, name: &str, args: &[usize]) -> Result<&mut i64> {
+        let (_, var, idx) = self.index_var(name, args)?;
+        Ok(&mut var.as_int()?[idx])
+    }
+
+    pub fn ref_local_int(
+        &mut self,
+        func_name: &str,
+        name: &str,
+        args: &[usize],
+    ) -> Result<&mut i64> {
+        let (_, var, idx) = self.index_local_var(func_name, name, args)?;
+        Ok(&mut var.as_int()?[idx])
+    }
+
+    pub fn ref_maybe_local_int(
+        &mut self,
+        func_name: &str,
+        name: &str,
+        args: &[usize],
+    ) -> Result<&mut i64> {
+        if self.is_local_var(func_name, name) {
+            self.ref_local_int(func_name, name, args)
+        } else {
+            self.ref_int(name, args)
+        }
+    }
+
+    pub fn ref_str(&mut self, name: &str, args: &[usize]) -> Result<&mut String> {
+        let (_, var, idx) = self.index_var(name, args)?;
+        Ok(&mut var.as_str()?[idx])
+    }
+
+    pub fn ref_local_str(
+        &mut self,
+        func_name: &str,
+        name: &str,
+        args: &[usize],
+    ) -> Result<&mut String> {
+        let (_, var, idx) = self.index_local_var(func_name, name, args)?;
+        Ok(&mut var.as_str()?[idx])
+    }
+
+    pub fn ref_maybe_local_str(
+        &mut self,
+        func_name: &str,
+        name: &str,
+        args: &[usize],
+    ) -> Result<&mut String> {
+        if self.is_local_var(func_name, name) {
+            self.ref_local_str(func_name, name, args)
+        } else {
+            self.ref_str(name, args)
+        }
+    }
+
+    pub fn read_int(&mut self, name: &str, args: &[usize]) -> Result<i64> {
+        let (_, var, idx) = self.index_var(name, args)?;
+        Ok(var.as_int()?[idx])
+    }
+
+    pub fn read_local_int(&mut self, func_name: &str, name: &str, args: &[usize]) -> Result<i64> {
+        let (_, var, idx) = self.index_local_var(func_name, name, args)?;
+        Ok(var.as_int()?[idx])
+    }
+
+    pub fn read_maybe_local_int(
+        &mut self,
+        func_name: &str,
+        name: &str,
+        args: &[usize],
+    ) -> Result<i64> {
+        if self.is_local_var(func_name, name) {
+            self.read_local_int(func_name, name, args)
+        } else {
+            self.read_int(name, args)
+        }
+    }
+
+    pub fn read_str(&mut self, name: &str, args: &[usize]) -> Result<String> {
+        let (_, var, idx) = self.index_var(name, args)?;
+        Ok(var.as_str()?[idx].clone())
+    }
+
+    pub fn index_var(
+        &mut self,
+        name: &str,
+        args: &[usize],
+    ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
+        let target = if name != "TARGET" {
+            self.read_int("TARGET", &[])?
+        } else {
+            // NEED for break recursion
+            -1
+        };
+
+        let (info, var) = self.get_var(name)?;
+
+        let (c_idx, idx) = info.calculate_single_idx(args);
+
+        let vm_var = match var {
+            UniformVariable::Character(cvar) => {
+                let c_idx = c_idx.unwrap_or_else(|| target as usize);
+                cvar.get_mut(c_idx)
+                    .ok_or_else(|| anyhow!("Character index {c_idx} not exists"))?
+            }
+            UniformVariable::Normal(var) => var,
+        };
+
+        Ok((info, vm_var, idx))
+    }
+
+    pub fn index_local_var(
+        &mut self,
+        func_name: &str,
+        name: &str,
+        args: &[usize],
+    ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
+        let target = self.read_int("TARGET", &[])?;
+
+        let (info, var) = self.get_local_var(func_name, name)?;
+
+        let (c_idx, idx) = info.calculate_single_idx(args);
+
+        let vm_var = match var {
+            UniformVariable::Character(cvar) => {
+                let c_idx = c_idx.unwrap_or_else(|| target as usize);
+                cvar.get_mut(c_idx)
+                    .ok_or_else(|| anyhow!("Character index {c_idx} not exists"))?
+            }
+            UniformVariable::Normal(var) => var,
+        };
+
+        Ok((info, vm_var, idx))
+    }
+
+    pub fn index_maybe_local_var(
+        &mut self,
+        func_name: &str,
+        name: &str,
+        args: &[usize],
+    ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
+        if self.is_local_var(func_name, name) {
+            self.index_local_var(func_name, name, args)
+        } else {
+            self.index_var(name, args)
+        }
     }
 
     pub fn get_local_var(
@@ -126,7 +261,7 @@ impl VariableStorage {
             if !info.init.is_empty() {
                 let var_ = var_.assume_normal();
                 for (idx, init_var) in info.init.iter().enumerate() {
-                    var_.set(iter::once(idx), init_var.clone()).unwrap();
+                    var_.set(idx, init_var.clone()).unwrap();
                 }
             }
             *var = Some(var_);
@@ -207,7 +342,7 @@ impl VariableStorage {
         match no_var {
             UniformVariable::Character(c) => {
                 for (idx, var) in c.iter_mut().enumerate() {
-                    if *var.get_int(iter::empty())? == target {
+                    if var.as_int()?[0] == target {
                         return Ok(Some(idx));
                     }
                 }
@@ -225,39 +360,23 @@ impl VariableStorage {
     ) -> Result<()> {
         macro_rules! set {
             (@int $name:expr, $field:ident) => {
-                self.get_var($name)?
-                    .1
-                    .assume_chara(idx)
-                    .set(iter::empty(), Value::Int(template.$field as i64))?;
+                self.get_var($name)?.1.assume_chara(idx).as_int()?[0] = template.$field as i64;
             };
             (@str $name:expr, $field:ident) => {
-                self.get_var($name)?
-                    .1
-                    .assume_chara(idx)
-                    .set(iter::empty(), Value::String(template.$field.clone()))?;
+                self.get_var($name)?.1.assume_chara(idx).as_str()?[0] = template.$field.clone();
             };
             (@intarr $name:expr, $field:ident) => {
-                let var = self.get_var($name)?.1.assume_chara(idx);
+                let var = self.get_var($name)?.1.assume_chara(idx).as_int()?;
 
-                match var {
-                    VmVariable::Int1D(arr) => {
-                        for (k, v) in template.$field.iter() {
-                            arr[*k as usize] = *v as i64;
-                        }
-                    }
-                    _ => unreachable!(),
+                for (k, v) in template.$field.iter() {
+                    var[*k as usize] = *v as i64;
                 }
             };
             (@strarr $name:expr, $field:ident) => {
-                let var = self.get_var($name)?.1.assume_chara(idx);
+                let var = self.get_var($name)?.1.assume_chara(idx).as_str()?;
 
-                match var {
-                    VmVariable::Str1D(arr) => {
-                        for (k, v) in template.$field.iter() {
-                            arr[*k as usize] = v.clone();
-                        }
-                    }
-                    _ => unreachable!(),
+                for (k, v) in template.$field.iter() {
+                    var[*k as usize] = v.clone();
                 }
             };
         }
@@ -287,111 +406,62 @@ impl VariableStorage {
 
 #[derive(Clone, Debug)]
 pub enum VmVariable {
-    Int0D(i64),
-    Int1D(Vec<i64>),
-    Int2D(Vec<Vec<i64>>),
-    Int3D(Vec<Vec<Vec<i64>>>),
-    Str0D(String),
-    Str1D(Vec<String>),
-    Str2D(Vec<Vec<String>>),
-    Str3D(Vec<Vec<Vec<String>>>),
+    Int(Vec<i64>),
+    Str(Vec<String>),
 }
 
 impl VmVariable {
-    pub fn new(info: &VariableInfo) -> Self {
-        match (info.is_str, info.size.as_slice()) {
-            (false, []) => Self::Int0D(info.default_int),
-            (false, [a]) => Self::Int1D(vec![info.default_int; *a]),
-            (false, [a, b]) => Self::Int2D(vec![vec![info.default_int; *a]; *b]),
-            (false, [a, b, c]) => Self::Int3D(vec![vec![vec![info.default_int; *a]; *b]; *c]),
-            (true, []) => Self::Str0D(String::new()),
-            (true, [a]) => Self::Str1D(vec![String::new(); *a]),
-            (true, [a, b]) => Self::Str2D(vec![vec![String::new(); *a]; *b]),
-            (true, [a, b, c]) => Self::Str3D(vec![vec![vec![String::new(); *a]; *b]; *c]),
-            _ => panic!("size length can't be greater than 3"),
+    fn new(info: &VariableInfo) -> Self {
+        let size = info.full_size();
+
+        match info.is_str {
+            false => Self::Int(vec![info.default_int; size]),
+            true => Self::Str(vec![String::new(); size]),
         }
     }
 
-    pub fn set(&mut self, args: impl Iterator<Item = usize>, value: Value) -> Result<()> {
+    pub fn get(&self, idx: usize) -> Result<Value> {
         match self {
-            VmVariable::Int0D(..)
-            | VmVariable::Int1D(..)
-            | VmVariable::Int2D(..)
-            | VmVariable::Int3D(..) => *self.get_int(args)? = value.try_into()?,
-            VmVariable::Str0D(..)
-            | VmVariable::Str1D(..)
-            | VmVariable::Str2D(..)
-            | VmVariable::Str3D(..) => *self.get_str(args)? = value.try_into()?,
+            Self::Int(i) => i
+                .get(idx)
+                .ok_or_else(|| anyhow!("Variable out of range {} over {}", idx, i.len()))
+                .copied()
+                .map(Value::Int),
+            Self::Str(i) => i
+                .get(idx)
+                .ok_or_else(|| anyhow!("Variable out of range {} over {}", idx, i.len()))
+                .cloned()
+                .map(Value::String),
+        }
+    }
+
+    pub fn set(&mut self, idx: usize, value: impl Into<Value>) -> Result<()> {
+        match (self, value.into()) {
+            (Self::Int(i), Value::Int(n)) => {
+                *i.get_mut(idx)
+                    .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = n;
+            }
+            (Self::Str(i), Value::String(s)) => {
+                *i.get_mut(idx)
+                    .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = s;
+            }
+            _ => bail!("Variable type mismatched"),
         }
 
         Ok(())
     }
 
-    pub fn get(&mut self, args: impl Iterator<Item = usize>) -> Result<Value> {
+    pub fn as_int(&mut self) -> Result<&mut Vec<i64>> {
         match self {
-            VmVariable::Int0D(..)
-            | VmVariable::Int1D(..)
-            | VmVariable::Int2D(..)
-            | VmVariable::Int3D(..) => self.get_int(args).map(Value::from),
-            VmVariable::Str0D(..)
-            | VmVariable::Str1D(..)
-            | VmVariable::Str2D(..)
-            | VmVariable::Str3D(..) => self.get_str(args).map(Value::from),
+            Self::Int(i) => Ok(i),
+            _ => bail!("Variable type is not Int"),
         }
     }
 
-    pub fn get_int(&mut self, mut args: impl Iterator<Item = usize>) -> Result<&mut i64> {
-        let mut last_arg;
-
-        macro_rules! a {
-            () => {{
-                last_arg = args.next().unwrap_or(0);
-                last_arg
-            }};
-        }
+    pub fn as_str(&mut self) -> Result<&mut Vec<String>> {
         match self {
-            VmVariable::Int0D(s) => Ok(s),
-            VmVariable::Int1D(s) => s
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
-            VmVariable::Int2D(s) => s
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
-            VmVariable::Int3D(s) => s
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range"))?
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index {last_arg} out of range")),
-            _ => bail!("Variable is Str type"),
-        }
-    }
-
-    pub fn get_str(&mut self, mut args: impl Iterator<Item = usize>) -> Result<&mut String> {
-        macro_rules! a {
-            () => {
-                args.next().unwrap_or(0)
-            };
-        }
-        match self {
-            VmVariable::Str0D(s) => Ok(s),
-            VmVariable::Str1D(s) => s.get_mut(a!()).ok_or_else(|| anyhow!("Index out of range")),
-            VmVariable::Str2D(s) => s
-                .get_mut(a!())
-                .unwrap()
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index out of range")),
-            VmVariable::Str3D(s) => s
-                .get_mut(a!())
-                .unwrap()
-                .get_mut(a!())
-                .unwrap()
-                .get_mut(a!())
-                .ok_or_else(|| anyhow!("Index out of range")),
-            _ => bail!("Variable is Int type"),
+            Self::Str(i) => Ok(i),
+            _ => bail!("Variable type is not Str"),
         }
     }
 }

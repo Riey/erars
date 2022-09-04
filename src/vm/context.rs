@@ -1,15 +1,17 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use arrayvec::ArrayVec;
 use smol_str::SmolStr;
 use std::collections::VecDeque;
+use std::fmt;
 use std::sync::Arc;
-use std::{fmt, iter};
 
 use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
 use erars_compiler::HeaderInfo;
 
 use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
-use crate::vm::{UniformVariable, VariableStorage, VmVariable};
+use crate::vm::{VariableStorage, VmVariable};
+
+use super::UniformVariable;
 
 #[derive(Clone)]
 pub struct VmContext {
@@ -132,51 +134,26 @@ impl VmContext {
                     .into()
             }
             _ => {
-                let (var, args) = self.resolve_var_ref(&var_ref)?;
+                let (_, var, idx) = self.resolve_var_ref(&var_ref)?;
 
-                var.get(args)?
+                var.get(idx)?
             }
         };
         Ok(value)
     }
 
     pub fn set_var_ref(&mut self, var_ref: &VariableRef, value: Value) -> Result<()> {
-        let (var, args) = self.resolve_var_ref(var_ref)?;
-        var.set(args, value)?;
+        let (_, var, idx) = self.resolve_var_ref(var_ref)?;
+        var.set(idx, value)?;
         Ok(())
     }
 
     pub fn resolve_var_ref<'c>(
         &'c mut self,
         r: &VariableRef,
-    ) -> Result<(&'c mut VmVariable, arrayvec::IntoIter<usize, 4>)> {
-        let target = *self
-            .var
-            .get_var("TARGET".into())
-            .unwrap()
-            .1
-            .assume_normal()
-            .get_int(iter::empty())?;
-
-        let (info, var, mut args) = self.resolve_var_ref_raw(r)?;
-
-        match var {
-            UniformVariable::Character(c) => {
-                let no = if args.len() < info.arg_len() {
-                    target.try_into()?
-                } else {
-                    args.next().unwrap()
-                };
-                let c_len = c.len();
-                Ok((
-                    c.get_mut(no).ok_or_else(|| {
-                        anyhow!("캐릭터 번호가 너무 큽니다. {no}, 최대 {}", c_len)
-                    })?,
-                    args,
-                ))
-            }
-            UniformVariable::Normal(v) => Ok((v, args)),
-        }
+    ) -> Result<(&'c mut VariableInfo, &'c mut VmVariable, usize)> {
+        self.var
+            .index_maybe_local_var(&r.func_name, &r.name, &r.idxs)
     }
 
     pub fn resolve_var_ref_raw<'c>(
@@ -185,11 +162,11 @@ impl VmContext {
     ) -> Result<(
         &'c mut VariableInfo,
         &'c mut UniformVariable,
-        arrayvec::IntoIter<usize, 4>,
+        ArrayVec<usize, 4>,
     )> {
         let (info, var) = self.var.get_maybe_local_var(&r.func_name, &r.name)?;
 
-        Ok((info, var, r.idxs.clone().into_iter()))
+        Ok((info, var, r.idxs.clone()))
     }
 
     pub fn new_func(&mut self, func_name: Result<SmolStr, EventType>, file_path: SmolStr) {

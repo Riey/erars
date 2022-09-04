@@ -134,6 +134,11 @@ FLAG:
   is_chara: false
   is_str: false
 
+TCVAR:
+  size: [10000]
+  is_chara: true
+  is_str: false
+
 TFLAG:
   size: [10000]
   is_chara: false

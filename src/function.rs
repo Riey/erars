@@ -9,6 +9,7 @@ use erars_compiler::{CompiledFunction, Instruction};
 use serde::{Deserialize, Serialize};
 
 use crate::vm::VariableStorage;
+use crate::vm::Workflow;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {
@@ -54,24 +55,30 @@ pub struct EventCollection {
 }
 
 impl EventCollection {
-    pub fn run(&self, mut f: impl FnMut(&FunctionBody) -> Result<()>) -> Result<()> {
+    pub fn run(&self, mut f: impl FnMut(&FunctionBody) -> Result<Workflow>) -> Result<Workflow> {
         if let Some(single) = self.single.as_ref() {
-            f(single)?;
+            return f(single);
         } else {
             for pre in self.pre.iter() {
-                f(pre)?;
+                if f(pre)? == Workflow::Exit {
+                    return Ok(Workflow::Exit);
+                }
             }
 
             for empty in self.empty.iter() {
-                f(empty)?;
+                if f(empty)? == Workflow::Exit {
+                    return Ok(Workflow::Exit);
+                }
             }
 
             for later in self.later.iter() {
-                f(later)?;
+                if f(later)? == Workflow::Exit {
+                    return Ok(Workflow::Exit);
+                }
             }
         }
 
-        Ok(())
+        Ok(Workflow::Return)
     }
 }
 
