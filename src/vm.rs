@@ -913,30 +913,33 @@ impl TerminalVm {
             }
             BeginType::Train => {
                 ctx.var.reset_train_data()?;
-                //                self.call_event(EventType::Train, chan, ctx)?;
-                //
-                //                loop {
-                //                    let no = ctx
-                //                        .var
-                //                        .get_int_normal_var("NEXTCOM", &[])?;
-                //                    if no >= 0 {
-                //                        ctx.var.set_normal_var("NOWEX", &[], 0)?;
-                //                        self.call_event(EventType::Com, chan, ctx)?;
-                //                        if self.call(&format!("@COM{no}"), &[], chan, ctx)? == Workflow::Exit {
-                //                            return Ok(());
-                //                        };
-                //
-                //                        if ctx.var.get_result() == 0 {
-                //                            continue;
-                //                        }
-                //
-                //                        if self.call("SOURCE_CHECK", &[], chan, ctx)? == Workflow::Exit {
-                //                            return Ok(());
-                //                        }
-                //
-                //                        ctx.var.get_var("SOURCE")?.1.assume_normal().
-                //                    }
-                //                }
+                self.call_event(EventType::Train, chan, ctx)?;
+
+                while ctx.begin.is_none() {
+                    let no = ctx.var.read_int("NEXTCOM", &[])?;
+                    if no >= 0 {
+                        *ctx.var.ref_int("NOWEX", &[])? = 0;
+                        self.call_event(EventType::Com, chan, ctx)?;
+                        if self.call(&format!("@COM{no}"), &[], chan, ctx)? == Workflow::Exit {
+                            return Ok(());
+                        };
+
+                        if ctx.var.get_result() == 0 {
+                            continue;
+                        }
+
+                        if self.call("SOURCE_CHECK", &[], chan, ctx)? == Workflow::Exit {
+                            return Ok(());
+                        }
+
+                        ctx.var
+                            .get_var("SOURCE")?
+                            .1
+                            .assume_normal()
+                            .as_int()?
+                            .fill(0);
+                    }
+                }
 
                 Ok(())
             }
