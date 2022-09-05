@@ -281,6 +281,14 @@ impl TerminalVm {
 
                         ctx.push(ret);
                     }
+                    "TOINT" => {
+                        check_arg_count!(1);
+
+                        match get_arg!(@String: args, ctx).parse() {
+                            Ok(i) => ctx.push(Value::Int(i)),
+                            Err(_) => ctx.push(0),
+                        }
+                    }
                     "MAX" => {
                         check_arg_count!(@atleast 1);
 
