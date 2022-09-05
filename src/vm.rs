@@ -793,6 +793,46 @@ impl TerminalVm {
                     | BuiltinCommand::LoadData => {
                         log::warn!("TODO: Save/Load");
                     }
+                    BuiltinCommand::GetPalamLv => {
+                        let value = get_arg!(@i64: args, ctx);
+                        let max = get_arg!(@i64: args, ctx);
+
+                        let var = ctx.var.get_var("PALAMLV")?.1.assume_normal().as_int()?;
+
+                        let mut ret = max;
+
+                        for (lv, lv_value) in var.iter().enumerate() {
+                            if lv as i64 > max {
+                                break;
+                            }
+                            if value <= *lv_value {
+                                ret = lv as i64;
+                                break;
+                            }
+                        }
+
+                        ctx.var.set_result(ret);
+                    }
+                    BuiltinCommand::GetExpLv => {
+                        let value = get_arg!(@i64: args, ctx);
+                        let max = get_arg!(@i64: args, ctx);
+
+                        let var = ctx.var.get_var("EXPLV")?.1.assume_normal().as_int()?;
+
+                        let mut ret = max;
+
+                        for (lv, lv_value) in var.iter().enumerate() {
+                            if lv as i64 > max {
+                                break;
+                            }
+                            if value <= *lv_value {
+                                ret = lv as i64;
+                                break;
+                            }
+                        }
+
+                        ctx.var.set_result(ret);
+                    }
                     _ => {
                         bail!("TODO: Command {}({:?})", com, args.collect_vec());
                     }

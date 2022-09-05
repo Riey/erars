@@ -4,6 +4,11 @@
   # is_global: false
   # size: [1000]
 
+PALAMLV:
+  size: [100]
+EXPLV:
+  size: [100]
+
 SAVESTR:
   size: [1000]
   is_chara: false
@@ -86,8 +91,8 @@ MAXBASE:
 
 DOWNBASE:
   size: [1000]
-  is_chara: true
-  is_str: false
+LOSEBASE:
+  size: [1000]
 
 TALENT:
   size: [1000]
@@ -125,6 +130,11 @@ ASSI:
   is_str: false
 
 TARGET:
+  size: [1000]
+  is_chara: false
+  is_str: false
+
+PLAYER:
   size: [1000]
   is_chara: false
   is_str: false
@@ -178,6 +188,9 @@ NOITEM:
   size: [1000]
   is_chara: false
   is_str: false
+
+DITEMTYPE:
+  size: [1000,1000]
 
 RESULT:
   size: [1000]
