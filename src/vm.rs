@@ -144,7 +144,13 @@ impl TerminalVm {
             }
             Instruction::Print(flags) => {
                 let s = ctx.pop_str()?;
+                if flags.contains(PrintFlags::LEFT_ALIGN) {
+                    ctx.printlc(chan, &s);
+                } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
+                    ctx.printrc(chan, &s);
+                } else {
                 ctx.print(chan, s);
+                }
                 if flags.contains(PrintFlags::NEWLINE) {
                     ctx.new_line(chan);
                 }

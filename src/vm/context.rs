@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use arrayvec::ArrayVec;
+use pad::PadStr;
 use smol_str::SmolStr;
 use std::collections::VecDeque;
 use std::fmt;
@@ -113,12 +114,7 @@ impl VmContext {
             "CHARANUM" => (self.var.character_len() as i64).into(),
             "ITEMPRICE" => {
                 let arg = var_ref.idxs[0] as u32;
-                self.header_info
-                    .item_price
-                    .get(&arg)
-                    .copied()
-                    .unwrap_or(0)
-                    .into()
+                self.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
             }
             "TRAINNAME" | "ITEMNAME" | "FLAGNAME" | "ABLNAME" | "TALENTNAME" | "MARKNAME"
             | "EXNAME" | "EXPNAME" | "CFLAGNAME" | "CSTRNAME" | "STRNAME" | "SAVESTRNAME"
@@ -152,8 +148,7 @@ impl VmContext {
         &'c mut self,
         r: &VariableRef,
     ) -> Result<(&'c mut VariableInfo, &'c mut VmVariable, usize)> {
-        self.var
-            .index_maybe_local_var(&r.func_name, &r.name, &r.idxs)
+        self.var.index_maybe_local_var(&r.func_name, &r.name, &r.idxs)
     }
 
     pub fn resolve_var_ref_raw<'c>(
@@ -277,6 +272,20 @@ impl VmContext {
     pub fn print(&mut self, chan: &ConsoleChannel, s: String) {
         self.line_is_empty = false;
         chan.send_msg(ConsoleMessage::Print(s));
+    }
+
+    pub fn printlc(&mut self, chan: &ConsoleChannel, s: &str) {
+        self.print(
+            chan,
+            s.pad_to_width_with_alignment(25, pad::Alignment::Left),
+        );
+    }
+
+    pub fn printrc(&mut self, chan: &ConsoleChannel, s: &str) {
+        self.print(
+            chan,
+            s.pad_to_width_with_alignment(25, pad::Alignment::Right),
+        );
     }
 
     pub fn new_line(&mut self, chan: &ConsoleChannel) {
