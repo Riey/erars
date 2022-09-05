@@ -120,8 +120,8 @@ impl VmContext {
             }
             "TRAINNAME" | "ITEMNAME" | "FLAGNAME" | "ABLNAME" | "TALENTNAME" | "MARKNAME"
             | "EXNAME" | "EXPNAME" | "CFLAGNAME" | "CSTRNAME" | "STRNAME" | "SAVESTRNAME"
-            | "TSTRNAME" | "EQUIPNAME" | "TEQUIPNAME" | "SOURCENAME" | "STAINNAME"
-            | "TCVARNAME" | "GLOBALNAME" | "GLOBALSNAME" => {
+            | "TSTRNAME" | "EQUIPNAME" | "TEQUIPNAME" | "PALAMNAME" | "SOURCENAME"
+            | "STAINNAME" | "TCVARNAME" | "GLOBALNAME" | "GLOBALSNAME" => {
                 let name = var_ref.name.as_str().strip_suffix("NAME").unwrap();
                 let arg = var_ref.idxs[0] as u32;
                 self.header_info
