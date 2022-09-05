@@ -319,6 +319,11 @@ impl TerminalVm {
 
                         ctx.push(v.clamp(low, high));
                     }
+                    "ABS" => {
+                        check_arg_count!(1);
+                        let v = get_arg!(@i64: args, ctx);
+                        ctx.push(v.abs());
+                    }
                     "LINEISEMPTY" => {
                         check_arg_count!(0);
                         let line_is_empty = ctx.line_is_empty();
