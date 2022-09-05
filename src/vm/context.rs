@@ -23,6 +23,7 @@ pub struct VmContext {
     call_stack: Vec<Callstack>,
     current_pos: ScriptPosition,
     line_is_empty: bool,
+    printc_count: u32,
     color: u32,
     hl_color: u32,
     bg_color: u32,
@@ -38,6 +39,7 @@ impl VmContext {
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
             line_is_empty: true,
+            printc_count: 0,
             color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
             hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
             bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
@@ -277,20 +279,29 @@ impl VmContext {
     }
 
     pub fn printlc(&mut self, chan: &ConsoleChannel, s: &str) {
+        if self.printc_count == 3 {
+            self.new_line(chan);
+        }
+        self.printc_count += 1;
         self.print(
             chan,
-            s.pad_to_width_with_alignment(25, pad::Alignment::Left),
+            s.pad_to_width_with_alignment(30, pad::Alignment::Left),
         );
     }
 
     pub fn printrc(&mut self, chan: &ConsoleChannel, s: &str) {
+        if self.printc_count == 3 {
+            self.new_line(chan);
+        }
+        self.printc_count += 1;
         self.print(
             chan,
-            s.pad_to_width_with_alignment(25, pad::Alignment::Right),
+            s.pad_to_width_with_alignment(30, pad::Alignment::Right),
         );
     }
 
     pub fn new_line(&mut self, chan: &ConsoleChannel) {
+        self.printc_count = 0;
         self.line_is_empty = true;
         chan.send_msg(ConsoleMessage::NewLine);
     }

@@ -999,7 +999,7 @@ impl TerminalVm {
 
                             for (no, name) in ctx.header_info.clone().var_name_var["TRAIN"].iter() {
                                 if call!(&format!("COM_ABLE{no}")) && ctx.var.get_result() != 0 {
-                                    ctx.printlc(chan, &format!("{name}[{no:3}]"));
+                                    ctx.printrc(chan, &format!("{name}[{no:3}]"));
                                 }
                             }
 
