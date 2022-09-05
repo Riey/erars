@@ -18,16 +18,14 @@ pub fn get_ctx(file_path: impl Into<SmolStr>) -> ParserContext {
         ..Default::default()
     };
 
-    info.merge_name_csv("FLAG", include_str!("../CSV/FLAG.CSV"))
-        .unwrap();
-    info.merge_name_csv("BASE", include_str!("../CSV/BASE.CSV"))
-        .unwrap();
-
-    info.merge_item_csv(include_str!("../CSV/ITEM.CSV"))
+    info.merge_name_csv("FLAG", include_str!("../CSV/FLAG.CSV")).unwrap();
+    info.merge_name_csv("BASE", include_str!("../CSV/BASE.CSV")).unwrap();
+    info.merge_name_csv("TRAIN", include_str!("../CSV/TRAIN.CSV"))
         .unwrap();
 
-    info.merge_chara_csv(include_str!("../CSV/CHARA3.CSV"))
-        .unwrap();
+    info.merge_item_csv(include_str!("../CSV/ITEM.CSV")).unwrap();
+
+    info.merge_chara_csv(include_str!("../CSV/CHARA3.CSV")).unwrap();
 
     ParserContext::new(Arc::new(info), file_path.into())
 }

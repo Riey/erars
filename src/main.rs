@@ -83,11 +83,8 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
             .unwrap();
 
             let mut files = Mutex::new(SimpleFiles::new());
-            let mut diagnostic = Mutex::new(
-                Diagnostic::error()
-                    .with_code("E0001")
-                    .with_message("Compile ERROR"),
-            );
+            let mut diagnostic =
+                Mutex::new(Diagnostic::error().with_code("E0001").with_message("Compile ERROR"));
 
             let mut info = HeaderInfo {
                 global_variables: infos,
@@ -102,11 +99,7 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
                         let s = std::fs::read_to_string(&csv).ok()?;
 
                         Some((
-                            csv.file_stem()
-                                .unwrap()
-                                .to_str()
-                                .unwrap()
-                                .to_ascii_uppercase(),
+                            csv.file_stem().unwrap().to_str().unwrap().to_ascii_uppercase(),
                             (csv, s),
                         ))
                     }
@@ -177,9 +170,8 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
                 match info.merge_header(&source) {
                     Ok(()) => (),
                     Err((err, span)) => {
-                        let file_id = files
-                            .get_mut()
-                            .add(erh.to_str().unwrap().to_string(), source);
+                        let file_id =
+                            files.get_mut().add(erh.to_str().unwrap().to_string(), source);
                         diagnostic
                             .get_mut()
                             .labels

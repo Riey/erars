@@ -6,6 +6,7 @@ use std::io;
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
+use pad::PadStr;
 use smol_str::SmolStr;
 use strum::Display;
 
@@ -108,9 +109,7 @@ impl TerminalVm {
             Instruction::EvalFormString => {
                 let form = ctx.pop_str()?;
                 let parser_ctx = ParserContext::new(ctx.header_info.clone(), "FORMS.ERB".into());
-                let expr = erars_compiler::normal_form_str(&parser_ctx)(&form)
-                    .unwrap()
-                    .1;
+                let expr = erars_compiler::normal_form_str(&parser_ctx)(&form).unwrap().1;
                 let insts = erars_compiler::compile_expr(expr).unwrap();
 
                 for inst in insts.iter() {
@@ -149,7 +148,7 @@ impl TerminalVm {
                 } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
                     ctx.printrc(chan, &s);
                 } else {
-                ctx.print(chan, s);
+                    ctx.print(chan, s);
                 }
                 if flags.contains(PrintFlags::NEWLINE) {
                     ctx.new_line(chan);
@@ -376,9 +375,7 @@ impl TerminalVm {
             }
             Instruction::ConcatString(c) => {
                 let args = ctx.take_value_list(*c)?;
-                let ret = args
-                    .into_iter()
-                    .fold(String::new(), |s, l| s + l.into_str().as_str());
+                let ret = args.into_iter().fold(String::new(), |s, l| s + l.into_str().as_str());
                 ctx.push(ret);
             }
             Instruction::Times(t) => {
@@ -470,7 +467,6 @@ impl TerminalVm {
             }
             Instruction::PadStr(align) => {
                 use erars_ast::Alignment;
-                use pad::{Alignment as PadAlign, PadStr};
 
                 let size = ctx.pop_int()?;
                 let text = match ctx.pop_value()? {
@@ -479,9 +475,9 @@ impl TerminalVm {
                 };
 
                 let align = match align {
-                    Alignment::Left => PadAlign::Left,
-                    Alignment::Center => PadAlign::Middle,
-                    Alignment::Right => PadAlign::Right,
+                    Alignment::Left => pad::Alignment::Left,
+                    Alignment::Center => pad::Alignment::Middle,
+                    Alignment::Right => pad::Alignment::Right,
                 };
 
                 ctx.push(text.pad_to_width_with_alignment(size as usize, align));
@@ -922,28 +918,55 @@ impl TerminalVm {
                 self.call_event(EventType::Train, chan, ctx)?;
 
                 while ctx.begin.is_none() {
-                    let no = ctx.var.read_int("NEXTCOM", &[])?;
-                    if no >= 0 {
-                        *ctx.var.ref_int("NOWEX", &[])? = 0;
-                        self.call_event(EventType::Com, chan, ctx)?;
-                        if self.call(&format!("@COM{no}"), &[], chan, ctx)? == Workflow::Exit {
-                            return Ok(());
-                        };
+                    let com_no = match ctx.var.read_int("NEXTCOM", &[])? {
+                        no if no >= 0 => no,
+                        _ => {
+                            if self.call("SHOW_STATUS", &[], chan, ctx)? == Workflow::Exit {
+                                return Ok(());
+                            }
 
-                        if ctx.var.get_result() == 0 {
-                            continue;
+                            for (no, name) in ctx.header_info.clone().var_name_var["TRAIN"].iter() {
+                                if self.call(&format!("COM_ABLE{no}"), &[], chan, ctx)?
+                                    == Workflow::Exit
+                                {
+                                    return Ok(());
+                                }
+
+                                if ctx.var.get_result() != 0 {
+                                    ctx.printlc(chan, &format!("{name}[{no:3}]"));
+                                }
+                            }
+
+                            if self.call("SHOW_USERCOM", &[], chan, ctx)? == Workflow::Exit {
+                                return Ok(());
+                            }
+
+                            ctx.var.get_var("UP")?.1.assume_normal().as_int()?.fill(0);
+                            ctx.var.get_var("DOWN")?.1.assume_normal().as_int()?.fill(0);
+                            ctx.var.get_var("LOSEBASE")?.1.assume_normal().as_int()?.fill(0);
+
+                            todo!()
                         }
+                    };
 
-                        if self.call("SOURCE_CHECK", &[], chan, ctx)? == Workflow::Exit {
-                            return Ok(());
-                        }
+                    *ctx.var.ref_int("NOWEX", &[])? = 0;
+                    self.call_event(EventType::Com, chan, ctx)?;
+                    if self.call(&format!("COM{com_no}"), &[], chan, ctx)? == Workflow::Exit {
+                        return Ok(());
+                    };
 
-                        ctx.var
-                            .get_var("SOURCE")?
-                            .1
-                            .assume_normal()
-                            .as_int()?
-                            .fill(0);
+                    if ctx.var.get_result() == 0 {
+                        continue;
+                    }
+
+                    if self.call("SOURCE_CHECK", &[], chan, ctx)? == Workflow::Exit {
+                        return Ok(());
+                    }
+
+                    ctx.var.get_var("SOURCE")?.1.assume_normal().as_int()?.fill(0);
+
+                    if self.call_event(EventType::ComEnd, chan, ctx)? == Workflow::Exit {
+                        return Ok(());
                     }
                 }
 

@@ -36,9 +36,7 @@ fn main() -> std::io::Result<()> {
 
     file.flush()?;
 
-    std::process::Command::new("rustfmt")
-        .arg(&test_path)
-        .spawn()?;
+    std::process::Command::new("rustfmt").arg(&test_path).spawn()?;
 
     Ok(())
 }

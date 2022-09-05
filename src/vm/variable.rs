@@ -480,6 +480,13 @@ impl UniformVariable {
         }
     }
 
+    pub fn as_vm_var(&mut self, chara_no: usize) -> &mut VmVariable {
+        match self {
+            UniformVariable::Character(c) => &mut c[chara_no],
+            UniformVariable::Normal(v) => v,
+        }
+    }
+
     pub fn assume_normal(&mut self) -> &mut VmVariable {
         match self {
             Self::Normal(v) => v,

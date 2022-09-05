@@ -844,10 +844,7 @@ fn calculate_binop_expr(first: Expr, stack: &mut Vec<(BinaryOperator, Expr)>) ->
 
     for (op, expr) in stack.drain(..) {
         loop {
-            if op_stack
-                .last()
-                .map_or(true, |o| o.priority() < op.priority())
-            {
+            if op_stack.last().map_or(true, |o| o.priority() < op.priority()) {
                 expr_stack.push(expr);
                 op_stack.push(op);
                 break;

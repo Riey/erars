@@ -103,16 +103,14 @@ impl HeaderInfo {
             ($name:expr, $var:ident, $val1:expr, $val2:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
-                    Err(_) => {
-                        match self
-                            .var_names
-                            .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
-                            .copied()
-                        {
-                            Some(idx) => idx,
-                            None => error!(lex, "잘못된 숫자입니다."),
-                        }
-                    }
+                    Err(_) => match self
+                        .var_names
+                        .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
+                        .copied()
+                    {
+                        Some(idx) => idx,
+                        None => error!(lex, "잘못된 숫자입니다."),
+                    },
                 };
 
                 let value = match $val2.parse::<u32>() {
@@ -125,32 +123,28 @@ impl HeaderInfo {
             (@bool $name:expr, $var:ident, $val1:expr, $val2:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
-                    Err(_) => {
-                        match self
-                            .var_names
-                            .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
-                            .copied()
-                        {
-                            Some(idx) => idx,
-                            None => error!(lex, "잘못된 숫자입니다."),
-                        }
-                    }
+                    Err(_) => match self
+                        .var_names
+                        .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
+                        .copied()
+                    {
+                        Some(idx) => idx,
+                        None => error!(lex, "잘못된 숫자입니다."),
+                    },
                 };
                 template.$var.insert(idx, 1);
             }};
             (@str $name:expr, $var:ident, $val1:expr, $val2:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
-                    Err(_) => {
-                        match self
-                            .var_names
-                            .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
-                            .copied()
-                        {
-                            Some(idx) => idx,
-                            None => error!(lex, "잘못된 숫자입니다."),
-                        }
-                    }
+                    Err(_) => match self
+                        .var_names
+                        .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
+                        .copied()
+                    {
+                        Some(idx) => idx,
+                        None => error!(lex, "잘못된 숫자입니다."),
+                    },
                 };
                 template.$var.insert(idx, $val2.into());
             }};
@@ -186,14 +180,14 @@ impl HeaderInfo {
     pub fn merge_name_csv(&mut self, var: &str, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
         let var = SmolStr::from(var);
+        let mut name_var = HashMap::new();
 
         while let Some((n, s)) = self::csv::name_csv_line(&mut lex)? {
             self.var_names.insert((var.clone(), s.clone()), n);
-            self.var_name_var
-                .entry(var.clone())
-                .or_default()
-                .insert(n, s);
+            name_var.insert(n, s);
         }
+
+        self.var_name_var.insert(var, name_var);
 
         Ok(())
     }
@@ -205,10 +199,7 @@ impl HeaderInfo {
         while let Some((n, s, price)) = self::csv::name_item_line(&mut lex)? {
             self.item_price.insert(n, price);
             self.var_names.insert((var.clone(), s.clone()), n);
-            self.var_name_var
-                .entry(var.clone())
-                .or_default()
-                .insert(n, s);
+            self.var_name_var.entry(var.clone()).or_default().insert(n, s);
         }
 
         Ok(())
@@ -222,8 +213,7 @@ impl HeaderInfo {
             match lex.next() {
                 Some(ErhToken::Define(def)) => {
                     let (def, ident) = try_nom!(lex, self::expr::ident(def));
-                    self.macros
-                        .insert(ident.to_string(), def.trim().to_string());
+                    self.macros.insert(ident.to_string(), def.trim().to_string());
                 }
                 Some(ErhToken::Dim(dim)) => {
                     let var = try_nom!(lex, self::expr::dim_line(&ctx, false)(dim)).1;
@@ -691,20 +681,14 @@ impl ParserContext {
                         .1
                         .into_const_int()
                         .unwrap();
-                    current_func
-                        .header
-                        .infos
-                        .push(FunctionInfo::LocalSize(var as usize));
+                    current_func.header.infos.push(FunctionInfo::LocalSize(var as usize));
                 }
                 Some(Token::LocalSSize(size)) => {
                     let var = try_nom!(lex, self::expr::expr(self)(size))
                         .1
                         .into_const_int()
                         .unwrap();
-                    current_func
-                        .header
-                        .infos
-                        .push(FunctionInfo::LocalSSize(var as usize));
+                    current_func.header.infos.push(FunctionInfo::LocalSSize(var as usize));
                 }
                 Some(other) => match self.parse_stmt(other, lex) {
                     Ok(stmt) => current_func.body.push(stmt),
@@ -730,8 +714,7 @@ impl ParserContext {
     }
 
     pub fn parse_function_str<'s>(&self, s: &'s str) -> ParserResult<Function> {
-        self.parse_program_str(s)
-            .map(|f| f.into_iter().next().unwrap())
+        self.parse_program_str(s).map(|f| f.into_iter().next().unwrap())
     }
 
     pub fn parse_expr_str<'s>(&self, s: &'s str) -> ParserResult<Expr> {

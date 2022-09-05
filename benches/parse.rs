@@ -40,17 +40,11 @@ fn parse_real(c: &mut Criterion) {
     let ctx = make_ctx();
 
     c.bench_function("parse title", |b| {
-        b.iter(|| {
-            ctx.parse_program_str(include_str!("../ERB/TITLE.ERB"))
-                .unwrap()
-        });
+        b.iter(|| ctx.parse_program_str(include_str!("../ERB/TITLE.ERB")).unwrap());
     });
 
     c.bench_function("parse system", |b| {
-        b.iter(|| {
-            ctx.parse_program_str(include_str!("../ERB/SYSTEM.ERB"))
-                .unwrap()
-        });
+        b.iter(|| ctx.parse_program_str(include_str!("../ERB/SYSTEM.ERB")).unwrap());
     });
 }
 
