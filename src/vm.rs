@@ -904,79 +904,109 @@ impl TerminalVm {
     fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
         log::trace!("Begin {ty}");
 
+        /// 해당 함수를 호출하고 존재할경우 true, 반대면 false를 반환함
+        ///
+        /// 해당 함수에서 게임이 종료되면 그대로 종료
+        macro_rules! call {
+            ($name:expr) => {
+                match self.try_call($name, &[], chan, ctx)? {
+                    Some(Workflow::Exit) => return Ok(()),
+                    Some(Workflow::Return) => true,
+                    None => false,
+                }
+            };
+        }
+
+        macro_rules! call_event {
+            ($ty:expr) => {
+                if self.call_event($ty, chan, ctx)? == Workflow::Exit {
+                    return Ok(());
+                }
+            };
+        }
+
         match ty {
             BeginType::Title => {
-                self.call("SYSTEM_TITLE".into(), &[], chan, ctx)?;
+                call!("SYSTEM_TITLE");
                 Ok(())
             }
             BeginType::First => {
-                self.call_event(EventType::First, chan, ctx)?;
+                call_event!(EventType::First);
                 Ok(())
             }
             BeginType::Train => {
                 ctx.var.reset_train_data()?;
-                self.call_event(EventType::Train, chan, ctx)?;
+                call_event!(EventType::Train);
 
                 while ctx.begin.is_none() {
                     let com_no = match ctx.var.read_int("NEXTCOM", &[])? {
                         no if no >= 0 => no,
                         _ => {
-                            if self.call("SHOW_STATUS", &[], chan, ctx)? == Workflow::Exit {
-                                return Ok(());
-                            }
+                            call!("SHOW_STATUS");
 
                             for (no, name) in ctx.header_info.clone().var_name_var["TRAIN"].iter() {
-                                if self.call(&format!("COM_ABLE{no}"), &[], chan, ctx)?
-                                    == Workflow::Exit
-                                {
-                                    return Ok(());
-                                }
-
-                                if ctx.var.get_result() != 0 {
+                                if call!(&format!("COM_ABLE{no}")) && ctx.var.get_result() != 0 {
                                     ctx.printlc(chan, &format!("{name}[{no:3}]"));
                                 }
                             }
 
-                            if self.call("SHOW_USERCOM", &[], chan, ctx)? == Workflow::Exit {
-                                return Ok(());
+                            call!("SHOW_USERCOM");
+
+                            ctx.var.reset_var("UP")?;
+                            ctx.var.reset_var("DOWN")?;
+                            ctx.var.reset_var("LOSEBASE")?;
+
+                            match ctx.input(chan, InputRequest::Int) {
+                                ConsoleResult::Quit => return Ok(()),
+                                ConsoleResult::Value(Value::String(_)) => unreachable!(),
+                                ConsoleResult::Value(Value::Int(no)) => {
+                                    ctx.var.set_result(no);
+
+                                    let com_exists = match no.try_into() {
+                                        Ok(no) => ctx
+                                            .header_info
+                                            .var_name_var
+                                            .get("TRAIN")
+                                            .map(|v| v.contains_key(&no))
+                                            .unwrap_or(false),
+                                        _ => false,
+                                    };
+
+                                    if com_exists {
+                                        no
+                                    } else {
+                                        call!("USERCOM");
+
+                                        continue;
+                                    }
+                                }
                             }
-
-                            ctx.var.get_var("UP")?.1.assume_normal().as_int()?.fill(0);
-                            ctx.var.get_var("DOWN")?.1.assume_normal().as_int()?.fill(0);
-                            ctx.var.get_var("LOSEBASE")?.1.assume_normal().as_int()?.fill(0);
-
-                            todo!()
                         }
                     };
 
-                    *ctx.var.ref_int("NOWEX", &[])? = 0;
-                    self.call_event(EventType::Com, chan, ctx)?;
-                    if self.call(&format!("COM{com_no}"), &[], chan, ctx)? == Workflow::Exit {
-                        return Ok(());
-                    };
+                    ctx.var.reset_var("NOWEX")?;
+
+                    call_event!(EventType::Com);
+                    call!(&format!("COM{com_no}"));
 
                     if ctx.var.get_result() == 0 {
                         continue;
                     }
 
-                    if self.call("SOURCE_CHECK", &[], chan, ctx)? == Workflow::Exit {
-                        return Ok(());
-                    }
+                    call!("SOURCE_CHECK");
 
-                    ctx.var.get_var("SOURCE")?.1.assume_normal().as_int()?.fill(0);
+                    ctx.var.reset_var("SOURCE")?;
 
-                    if self.call_event(EventType::ComEnd, chan, ctx)? == Workflow::Exit {
-                        return Ok(());
-                    }
+                    call_event!(EventType::ComEnd);
                 }
 
                 Ok(())
             }
             BeginType::Shop => {
-                self.call_event(EventType::Shop, chan, ctx)?;
+                call_event!(EventType::Shop);
 
                 while ctx.begin.is_none() {
-                    self.call("SHOW_SHOP", &[], chan, ctx)?;
+                    call!("SHOW_SHOP");
 
                     match ctx.input(chan, InputRequest::Int) {
                         ConsoleResult::Quit => break,
@@ -999,11 +1029,11 @@ impl TerminalVm {
                                     if *money >= price {
                                         *money -= price;
                                         drop(money);
-                                        *ctx.var.ref_int("ITEM", &[])? += 1;
+                                        *ctx.var.ref_int("ITEM", &[i as usize])? += 1;
                                     }
                                 }
                             } else {
-                                self.call("USERSHOP", &[], chan, ctx)?;
+                                call!("USERSHOP");
                             }
                         }
                         ConsoleResult::Value(Value::String(_)) => {

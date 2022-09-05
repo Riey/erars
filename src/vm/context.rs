@@ -78,7 +78,9 @@ impl VmContext {
     }
 
     pub fn update_last_call_stack(&mut self) {
-        self.call_stack.last_mut().unwrap().script_position = self.current_pos().clone();
+        if let Some(stack) = self.call_stack.last_mut() {
+            stack.script_position = self.current_pos.clone();
+        }
     }
 
     pub fn call_stack(&self) -> &[Callstack] {

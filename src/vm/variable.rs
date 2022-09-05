@@ -2,6 +2,7 @@ use anyhow::{anyhow, bail, Result};
 use erars_ast::{Value, VariableInfo};
 use erars_compiler::CharacterTemplate;
 use hashbrown::HashMap;
+use rayon::prelude::*;
 use smol_str::SmolStr;
 
 #[derive(Clone)]
@@ -199,7 +200,7 @@ impl VariableStorage {
             UniformVariable::Character(cvar) => {
                 let c_idx = c_idx.unwrap_or_else(|| target as usize);
                 cvar.get_mut(c_idx)
-                    .ok_or_else(|| anyhow!("Character index {c_idx} not exists"))?
+                    .ok_or_else(|| anyhow!("Variable {name} Character index {c_idx} not exists"))?
             }
             UniformVariable::Normal(var) => var,
         };
@@ -222,8 +223,9 @@ impl VariableStorage {
         let vm_var = match var {
             UniformVariable::Character(cvar) => {
                 let c_idx = c_idx.unwrap_or_else(|| target as usize);
-                cvar.get_mut(c_idx)
-                    .ok_or_else(|| anyhow!("Character index {c_idx} not exists"))?
+                cvar.get_mut(c_idx).ok_or_else(|| {
+                    anyhow!("Variable {name}@{func_name} Character index {c_idx} not exists")
+                })?
             }
             UniformVariable::Normal(var) => var,
         };
@@ -287,6 +289,28 @@ impl VariableStorage {
         } else {
             self.get_var(var)
         }
+    }
+
+    pub fn reset_var(&mut self, var: &str) -> Result<()> {
+        let (info, var) = self.get_var(var)?;
+
+        if info.is_str {
+            match var {
+                UniformVariable::Character(c) => {
+                    c.par_iter_mut().for_each(|v| v.as_str().unwrap().fill(String::new()))
+                }
+                UniformVariable::Normal(v) => v.as_str().unwrap().fill(String::new()),
+            }
+        } else {
+            match var {
+                UniformVariable::Character(c) => c
+                    .par_iter_mut()
+                    .for_each(|v| v.as_int().unwrap().fill(info.default_int)),
+                UniformVariable::Normal(v) => v.as_int().unwrap().fill(info.default_int),
+            }
+        }
+
+        Ok(())
     }
 
     pub fn get_var(&mut self, var: &str) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
@@ -491,6 +515,13 @@ impl UniformVariable {
         match self {
             Self::Normal(v) => v,
             _ => panic!("Variable is not normal variable"),
+        }
+    }
+
+    pub fn assume_chara_vec(&mut self) -> &mut Vec<VmVariable> {
+        match self {
+            Self::Character(c) => c,
+            _ => panic!("Variable is not character variable"),
         }
     }
 

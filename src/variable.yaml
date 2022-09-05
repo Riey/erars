@@ -54,6 +54,11 @@ EX:
   is_chara: true
   is_str: false
 
+NOWEX:
+  size: [1000]
+  is_chara: true
+  is_str: false
+
 EXP:
   size: [1000]
   is_chara: true
@@ -186,47 +191,42 @@ RESULTS:
 
 PALAM:
   size: [1000]
-  is_chara: false
+  is_chara: true
   is_str: false
 
 STAIN:
   size: [1000]
-  is_chara: false
-  is_str: false
-
-SOURCE:
-  size: [1000]
-  is_chara: false
+  is_chara: true
   is_str: false
 
 JUEL:
   size: [1000]
-  is_chara: false
+  is_chara: true
   is_str: false
 
 GOTJUEL:
   size: [1000]
-  is_chara: false
+  is_chara: true
   is_str: false
 
 SOURCE:
   size: [1000]
-  is_chara: false
+  is_chara: true
   is_str: false
 
 UP:
   size: [1000]
-  is_chara: false
+  is_chara: true
   is_str: false
 
 DOWN:
   size: [1000]
-  is_chara: false
+  is_chara: true
   is_str: false
 
 TEQUIP:
   size: [1000]
-  is_chara: false
+  is_chara: true
   is_str: false
 
 ASSIPLAY:

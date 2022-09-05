@@ -1,0 +1,4 @@
+[
+    Print("EVENTTRAIN"), NewLine,
+    Print("COM0"), NewLine,
+]
