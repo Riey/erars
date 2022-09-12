@@ -17,7 +17,7 @@ fn run_test() {
         .unwrap();
     }
 
-    let erb_files = glob::glob("tests/run_tests/*.erb").unwrap();
+    let erb_files = glob::glob("tests/run_tests/**/*.erb").unwrap();
     let header = test_util::get_ctx("").header;
 
     for erb_file in erb_files {
