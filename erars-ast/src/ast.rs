@@ -108,7 +108,7 @@ pub enum Expr {
     FormText(FormText),
     Var(Variable),
     Method(Box<str>, Vec<Self>),
-    BuitinMethod(BuiltinMethod, Vec<Self>),
+    BuiltinMethod(BuiltinMethod, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),
     /// ++/-- var ++/--
     IncOpExpr {

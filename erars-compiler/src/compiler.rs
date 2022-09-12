@@ -92,7 +92,7 @@ impl Compiler {
                     self.store_var(var.clone())?;
                 }
             }
-            Expr::BuitinMethod(meth, args) => {
+            Expr::BuiltinMethod(meth, args) => {
                 let c = self.push_list(args)?;
                 self.push(Instruction::Method(meth, c));
             }

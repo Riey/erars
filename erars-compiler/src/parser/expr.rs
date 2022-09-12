@@ -280,7 +280,7 @@ fn ident_or_method_expr<'c, 'a>(
             ctx.ban_percent.set(p);
 
             match ident.parse() {
-                Ok(meth) => Ok((i, Expr::BuitinMethod(meth, args))),
+                Ok(meth) => Ok((i, Expr::BuiltinMethod(meth, args))),
                 _ => Ok((i, Expr::Method(ident.into(), args))),
             }
         } else {
