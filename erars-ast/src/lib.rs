@@ -8,7 +8,7 @@ mod variable;
 
 pub use alignment::Alignment;
 pub use ast::*;
-pub use command::BuiltinCommand;
+pub use command::*;
 pub use event::*;
 pub use operator::*;
 pub use ordered_float::NotNan;

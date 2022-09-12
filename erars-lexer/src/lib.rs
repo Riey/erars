@@ -81,11 +81,24 @@ fn single_command(com: BuiltinCommand) -> Stmt {
 }
 
 #[inline]
+fn single_method(meth: BuiltinMethod) -> Stmt {
+    Stmt::Method(meth, Vec::new())
+}
+
+#[inline]
 fn normal_expr_command<'s>(
     lex: &mut Lexer<'s, Token<'s>>,
     com: BuiltinCommand,
 ) -> (BuiltinCommand, &'s str) {
     (com, lex_line_left(lex))
+}
+
+#[inline]
+fn normal_expr_method<'s>(
+    lex: &mut Lexer<'s, Token<'s>>,
+    meth: BuiltinMethod,
+) -> (BuiltinMethod, &'s str) {
+    (meth, lex_line_left(lex))
 }
 
 fn lex_line_left_erh<'s>(lex: &mut Lexer<'s, ErhToken<'s>>) -> &'s str {
@@ -338,7 +351,6 @@ pub enum Token<'s> {
 
     #[token("VARSET", |lex| normal_expr_command(lex, BuiltinCommand::Varset))]
     #[token("CVARSET", |lex| normal_expr_command(lex, BuiltinCommand::CVarset))]
-    #[token("LIMIT", |lex| normal_expr_command(lex, BuiltinCommand::Limit))]
     #[token("RESET_STAIN", |lex| normal_expr_command(lex, BuiltinCommand::ResetStain))]
     #[token("INPUT", |lex| normal_expr_command(lex, BuiltinCommand::Input))]
     #[token("INPUTS", |lex| normal_expr_command(lex, BuiltinCommand::InputS))]
@@ -351,8 +363,6 @@ pub enum Token<'s> {
     #[token("RETURN", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
     #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::ReturnF))]
     #[token("CALLTRAIN", |lex| normal_expr_command(lex, BuiltinCommand::CallTrain))]
-    #[token("STRLENS", |lex| normal_expr_command(lex, BuiltinCommand::StrLenS))]
-    #[token("STRLENSU", |lex| normal_expr_command(lex, BuiltinCommand::StrLenSU))]
     #[token("CUSTOMDRAWLINE", |lex| normal_expr_command(lex, BuiltinCommand::CustomDrawLine))]
     #[token("CLEARLINE", |lex| normal_expr_command(lex, BuiltinCommand::ClearLine))]
     #[token("SETCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetColor))]
@@ -360,18 +370,10 @@ pub enum Token<'s> {
     #[token("SETCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetColorByName))]
     #[token("SETBGCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColorByName))]
     #[token("SETBIT", |lex| normal_expr_command(lex, BuiltinCommand::SetBit))]
-    #[token("GETBIT", |lex| normal_expr_command(lex, BuiltinCommand::GetBit))]
     #[token("CLEARBIT", |lex| normal_expr_command(lex, BuiltinCommand::ClearBit))]
     #[token("INVERTBIT", |lex| normal_expr_command(lex, BuiltinCommand::InvertBit))]
-    #[token("POWER", |lex| normal_expr_command(lex, BuiltinCommand::Power))]
-    #[token("GETEXPLV", |lex| normal_expr_command(lex, BuiltinCommand::GetExpLv))]
-    #[token("GETPALAMLV", |lex| normal_expr_command(lex, BuiltinCommand::GetPalamLv))]
-    #[token("UNICODE", |lex| normal_expr_command(lex, BuiltinCommand::Unicode))]
     #[token("BAR", |lex| normal_expr_command(lex, BuiltinCommand::Bar))]
     #[token("ARRAYSHIFT", |lex| normal_expr_command(lex, BuiltinCommand::ArrayShift))]
-    #[token("SUBSTRING", |lex| normal_expr_command(lex, BuiltinCommand::SubString))]
-    #[token("SUBSTRINGU", |lex| normal_expr_command(lex, BuiltinCommand::SubStringU))]
-    #[token("SPLIT", |lex| normal_expr_command(lex, BuiltinCommand::Split))]
     #[token("SWAP", |lex| normal_expr_command(lex, BuiltinCommand::Swap))]
     #[token("REDRAW", |lex| normal_expr_command(lex, BuiltinCommand::Redraw))]
     #[token("CHKFONT", |lex| normal_expr_command(lex, BuiltinCommand::ChkFont))]
@@ -387,44 +389,58 @@ pub enum Token<'s> {
     #[token("CHKCHARADATA", |lex| normal_expr_command(lex, BuiltinCommand::ChkCharaData))]
     #[token("FIND_CHARADATA", |lex| normal_expr_command(lex, BuiltinCommand::FindCharaData))]
     #[token("ADDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::AddChara))]
-    #[token("GETCHARA", |lex| normal_expr_command(lex, BuiltinCommand::GetChara))]
     #[token("DELCHARA", |lex| normal_expr_command(lex, BuiltinCommand::DelChara))]
     #[token("SWAPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::SwapChara))]
     #[token("SORTCHARA", |lex| normal_expr_command(lex, BuiltinCommand::SortChara))]
     #[token("FINDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::FindChara))]
     #[token("PICKUPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::PickupChara))]
-    #[token("CSVNAME", |lex| normal_expr_command(lex, BuiltinCommand::CsvName))]
-    #[token("CSVCALLNAME", |lex| normal_expr_command(lex, BuiltinCommand::CsvCallName))]
-    #[token("CSVNICKNAME", |lex| normal_expr_command(lex, BuiltinCommand::CsvNickName))]
-    #[token("CSVMASTERNAME", |lex| normal_expr_command(lex, BuiltinCommand::CsvMasterName))]
-    #[token("CSVBASE", |lex| normal_expr_command(lex, BuiltinCommand::CsvBase))]
-    #[token("CSVCSTR", |lex| normal_expr_command(lex, BuiltinCommand::CsvCstr))]
-    #[token("CSVABL", |lex| normal_expr_command(lex, BuiltinCommand::CsvAbl))]
-    #[token("CSVTALENT", |lex| normal_expr_command(lex, BuiltinCommand::CsvTalent))]
-    #[token("CSVMARK", |lex| normal_expr_command(lex, BuiltinCommand::CsvMark))]
-    #[token("CSVEXP", |lex| normal_expr_command(lex, BuiltinCommand::CsvExp))]
-    #[token("CSVRELATION", |lex| normal_expr_command(lex, BuiltinCommand::CsvRelation))]
-    #[token("CSVJUEL", |lex| normal_expr_command(lex, BuiltinCommand::CsvJuel))]
-    #[token("CSVEQUIP", |lex| normal_expr_command(lex, BuiltinCommand::CsvEquip))]
-    #[token("CSVCFLAG", |lex| normal_expr_command(lex, BuiltinCommand::CsvCflag))]
+    #[token("SPLIT", |lex| normal_expr_command(lex, BuiltinCommand::Split))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
+    #[token("LIMIT", |lex| normal_expr_method(lex, BuiltinMethod::Limit))]
+    #[token("STRLENS", |lex| normal_expr_method(lex, BuiltinMethod::StrLenS))]
+    #[token("STRLENSU", |lex| normal_expr_method(lex, BuiltinMethod::StrLenSU))]
+    #[token("GETBIT", |lex| normal_expr_method(lex, BuiltinMethod::GetBit))]
+    #[token("POWER", |lex| normal_expr_method(lex, BuiltinMethod::Power))]
+    #[token("GETEXPLV", |lex| normal_expr_method(lex, BuiltinMethod::GetExpLv))]
+    #[token("GETPALAMLV", |lex| normal_expr_method(lex, BuiltinMethod::GetPalamLv))]
+    #[token("UNICODE", |lex| normal_expr_method(lex, BuiltinMethod::Unicode))]
+    #[token("SUBSTRING", |lex| normal_expr_method(lex, BuiltinMethod::SubString))]
+    #[token("SUBSTRINGU", |lex| normal_expr_method(lex, BuiltinMethod::SubStringU))]
+    #[token("GETCHARA", |lex| normal_expr_method(lex, BuiltinMethod::GetChara))]
+    #[token("CSVNAME", |lex| normal_expr_method(lex, BuiltinMethod::CsvName))]
+    #[token("CSVCALLNAME", |lex| normal_expr_method(lex, BuiltinMethod::CsvCallName))]
+    #[token("CSVNICKNAME", |lex| normal_expr_method(lex, BuiltinMethod::CsvNickName))]
+    #[token("CSVMASTERNAME", |lex| normal_expr_method(lex, BuiltinMethod::CsvMasterName))]
+    #[token("CSVBASE", |lex| normal_expr_method(lex, BuiltinMethod::CsvBase))]
+    #[token("CSVCSTR", |lex| normal_expr_method(lex, BuiltinMethod::CsvCstr))]
+    #[token("CSVABL", |lex| normal_expr_method(lex, BuiltinMethod::CsvAbl))]
+    #[token("CSVTALENT", |lex| normal_expr_method(lex, BuiltinMethod::CsvTalent))]
+    #[token("CSVMARK", |lex| normal_expr_method(lex, BuiltinMethod::CsvMark))]
+    #[token("CSVEX", |lex| normal_expr_method(lex, BuiltinMethod::CsvEx))]
+    #[token("CSVEXP", |lex| normal_expr_method(lex, BuiltinMethod::CsvExp))]
+    #[token("CSVRELATION", |lex| normal_expr_method(lex, BuiltinMethod::CsvRelation))]
+    #[token("CSVJUEL", |lex| normal_expr_method(lex, BuiltinMethod::CsvJuel))]
+    #[token("CSVEQUIP", |lex| normal_expr_method(lex, BuiltinMethod::CsvEquip))]
+    #[token("CSVCFLAG", |lex| normal_expr_method(lex, BuiltinMethod::CsvCflag))]
+    NormalExprMethod((BuiltinMethod, &'s str)),
+
     #[regex(r"REUSELASTLINE( [^\r\n]*)?", |lex| unsafe { parse_reuse(lex.slice()) })]
+    #[token("GETTIME", |_| single_method(BuiltinMethod::GetTime))]
+    #[token("GETCOLOR", |_| single_method(BuiltinMethod::GetColor))]
+    #[token("GETDEFCOLOR", |_| single_method(BuiltinMethod::GetDefColor))]
+    #[token("GETBGCOLOR", |_| single_method(BuiltinMethod::GetBgColor))]
+    #[token("GETDEFBGCOLOR", |_| single_method(BuiltinMethod::GetDefBgColor))]
+    #[token("GETFOCUSCOLOR", |_| single_method(BuiltinMethod::GetFocusColor))]
     #[token("QUIT", |_| single_command(BuiltinCommand::Quit))]
     #[token("WAIT", |_| single_command(BuiltinCommand::Wait))]
     #[token("RESTART", |_| single_command(BuiltinCommand::Restart))]
     #[token("SAVEGLOBAL", |_| single_command(BuiltinCommand::SaveGlobal))]
     #[token("LOADGLOBAL", |_| single_command(BuiltinCommand::LoadGlobal))]
-    #[token("GETTIME", |_| single_command(BuiltinCommand::GetTime))]
     #[token("DRAWLINE", |_| single_command(BuiltinCommand::DrawLine))]
     #[token("RESETDATA", |_| single_command(BuiltinCommand::ResetData))]
     #[token("RESETCOLOR", |_| single_command(BuiltinCommand::ResetColor))]
     #[token("RESETBGCOLOR", |_| single_command(BuiltinCommand::ResetBgColor))]
-    #[token("GETCOLOR", |_| single_command(BuiltinCommand::GetColor))]
-    #[token("GETDEFCOLOR", |_| single_command(BuiltinCommand::GetDefColor))]
-    #[token("GETBGCOLOR", |_| single_command(BuiltinCommand::GetBgColor))]
-    #[token("GETDEFBGCOLOR", |_| single_command(BuiltinCommand::GetDefBgColor))]
-    #[token("GETFOCUSCOLOR", |_| single_command(BuiltinCommand::GetFocusColor))]
     #[token("ADDDEFCHARA", |_| single_command(BuiltinCommand::AddDefChara))]
     #[token("GETFONT", |_| single_command(BuiltinCommand::GetFont))]
     #[token("FONTBOLD", |_| single_command(BuiltinCommand::FontBold))]

@@ -92,6 +92,10 @@ impl Compiler {
                     self.store_var(var.clone())?;
                 }
             }
+            Expr::BuitinMethod(meth, args) => {
+                let c = self.push_list(args)?;
+                self.push(Instruction::Method(meth, c));
+            }
             Expr::String(s) => self.push(Instruction::LoadStr(s)),
             Expr::Int(i) => self.push(Instruction::LoadInt(i)),
             Expr::BinopExpr(lhs, op, rhs) => {
@@ -555,6 +559,11 @@ impl Compiler {
             Stmt::Command(command, args) => {
                 let count = self.push_list(args)?;
                 self.push(Instruction::Command(command, count));
+            }
+            Stmt::Method(meth, args) => {
+                let count = self.push_list(args)?;
+                self.push(Instruction::Method(meth, count));
+                self.push(Instruction::StoreResult);
             }
             Stmt::Times(var, ratio) => {
                 self.push_var(var.clone())?;

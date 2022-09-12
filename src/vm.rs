@@ -13,8 +13,8 @@ use strum::Display;
 use hashbrown::HashMap;
 
 use erars_ast::{
-    BeginType, BinaryOperator, BuiltinCommand, EventType, PrintFlags, ScriptPosition,
-    UnaryOperator, Value,
+    BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventType, PrintFlags,
+    ScriptPosition, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext};
 
@@ -102,6 +102,10 @@ impl TerminalVm {
             Instruction::Pop => drop(ctx.pop()),
             Instruction::Duplicate => ctx.dup(),
             Instruction::DuplicatePrev => ctx.dup_prev(),
+            Instruction::StoreResult => match ctx.pop_value()? {
+                Value::Int(i) => ctx.var.set_result(i),
+                Value::String(s) => ctx.var.set_results(s),
+            },
             Instruction::ReadVar => {
                 let value = ctx.pop_value()?;
                 ctx.push(value);
@@ -159,206 +163,11 @@ impl TerminalVm {
             }
             Instruction::CallMethod(c) => {
                 let func = ctx.pop_str()?;
-                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 16>>().into_iter();
+                let args = ctx.take_value_list(*c)?;
 
-                macro_rules! check_arg_count {
-                    ($expect:expr) => {
-                        if *c != $expect {
-                            bail!("메소드 {func}의 매개변수는 {}개여야합니다.", $expect);
-                        }
-                    };
-                    ($expect:expr, $expect2:expr) => {
-                        if *c != $expect && *c != $expect2 {
-                            bail!("메소드 {func}의 매개변수는 {}개여야합니다.", $expect);
-                        }
-                    };
-                    (@atleast $expect:expr) => {
-                        if *c < $expect {
-                            bail!("메소드 {func}의 매개변수는 {}개 이상이여야합니다.", $expect);
-                        }
-                    };
-                }
-
-                macro_rules! csv_method {
-                    ($field:ident) => {
-                        check_arg_count!(1, 2);
-                        let no = get_arg!(@i64: args, ctx) as u32;
-
-                        if *c == 2 {
-                            log::warn!("Ignore SP feature");
-                        }
-
-                        let csv = ctx
-                            .header_info
-                            .character_templates
-                            .get(&no)
-                            .map(|csv| csv.$field.clone())
-                            .unwrap_or_default();
-
-                        ctx.push(csv);
-                    };
-
-                    (@arr $field:ident) => {
-                        check_arg_count!(2, 3);
-                        let no = get_arg!(@i64: args, ctx) as u32;
-                        let idx = get_arg!(@i64: args, ctx) as u32;
-
-                        if *c == 3 {
-                            log::warn!("Ignore SP feature");
-                        }
-
-                        let csv = ctx
-                            .header_info
-                            .character_templates
-                            .get(&no)
-                            .and_then(|csv| csv.$field.get(&idx).cloned())
-                            .unwrap_or_default();
-
-                        ctx.push(csv);
-                    };
-                }
-
-                match func.as_str() {
-                    "CSVNAME" => {
-                        csv_method!(name);
-                    }
-                    "CSVNICKNAME" => {
-                        csv_method!(nick_name);
-                    }
-                    "CSVCALLNAME" => {
-                        csv_method!(call_name);
-                    }
-                    "CSVCSTR" => {
-                        csv_method!(@arr cstr);
-                    }
-                    "CSVTALENT" => {
-                        csv_method!(@arr talent);
-                    }
-                    "CSVABL" => {
-                        csv_method!(@arr abl);
-                    }
-                    "CSVBASE" => {
-                        csv_method!(@arr base);
-                    }
-                    "CSVEX" => {
-                        csv_method!(@arr ex);
-                    }
-                    "CSVEXP" => {
-                        csv_method!(@arr exp);
-                    }
-                    "CSVMARK" => {
-                        csv_method!(@arr mark);
-                    }
-                    "CSVRELATION" => {
-                        csv_method!(@arr relation);
-                    }
-                    "CSVJUEL" => {
-                        csv_method!(@arr juel);
-                    }
-                    "CSVCFLAG" => {
-                        csv_method!(@arr cflag);
-                    }
-                    "STRLENS" => {
-                        check_arg_count!(1);
-                        let s = get_arg!(@String: args, ctx);
-                        ctx.push(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
-                    }
-                    "STRLENSU" => {
-                        check_arg_count!(1);
-                        let s = get_arg!(@String: args, ctx);
-                        ctx.push(s.chars().count() as i64);
-                    }
-                    "TOSTR" => {
-                        check_arg_count!(1, 2);
-                        let value = get_arg!(@i64: args, ctx);
-                        let format = get_arg!(@opt @String: args, ctx);
-                        let ret = match format {
-                            Some(_) => {
-                                format!("{00}", value)
-                            }
-                            None => value.to_string(),
-                        };
-
-                        ctx.push(ret);
-                    }
-                    "TOINT" => {
-                        check_arg_count!(1);
-
-                        match get_arg!(@String: args, ctx).parse() {
-                            Ok(i) => ctx.push(Value::Int(i)),
-                            Err(_) => ctx.push(0),
-                        }
-                    }
-                    "MAX" => {
-                        check_arg_count!(@atleast 1);
-
-                        let mut max = get_arg!(@value args, ctx);
-
-                        for arg in args {
-                            max = max.max(ctx.reduce_local_value(arg)?);
-                        }
-
-                        ctx.push(max);
-                    }
-                    "MIN" => {
-                        check_arg_count!(@atleast 1);
-
-                        let mut min = get_arg!(@value args, ctx);
-
-                        for arg in args {
-                            min = min.min(ctx.reduce_local_value(arg)?);
-                        }
-
-                        ctx.push(min);
-                    }
-                    "LIMIT" => {
-                        check_arg_count!(3);
-                        let v = get_arg!(@i64: args, ctx);
-                        let low = get_arg!(@i64: args, ctx);
-                        let high = get_arg!(@i64: args, ctx);
-
-                        ctx.push(v.clamp(low, high));
-                    }
-                    "ABS" => {
-                        check_arg_count!(1);
-                        let v = get_arg!(@i64: args, ctx);
-                        ctx.push(v.abs());
-                    }
-                    "LINEISEMPTY" => {
-                        check_arg_count!(0);
-                        let line_is_empty = ctx.line_is_empty();
-                        ctx.push(line_is_empty);
-                    }
-                    "GROUPMATCH" => {
-                        check_arg_count!(@atleast 1);
-                        let value = ctx.reduce_local_value(args.next().unwrap())?;
-                        let mut ret = 0i64;
-
-                        for arg in args {
-                            if value == ctx.reduce_local_value(arg)? {
-                                ret += 1;
-                            }
-                        }
-
-                        ctx.push(ret);
-                    }
-                    "GETCHARA" => {
-                        check_arg_count!(1);
-                        let no = get_arg!(@i64: args, ctx);
-
-                        let idx = ctx.var.get_chara(no)?;
-
-                        ctx.push(idx.map(|i| i as i64).unwrap_or(-1));
-                    }
-                    label => {
-                        let args = args
-                            .map(|arg| ctx.reduce_local_value(arg))
-                            .collect::<Result<Vec<Value>>>()?;
-                        match self.call(label, args.as_slice(), chan, ctx)? {
-                            Workflow::Exit => return Ok(Some(Workflow::Exit)),
-                            Workflow::Return => {}
-                        }
-                    }
+                match self.call(&func, args.as_slice(), chan, ctx)? {
+                    Workflow::Exit => return Ok(Some(Workflow::Exit)),
+                    Workflow::Return => {}
                 }
             }
             Instruction::TryCall(c) => {
@@ -495,14 +304,197 @@ impl TerminalVm {
 
                 ctx.push(text.pad_to_width_with_alignment(size as usize, align));
             }
-            Instruction::Command(com, c) => {
-                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
+            Instruction::Method(meth, c) => {
+                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 16>>().into_iter();
 
-                match com {
-                    BuiltinCommand::Restart => {
-                        *cursor = 0;
+                macro_rules! check_arg_count {
+                    ($expect:expr) => {
+                        if *c != $expect {
+                            bail!("메소드 {meth}의 매개변수는 {}개여야합니다.", $expect);
+                        }
+                    };
+                    ($expect:expr, $expect2:expr) => {
+                        if *c != $expect && *c != $expect2 {
+                            bail!("메소드 {meth}의 매개변수는 {}개여야합니다.", $expect);
+                        }
+                    };
+                    (@atleast $expect:expr) => {
+                        if *c < $expect {
+                            bail!("메소드 {meth}의 매개변수는 {}개 이상이여야합니다.", $expect);
+                        }
+                    };
+                }
+
+                macro_rules! csv_method {
+                    ($field:ident) => {
+                        check_arg_count!(1, 2);
+                        let no = get_arg!(@i64: args, ctx) as u32;
+
+                        if *c == 2 {
+                            log::warn!("Ignore SP feature");
+                        }
+
+                        let csv = ctx
+                            .header_info
+                            .character_templates
+                            .get(&no)
+                            .map(|csv| csv.$field.clone())
+                            .unwrap_or_default();
+
+                        ctx.push(csv);
+                    };
+
+                    (@arr $field:ident) => {
+                        check_arg_count!(2, 3);
+                        let no = get_arg!(@i64: args, ctx) as u32;
+                        let idx = get_arg!(@i64: args, ctx) as u32;
+
+                        if *c == 3 {
+                            log::warn!("Ignore SP feature");
+                        }
+
+                        let csv = ctx
+                            .header_info
+                            .character_templates
+                            .get(&no)
+                            .and_then(|csv| csv.$field.get(&idx).cloned())
+                            .unwrap_or_default();
+
+                        ctx.push(csv);
+                    };
+                }
+
+                match meth {
+                    BuiltinMethod::CsvName => {
+                        csv_method!(name);
                     }
-                    BuiltinCommand::SubStringU => {
+                    BuiltinMethod::CsvNickName => {
+                        csv_method!(nick_name);
+                    }
+                    BuiltinMethod::CsvCallName => {
+                        csv_method!(call_name);
+                    }
+                    BuiltinMethod::CsvCstr => {
+                        csv_method!(@arr cstr);
+                    }
+                    BuiltinMethod::CsvTalent => {
+                        csv_method!(@arr talent);
+                    }
+                    BuiltinMethod::CsvAbl => {
+                        csv_method!(@arr abl);
+                    }
+                    BuiltinMethod::CsvBase => {
+                        csv_method!(@arr base);
+                    }
+                    BuiltinMethod::CsvEx => {
+                        csv_method!(@arr ex);
+                    }
+                    BuiltinMethod::CsvExp => {
+                        csv_method!(@arr exp);
+                    }
+                    BuiltinMethod::CsvMark => {
+                        csv_method!(@arr mark);
+                    }
+                    BuiltinMethod::CsvRelation => {
+                        csv_method!(@arr relation);
+                    }
+                    BuiltinMethod::CsvJuel => {
+                        csv_method!(@arr juel);
+                    }
+                    BuiltinMethod::CsvCflag => {
+                        csv_method!(@arr cflag);
+                    }
+                    BuiltinMethod::StrLenS => {
+                        check_arg_count!(1);
+                        let s = get_arg!(@String: args, ctx);
+                        ctx.push(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
+                    }
+                    BuiltinMethod::StrLenSU => {
+                        check_arg_count!(1);
+                        let s = get_arg!(@String: args, ctx);
+                        ctx.push(s.chars().count() as i64);
+                    }
+                    BuiltinMethod::ToStr => {
+                        check_arg_count!(1, 2);
+                        let value = get_arg!(@i64: args, ctx);
+                        let format = get_arg!(@opt @String: args, ctx);
+                        let ret = match format {
+                            Some(_) => {
+                                format!("{00}", value)
+                            }
+                            None => value.to_string(),
+                        };
+
+                        ctx.push(ret);
+                    }
+                    BuiltinMethod::ToInt => {
+                        check_arg_count!(1);
+
+                        match get_arg!(@String: args, ctx).parse() {
+                            Ok(i) => ctx.push(Value::Int(i)),
+                            Err(_) => ctx.push(0),
+                        }
+                    }
+                    BuiltinMethod::Max => {
+                        check_arg_count!(@atleast 1);
+
+                        let mut max = get_arg!(@value args, ctx);
+
+                        for arg in args {
+                            max = max.max(ctx.reduce_local_value(arg)?);
+                        }
+
+                        ctx.push(max);
+                    }
+                    BuiltinMethod::Min => {
+                        check_arg_count!(@atleast 1);
+
+                        let mut min = get_arg!(@value args, ctx);
+
+                        for arg in args {
+                            min = min.min(ctx.reduce_local_value(arg)?);
+                        }
+
+                        ctx.push(min);
+                    }
+                    BuiltinMethod::Limit => {
+                        check_arg_count!(3);
+                        let v = get_arg!(@i64: args, ctx);
+                        let low = get_arg!(@i64: args, ctx);
+                        let high = get_arg!(@i64: args, ctx);
+
+                        ctx.push(v.clamp(low, high));
+                    }
+                    BuiltinMethod::Abs => {
+                        check_arg_count!(1);
+                        let v = get_arg!(@i64: args, ctx);
+                        ctx.push(v.abs());
+                    }
+                    BuiltinMethod::LineIsEmpty => {
+                        check_arg_count!(0);
+                        let line_is_empty = ctx.line_is_empty();
+                        ctx.push(line_is_empty);
+                    }
+                    BuiltinMethod::GroupMatch => {
+                        check_arg_count!(@atleast 1);
+                        let value = ctx.reduce_local_value(args.next().unwrap())?;
+                        let mut ret = 0i64;
+
+                        for arg in args {
+                            if value == ctx.reduce_local_value(arg)? {
+                                ret += 1;
+                            }
+                        }
+
+                        ctx.push(ret);
+                    }
+                    BuiltinMethod::GetBit => {
+                        let l = get_arg!(@i64: args, ctx);
+                        let r = get_arg!(@i64: args, ctx);
+                        ctx.push((l >> r) & 1);
+                    }
+
+                    BuiltinMethod::SubStringU => {
                         let text = get_arg!(@String: args, ctx);
                         let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
                         let length = get_arg!(@opt @usize: args, ctx);
@@ -524,18 +516,89 @@ impl TerminalVm {
                             }
                         };
 
-                        ctx.var.set_results(ret);
+                        ctx.push(ret);
                     }
-                    BuiltinCommand::Unicode => {
+
+                    BuiltinMethod::Unicode => {
                         let code = get_arg!(@i64: args, ctx).try_into()?;
 
-                        ctx.var.set_results(
+                        ctx.push(
                             char::from_u32(code)
                                 .ok_or_else(|| {
                                     anyhow!("u32 {code} is not valid unicode codepoint")
                                 })?
                                 .to_string(),
                         );
+                    }
+
+                    BuiltinMethod::GetColor => {
+                        ctx.push(ctx.color() as i64);
+                    }
+                    BuiltinMethod::GetBgColor => {
+                        ctx.push(ctx.bg_color() as i64);
+                    }
+                    BuiltinMethod::GetFocusColor => {
+                        ctx.push(ctx.hl_color() as i64);
+                    }
+                    BuiltinMethod::GetChara => {
+                        let no = get_arg!(@i64: args, ctx);
+
+                        let idx = ctx.var.get_chara(no)?;
+
+                        ctx.push(idx.map(|i| i as i64).unwrap_or(-1));
+                    }
+                    BuiltinMethod::GetPalamLv => {
+                        let value = get_arg!(@i64: args, ctx);
+                        let max = get_arg!(@i64: args, ctx);
+
+                        let var = ctx.var.get_var("PALAMLV")?.1.assume_normal().as_int()?;
+
+                        let mut ret = max;
+
+                        for (lv, lv_value) in var.iter().enumerate() {
+                            if lv as i64 > max {
+                                break;
+                            }
+                            if value <= *lv_value {
+                                ret = lv as i64;
+                                break;
+                            }
+                        }
+
+                        ctx.push(ret);
+                    }
+                    BuiltinMethod::GetExpLv => {
+                        let value = get_arg!(@i64: args, ctx);
+                        let max = get_arg!(@i64: args, ctx);
+
+                        let var = ctx.var.get_var("EXPLV")?.1.assume_normal().as_int()?;
+
+                        let mut ret = max;
+
+                        for (lv, lv_value) in var.iter().enumerate() {
+                            if lv as i64 > max {
+                                break;
+                            }
+                            if value <= *lv_value {
+                                ret = lv as i64;
+                                break;
+                            }
+                        }
+
+                        ctx.push(ret);
+                    }
+                    _ => bail!("TODO: unimplemented builtin method {meth}"),
+                }
+            }
+            Instruction::Command(com, c) => {
+                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
+
+                match com {
+                    BuiltinCommand::Restart => {
+                        *cursor = 0;
+                    }
+                    BuiltinCommand::SetBit => {
+                        bail!("TODO: SETBIT");
                     }
                     BuiltinCommand::Throw => {
                         let msg = get_arg!(@opt @String: args, ctx);
@@ -671,17 +734,6 @@ impl TerminalVm {
 
                         return Ok(Some(Workflow::Return));
                     }
-                    BuiltinCommand::StrLenS => {
-                        let s = get_arg!(@String: args, ctx);
-
-                        ctx.var
-                            .set_result(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
-                    }
-                    BuiltinCommand::StrLenSU => {
-                        let s = get_arg!(@String: args, ctx);
-
-                        ctx.var.set_result(s.chars().count() as i64);
-                    }
                     BuiltinCommand::DrawLine => {
                         chan.send_msg(ConsoleMessage::DrawLine);
                         chan.request_redraw();
@@ -716,15 +768,6 @@ impl TerminalVm {
                     BuiltinCommand::ResetBgColor => {
                         log::warn!("TODO: RESETBGCOLOR");
                         // chan.send_msg(ConsoleMessage::SetColor(0xFF, 0xFF, 0xFF));
-                    }
-                    BuiltinCommand::GetColor => {
-                        ctx.push(ctx.color() as i64);
-                    }
-                    BuiltinCommand::GetBgColor => {
-                        ctx.push(ctx.bg_color() as i64);
-                    }
-                    BuiltinCommand::GetFocusColor => {
-                        ctx.push(ctx.hl_color() as i64);
                     }
                     BuiltinCommand::Input | BuiltinCommand::InputS => {
                         let req = match com {
@@ -773,13 +816,6 @@ impl TerminalVm {
                             None => {}
                         }
                     }
-                    BuiltinCommand::GetChara => {
-                        let no = get_arg!(@i64: args, ctx);
-
-                        let idx = ctx.var.get_chara(no)?;
-
-                        ctx.var.set_result(idx.map(|i| i as i64).unwrap_or(-1));
-                    }
                     BuiltinCommand::DelChara => {
                         let idx = get_arg!(@i64: args, ctx);
                         ctx.var.del_chara(idx.try_into()?);
@@ -792,46 +828,6 @@ impl TerminalVm {
                     | BuiltinCommand::SaveData
                     | BuiltinCommand::LoadData => {
                         log::warn!("TODO: Save/Load");
-                    }
-                    BuiltinCommand::GetPalamLv => {
-                        let value = get_arg!(@i64: args, ctx);
-                        let max = get_arg!(@i64: args, ctx);
-
-                        let var = ctx.var.get_var("PALAMLV")?.1.assume_normal().as_int()?;
-
-                        let mut ret = max;
-
-                        for (lv, lv_value) in var.iter().enumerate() {
-                            if lv as i64 > max {
-                                break;
-                            }
-                            if value <= *lv_value {
-                                ret = lv as i64;
-                                break;
-                            }
-                        }
-
-                        ctx.var.set_result(ret);
-                    }
-                    BuiltinCommand::GetExpLv => {
-                        let value = get_arg!(@i64: args, ctx);
-                        let max = get_arg!(@i64: args, ctx);
-
-                        let var = ctx.var.get_var("EXPLV")?.1.assume_normal().as_int()?;
-
-                        let mut ret = max;
-
-                        for (lv, lv_value) in var.iter().enumerate() {
-                            if lv as i64 > max {
-                                break;
-                            }
-                            if value <= *lv_value {
-                                ret = lv as i64;
-                                break;
-                            }
-                        }
-
-                        ctx.var.set_result(ret);
                     }
                     _ => {
                         bail!("TODO: Command {}({:?})", com, args.collect_vec());

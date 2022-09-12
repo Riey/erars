@@ -2,8 +2,8 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, Expr, Function, FunctionInfo,
-    ScriptPosition, Stmt, StmtWithPos, Variable, VariableInfo,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr,
+    Function, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable, VariableInfo,
 };
 use erars_lexer::{ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -12,8 +12,9 @@ use smol_str::SmolStr;
 use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
+    collections::BTreeMap,
     mem,
-    sync::Arc, collections::BTreeMap,
+    sync::Arc,
 };
 
 pub use crate::error::{ParserError, ParserResult};
@@ -325,7 +326,7 @@ impl ParserContext {
             Token::LabelLine(label) => Stmt::Label(label.into()),
             Token::StrLenForm(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Command(BuiltinCommand::StrLenForm, vec![form])
+                Stmt::Method(BuiltinMethod::StrLenForm, vec![form])
             }
             Token::PutForm(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
@@ -333,7 +334,7 @@ impl ParserContext {
             }
             Token::StrLenFormU(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Command(BuiltinCommand::StrLenFormU, vec![form])
+                Stmt::Method(BuiltinMethod::StrLenFormU, vec![form])
             }
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::Throw(left) => Stmt::Command(
@@ -620,6 +621,10 @@ impl ParserContext {
             Token::NormalExprCommand((com, args)) => {
                 let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
                 Stmt::Command(com, args)
+            }
+            Token::NormalExprMethod((meth, args)) => {
+                let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
+                Stmt::Method(meth, args)
             }
             other => error!(lex, format!("[Stmt] Invalid token: {:?}", other)),
         };

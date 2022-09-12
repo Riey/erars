@@ -278,7 +278,11 @@ fn ident_or_method_expr<'c, 'a>(
             ctx.ban_percent.set(false);
             let (i, args) = terminated(separated_list0(char_sp(','), expr(ctx)), char_sp(')'))(i)?;
             ctx.ban_percent.set(p);
-            Ok((i, Expr::Method(ident.into(), args)))
+
+            match ident.parse() {
+                Ok(meth) => Ok((i, Expr::BuitinMethod(meth, args))),
+                _ => Ok((i, Expr::Method(ident.into(), args))),
+            }
         } else {
             let (i, func_extern) = var_func_extern(i)?;
             match ident {

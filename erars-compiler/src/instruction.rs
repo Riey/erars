@@ -1,6 +1,6 @@
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, NotNan, PrintFlags, ScriptPosition,
-    UnaryOperator,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, NotNan, PrintFlags,
+    ScriptPosition, UnaryOperator,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +28,8 @@ pub enum Instruction {
     /// If value is not VarRef, This is noop
     ReadVar,
     StoreVar,
+    /// Store top value to RESULT/RESULTS
+    StoreResult,
     CallMethod(u32),
     Call(u32),
     /// if name is not exists, push 1
@@ -41,6 +43,7 @@ pub enum Instruction {
     ReuseLastLine,
     ConcatString(u32),
     Command(BuiltinCommand, u32),
+    Method(BuiltinMethod, u32),
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
     SetAlignment(Alignment),
