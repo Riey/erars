@@ -262,11 +262,11 @@ NEXTCOM:
   is_chara: false
   is_str: false
 
-# GLOBAL:
-#   is_global: true
-#   size: [1000]
+GLOBAL:
+  is_global: true
+  size: [1000]
 
-# GLOBALS:
-#   is_global: true
-#   is_str: true
-#   size: [1000]
+GLOBALS:
+  is_global: true
+  is_str: true
+  size: [1000]

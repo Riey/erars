@@ -10,29 +10,20 @@ pub struct VariableStorage {
     character_len: usize,
     variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
     local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
-    #[allow(unused)]
-    global_variables: HashMap<SmolStr, VmVariable>,
 }
 
 impl VariableStorage {
     pub fn new(infos: &HashMap<SmolStr, VariableInfo>) -> Self {
         let mut variables = HashMap::new();
-        let mut global_variables = HashMap::new();
 
         for (k, v) in infos {
-            if v.is_global {
-                assert!(!v.is_chara, "전역변수는 캐릭터변수일수 없습니다.");
-                global_variables.insert(k.clone(), VmVariable::new(v));
-            } else {
-                variables.insert(k.clone(), (v.clone(), UniformVariable::new(v)));
-            }
+            variables.insert(k.clone(), (v.clone(), UniformVariable::new(v)));
         }
 
         Self {
             character_len: 0,
             variables,
             local_variables: HashMap::new(),
-            global_variables,
         }
     }
 

@@ -13,7 +13,7 @@ use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
     mem,
-    sync::Arc,
+    sync::Arc, collections::BTreeMap,
 };
 
 pub use crate::error::{ParserError, ParserResult};
@@ -90,7 +90,7 @@ pub struct HeaderInfo {
     pub character_templates: HashMap<u32, CharacterTemplate>,
     pub item_price: HashMap<u32, u32>,
     pub var_names: HashMap<(SmolStr, SmolStr), u32>,
-    pub var_name_var: HashMap<SmolStr, HashMap<u32, SmolStr>>,
+    pub var_name_var: HashMap<SmolStr, BTreeMap<u32, SmolStr>>,
     pub global_variables: HashMap<SmolStr, VariableInfo>,
 }
 
@@ -180,7 +180,7 @@ impl HeaderInfo {
     pub fn merge_name_csv(&mut self, var: &str, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
         let var = SmolStr::from(var);
-        let mut name_var = HashMap::new();
+        let mut name_var = BTreeMap::new();
 
         while let Some((n, s)) = self::csv::name_csv_line(&mut lex)? {
             self.var_names.insert((var.clone(), s.clone()), n);
