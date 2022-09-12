@@ -276,6 +276,9 @@ pub enum Token<'s> {
     #[token("PUTFORM", lex_line_left)]
     PutForm(&'s str),
 
+    #[token("CALLEVENT")]
+    CallEvent,
+
     #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print(lex.slice()) })]
     Print((PrintFlags, PrintType, &'s str)),
     #[token("DATA", lex_line_left)]

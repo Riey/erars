@@ -279,6 +279,9 @@ impl Compiler {
 
     pub fn push_stmt(&mut self, stmt: Stmt) -> CompileResult<()> {
         match stmt {
+            Stmt::CallEvent(ty) => {
+                self.push(Instruction::CallEvent(ty));
+            }
             Stmt::Print(flags, text) => {
                 self.push_expr(text)?;
                 self.push(Instruction::Print(flags));

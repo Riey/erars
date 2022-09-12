@@ -195,6 +195,10 @@ impl TerminalVm {
                 ctx.begin = Some(*b);
                 return Ok(Some(Workflow::Exit));
             }
+            Instruction::CallEvent(ty) => match self.call_event(*ty, chan, ctx)? {
+                Workflow::Return => {}
+                Workflow::Exit => return Ok(Some(Workflow::Exit)),
+            },
             Instruction::ConcatString(c) => {
                 let args = ctx.take_value_list(*c)?;
                 let ret = args.into_iter().fold(String::new(), |s, l| s + l.into_str().as_str());
@@ -684,13 +688,13 @@ impl TerminalVm {
                         let ret = get_arg!(@value args, ctx);
 
                         if args.next().is_some() {
-                            log::warn!("RETURNF는 한개의 값만 반환할 수 있습니다.");
+                            bail!("RETURNF는 한개의 값만 반환할 수 있습니다.");
                         }
 
                         let left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
 
                         if !left_stack.is_empty() {
-                            log::warn!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
+                            bail!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
                         }
 
                         ctx.push(ret);
@@ -701,7 +705,7 @@ impl TerminalVm {
                         let left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
 
                         if !left_stack.is_empty() {
-                            log::warn!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
+                            bail!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
                         }
 
                         let mut result_idx = 0usize;
@@ -1148,6 +1152,7 @@ impl TerminalVm {
             match self.begin(begin, chan, ctx) {
                 Ok(()) => {}
                 Err(err) => {
+                    ctx.new_line(chan);
                     report_error!(chan, "VM failed with: {err}");
 
                     ctx.update_last_call_stack();

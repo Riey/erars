@@ -2,8 +2,8 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr,
-    Function, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable, VariableInfo,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, EventType,
+    Expr, Function, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable, VariableInfo,
 };
 use erars_lexer::{ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -323,6 +323,7 @@ impl ParserContext {
             Token::DirectStmt(stmt) => stmt,
             Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
             Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
+            Token::CallEvent => Stmt::CallEvent(take_ident!(EventType, lex)),
             Token::LabelLine(label) => Stmt::Label(label.into()),
             Token::StrLenForm(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));

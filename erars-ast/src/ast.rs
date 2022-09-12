@@ -7,8 +7,8 @@ use smol_str::SmolStr;
 use strum::{Display, EnumString};
 
 use crate::{
-    command::BuiltinMethod, Alignment, BinaryOperator, BuiltinCommand, EventFlags, LocalVariable,
-    UnaryOperator, Value, Variable,
+    command::BuiltinMethod, Alignment, BinaryOperator, BuiltinCommand, EventFlags, EventType,
+    LocalVariable, UnaryOperator, Value, Variable,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +41,7 @@ pub enum Stmt {
         try_body: Vec<StmtWithPos>,
         catch_body: Option<Vec<StmtWithPos>>,
     },
+    CallEvent(EventType),
     Begin(BeginType),
     Repeat(Expr, Vec<StmtWithPos>),
     Do(Expr, Vec<StmtWithPos>),

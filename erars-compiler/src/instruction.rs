@@ -1,6 +1,6 @@
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, NotNan, PrintFlags,
-    ScriptPosition, UnaryOperator,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventType, NotNan,
+    PrintFlags, ScriptPosition, UnaryOperator,
 };
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +38,7 @@ pub enum Instruction {
     /// if name is not exists, push 1
     TryJump(u32),
     Begin(BeginType),
+    CallEvent(EventType),
     /// Print first value
     Print(PrintFlags),
     ReuseLastLine,
