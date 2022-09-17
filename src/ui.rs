@@ -165,6 +165,10 @@ impl ConsoleSender {
     pub fn request_redraw(&self) {
         self.chan.request_redraw();
     }
+
+    pub fn into_chan(self) -> Arc<ConsoleChannel> {
+        self.chan
+    }
 }
 
 pub struct ConsoleChannel {

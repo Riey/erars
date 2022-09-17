@@ -1,5 +1,7 @@
+use std::sync::Arc;
+
 use erars::function::FunctionDic;
-use erars::ui::{ConsoleChannel, ConsoleMessage};
+use erars::ui::{ConsoleChannel, ConsoleMessage, ConsoleSender};
 use erars::vm::*;
 use erars_compiler::{compile, ParserContext};
 
@@ -51,7 +53,10 @@ fn run_test() {
 fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> Vec<ConsoleMessage> {
     let vm = TerminalVm::new(dic);
     let chan = ConsoleChannel::new();
+    let mut tx = ConsoleSender::new(Arc::new(chan));
 
-    vm.start(&chan, &mut ctx).unwrap();
-    chan.take_all_msg()
+    vm.start(&mut tx, &mut ctx).unwrap();
+    Arc::try_unwrap(tx.into_chan())
+        .unwrap_or_else(|_| unreachable!())
+        .take_all_msg()
 }
