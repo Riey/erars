@@ -398,6 +398,7 @@ pub enum Token<'s> {
     #[token("FINDCHARA", |lex| normal_expr_command(lex, BuiltinCommand::FindChara))]
     #[token("PICKUPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::PickupChara))]
     #[token("SPLIT", |lex| normal_expr_command(lex, BuiltinCommand::Split))]
+    #[token("CUPCHECK", |lex| normal_expr_command(lex, BuiltinCommand::CUpCheck))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[token("LIMIT", |lex| normal_expr_method(lex, BuiltinMethod::Limit))]

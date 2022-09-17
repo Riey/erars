@@ -81,6 +81,8 @@ MARK:
   is_chara: true
   is_str: false
 
+LOSEBASE:
+  size: [1000]
 BASE:
   size: [1000]
   is_chara: true
@@ -88,9 +90,6 @@ MAXBASE:
   size: [1000]
   is_chara: true
 DOWNBASE:
-  size: [1000]
-  is_chara: true
-LOSEBASE:
   size: [1000]
   is_chara: true
 
@@ -229,13 +228,17 @@ SOURCE:
 
 UP:
   size: [1000]
-  is_chara: true
-  is_str: false
 
 DOWN:
   size: [1000]
+
+CUP:
+  size: [1000]
   is_chara: true
-  is_str: false
+
+CDOWN:
+  size: [1000]
+  is_chara: true
 
 TEQUIP:
   size: [1000]

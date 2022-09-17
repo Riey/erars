@@ -604,6 +604,11 @@ impl TerminalVm {
                         let target = ctx.var.read_int("TARGET", &[])?.try_into()?;
                         ctx.var.upcheck(tx, target, names)?;
                     }
+                    BuiltinCommand::CUpCheck => {
+                        let target = get_arg!(@usize: args, ctx);
+                        let names = ctx.header_info.var_name_var.get("PALAM").unwrap();
+                        ctx.var.cupcheck(tx, target, names)?;
+                    }
                     BuiltinCommand::Restart => {
                         *cursor = 0;
                     }
@@ -1007,6 +1012,9 @@ impl TerminalVm {
                             ctx.var.reset_var("UP")?;
                             ctx.var.reset_var("DOWN")?;
                             ctx.var.reset_var("LOSEBASE")?;
+                            ctx.var.reset_var("CUP")?;
+                            ctx.var.reset_var("CDOWN")?;
+                            ctx.var.reset_var("DOWNBASE")?;
 
                             match tx.input(InputRequest::Int) {
                                 ConsoleResult::Quit => return Ok(()),

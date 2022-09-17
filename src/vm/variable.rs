@@ -39,18 +39,13 @@ impl VariableStorage {
         &mut self.rng
     }
 
-    pub fn upcheck(
-        &mut self,
+    fn upcheck_internal(
         tx: &mut ConsoleSender,
-        idx: usize,
         palam_name: &BTreeMap<u32, SmolStr>,
+        palam: &mut Vec<i64>,
+        up: &mut Vec<i64>,
+        down: &mut Vec<i64>,
     ) -> Result<()> {
-        let (palam, up, down) = self.get_var3("PALAM", "UP", "DOWN")?;
-
-        let palam = palam.1.assume_chara(idx).as_int()?;
-        let up = up.1.assume_chara(idx).as_int()?;
-        let down = down.1.assume_chara(idx).as_int()?;
-
         itertools::multizip((palam.iter_mut(), up.iter_mut(), down.iter_mut()))
             .enumerate()
             .for_each(|(no, (p, u, d))| {
@@ -80,6 +75,36 @@ impl VariableStorage {
         down.fill(0);
 
         Ok(())
+    }
+
+    pub fn upcheck(
+        &mut self,
+        tx: &mut ConsoleSender,
+        idx: usize,
+        palam_name: &BTreeMap<u32, SmolStr>,
+    ) -> Result<()> {
+        let (palam, up, down) = self.get_var3("PALAM", "UP", "DOWN")?;
+
+        let palam = palam.1.assume_chara(idx).as_int()?;
+        let up = up.1.assume_normal().as_int()?;
+        let down = down.1.assume_normal().as_int()?;
+
+        Self::upcheck_internal(tx, palam_name, palam, up, down)
+    }
+
+    pub fn cupcheck(
+        &mut self,
+        tx: &mut ConsoleSender,
+        idx: usize,
+        palam_name: &BTreeMap<u32, SmolStr>,
+    ) -> Result<()> {
+        let (palam, up, down) = self.get_var3("PALAM", "CUP", "CDOWN")?;
+
+        let palam = palam.1.assume_chara(idx).as_int()?;
+        let up = up.1.assume_chara(idx).as_int()?;
+        let down = down.1.assume_chara(idx).as_int()?;
+
+        Self::upcheck_internal(tx, palam_name, palam, up, down)
     }
 
     pub fn reset_train_data(&mut self) -> Result<()> {

@@ -67,6 +67,7 @@ pub enum BuiltinMethod {
 #[allow(non_camel_case_types)]
 pub enum BuiltinCommand {
     UpCheck,
+    CUpCheck,
 
     Input,
     InputS,
