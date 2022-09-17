@@ -309,7 +309,7 @@ impl TerminalVm {
                 ctx.push(text.pad_to_width_with_alignment(size as usize, align));
             }
             Instruction::Method(meth, c) => {
-                let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 16>>().into_iter();
+                let mut args = ctx.take_list(*c).collect::<Vec<_>>().into_iter();
 
                 macro_rules! check_arg_count {
                     ($expect:expr) => {
@@ -598,6 +598,10 @@ impl TerminalVm {
                 let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
 
                 match com {
+                    BuiltinCommand::UpCheck => {
+                        let target = ctx.var.read_int("TARGET", &[])?.try_into()?;
+                        ctx.var.upcheck(target)?;
+                    }
                     BuiltinCommand::Restart => {
                         *cursor = 0;
                     }

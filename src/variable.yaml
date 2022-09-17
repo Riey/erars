@@ -82,17 +82,15 @@ MARK:
 BASE:
   size: [1000]
   is_chara: true
-  is_str: false
-
 MAXBASE:
   size: [1000]
   is_chara: true
-  is_str: false
-
 DOWNBASE:
   size: [1000]
+  is_chara: true
 LOSEBASE:
   size: [1000]
+  is_chara: true
 
 TALENT:
   size: [1000]

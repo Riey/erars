@@ -55,7 +55,7 @@ impl VariableInfo {
 
             (false, [_, _, w], [y, idx]) => (None, *w * *y + *idx),
             (false, [_, h, w], [z, y, idx]) => (None, *z * *w * *h + *w * *y + *idx),
-            _ => panic!("Invalid index"),
+            other => panic!("Invalid index for variable, {other:?}"),
         }
     }
 }

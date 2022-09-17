@@ -27,6 +27,26 @@ impl VariableStorage {
         }
     }
 
+    pub fn upcheck(&mut self, idx: usize) -> Result<()> {
+        let (palam, up, down) = self.get_var3("PALAM", "UP", "DOWN")?;
+
+        let palam = palam.1.assume_chara(idx).as_int()?;
+        let up = up.1.assume_chara(idx).as_int()?;
+        let down = down.1.assume_chara(idx).as_int()?;
+
+        itertools::multizip((palam.iter_mut(), up.iter_mut(), down.iter_mut())).for_each(
+            |(p, u, d)| {
+                *p += *u;
+                *p -= *d;
+            },
+        );
+
+        up.fill(0);
+        down.fill(0);
+
+        Ok(())
+    }
+
     pub fn reset_train_data(&mut self) -> Result<()> {
         macro_rules! set_var {
             ($name:expr, $value:expr) => {
@@ -321,12 +341,28 @@ impl VariableStorage {
         (&mut VariableInfo, &mut UniformVariable),
         (&mut VariableInfo, &mut UniformVariable),
     )> {
-        assert_ne!(l, r);
-
         match self.variables.get_many_mut([l, r]) {
             Some([(ll, lr), (rl, rr)]) => Ok(((ll, lr), (rl, rr))),
             None => {
                 bail!("Variable {l} or {r} is not exists");
+            }
+        }
+    }
+
+    pub fn get_var3(
+        &mut self,
+        v1: &str,
+        v2: &str,
+        v3: &str,
+    ) -> Result<(
+        (&mut VariableInfo, &mut UniformVariable),
+        (&mut VariableInfo, &mut UniformVariable),
+        (&mut VariableInfo, &mut UniformVariable),
+    )> {
+        match self.variables.get_many_mut([v1, v2, v3]) {
+            Some([(l1, r1), (l2, r2), (l3, r3)]) => Ok(((l1, r1), (l2, r2), (l3, r3))),
+            None => {
+                bail!("Variable {v1} or {v2} or {v3} is not exists");
             }
         }
     }
