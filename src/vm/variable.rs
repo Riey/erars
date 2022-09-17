@@ -1,6 +1,6 @@
 use anyhow::{anyhow, bail, Result};
 use erars_ast::{Value, VariableInfo};
-use erars_compiler::CharacterTemplate;
+use erars_compiler::{CharacterTemplate, ReplaceInfo};
 use hashbrown::HashMap;
 use rayon::prelude::*;
 use smol_str::SmolStr;
@@ -402,6 +402,26 @@ impl VariableStorage {
             }
             UniformVariable::Normal(_) => bail!("NO can't be normal variable"),
         }
+    }
+
+    pub fn init_replace(&mut self, replace: &ReplaceInfo) -> Result<()> {
+        macro_rules! set {
+            ($name:expr, $field:ident) => {
+                let var = self.get_var($name)?.1.assume_normal().as_int()?;
+                let arr = &replace.$field;
+
+                var[..arr.len()].copy_from_slice(arr);
+            };
+        }
+
+        set!("PALAMLV", palamlv_init);
+        set!("EXPLV", explv_init);
+        set!("PALAMLV", palamlv_init);
+
+        self.get_var("RELATION")?.0.default_int = replace.relation_init;
+        *self.ref_int("PBAND", &[])? = replace.pband_init;
+
+        Ok(())
     }
 
     pub fn set_character_template(

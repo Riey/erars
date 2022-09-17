@@ -32,7 +32,7 @@ pub struct VmContext {
 
 impl VmContext {
     pub fn new(header_info: Arc<HeaderInfo>) -> Self {
-        Self {
+        let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
             header_info,
             begin: Some(BeginType::Title),
@@ -45,7 +45,20 @@ impl VmContext {
             bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
             current_pos: ScriptPosition::default(),
             inputs: VecDeque::new(),
-        }
+        };
+
+        ret.init_variable().unwrap();
+
+        ret
+    }
+
+    fn init_variable(&mut self) -> Result<()> {
+        let info = self.header_info.clone();
+        let replace = &info.replace;
+
+        self.var.init_replace(&replace)?;
+
+        Ok(())
     }
 
     pub fn push_input(&mut self, value: Value) {

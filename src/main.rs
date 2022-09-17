@@ -47,8 +47,6 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
         {
             check_time!("Initialize");
 
-            check_time!("Parse args");
-
             let infos: HashMap<SmolStr, VariableInfo> =
                 serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
@@ -126,6 +124,18 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
                             }
                         }
                     }
+                    "_Replace" => {
+                        log::debug!("Merge _Replace.CSV");
+                        match info.merge_replace_csv(v) {
+                            Ok(()) => {}
+                            Err((err, span)) => {
+                                let file_id = files.lock().add(format!("{k}.CSV"), v.clone());
+                                diagnostic.lock().labels.push(
+                                    Label::primary(file_id, span).with_message(format!("{}", err)),
+                                );
+                            }
+                        }
+                    }
                     "ITEM" => {
                         log::debug!("Merge ITEM.CSV");
                         match info.merge_item_csv(v) {
@@ -161,6 +171,9 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
             drop(csv_dic);
 
             check_time!("Merge CSV");
+
+            inner_chan.send_msg(ConsoleMessage::Print(info.replace.start_message.clone()));
+            inner_chan.send_msg(ConsoleMessage::NewLine);
 
             for erh in erhs {
                 let erh = erh.unwrap();

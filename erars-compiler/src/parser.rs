@@ -85,9 +85,55 @@ pub struct CharacterTemplate {
     pub relation: HashMap<u32, u32>,
 }
 
+#[derive(Debug)]
+pub struct ReplaceInfo {
+    pub money_unit: String,
+    pub unit_forward: bool,
+    pub start_message: String,
+    pub sell_item_count: i64,
+    pub drawline_str: String,
+    pub bar_str1: String,
+    pub bar_str2: String,
+    pub system_menu0: String,
+    pub system_menu1: String,
+    pub comable_init: i64,
+    pub stain_init: Vec<i64>,
+    pub timeout_message: String,
+    pub explv_init: Vec<i64>,
+    pub palamlv_init: Vec<i64>,
+    pub pband_init: i64,
+    pub relation_init: i64,
+}
+
+impl Default for ReplaceInfo {
+    fn default() -> Self {
+        Self {
+            money_unit: "$".into(),
+            unit_forward: false,
+            start_message: "Now Loading...".into(),
+            sell_item_count: 100,
+            drawline_str: "-".into(),
+            bar_str1: "*".into(),
+            bar_str2: ".".into(),
+            system_menu0: "[0] 最初からはじめる".into(),
+            system_menu1: "[1] ロードしてはじめる".into(),
+            comable_init: 0,
+            stain_init: vec![0, 0, 2, 1, 8],
+            timeout_message: "時間切れ".into(),
+            explv_init: vec![0, 1, 4, 20, 50, 200],
+            palamlv_init: vec![
+                0, 100, 500, 3000, 10000, 30000, 60000, 100000, 150000, 250000,
+            ],
+            pband_init: 4,
+            relation_init: 0,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
+    pub replace: ReplaceInfo,
     pub character_templates: HashMap<u32, CharacterTemplate>,
     pub item_price: HashMap<u32, u32>,
     pub var_names: HashMap<(SmolStr, SmolStr), u32>,
@@ -201,6 +247,91 @@ impl HeaderInfo {
             self.item_price.insert(n, price);
             self.var_names.insert((var.clone(), s.clone()), n);
             self.var_name_var.entry(var.clone()).or_default().insert(n, s);
+        }
+
+        Ok(())
+    }
+
+    pub fn merge_replace_csv(&mut self, s: &str) -> ParserResult<()> {
+        let mut lex = Lexer::new(s);
+
+        while let Some((k, v)) = self::csv::csv2_line(&mut lex)? {
+            macro_rules! define_replace_parser {
+                (
+                    @direct [$(($dr_key:literal, $dr_field:ident),)*]
+                    @parse [$(($pa_key:literal, $pa_field:ident),)*]
+                    @match_ [$(($ma_key:literal, $ma_field:ident, [$($ma_subkey:literal => $ma_value:expr,)+]),)*]
+                    @arr [$(($ar_key:literal, $ar_field:ident),)*]
+                ) => {
+                    match k {
+                        $(
+                            $dr_key => self.replace.$dr_field = v.into(),
+                        )*
+                        $(
+                            $pa_key => match v.parse() {
+                                Ok(v) => self.replace.$pa_field = v,
+                                Err(_) => {
+                                    log::error!("Invalid value for `{k}`: {v}");
+                                    continue;
+                                },
+                            },
+                        )*
+                        $(
+                            $ma_key => self.replace.$ma_field = match v {
+                                $(
+                                    $ma_subkey => $ma_value,
+                                )*
+                                _ => {
+                                    log::error!("Invalid value for `{k}`: {v}");
+                                    continue;
+                                },
+                            },
+                        )*
+                        $(
+                            $ar_key => match v.split('/').map(|s| s.parse()).collect::<Result<Vec<_>, _>>() {
+                                Ok(v) => self.replace.$ar_field = v,
+                                Err(_) => {
+                                    log::error!("Invalid value for `{k}`: {v}");
+                                    continue;
+                                },
+                            },
+                        )*
+                        _ => {
+                            log::error!("Unknown replace key: {k}");
+                        }
+                    }
+                };
+            }
+
+            define_replace_parser! {
+                @direct [
+                    ("お金の単位", money_unit),
+                    ("起動時簡略表示", start_message),
+                    ("DRAWLINE文字", drawline_str),
+                    ("BAR文字1", bar_str1),
+                    ("BAR文字2", bar_str2),
+                    ("システムメニュー0", system_menu0),
+                    ("システムメニュー1", system_menu1),
+                    ("時間切れ表示", timeout_message),
+                ]
+                @parse [
+                    ("販売アイテム数", sell_item_count),
+                    ("COM_ABLE初期値", comable_init),
+                    ("PBANDの初期値", pband_init),
+                    ("RELATIONの初期値", relation_init),
+                ]
+                @match_ [
+                    ("単位の位置", unit_forward, [
+                        "前" => true,
+                        "後" => false,
+                    ]),
+                ]
+                @arr [
+                    ("汚れの初期値", stain_init),
+                    ("EXPLVの初期値", explv_init),
+                    ("PALAMLVの初期値", palamlv_init),
+                ]
+            }
         }
 
         Ok(())

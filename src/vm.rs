@@ -673,15 +673,12 @@ impl TerminalVm {
 
                         ret.push('[');
 
-                        const FILL_CHAR: char = '*';
-                        const BLANK_CHAR: char = '.';
-
                         for _ in 0..bar_length {
-                            ret.push(FILL_CHAR);
+                            ret.push_str(&ctx.header_info.replace.bar_str1);
                         }
 
                         for _ in 0..blank {
-                            ret.push(BLANK_CHAR);
+                            ret.push_str(&ctx.header_info.replace.bar_str2);
                         }
 
                         ret.push(']');
@@ -976,7 +973,9 @@ impl TerminalVm {
 
         match ty {
             BeginType::Title => {
-                call!("SYSTEM_TITLE");
+                if !call!("SYSTEM_TITLE") {
+                    todo!("Default TITLE");
+                }
                 Ok(())
             }
             BeginType::First => {
@@ -994,7 +993,9 @@ impl TerminalVm {
                             call!("SHOW_STATUS");
 
                             for (no, name) in ctx.header_info.clone().var_name_var["TRAIN"].iter() {
-                                if call!(&format!("COM_ABLE{no}")) && ctx.var.get_result() != 0 {
+                                if call!(&format!("COM_ABLE{no}")) && ctx.var.get_result() != 0
+                                    || ctx.header_info.replace.comable_init != 0
+                                {
                                     ctx.printrc(chan, &format!("{name}[{no:3}]"));
                                 }
                             }
@@ -1064,7 +1065,7 @@ impl TerminalVm {
 
                             log::debug!("SHOP: get {i}");
 
-                            if i >= 0 && i < 100 {
+                            if i >= 0 && i < ctx.header_info.replace.sell_item_count {
                                 let sales = ctx.var.read_int("ITEMSALES", &[i as usize])?;
 
                                 log::debug!("sales: {sales}");

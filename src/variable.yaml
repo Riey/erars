@@ -8,6 +8,8 @@ PALAMLV:
   size: [100]
 EXPLV:
   size: [100]
+PBAND:
+  size: [1000]
 
 SAVESTR:
   size: [1000]

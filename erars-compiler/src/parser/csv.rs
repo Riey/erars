@@ -4,6 +4,16 @@ use smol_str::SmolStr;
 
 use crate::ParserResult;
 
+pub fn csv2_line<'s>(
+    lex: &mut Lexer<'s, CsvToken<'s>>,
+) -> ParserResult<Option<(&'s str, &'s str)>> {
+    match lex.next() {
+        Some(CsvToken::Csv2((key, value))) => Ok(Some((key, value))),
+        Some(_) => Err((format!("CSV 형식이 잘못됐습니다."), lex.span())),
+        None => Ok(None),
+    }
+}
+
 pub fn name_csv_line<'s>(
     lex: &mut Lexer<'s, CsvToken<'s>>,
 ) -> ParserResult<Option<(u32, SmolStr)>> {

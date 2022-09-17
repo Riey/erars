@@ -471,23 +471,23 @@ pub enum Token<'s> {
 fn csv2<'s>(lex: &mut Lexer<'s, CsvToken<'s>>) -> (&'s str, &'s str) {
     let mut p = lex.slice().split(',');
 
-    (p.next().unwrap(), p.next().unwrap())
+    (p.next().unwrap().trim(), p.next().unwrap().trim())
 }
 
 fn csv3<'s>(lex: &mut Lexer<'s, CsvToken<'s>>) -> (&'s str, &'s str, &'s str) {
     let mut p = lex.slice().split(',');
 
-    (p.next().unwrap(), p.next().unwrap(), p.next().unwrap())
+    (p.next().unwrap().trim(), p.next().unwrap().trim(), p.next().unwrap().trim())
 }
 
 fn csv4<'s>(lex: &mut Lexer<'s, CsvToken<'s>>) -> (&'s str, &'s str, &'s str, &'s str) {
     let mut p = lex.slice().split(',');
 
     (
-        p.next().unwrap(),
-        p.next().unwrap(),
-        p.next().unwrap(),
-        p.next().unwrap(),
+        p.next().unwrap().trim(),
+        p.next().unwrap().trim(),
+        p.next().unwrap().trim(),
+        p.next().unwrap().trim(),
     )
 }
 
