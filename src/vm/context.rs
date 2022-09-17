@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use arrayvec::ArrayVec;
 use pad::PadStr;
+use rand::Rng;
 use smol_str::SmolStr;
 use std::collections::VecDeque;
 use std::fmt;
@@ -145,6 +146,10 @@ impl VmContext {
                     .and_then(|d| Some(d.get(&arg)?.as_str()))
                     .unwrap_or("")
                     .into()
+            }
+            "RAND" => {
+                let max = var_ref.idxs[0];
+                Value::Int(self.var.rng().gen_range(0..max) as i64)
             }
             _ => {
                 let (_, var, idx) = self.resolve_var_ref(&var_ref)?;

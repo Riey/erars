@@ -2,12 +2,15 @@ use anyhow::{anyhow, bail, Result};
 use erars_ast::{Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, ReplaceInfo};
 use hashbrown::HashMap;
+use rand::SeedableRng;
+use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 use smol_str::SmolStr;
 
 #[derive(Clone)]
 pub struct VariableStorage {
     character_len: usize,
+    rng: ChaCha20Rng,
     variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
     local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
 }
@@ -22,9 +25,14 @@ impl VariableStorage {
 
         Self {
             character_len: 0,
+            rng: ChaCha20Rng::from_entropy(),
             variables,
             local_variables: HashMap::new(),
         }
+    }
+
+    pub fn rng(&mut self) -> &mut impl rand::Rng {
+        &mut self.rng
     }
 
     pub fn upcheck(&mut self, idx: usize) -> Result<()> {
