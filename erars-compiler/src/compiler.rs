@@ -231,20 +231,28 @@ impl Compiler {
 
         self.push_expr(init)?;
         self.store_var(var.clone())?;
+
         self.push_expr(step)?;
         self.push(Instruction::ReadVar);
         self.push_expr(end)?;
         self.push(Instruction::ReadVar);
+
+        // stack: [step, end]
 
         self.begin_loop_block();
 
         let start = self.current_no();
 
         // compare var with end
+
+        // stack: [step, end, var]
         self.push_var(var.clone())?;
+        // stack: [step, end, var, end]
         self.push(Instruction::DuplicatePrev);
+        // stack: [step, end, exit?]
         self.push(Instruction::BinaryOperator(BinaryOperator::Less));
 
+        // stack: [step, end]
         let exit = self.mark();
 
         for stmt in body {

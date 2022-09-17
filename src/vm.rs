@@ -90,7 +90,7 @@ impl TerminalVm {
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
         log::trace!(
-            "[{func_name}] `{inst:?}`, stack: {stack:?}",
+            "[{func_name}] `{inst:?}[{cursor}]`, stack: {stack:?}",
             stack = ctx.stack()
         );
 
@@ -691,22 +691,14 @@ impl TerminalVm {
                             bail!("RETURNF는 한개의 값만 반환할 수 있습니다.");
                         }
 
-                        let left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
-
-                        if !left_stack.is_empty() {
-                            bail!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
-                        }
+                        let _left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
 
                         ctx.push(ret);
 
                         return Ok(Some(Workflow::Return));
                     }
                     BuiltinCommand::Return => {
-                        let left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
-
-                        if !left_stack.is_empty() {
-                            bail!("반환되는 함수에 값이 남아있습니다. 프로그램이 잘못되었습니다: {left_stack:?}");
-                        }
+                        let _left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
 
                         let mut result_idx = 0usize;
                         let mut results_idx = 0usize;

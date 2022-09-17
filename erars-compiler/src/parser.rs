@@ -489,7 +489,9 @@ impl ParserContext {
                 if has_else {
                     Stmt::SelectCase(cond, cases, Some(body))
                 } else {
-                    cases.last_mut().unwrap().1 = body;
+                    if let Some(last) = cases.last_mut() {
+                        last.1 = body;
+                    }
                     Stmt::SelectCase(cond, cases, None)
                 }
             }
