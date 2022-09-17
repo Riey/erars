@@ -1,16 +1,13 @@
 use anyhow::{bail, Result};
 use arrayvec::ArrayVec;
-use pad::PadStr;
 use rand::Rng;
 use smol_str::SmolStr;
-use std::collections::VecDeque;
 use std::fmt;
 use std::sync::Arc;
 
 use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
 use erars_compiler::HeaderInfo;
 
-use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
 use crate::vm::{VariableStorage, VmVariable};
 
 use super::UniformVariable;
@@ -23,12 +20,6 @@ pub struct VmContext {
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
     current_pos: ScriptPosition,
-    line_is_empty: bool,
-    printc_count: u32,
-    color: u32,
-    hl_color: u32,
-    bg_color: u32,
-    inputs: VecDeque<Value>,
 }
 
 impl VmContext {
@@ -39,13 +30,7 @@ impl VmContext {
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
-            line_is_empty: true,
-            printc_count: 0,
-            color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
-            hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
-            bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
             current_pos: ScriptPosition::default(),
-            inputs: VecDeque::new(),
         };
 
         ret.init_variable().unwrap();
@@ -62,21 +47,6 @@ impl VmContext {
         Ok(())
     }
 
-    pub fn push_input(&mut self, value: Value) {
-        self.inputs.push_back(value);
-    }
-
-    pub fn input(&mut self, chan: &ConsoleChannel, req: InputRequest) -> ConsoleResult {
-        if let Some(i) = self.inputs.pop_front() {
-            ConsoleResult::Value(i)
-        } else {
-            chan.send_msg(ConsoleMessage::Input(req));
-            let ret = chan.recv_ret();
-            log::trace!("Console Recv {ret:?}");
-            ret
-        }
-    }
-
     pub fn set_begin(&mut self, ty: BeginType) {
         self.begin = Some(ty);
     }
@@ -87,10 +57,6 @@ impl VmContext {
 
     pub fn var_mut(&mut self) -> &mut VariableStorage {
         &mut self.var
-    }
-
-    pub fn line_is_empty(&self) -> bool {
-        self.line_is_empty
     }
 
     pub fn update_last_call_stack(&mut self) {
@@ -284,61 +250,6 @@ impl VmContext {
 
     pub fn pop_int(&mut self) -> Result<i64> {
         self.pop_value().and_then(|v| v.try_into_int())
-    }
-
-    pub fn reuse_last_line(&mut self, chan: &ConsoleChannel, s: String) {
-        self.line_is_empty = false;
-        chan.send_msg(ConsoleMessage::ReuseLastLine(s));
-    }
-
-    pub fn print(&mut self, chan: &ConsoleChannel, s: String) {
-        self.line_is_empty = false;
-        chan.send_msg(ConsoleMessage::Print(s));
-    }
-
-    pub fn printlc(&mut self, chan: &ConsoleChannel, s: &str) {
-        if self.printc_count == 3 {
-            self.new_line(chan);
-        }
-        self.printc_count += 1;
-        self.print(
-            chan,
-            s.pad_to_width_with_alignment(30, pad::Alignment::Left),
-        );
-    }
-
-    pub fn printrc(&mut self, chan: &ConsoleChannel, s: &str) {
-        if self.printc_count == 3 {
-            self.new_line(chan);
-        }
-        self.printc_count += 1;
-        self.print(
-            chan,
-            s.pad_to_width_with_alignment(30, pad::Alignment::Right),
-        );
-    }
-
-    pub fn new_line(&mut self, chan: &ConsoleChannel) {
-        self.printc_count = 0;
-        self.line_is_empty = true;
-        chan.send_msg(ConsoleMessage::NewLine);
-    }
-
-    pub fn set_color(&mut self, chan: &ConsoleChannel, r: u8, g: u8, b: u8) {
-        self.color = u32::from_le_bytes([r, g, b, 0]);
-        chan.send_msg(ConsoleMessage::SetColor(r, g, b));
-    }
-
-    pub fn color(&self) -> u32 {
-        self.color
-    }
-
-    pub fn hl_color(&self) -> u32 {
-        self.hl_color
-    }
-
-    pub fn bg_color(&self) -> u32 {
-        self.bg_color
     }
 }
 

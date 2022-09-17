@@ -13,7 +13,7 @@ use codespan_reporting::{
 };
 use erars::{
     function::FunctionDic,
-    ui::{ConsoleChannel, ConsoleMessage, EraApp, StdioBackend},
+    ui::{ConsoleChannel, ConsoleMessage, ConsoleSender, EraApp, StdioBackend},
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::{Value, VariableInfo};
@@ -26,15 +26,14 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
 
     let chan = Arc::new(ConsoleChannel::new());
 
-    let inner_chan = chan.clone();
+    let mut tx = ConsoleSender::new(chan.clone());
 
     macro_rules! check_time {
         ($work:expr) => {
             let m = time.elapsed().as_millis();
             time = Instant::now();
 
-            inner_chan.send_msg(ConsoleMessage::Print(format!("[{}]: {}ms", $work, m)));
-            inner_chan.send_msg(ConsoleMessage::NewLine);
+            tx.print_line(format!("[{}]: {}ms", $work, m));
         };
     }
 
@@ -124,8 +123,8 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
                             }
                         }
                     }
-                    "_Replace" => {
-                        log::debug!("Merge _Replace.CSV");
+                    "_REPLACE" => {
+                        log::debug!("Merge _REPLACE.CSV");
                         match info.merge_replace_csv(v) {
                             Ok(()) => {}
                             Err((err, span)) => {
@@ -135,6 +134,7 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
                                 );
                             }
                         }
+                        log::info!("Replace: {:?}", info.replace);
                     }
                     "ITEM" => {
                         log::debug!("Merge ITEM.CSV");
@@ -172,8 +172,7 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
 
             check_time!("Merge CSV");
 
-            inner_chan.send_msg(ConsoleMessage::Print(info.replace.start_message.clone()));
-            inner_chan.send_msg(ConsoleMessage::NewLine);
+            tx.print_line(info.replace.start_message.clone());
 
             for erh in erhs {
                 let erh = erh.unwrap();
@@ -235,7 +234,7 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
             ctx = VmContext::new(header_info.clone());
 
             for input in inputs {
-                ctx.push_input(input);
+                tx.push_input(input);
             }
 
             for func in funcs {
@@ -252,16 +251,16 @@ fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> any
                 let config = Config::default();
                 codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                     .unwrap();
-                inner_chan.exit();
+                tx.exit();
                 log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
                 return;
             }
         }
 
         let vm = TerminalVm::new(function_dic);
-        vm.start(&inner_chan, &mut ctx).unwrap();
+        vm.start(&mut tx, &mut ctx).unwrap();
 
-        inner_chan.exit();
+        tx.exit();
 
         log::info!("Program Terminated");
     });

@@ -23,14 +23,16 @@ pub use self::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
-use crate::function::{FunctionBody, FunctionDic};
-use crate::ui::{ConsoleChannel, ConsoleMessage, ConsoleResult, InputRequest};
+use crate::ui::{ConsoleMessage, ConsoleResult, InputRequest};
+use crate::{
+    function::{FunctionBody, FunctionDic},
+    ui::ConsoleSender,
+};
 
 macro_rules! report_error {
-    ($chan:expr, $($t:tt)+) => {
+    ($tx:expr, $($t:tt)+) => {
         log::error!($($t)+);
-        $chan.send_msg(ConsoleMessage::Print(format!($($t)+)));
-        $chan.send_msg(ConsoleMessage::NewLine);
+        $tx.print_line(format!($($t)+));
     };
 }
 macro_rules! get_arg {
@@ -86,7 +88,7 @@ impl TerminalVm {
         goto_labels: &HashMap<SmolStr, u32>,
         inst: &Instruction,
         cursor: &mut usize,
-        chan: &ConsoleChannel,
+        tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
         log::trace!(
@@ -117,7 +119,7 @@ impl TerminalVm {
                 let insts = erars_compiler::compile_expr(expr).unwrap();
 
                 for inst in insts.iter() {
-                    self.run_instruction(func_name, goto_labels, inst, &mut 0, chan, ctx)?;
+                    self.run_instruction(func_name, goto_labels, inst, &mut 0, tx, ctx)?;
                 }
             }
             Instruction::GotoLabel => {
@@ -142,22 +144,22 @@ impl TerminalVm {
             }
             Instruction::ReuseLastLine => {
                 let s = ctx.pop_str()?;
-                ctx.reuse_last_line(chan, s);
-                chan.request_redraw();
+                tx.reuse_last_line(s);
+                tx.request_redraw();
             }
             Instruction::Print(flags) => {
                 let s = ctx.pop_str()?;
                 if flags.contains(PrintFlags::LEFT_ALIGN) {
-                    ctx.printlc(chan, &s);
+                    tx.printlc(&s);
                 } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
-                    ctx.printrc(chan, &s);
+                    tx.printrc(&s);
                 } else {
-                    ctx.print(chan, s);
+                    tx.print(s);
                 }
                 if flags.contains(PrintFlags::NEWLINE) {
-                    ctx.new_line(chan);
+                    tx.new_line();
                 }
-                chan.request_redraw();
+                tx.request_redraw();
 
                 // TODO: PRINTW
             }
@@ -165,7 +167,7 @@ impl TerminalVm {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_value_list(*c)?;
 
-                match self.call(&func, args.as_slice(), chan, ctx)? {
+                match self.call(&func, args.as_slice(), tx, ctx)? {
                     Workflow::Exit => return Ok(Some(Workflow::Exit)),
                     Workflow::Return => {}
                 }
@@ -174,7 +176,7 @@ impl TerminalVm {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_value_list(*c)?;
 
-                match self.try_call(&func, &args, chan, ctx)? {
+                match self.try_call(&func, &args, tx, ctx)? {
                     Some(Workflow::Return) => ctx.push(true),
                     Some(Workflow::Exit) => return Ok(Some(Workflow::Exit)),
                     None => {
@@ -186,7 +188,7 @@ impl TerminalVm {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_value_list(*c)?;
 
-                match self.call(&func, &args, chan, ctx)? {
+                match self.call(&func, &args, tx, ctx)? {
                     Workflow::Return => {}
                     Workflow::Exit => return Ok(Some(Workflow::Exit)),
                 }
@@ -195,7 +197,7 @@ impl TerminalVm {
                 ctx.begin = Some(*b);
                 return Ok(Some(Workflow::Exit));
             }
-            Instruction::CallEvent(ty) => match self.call_event(*ty, chan, ctx)? {
+            Instruction::CallEvent(ty) => match self.call_event(*ty, tx, ctx)? {
                 Workflow::Return => {}
                 Workflow::Exit => return Ok(Some(Workflow::Exit)),
             },
@@ -289,7 +291,7 @@ impl TerminalVm {
                 }
             }
             Instruction::SetAlignment(align) => {
-                chan.send_msg(ConsoleMessage::Alignment(*align));
+                tx.set_align(*align);
             }
             Instruction::PadStr(align) => {
                 use erars_ast::Alignment;
@@ -476,8 +478,7 @@ impl TerminalVm {
                     }
                     BuiltinMethod::LineIsEmpty => {
                         check_arg_count!(0);
-                        let line_is_empty = ctx.line_is_empty();
-                        ctx.push(line_is_empty);
+                        ctx.push(tx.line_is_empty());
                     }
                     BuiltinMethod::GroupMatch => {
                         check_arg_count!(@atleast 1);
@@ -536,13 +537,13 @@ impl TerminalVm {
                     }
 
                     BuiltinMethod::GetColor => {
-                        ctx.push(ctx.color() as i64);
+                        ctx.push(tx.color() as i64);
                     }
                     BuiltinMethod::GetBgColor => {
-                        ctx.push(ctx.bg_color() as i64);
+                        ctx.push(tx.bg_color() as i64);
                     }
                     BuiltinMethod::GetFocusColor => {
-                        ctx.push(ctx.hl_color() as i64);
+                        ctx.push(tx.hl_color() as i64);
                     }
                     BuiltinMethod::GetChara => {
                         let no = get_arg!(@i64: args, ctx);
@@ -599,8 +600,9 @@ impl TerminalVm {
 
                 match com {
                     BuiltinCommand::UpCheck => {
+                        let names = ctx.header_info.var_name_var.get("PALAM").unwrap();
                         let target = ctx.var.read_int("TARGET", &[])?.try_into()?;
-                        ctx.var.upcheck(target)?;
+                        ctx.var.upcheck(target, names)?;
                     }
                     BuiltinCommand::Restart => {
                         *cursor = 0;
@@ -683,7 +685,7 @@ impl TerminalVm {
 
                         ret.push(']');
 
-                        ctx.print(chan, ret);
+                        tx.print(ret);
                     }
                     BuiltinCommand::ReturnF => {
                         let ret = get_arg!(@value args, ctx);
@@ -732,8 +734,8 @@ impl TerminalVm {
                         return Ok(Some(Workflow::Return));
                     }
                     BuiltinCommand::DrawLine => {
-                        chan.send_msg(ConsoleMessage::DrawLine);
-                        chan.request_redraw();
+                        tx.draw_line();
+                        tx.request_redraw();
                     }
                     BuiltinCommand::FontStyle => {
                         log::warn!("TODO: fontstyle({})", get_arg!(@i64: args, ctx));
@@ -757,10 +759,10 @@ impl TerminalVm {
                             }
                         };
 
-                        ctx.set_color(chan, r, g, b);
+                        tx.set_color(r, g, b);
                     }
                     BuiltinCommand::ResetColor => {
-                        ctx.set_color(chan, 0xFF, 0xFF, 0xFF);
+                        tx.set_color(0xFF, 0xFF, 0xFF);
                     }
                     BuiltinCommand::ResetBgColor => {
                         log::warn!("TODO: RESETBGCOLOR");
@@ -772,7 +774,7 @@ impl TerminalVm {
                             BuiltinCommand::Input => InputRequest::Int,
                             _ => unreachable!(),
                         };
-                        match ctx.input(chan, req) {
+                        match tx.input(req) {
                             ConsoleResult::Quit => {
                                 log::info!("User Quit");
                                 return Ok(Some(Workflow::Exit));
@@ -785,7 +787,7 @@ impl TerminalVm {
                     }
                     BuiltinCommand::Quit => {
                         log::info!("Run QUIT");
-                        chan.exit();
+                        tx.exit();
                         return Ok(Some(Workflow::Exit));
                     }
                     BuiltinCommand::AddChara => {
@@ -842,7 +844,7 @@ impl TerminalVm {
         func_name: &str,
         goto_labels: &HashMap<SmolStr, u32>,
         body: &FunctionBody,
-        chan: &ConsoleChannel,
+        tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         let mut cursor = 0;
@@ -851,7 +853,7 @@ impl TerminalVm {
 
         while let Some(inst) = insts.get(cursor) {
             cursor += 1;
-            match self.run_instruction(func_name, goto_labels, inst, &mut cursor, chan, ctx) {
+            match self.run_instruction(func_name, goto_labels, inst, &mut cursor, tx, ctx) {
                 Ok(None) => {}
                 Ok(Some(Workflow::Return)) => break,
                 Ok(Some(flow)) => return Ok(flow),
@@ -868,7 +870,7 @@ impl TerminalVm {
         &self,
         label: &str,
         args: &[Value],
-        chan: &ConsoleChannel,
+        tx: &mut ConsoleSender,
         ctx: &mut VmContext,
         body: &FunctionBody,
     ) -> Result<Workflow> {
@@ -899,7 +901,7 @@ impl TerminalVm {
             }
         }
 
-        let ret = self.run_body(label, body.goto_labels(), body, chan, ctx)?;
+        let ret = self.run_body(label, body.goto_labels(), body, tx, ctx)?;
 
         ctx.end_func();
 
@@ -911,10 +913,10 @@ impl TerminalVm {
         &self,
         label: &str,
         args: &[Value],
-        chan: &ConsoleChannel,
+        tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
-        self.call_internal(label, args, chan, ctx, self.dic.get_func(label)?)
+        self.call_internal(label, args, tx, ctx, self.dic.get_func(label)?)
     }
 
     #[inline]
@@ -922,11 +924,11 @@ impl TerminalVm {
         &self,
         label: &str,
         args: &[Value],
-        chan: &ConsoleChannel,
+        tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
         match self.dic.get_func_opt(label) {
-            Some(body) => self.call_internal(label, args, chan, ctx, body).map(Some),
+            Some(body) => self.call_internal(label, args, tx, ctx, body).map(Some),
             None => Ok(None),
         }
     }
@@ -934,20 +936,20 @@ impl TerminalVm {
     fn call_event(
         &self,
         ty: EventType,
-        chan: &ConsoleChannel,
+        tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         self.dic.get_event(ty).run(|body| {
             let label: &str = ty.into();
             ctx.new_func(Err(ty), body.file_path().clone());
-            let ret = self.run_body(label, body.goto_labels(), body, chan, ctx)?;
+            let ret = self.run_body(label, body.goto_labels(), body, tx, ctx)?;
             ctx.end_func();
 
             Ok(ret)
         })
     }
 
-    fn begin(&self, ty: BeginType, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
+    fn begin(&self, ty: BeginType, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<()> {
         log::trace!("Begin {ty}");
 
         /// 해당 함수를 호출하고 존재할경우 true, 반대면 false를 반환함
@@ -955,7 +957,7 @@ impl TerminalVm {
         /// 해당 함수에서 게임이 종료되면 그대로 종료
         macro_rules! call {
             ($name:expr) => {
-                match self.try_call($name, &[], chan, ctx)? {
+                match self.try_call($name, &[], tx, ctx)? {
                     Some(Workflow::Exit) => return Ok(()),
                     Some(Workflow::Return) => true,
                     None => false,
@@ -965,7 +967,7 @@ impl TerminalVm {
 
         macro_rules! call_event {
             ($ty:expr) => {
-                if self.call_event($ty, chan, ctx)? == Workflow::Exit {
+                if self.call_event($ty, tx, ctx)? == Workflow::Exit {
                     return Ok(());
                 }
             };
@@ -996,7 +998,7 @@ impl TerminalVm {
                                 if call!(&format!("COM_ABLE{no}")) && ctx.var.get_result() != 0
                                     || ctx.header_info.replace.comable_init != 0
                                 {
-                                    ctx.printrc(chan, &format!("{name}[{no:3}]"));
+                                    tx.printrc(&format!("{name}[{no:3}]"));
                                 }
                             }
 
@@ -1006,7 +1008,7 @@ impl TerminalVm {
                             ctx.var.reset_var("DOWN")?;
                             ctx.var.reset_var("LOSEBASE")?;
 
-                            match ctx.input(chan, InputRequest::Int) {
+                            match tx.input(InputRequest::Int) {
                                 ConsoleResult::Quit => return Ok(()),
                                 ConsoleResult::Value(Value::String(_)) => unreachable!(),
                                 ConsoleResult::Value(Value::Int(no)) => {
@@ -1058,7 +1060,7 @@ impl TerminalVm {
                 while ctx.begin.is_none() {
                     call!("SHOW_SHOP");
 
-                    match ctx.input(chan, InputRequest::Int) {
+                    match tx.input(InputRequest::Int) {
                         ConsoleResult::Quit => break,
                         ConsoleResult::Value(Value::Int(i)) => {
                             ctx.var.set_result(i);
@@ -1099,7 +1101,7 @@ impl TerminalVm {
         }
     }
 
-    fn report_stack(stack: &Callstack, chan: &ConsoleChannel, position: Option<ScriptPosition>) {
+    fn report_stack(stack: &Callstack, tx: &mut ConsoleSender, position: Option<ScriptPosition>) {
         fn read_source(path: &str, pos: &ScriptPosition) -> io::Result<Option<String>> {
             use io::{BufRead, BufReader};
             BufReader::new(std::fs::File::open(path)?)
@@ -1115,14 +1117,14 @@ impl TerminalVm {
                 Ok(Some(s)) => {
                     let source = s.replace("\n", "\\n");
                     report_error!(
-                        chan,
+                        tx,
                         "    at function {name}{position} `{}` [{source}]",
                         stack.file_path,
                     );
                 }
                 _ => {
                     report_error!(
-                        chan,
+                        tx,
                         "    at function {name}@{position} `{}`",
                         stack.file_path,
                     );
@@ -1131,31 +1133,27 @@ impl TerminalVm {
             Err(ty) => match read_source(stack.file_path.as_str(), &position) {
                 Ok(Some(s)) => {
                     let source = s.replace("\n", "\\n");
-                    report_error!(
-                        chan,
-                        "    at {ty}{position} `{}` [{source}]",
-                        stack.file_path,
-                    );
+                    report_error!(tx, "    at {ty}{position} `{}` [{source}]", stack.file_path,);
                 }
                 _ => {
-                    report_error!(chan, "    at {ty}@{position} `{}`", stack.file_path,);
+                    report_error!(tx, "    at {ty}@{position} `{}`", stack.file_path,);
                 }
             },
         }
     }
 
-    pub fn start(&self, chan: &ConsoleChannel, ctx: &mut VmContext) -> Result<()> {
+    pub fn start(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<()> {
         while let Some(begin) = ctx.take_begin() {
-            match self.begin(begin, chan, ctx) {
+            match self.begin(begin, tx, ctx) {
                 Ok(()) => {}
                 Err(err) => {
-                    ctx.new_line(chan);
-                    report_error!(chan, "VM failed with: {err}");
+                    tx.new_line();
+                    report_error!(tx, "VM failed with: {err}");
 
                     ctx.update_last_call_stack();
 
                     for stack in ctx.call_stack().iter().rev() {
-                        Self::report_stack(stack, chan, None);
+                        Self::report_stack(stack, tx, None);
                     }
 
                     return Err(err);

@@ -1,7 +1,9 @@
 use crossbeam_channel::{bounded, Receiver, Sender};
 use erars_ast::{Alignment, Value};
+use pad::PadStr;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::Arc;
 use std::time::Duration;
@@ -40,6 +42,129 @@ pub enum ConsoleResult {
 
 pub trait EraApp {
     fn run(&mut self, chan: Arc<ConsoleChannel>) -> anyhow::Result<()>;
+}
+
+pub struct ConsoleSender {
+    chan: Arc<ConsoleChannel>,
+    line_is_empty: bool,
+    printc_count: u32,
+    color: u32,
+    hl_color: u32,
+    bg_color: u32,
+    align: Alignment,
+    inputs: VecDeque<Value>,
+}
+
+impl ConsoleSender {
+    pub fn new(chan: Arc<ConsoleChannel>) -> Self {
+        Self {
+            chan,
+
+            line_is_empty: true,
+            printc_count: 0,
+            color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
+            hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
+            bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
+            align: Alignment::Left,
+            inputs: VecDeque::new(),
+        }
+    }
+
+    pub fn push_input(&mut self, value: Value) {
+        self.inputs.push_back(value);
+    }
+
+    pub fn input(&mut self, req: InputRequest) -> ConsoleResult {
+        if let Some(i) = self.inputs.pop_front() {
+            ConsoleResult::Value(i)
+        } else {
+            self.chan.send_msg(ConsoleMessage::Input(req));
+            let ret = self.chan.recv_ret();
+            log::trace!("Console Recv {ret:?}");
+            ret
+        }
+    }
+
+    pub fn line_is_empty(&self) -> bool {
+        self.line_is_empty
+    }
+
+    pub fn reuse_last_line(&mut self, s: String) {
+        self.line_is_empty = false;
+        self.chan.send_msg(ConsoleMessage::ReuseLastLine(s));
+    }
+
+    pub fn print(&mut self, s: String) {
+        self.line_is_empty = false;
+        self.chan.send_msg(ConsoleMessage::Print(s));
+    }
+
+    pub fn print_line(&mut self, s: String) {
+        self.print(s);
+        self.new_line();
+    }
+
+    pub fn printlc(&mut self, s: &str) {
+        if self.printc_count == 3 {
+            self.new_line();
+        }
+        self.printc_count += 1;
+        self.print(s.pad_to_width_with_alignment(30, pad::Alignment::Left));
+    }
+
+    pub fn printrc(&mut self, s: &str) {
+        if self.printc_count == 3 {
+            self.new_line();
+        }
+        self.printc_count += 1;
+        self.print(s.pad_to_width_with_alignment(30, pad::Alignment::Right));
+    }
+
+    pub fn new_line(&mut self) {
+        self.printc_count = 0;
+        self.line_is_empty = true;
+        self.chan.send_msg(ConsoleMessage::NewLine);
+    }
+
+    pub fn draw_line(&mut self) {
+        self.printc_count = 0;
+        self.line_is_empty = true;
+        self.chan.send_msg(ConsoleMessage::DrawLine);
+    }
+
+    pub fn set_color(&mut self, r: u8, g: u8, b: u8) {
+        self.color = u32::from_le_bytes([r, g, b, 0]);
+        self.chan.send_msg(ConsoleMessage::SetColor(r, g, b));
+    }
+
+    pub fn set_align(&mut self, align: Alignment) {
+        self.align = align;
+        self.chan.send_msg(ConsoleMessage::Alignment(align));
+    }
+
+    pub fn exit(&self) {
+        self.chan.exit();
+    }
+
+    pub fn align(&self) -> Alignment {
+        self.align
+    }
+
+    pub fn color(&self) -> u32 {
+        self.color
+    }
+
+    pub fn hl_color(&self) -> u32 {
+        self.hl_color
+    }
+
+    pub fn bg_color(&self) -> u32 {
+        self.bg_color
+    }
+
+    pub fn request_redraw(&self) {
+        self.chan.request_redraw();
+    }
 }
 
 pub struct ConsoleChannel {
