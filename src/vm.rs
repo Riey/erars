@@ -1046,6 +1046,8 @@ impl TerminalVm {
 
                     ctx.var.reset_var("NOWEX")?;
 
+                    *ctx.var.ref_int("SELECTCOM", &[])? = com_no;
+
                     call_event!(EventType::Com);
                     call!(&format!("COM{com_no}"));
 
