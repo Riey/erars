@@ -91,10 +91,10 @@ impl TerminalVm {
         tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        log::trace!(
-            "[{func_name}] `{inst:?}[{cursor}]`, stack: {stack:?}",
-            stack = ctx.stack()
-        );
+        // log::debug!(
+        //     "[{func_name}] `{inst:?}[{cursor}]`, stack: {stack:?}",
+        //     stack = ctx.stack()
+        // );
 
         match inst {
             Instruction::ReportPosition(pos) => ctx.update_position(pos.clone()),
@@ -694,14 +694,14 @@ impl TerminalVm {
                             bail!("RETURNF는 한개의 값만 반환할 수 있습니다.");
                         }
 
-                        let _left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
+                        drop(ctx.return_func()?);
 
                         ctx.push(ret);
 
                         return Ok(Some(Workflow::Return));
                     }
                     BuiltinCommand::Return => {
-                        let _left_stack = ctx.return_func()?.collect::<ArrayVec<_, 8>>();
+                        drop(ctx.return_func()?);
 
                         let mut result_idx = 0usize;
                         let mut results_idx = 0usize;
@@ -820,7 +820,7 @@ impl TerminalVm {
                         ctx.var.del_chara(idx.try_into()?);
                     }
                     BuiltinCommand::ResetData => {
-                        ctx.var.reset_data();
+                        ctx.var.reset_data(&ctx.header_info.replace)?;
                     }
                     BuiltinCommand::LoadGlobal
                     | BuiltinCommand::SaveGlobal

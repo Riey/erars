@@ -402,11 +402,14 @@ impl VariableStorage {
         }
     }
 
-    pub fn reset_data(&mut self) {
+    pub fn reset_data(&mut self, replace: &ReplaceInfo) -> Result<()> {
         self.character_len = 0;
         for var in self.variables.values_mut() {
             var.1 = UniformVariable::new(&var.0);
         }
+        self.init_replace(replace)?;
+
+        Ok(())
     }
 
     pub fn add_chara(&mut self) {
@@ -451,7 +454,6 @@ impl VariableStorage {
 
         set!("PALAMLV", palamlv_init);
         set!("EXPLV", explv_init);
-        set!("PALAMLV", palamlv_init);
 
         self.get_var("RELATION")?.0.default_int = replace.relation_init;
         *self.ref_int("PBAND", &[])? = replace.pband_init;

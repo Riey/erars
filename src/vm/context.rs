@@ -123,6 +123,7 @@ impl VmContext {
                 var.get(idx)?
             }
         };
+
         Ok(value)
     }
 
