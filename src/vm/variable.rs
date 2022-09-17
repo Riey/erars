@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use anyhow::{anyhow, bail, Result};
 use erars_ast::{Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, ReplaceInfo};
@@ -6,6 +8,8 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 use smol_str::SmolStr;
+
+use crate::ui::ConsoleSender;
 
 #[derive(Clone)]
 pub struct VariableStorage {
@@ -35,19 +39,42 @@ impl VariableStorage {
         &mut self.rng
     }
 
-    pub fn upcheck(&mut self, idx: usize) -> Result<()> {
+    pub fn upcheck(
+        &mut self,
+        tx: &mut ConsoleSender,
+        idx: usize,
+        palam_name: &BTreeMap<u32, SmolStr>,
+    ) -> Result<()> {
         let (palam, up, down) = self.get_var3("PALAM", "UP", "DOWN")?;
 
         let palam = palam.1.assume_chara(idx).as_int()?;
         let up = up.1.assume_chara(idx).as_int()?;
         let down = down.1.assume_chara(idx).as_int()?;
 
-        itertools::multizip((palam.iter_mut(), up.iter_mut(), down.iter_mut())).for_each(
-            |(p, u, d)| {
+        itertools::multizip((palam.iter_mut(), up.iter_mut(), down.iter_mut()))
+            .enumerate()
+            .for_each(|(no, (p, u, d))| {
+                if *u == 0 && *d == 0 {
+                    return;
+                }
+
+                let name = palam_name.get(&(no as u32)).map(|s| s.as_str()).unwrap_or("");
+
+                tx.print(format!("{name} {p}"));
+
+                if *u != 0 {
+                    tx.print(format!("+{u}"));
+                }
+
+                if *d != 0 {
+                    tx.print(format!("-{d}"));
+                }
+
                 *p += *u;
                 *p -= *d;
-            },
-        );
+
+                tx.print_line(format!("={p}"));
+            });
 
         up.fill(0);
         down.fill(0);

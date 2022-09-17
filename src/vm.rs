@@ -23,7 +23,7 @@ pub use self::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
-use crate::ui::{ConsoleMessage, ConsoleResult, InputRequest};
+use crate::ui::{ConsoleResult, InputRequest};
 use crate::{
     function::{FunctionBody, FunctionDic},
     ui::ConsoleSender,
@@ -602,7 +602,7 @@ impl TerminalVm {
                     BuiltinCommand::UpCheck => {
                         let names = ctx.header_info.var_name_var.get("PALAM").unwrap();
                         let target = ctx.var.read_int("TARGET", &[])?.try_into()?;
-                        ctx.var.upcheck(target, names)?;
+                        ctx.var.upcheck(tx, target, names)?;
                     }
                     BuiltinCommand::Restart => {
                         *cursor = 0;

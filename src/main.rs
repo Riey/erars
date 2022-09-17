@@ -13,7 +13,7 @@ use codespan_reporting::{
 };
 use erars::{
     function::FunctionDic,
-    ui::{ConsoleChannel, ConsoleMessage, ConsoleSender, EraApp, StdioBackend},
+    ui::{ConsoleChannel, ConsoleSender, EraApp, StdioBackend},
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::{Value, VariableInfo};
