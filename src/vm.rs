@@ -420,6 +420,32 @@ impl TerminalVm {
                         let s = get_arg!(@String: args, ctx);
                         ctx.push(s.chars().count() as i64);
                     }
+                    BuiltinMethod::SumArray => {
+                        check_arg_count!(2, 3);
+
+                        let var_ref = get_arg!(@var args);
+                        let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                        let end = get_arg!(@opt @usize: args, ctx);
+
+                        let target = ctx.var.read_int("TARGET", &[])?;
+                        let var = ctx.var.get_maybe_local_var(func_name, &var_ref.name)?.1;
+
+                        let var = match var {
+                            UniformVariable::Character(cvar) => {
+                                let c_idx = var_ref.idxs.first().copied().unwrap_or(target.try_into()?);
+                                &mut cvar[c_idx]
+                            }
+                            UniformVariable::Normal(var) => var,
+                        }.as_int()?;
+
+                        let slice = match end {
+                            Some(end) => &var[start..end],
+                            None => &var[start..],
+                        };
+
+                        let ret = slice.iter().sum::<i64>();
+                        ctx.push(ret);
+                    }
                     BuiltinMethod::ToStr => {
                         check_arg_count!(1, 2);
                         let value = get_arg!(@i64: args, ctx);

@@ -19,6 +19,7 @@ pub enum BuiltinMethod {
     Abs,
     LineIsEmpty,
     GroupMatch,
+    SumArray,
 
     StrLenS,
     StrLenSU,
