@@ -13,17 +13,14 @@ PBAND:
 
 SAVESTR:
   size: [1000]
-  is_chara: false
   is_str: true
 
 STR:
   size: [1000]
-  is_chara: false
   is_str: true
 
 TSTR:
   size: [1000]
-  is_chara: false
   is_str: true
 
 CSTR:
@@ -34,52 +31,46 @@ CSTR:
 NO:
   size: []
   is_chara: true
-  is_str: false
 
 ISASSI:
   size: []
   is_chara: true
-  is_str: false
 
 CFLAG:
   size: [10000]
   is_chara: true
-  is_str: false
 
 EQUIP:
   size: [1000]
   is_chara: true
-  is_str: false
 
 ABL:
   size: [1000]
   is_chara: true
-  is_str: false
 
 EX:
   size: [1000]
   is_chara: true
-  is_str: false
 
 NOWEX:
   size: [1000]
   is_chara: true
-  is_str: false
 
 EXP:
   size: [1000]
   is_chara: true
-  is_str: false
 
 RELATION:
   size: [1000]
   is_chara: true
-  is_str: false
+
+EJAC:
+  size: [1000]
+  is_chara: true
 
 MARK:
   size: [1000]
   is_chara: true
-  is_str: false
 
 LOSEBASE:
   size: [1000]
@@ -96,7 +87,6 @@ DOWNBASE:
 TALENT:
   size: [1000]
   is_chara: true
-  is_str: false
 
 NAME:
   size: []
@@ -120,111 +110,76 @@ MASTERNAME:
 
 MASTER:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 ASSI:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 TARGET:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 PLAYER:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 COUNT:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 FLAG:
   size: [10000]
-  is_chara: false
-  is_str: false
 
 TCVAR:
   size: [10000]
   is_chara: true
-  is_str: false
 
 TFLAG:
   size: [10000]
-  is_chara: false
-  is_str: false
 
 DAY:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 TIME:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 MONEY:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 ITEM:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 ITEMSALES:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 NOITEM:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 DITEMTYPE:
   size: [1000,1000]
 
 RESULT:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 RESULTS:
   size: [1000]
-  is_chara: false
   is_str: true
 
 PALAM:
   size: [1000]
   is_chara: true
-  is_str: false
 
 STAIN:
   size: [1000]
   is_chara: true
-  is_str: false
 
 JUEL:
   size: [1000]
   is_chara: true
-  is_str: false
 
 GOTJUEL:
   size: [1000]
   is_chara: true
-  is_str: false
 
 SOURCE:
   size: [1000]
   is_chara: true
-  is_str: false
 
 UP:
   size: [1000]
@@ -243,27 +198,18 @@ CDOWN:
 TEQUIP:
   size: [1000]
   is_chara: true
-  is_str: false
 
 ASSIPLAY:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 SELECTCOM:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 PREVCOM:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 NEXTCOM:
   size: [1000]
-  is_chara: false
-  is_str: false
 
 GLOBAL:
   is_global: true
