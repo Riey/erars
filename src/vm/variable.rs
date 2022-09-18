@@ -7,9 +7,24 @@ use hashbrown::HashMap;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
+use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
 use crate::ui::ConsoleSender;
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SerializableVariableStorage {
+    character_len: usize,
+    rand_seed: [u8; 32],
+    variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SerializableGlobalVariableStorage {
+    variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
+}
 
 #[derive(Clone)]
 pub struct VariableStorage {
@@ -32,6 +47,117 @@ impl VariableStorage {
             rng: ChaCha20Rng::from_entropy(),
             variables,
             local_variables: HashMap::new(),
+        }
+    }
+
+    pub fn load_global_serializable(
+        &mut self,
+        sav: SerializableGlobalVariableStorage,
+        replace: &ReplaceInfo,
+    ) -> Result<()> {
+        self.variables.retain(|_, (info, _)| info.is_global);
+        self.variables.extend(sav.variables);
+
+        self.local_variables
+            .values_mut()
+            .for_each(|v| v.retain(|_, (info, _)| info.is_global));
+        self.local_variables.retain(|_, v| v.is_empty());
+        for (fn_name, vars) in sav.local_variables {
+            self.local_variables.entry(fn_name).or_default().extend(vars);
+        }
+
+        self.init_replace(replace)?;
+
+        Ok(())
+    }
+
+    pub fn load_serializable(
+        &mut self,
+        sav: SerializableVariableStorage,
+        replace: &ReplaceInfo,
+    ) -> Result<()> {
+        self.character_len = sav.character_len;
+        self.rng = SeedableRng::from_seed(sav.rand_seed);
+
+        self.variables.retain(|_, (info, _)| !info.is_global);
+        self.variables.extend(sav.variables);
+
+        self.local_variables
+            .values_mut()
+            .for_each(|v| v.retain(|_, (info, _)| !info.is_global));
+        self.local_variables.retain(|_, v| v.is_empty());
+        for (fn_name, vars) in sav.local_variables {
+            self.local_variables.entry(fn_name).or_default().extend(vars);
+        }
+
+        self.init_replace(replace)?;
+
+        Ok(())
+    }
+
+    pub fn get_serializable(&self) -> SerializableVariableStorage {
+        let variables = self
+            .variables
+            .iter()
+            .filter_map(|(name, (info, var))| {
+                if !info.is_global {
+                    Some((name.clone(), (info.clone(), var.clone())))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut local_variables = HashMap::<_, HashMap<_, _>>::new();
+
+        for (fn_name, vars) in self.local_variables.iter() {
+            for (name, (info, var)) in vars.iter() {
+                if !info.is_global {
+                    local_variables
+                        .entry(fn_name.clone())
+                        .or_default()
+                        .insert(name.clone(), (info.clone(), var.clone()));
+                }
+            }
+        }
+
+        SerializableVariableStorage {
+            variables,
+            local_variables,
+            character_len: self.character_len,
+            rand_seed: self.rng.get_seed(),
+        }
+    }
+
+    pub fn get_global_serializable(&self) -> SerializableGlobalVariableStorage {
+        let variables = self
+            .variables
+            .iter()
+            .filter_map(|(name, (info, var))| {
+                if info.is_global {
+                    Some((name.clone(), (info.clone(), var.clone())))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut local_variables = HashMap::<_, HashMap<_, _>>::new();
+
+        for (fn_name, vars) in self.local_variables.iter() {
+            for (name, (info, var)) in vars.iter() {
+                if info.is_global {
+                    local_variables
+                        .entry(fn_name.clone())
+                        .or_default()
+                        .insert(name.clone(), (info.clone(), var.clone()));
+                }
+            }
+        }
+
+        SerializableGlobalVariableStorage {
+            variables,
+            local_variables,
         }
     }
 
@@ -537,7 +663,7 @@ impl VariableStorage {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VmVariable {
     Int(Vec<i64>),
     Str(Vec<String>),
@@ -599,7 +725,7 @@ impl VmVariable {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum UniformVariable {
     Normal(VmVariable),
     Character(Vec<VmVariable>),

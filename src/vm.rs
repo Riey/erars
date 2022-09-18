@@ -1,7 +1,7 @@
 mod context;
 mod variable;
 
-use std::io;
+use std::{io, path::PathBuf};
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -24,10 +24,13 @@ pub use self::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
-use crate::ui::{ConsoleResult, InputRequest};
 use crate::{
     function::{FunctionBody, FunctionDic},
     ui::ConsoleSender,
+};
+use crate::{
+    ui::{ConsoleResult, InputRequest},
+    vm::variable::SerializableVariableStorage,
 };
 
 macro_rules! report_error {
@@ -76,11 +79,15 @@ pub enum Workflow {
 
 pub struct TerminalVm {
     dic: FunctionDic,
+    sav_path: PathBuf,
 }
 
 impl TerminalVm {
-    pub fn new(function_dic: FunctionDic) -> Self {
-        Self { dic: function_dic }
+    pub fn new(function_dic: FunctionDic, game_path: PathBuf) -> Self {
+        Self {
+            dic: function_dic,
+            sav_path: game_path.join("sav"),
+        }
     }
 
     fn run_instruction(
@@ -527,12 +534,14 @@ impl TerminalVm {
                         ctx.push(ret);
                     }
                     BuiltinMethod::GetBit => {
+                        check_arg_count!(2);
                         let l = get_arg!(@i64: args, ctx);
                         let r = get_arg!(@i64: args, ctx);
                         ctx.push((l >> r) & 1);
                     }
 
                     BuiltinMethod::SubStringU => {
+                        check_arg_count!(1, 3);
                         let text = get_arg!(@String: args, ctx);
                         let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
                         let length = get_arg!(@opt @usize: args, ctx);
@@ -558,6 +567,7 @@ impl TerminalVm {
                     }
 
                     BuiltinMethod::Unicode => {
+                        check_arg_count!(1);
                         let code = get_arg!(@i64: args, ctx).try_into()?;
 
                         ctx.push(
@@ -570,15 +580,20 @@ impl TerminalVm {
                     }
 
                     BuiltinMethod::GetColor => {
+                        check_arg_count!(0);
                         ctx.push(tx.color() as i64);
                     }
                     BuiltinMethod::GetBgColor => {
+                        check_arg_count!(0);
                         ctx.push(tx.bg_color() as i64);
                     }
                     BuiltinMethod::GetFocusColor => {
+                        check_arg_count!(0);
                         ctx.push(tx.hl_color() as i64);
                     }
                     BuiltinMethod::GetChara => {
+                        check_arg_count!(1);
+
                         let no = get_arg!(@i64: args, ctx);
 
                         let idx = ctx.var.get_chara(no)?;
@@ -586,6 +601,8 @@ impl TerminalVm {
                         ctx.push(idx.map(|i| i as i64).unwrap_or(-1));
                     }
                     BuiltinMethod::GetPalamLv => {
+                        check_arg_count!(2);
+
                         let value = get_arg!(@i64: args, ctx);
                         let max = get_arg!(@i64: args, ctx);
 
@@ -606,6 +623,8 @@ impl TerminalVm {
                         ctx.push(ret);
                     }
                     BuiltinMethod::GetExpLv => {
+                        check_arg_count!(2);
+
                         let value = get_arg!(@i64: args, ctx);
                         let max = get_arg!(@i64: args, ctx);
 
@@ -625,6 +644,36 @@ impl TerminalVm {
 
                         ctx.push(ret);
                     }
+
+                    BuiltinMethod::ChkData => {
+                        check_arg_count!(1);
+                        let idx = get_arg!(@i64: args, ctx);
+                        let file = self.sav_path.join(format!("save{idx:02}.yml"));
+
+                        let ret = if !file.exists() {
+                            1
+                        } else {
+                            std::fs::read_to_string(file)
+                                .ok()
+                                .and_then(|s| {
+                                    match serde_yaml::from_str::<(
+                                        String,
+                                        SerializableVariableStorage,
+                                    )>(&s)
+                                    {
+                                        Ok(_) => Some(0),
+                                        Err(err) => {
+                                            log::error!("Save load error: {err}");
+                                            None
+                                        }
+                                    }
+                                })
+                                .unwrap_or(4)
+                        };
+
+                        ctx.push(ret);
+                    }
+
                     _ => bail!("TODO: unimplemented builtin method {meth}"),
                 }
             }
@@ -860,10 +909,60 @@ impl TerminalVm {
                     BuiltinCommand::ResetData => {
                         ctx.var.reset_data(&ctx.header_info.replace)?;
                     }
-                    BuiltinCommand::LoadGlobal
-                    | BuiltinCommand::SaveGlobal
-                    | BuiltinCommand::SaveData
-                    | BuiltinCommand::LoadData => {
+                    BuiltinCommand::SaveData => {
+                        let idx = get_arg!(@i64: args, ctx);
+                        let description = get_arg!(@String: args, ctx);
+
+                        if !self.sav_path.exists() {
+                            std::fs::create_dir(&self.sav_path).ok();
+                        }
+
+                        std::fs::write(
+                            self.sav_path.join(format!("save{idx:02}.yml")),
+                            &serde_yaml::to_string(&(description, ctx.var.get_serializable()))?,
+                        )?;
+                    }
+                    BuiltinCommand::SaveGlobal => {
+                        if !self.sav_path.exists() {
+                            std::fs::create_dir(&self.sav_path).ok();
+                        }
+
+                        log::info!("SAVEGLOBAL");
+
+                        std::fs::write(
+                            self.sav_path.join("global.yml"),
+                            &serde_yaml::to_string(&ctx.var.get_global_serializable())?,
+                        )?;
+                    }
+                    BuiltinCommand::LoadGlobal => {
+                        ctx.var.set_result(0);
+
+                        if !self.sav_path.exists() {
+                            std::fs::create_dir(&self.sav_path).ok();
+                        }
+
+                        let sav_file_path = self.sav_path.join("global.yml");
+
+                        if sav_file_path.exists() {
+                            let sav = std::fs::read_to_string(sav_file_path)?;
+
+                            match serde_yaml::from_str(&sav) {
+                                Ok(sav) => {
+                                    if ctx
+                                        .var
+                                        .load_global_serializable(sav, &ctx.header_info.replace)
+                                        .is_ok()
+                                    {
+                                        ctx.var.set_result(1);
+                                    }
+                                }
+                                Err(err) => {
+                                    log::error!("Failed to load global data: {err}");
+                                }
+                            }
+                        }
+                    }
+                    BuiltinCommand::LoadData => {
                         log::warn!("TODO: Save/Load");
                     }
                     _ => {

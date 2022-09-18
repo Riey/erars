@@ -56,7 +56,7 @@ fn run_test() {
 }
 
 fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> Vec<ConsoleMessage> {
-    let vm = TerminalVm::new(dic);
+    let vm = TerminalVm::new(dic, ".".into());
     let chan = ConsoleChannel::new();
     let mut tx = ConsoleSender::new(Arc::new(chan));
 

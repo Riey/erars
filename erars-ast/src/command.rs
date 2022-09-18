@@ -46,6 +46,11 @@ pub enum BuiltinMethod {
     GetTime,
     Rand,
 
+    ChkData,
+    ChkCharaData,
+    #[strum(serialize = "FIND_CHARADATA")]
+    FindCharaData,
+
     CsvName,
     CsvCallName,
     CsvMasterName,
@@ -104,7 +109,6 @@ pub enum BuiltinCommand {
     SaveData,
     LoadData,
     DelData,
-    ChkData,
     SaveNos,
 
     SaveGlobal,
@@ -112,8 +116,6 @@ pub enum BuiltinCommand {
 
     SaveChara,
     LoadChara,
-    ChkCharaData,
-    FindCharaData,
     AddDefChara,
     AddChara,
     DelChara,

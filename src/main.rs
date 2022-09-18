@@ -249,7 +249,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
         }
     }
 
-    let vm = TerminalVm::new(function_dic);
+    let vm = TerminalVm::new(function_dic, target_path.into());
     let _ = vm.start(&mut tx, &mut ctx);
 
     tx.exit();
