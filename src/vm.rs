@@ -103,7 +103,7 @@ impl TerminalVm {
             Instruction::LoadInt(n) => ctx.push(*n),
             Instruction::LoadStr(s) => ctx.push(s.to_string()),
             Instruction::Nop => {}
-            Instruction::Pop => drop(ctx.pop()),
+            Instruction::Pop => drop(ctx.pop()?),
             Instruction::Duplicate => ctx.dup(),
             Instruction::DuplicatePrev => ctx.dup_prev(),
             Instruction::StoreResult => match ctx.pop_value()? {

@@ -250,7 +250,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
     }
 
     let vm = TerminalVm::new(function_dic);
-    vm.start(&mut tx, &mut ctx).unwrap();
+    let _ = vm.start(&mut tx, &mut ctx);
 
     tx.exit();
 
@@ -279,7 +279,11 @@ struct Args {
     #[clap(long, help = "Accept input value from file")]
     use_input: Option<PathBuf>,
 
-    #[clap(long, help = "Log level (error, warn, info, debug, trace)")]
+    #[clap(
+        long,
+        default_value = "info",
+        help = "Log level (error, warn, info, debug, trace)"
+    )]
     log_level: String,
 
     #[clap(long, help = "Don't print logs")]
@@ -305,6 +309,7 @@ fn main() {
                 .log_to_file(FileSpec::default().directory("logs").basename("erars"))
                 .write_mode(WriteMode::BufferAndFlush)
                 .create_symlink("last_log.log")
+                .use_utc()
                 .start()
                 .unwrap(),
         )

@@ -19,6 +19,7 @@ fn run_test() {
         )
         .log_to_file(FileSpec::default().directory("logs").basename("erars_test"))
         .write_mode(WriteMode::BufferAndFlush)
+        .use_utc()
         .create_symlink("last_test_log.log")
         .start()
         .unwrap();

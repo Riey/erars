@@ -226,23 +226,29 @@ impl VmContext {
         self.stack.push(LocalValue::Value(value.into()));
     }
 
-    pub fn pop(&mut self) -> LocalValue {
-        // if this failed, it must be compiler error
-        self.stack
-            .pop()
-            .unwrap_or_else(|| unreachable!("Unknown compiler error"))
-    }
+    pub fn pop(&mut self) -> Result<LocalValue> {
+        if let Some(last_stack) = self.call_stack.last() {
+            if last_stack.stack_base >= self.stack.len() {
+                bail!("다른 함수의 스택을 침범했습니다.");
+            }
+        }
 
-    pub fn pop_value(&mut self) -> Result<Value> {
+        // if this failed, it must be compiler error
         match self.stack.pop() {
-            Some(LocalValue::Value(v)) => Ok(v),
-            Some(LocalValue::VarRef(var_ref)) => self.read_var_ref(&var_ref),
+            Some(v) => Ok(v),
             None => bail!("Stack is empty"),
         }
     }
 
+    pub fn pop_value(&mut self) -> Result<Value> {
+        match self.pop()? {
+            LocalValue::Value(v) => Ok(v),
+            LocalValue::VarRef(var_ref) => self.read_var_ref(&var_ref),
+        }
+    }
+
     pub fn pop_var_ref(&mut self) -> Result<VariableRef> {
-        self.pop().try_into()
+        self.pop()?.try_into()
     }
 
     pub fn pop_str(&mut self) -> Result<String> {
