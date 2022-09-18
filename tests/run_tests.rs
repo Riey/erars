@@ -4,20 +4,24 @@ use erars::function::FunctionDic;
 use erars::ui::{ConsoleChannel, ConsoleMessage, ConsoleSender};
 use erars::vm::*;
 use erars_compiler::{compile, ParserContext};
+use flexi_logger::*;
 
 mod test_util;
 
 #[test]
 fn run_test() {
-    {
-        use simplelog::*;
-        CombinedLogger::init(vec![WriteLogger::new(
-            LevelFilter::Trace,
-            Config::default(),
-            std::fs::File::create("erars.log").unwrap(),
-        )])
+    Logger::try_with_str("trace")
+        .unwrap()
+        .rotate(
+            Criterion::AgeOrSize(Age::Day, 1024 * 1024),
+            Naming::Numbers,
+            Cleanup::KeepLogFiles(5),
+        )
+        .log_to_file(FileSpec::default().directory("logs").basename("erars_test"))
+        .write_mode(WriteMode::BufferAndFlush)
+        .create_symlink("last_test_log.log")
+        .start()
         .unwrap();
-    }
 
     let erb_files = glob::glob("tests/run_tests/**/*.erb").unwrap();
     let header = test_util::get_ctx("").header;

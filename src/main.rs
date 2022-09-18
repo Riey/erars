@@ -279,27 +279,36 @@ struct Args {
     #[clap(long, help = "Accept input value from file")]
     use_input: Option<PathBuf>,
 
-    #[clap(long, help = "Show more verbose log")]
-    verbose: bool,
+    #[clap(long, help = "Log level (error, warn, info, debug, trace)")]
+    log_level: String,
+
+    #[clap(long, help = "Don't print logs")]
+    quite: bool,
 }
 
 fn main() {
+    use flexi_logger::*;
+
     let args: Args = clap::Parser::parse();
 
-    {
-        let level = if args.verbose {
-            LevelFilter::Trace
-        } else {
-            LevelFilter::Debug
-        };
-        use simplelog::*;
-        CombinedLogger::init(vec![WriteLogger::new(
-            level,
-            Config::default(),
-            std::fs::File::create("erars.log").unwrap(),
-        )])
-        .unwrap();
-    }
+    let _handle = if args.quite {
+        None
+    } else {
+        Some(
+            Logger::try_with_str(&args.log_level)
+                .unwrap()
+                .rotate(
+                    Criterion::AgeOrSize(Age::Day, 1024 * 1024),
+                    Naming::Numbers,
+                    Cleanup::KeepLogFiles(5),
+                )
+                .log_to_file(FileSpec::default().directory("logs").basename("erars"))
+                .write_mode(WriteMode::BufferAndFlush)
+                .create_symlink("last_log.log")
+                .start()
+                .unwrap(),
+        )
+    };
 
     log_panics::init();
 

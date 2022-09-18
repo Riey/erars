@@ -395,6 +395,7 @@ dependencies = [
  "enum-map",
  "erars-ast",
  "erars-compiler",
+ "flexi_logger",
  "glob",
  "hashbrown",
  "itertools",
@@ -409,7 +410,6 @@ dependencies = [
  "ron",
  "serde",
  "serde_yaml",
- "simplelog",
  "smol_str",
  "strum 0.23.0",
  "unicode-width",
@@ -472,6 +472,23 @@ dependencies = [
  "serde",
  "smol_str",
  "strum 0.24.1",
+]
+
+[[package]]
+name = "flexi_logger"
+version = "0.23.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4a12e3b5a8775259ee83ac38aea8cdf9c3a1667c02178d207378c0837808fa9"
+dependencies = [
+ "ansi_term",
+ "atty",
+ "glob",
+ "lazy_static",
+ "log",
+ "regex",
+ "rustversion",
+ "thiserror",
+ "time",
 ]
 
 [[package]]
@@ -1089,17 +1106,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "simplelog"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48dfff04aade74dd495b007c831cd6f4e0cee19c344dd9dc0884c0289b70a786"
-dependencies = [
- "log",
- "termcolor",
- "time",
-]
-
-[[package]]
 name = "smallvec"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1231,9 +1237,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.13"
+version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db76ff9fa4b1458b3c7f077f3ff9887394058460d21e634355b273aaf11eea45"
+checksum = "3c3f9a28b618c3a6b9251b6908e9c99e04b9e5c02e6581ccbb67d59c34ef7f9b"
 dependencies = [
  "itoa 1.0.3",
  "libc",

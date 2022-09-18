@@ -92,10 +92,11 @@ impl TerminalVm {
         tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        // log::debug!(
-        //     "[{func_name}] `{inst:?}[{cursor}]`, stack: {stack:?}",
-        //     stack = ctx.stack()
-        // );
+        log::trace!(
+            "[{func_name}] `{inst:?}[{cursor}]`, stack: {stack:?}, call_stack: {call_stack:?}",
+            stack = ctx.stack(),
+            call_stack = ctx.call_stack(),
+        );
 
         match inst {
             Instruction::ReportPosition(pos) => ctx.update_position(pos.clone()),
@@ -445,11 +446,13 @@ impl TerminalVm {
 
                         let var = match var {
                             UniformVariable::Character(cvar) => {
-                                let c_idx = var_ref.idxs.first().copied().unwrap_or(target.try_into()?);
+                                let c_idx =
+                                    var_ref.idxs.first().copied().unwrap_or(target.try_into()?);
                                 &mut cvar[c_idx]
                             }
                             UniformVariable::Normal(var) => var,
-                        }.as_int()?;
+                        }
+                        .as_int()?;
 
                         let slice = match end {
                             Some(end) => &var[start..end],
@@ -1105,6 +1108,33 @@ impl TerminalVm {
             }
             BeginType::AfterTrain => {
                 call_event!(EventType::End);
+
+                Ok(())
+            }
+            BeginType::AblUp => {
+                while ctx.begin.is_none() {
+                    call!("SHOW_JUEL");
+                    call!("SHOW_ABLUP_SELECT");
+
+                    loop {
+                        match tx.input(InputRequest::Int) {
+                            ConsoleResult::Quit => return Ok(()),
+                            ConsoleResult::Value(Value::Int(i)) => {
+                                ctx.var.set_result(i);
+
+                                if matches!(i, 0..=99) {
+                                    if call!(&format!("ABLUP{i}")) {
+                                        break;
+                                    }
+                                } else {
+                                    call!("USERABLUP");
+                                    break;
+                                }
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                }
 
                 Ok(())
             }

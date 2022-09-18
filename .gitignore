@@ -1,6 +1,7 @@
 /target
 /.direnv
 /.idea
-erars.log
+last_log.log
+/logs
 massif*
 *~undo-tree~

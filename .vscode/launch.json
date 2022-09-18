@@ -37,7 +37,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["../eraTHYMKR"],
+            "args": ["--use-input=inputs.ron", "../eraTHYMKR"],
             "cwd": "${workspaceFolder}"
         },
         {
