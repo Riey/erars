@@ -932,8 +932,8 @@ impl TerminalVm {
                         }
 
                         std::fs::write(
-                            self.sav_path.join(format!("save{idx:02}.yml")),
-                            &serde_yaml::to_string(&(description, ctx.var.get_serializable()))?,
+                            self.sav_path.join(format!("save{idx:02}.msgpack")),
+                            &rmp_serde::to_vec(&(description, ctx.var.get_serializable()))?,
                         )?;
                     }
                     BuiltinCommand::SaveGlobal => {
@@ -941,11 +941,9 @@ impl TerminalVm {
                             std::fs::create_dir(&self.sav_path).ok();
                         }
 
-                        log::info!("SAVEGLOBAL");
-
                         std::fs::write(
-                            self.sav_path.join("global.yml"),
-                            &serde_yaml::to_string(&ctx.var.get_global_serializable())?,
+                            self.sav_path.join("global.msgpack"),
+                            &rmp_serde::to_vec(&ctx.var.get_global_serializable())?,
                         )?;
                     }
                     BuiltinCommand::LoadGlobal => {
@@ -955,12 +953,12 @@ impl TerminalVm {
                             std::fs::create_dir(&self.sav_path).ok();
                         }
 
-                        let sav_file_path = self.sav_path.join("global.yml");
+                        let sav_file_path = self.sav_path.join("global.msgpack");
 
                         if sav_file_path.exists() {
-                            let sav = std::fs::read_to_string(sav_file_path)?;
+                            let sav = std::fs::read(sav_file_path)?;
 
-                            match serde_yaml::from_str(&sav) {
+                            match rmp_serde::from_read(sav.as_slice()) {
                                 Ok(sav) => {
                                     if ctx
                                         .var
