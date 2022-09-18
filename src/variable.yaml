@@ -219,3 +219,56 @@ GLOBALS:
   is_global: true
   is_str: true
   size: [1000]
+
+A:
+  size: [1000]
+B:
+  size: [1000]
+C:
+  size: [1000]
+D:
+  size: [1000]
+E:
+  size: [1000]
+F:
+  size: [1000]
+G:
+  size: [1000]
+H:
+  size: [1000]
+I:
+  size: [1000]
+J:
+  size: [1000]
+K:
+  size: [1000]
+L:
+  size: [1000]
+M:
+  size: [1000]
+N:
+  size: [1000]
+O:
+  size: [1000]
+P:
+  size: [1000]
+Q:
+  size: [1000]
+R:
+  size: [1000]
+S:
+  size: [1000]
+T:
+  size: [1000]
+U:
+  size: [1000]
+V:
+  size: [1000]
+W:
+  size: [1000]
+X:
+  size: [1000]
+Y:
+  size: [1000]
+Z:
+  size: [1000]
