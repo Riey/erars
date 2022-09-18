@@ -1139,6 +1139,11 @@ impl TerminalVm {
 
                 Ok(())
             }
+            BeginType::TurnEnd => {
+                call_event!(EventType::TurnEnd);
+
+                Ok(())
+            }
             BeginType::Shop => {
                 call_event!(EventType::Shop);
 
@@ -1182,7 +1187,6 @@ impl TerminalVm {
 
                 Ok(())
             }
-            _ => bail!("TODO: {}", ty),
         }
     }
 
