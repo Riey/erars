@@ -30,7 +30,6 @@ pub enum Instruction {
     StoreVar,
     /// Store top value to RESULT/RESULTS
     StoreResult,
-    CallMethod(u32),
     Call(u32),
     /// if name is not exists, push 1
     TryCall(u32),

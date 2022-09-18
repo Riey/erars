@@ -14,6 +14,8 @@ use crate::vm::Workflow;
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {
     file_path: SmolStr,
+    is_function: bool,
+    is_functions: bool,
     body: Box<[Instruction]>,
     goto_labels: HashMap<SmolStr, u32>,
     args: Vec<(Box<str>, Option<Value>, ArrayVec<usize, 4>)>,
@@ -43,6 +45,14 @@ impl FunctionBody {
 
     pub fn file_path(&self) -> &SmolStr {
         &self.file_path
+    }
+
+    pub fn is_function(&self) -> bool {
+        self.is_function
+    }
+
+    pub fn is_functions(&self) -> bool {
+        self.is_functions
     }
 }
 
@@ -139,7 +149,14 @@ impl FunctionDic {
                 FunctionInfo::EventFlag(f) => {
                     flags = f;
                 }
-                FunctionInfo::Function | FunctionInfo::FunctionS => {}
+                FunctionInfo::Function => {
+                    body.is_function = true;
+                    assert!(!body.is_functions);
+                }
+                FunctionInfo::FunctionS => {
+                    body.is_functions = true;
+                    assert!(!body.is_function);
+                }
                 FunctionInfo::Dim(local) => {
                     var_dic.add_local_info(header.name.clone(), local.var, local.info);
                 }

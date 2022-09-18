@@ -165,15 +165,6 @@ impl TerminalVm {
 
                 // TODO: PRINTW
             }
-            Instruction::CallMethod(c) => {
-                let func = ctx.pop_str()?;
-                let args = ctx.take_value_list(*c)?;
-
-                match self.call(&func, args.as_slice(), tx, ctx)? {
-                    Workflow::Exit => return Ok(Some(Workflow::Exit)),
-                    Workflow::Return => {}
-                }
-            }
             Instruction::TryCall(c) => {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_value_list(*c)?;
@@ -191,8 +182,8 @@ impl TerminalVm {
                 let args = ctx.take_value_list(*c)?;
 
                 match self.call(&func, &args, tx, ctx)? {
-                    Workflow::Return => {}
                     Workflow::Exit => return Ok(Some(Workflow::Exit)),
+                    Workflow::Return => {}
                 }
             }
             Instruction::Begin(b) => {
@@ -902,12 +893,22 @@ impl TerminalVm {
             cursor += 1;
             match self.run_instruction(func_name, goto_labels, inst, &mut cursor, tx, ctx) {
                 Ok(None) => {}
-                Ok(Some(Workflow::Return)) => break,
+                Ok(Some(Workflow::Return)) => return Ok(Workflow::Return),
                 Ok(Some(flow)) => return Ok(flow),
                 Err(err) => {
                     return Err(err);
                 }
             }
+        }
+
+        // exit without RETURN/RETURNF
+
+        if body.is_function() {
+            ctx.push(0);
+        } else if body.is_functions() {
+            ctx.push("");
+        } else {
+            ctx.var.set_result(0);
         }
 
         Ok(Workflow::Return)

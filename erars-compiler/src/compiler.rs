@@ -146,7 +146,7 @@ impl Compiler {
             Expr::Method(name, args) => {
                 let count = self.push_list(args)?;
                 self.push(Instruction::LoadStr(name));
-                self.push(Instruction::CallMethod(count));
+                self.push(Instruction::Call(count));
             }
             Expr::Var(var) => {
                 self.push_var(var)?;
