@@ -11,10 +11,6 @@ EXPLV:
 PBAND:
   size: [1000]
 
-SAVESTR:
-  size: [1000]
-  is_str: true
-
 STR:
   size: [1000]
   is_str: true

@@ -14,6 +14,7 @@ use crate::ui::ConsoleSender;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SerializableVariableStorage {
+    pub description: String,
     character_len: usize,
     rand_seed: [u8; 32],
     variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
@@ -95,7 +96,7 @@ impl VariableStorage {
         Ok(())
     }
 
-    pub fn get_serializable(&self) -> SerializableVariableStorage {
+    pub fn get_serializable(&self, description: String) -> SerializableVariableStorage {
         let variables = self
             .variables
             .iter()
@@ -123,6 +124,7 @@ impl VariableStorage {
 
         SerializableVariableStorage {
             variables,
+            description,
             local_variables,
             character_len: self.character_len,
             rand_seed: self.rng.get_seed(),

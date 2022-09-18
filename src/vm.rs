@@ -1,4 +1,5 @@
 mod context;
+mod save_data;
 mod variable;
 
 use std::{io, path::PathBuf};
@@ -662,33 +663,11 @@ impl TerminalVm {
                     BuiltinMethod::ChkData => {
                         check_arg_count!(1);
                         let idx = get_arg!(@i64: args, ctx);
-                        let file = self.sav_path.join(format!("save{idx:02}.msgpack"));
 
-                        let ret = if !file.exists() {
-                            1
-                        } else {
-                            match std::fs::read(file) {
-                                Ok(s) => {
-                                    match rmp_serde::from_read::<
-                                        _,
-                                        (String, SerializableVariableStorage),
-                                    >(s.as_slice())
-                                    {
-                                        Ok(_) => 0,
-                                        Err(err) => {
-                                            log::error!("Save load error: {err}");
-                                            4
-                                        }
-                                    }
-                                }
-                                Err(err) => {
-                                    log::error!("File read error: {err}");
-                                    4
-                                }
-                            }
+                        let ret = match self::save_data::read_save_data(&self.sav_path, idx) {
+                            Ok(_) => 0,
+                            Err(err) => err,
                         };
-
-                        log::debug!("Check save {idx}, result: {ret}");
 
                         ctx.push(ret);
                     }
@@ -932,60 +911,34 @@ impl TerminalVm {
                         let idx = get_arg!(@i64: args, ctx);
                         let description = get_arg!(@String: args, ctx);
 
-                        if !self.sav_path.exists() {
-                            std::fs::create_dir(&self.sav_path).ok();
-                        }
-
-                        std::fs::write(
-                            self.sav_path.join(format!("save{idx:02}.msgpack")),
-                            &rmp_serde::to_vec(&(description, ctx.var.get_serializable()))?,
-                        )?;
+                        self::save_data::write_save_data(
+                            &self.sav_path,
+                            idx,
+                            &ctx.var,
+                            description,
+                        );
                     }
                     BuiltinCommand::LoadData => {
                         let idx = get_arg!(@i64: args, ctx);
 
-                        let file =
-                            std::fs::read(self.sav_path.join(format!("save{idx:02}.msgpack")))?;
-
-                        let data: (String, SerializableVariableStorage) =
-                            rmp_serde::from_read(file.as_slice())?;
-                        ctx.var.load_serializable(data.1, &ctx.header_info.replace)?;
+                        match self::save_data::read_save_data(&self.sav_path, idx) {
+                            Ok(data) => {
+                                ctx.var.load_serializable(data, &ctx.header_info.replace)?;
+                            }
+                            _ => {}
+                        }
                     }
                     BuiltinCommand::SaveGlobal => {
-                        if !self.sav_path.exists() {
-                            std::fs::create_dir(&self.sav_path).ok();
-                        }
-
-                        std::fs::write(
-                            self.sav_path.join("global.msgpack"),
-                            &rmp_serde::to_vec(&ctx.var.get_global_serializable())?,
-                        )?;
+                        self::save_data::write_global_data(&self.sav_path, &ctx.var);
                     }
                     BuiltinCommand::LoadGlobal => {
-                        ctx.var.set_result(0);
-
-                        if !self.sav_path.exists() {
-                            std::fs::create_dir(&self.sav_path).ok();
-                        }
-
-                        let sav_file_path = self.sav_path.join("global.msgpack");
-
-                        if sav_file_path.exists() {
-                            let sav = std::fs::read(sav_file_path)?;
-
-                            match rmp_serde::from_read(sav.as_slice()) {
-                                Ok(sav) => {
-                                    if ctx
-                                        .var
-                                        .load_global_serializable(sav, &ctx.header_info.replace)
-                                        .is_ok()
-                                    {
-                                        ctx.var.set_result(1);
-                                    }
-                                }
-                                Err(err) => {
-                                    log::error!("Failed to load global data: {err}");
-                                }
+                        match self::save_data::read_global_data(&self.sav_path) {
+                            Ok(data) => {
+                                ctx.var.load_global_serializable(data, &ctx.header_info.replace)?;
+                                ctx.var.set_result(1);
+                            }
+                            _ => {
+                                ctx.var.set_result(0);
                             }
                         }
                     }
