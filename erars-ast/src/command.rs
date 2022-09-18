@@ -44,6 +44,7 @@ pub enum BuiltinMethod {
     Log10,
 
     GetTime,
+    Rand,
 
     CsvName,
     CsvCallName,

@@ -7,6 +7,7 @@ use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
 use pad::PadStr;
+use rand::Rng;
 use smol_str::SmolStr;
 use strum::Display;
 
@@ -409,6 +410,18 @@ impl TerminalVm {
                     }
                     BuiltinMethod::CsvCflag => {
                         csv_method!(@arr cflag);
+                    }
+                    BuiltinMethod::Rand => {
+                        check_arg_count!(1, 2);
+                        let n1 = get_arg!(@i64: args, ctx);
+                        let n2 = get_arg!(@opt @i64: args, ctx);
+
+                        let ret = match n2 {
+                            Some(max) => ctx.var.rng().gen_range(n1..max),
+                            None => ctx.var.rng().gen_range(0..n1),
+                        };
+
+                        ctx.push(ret);
                     }
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
