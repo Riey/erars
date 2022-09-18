@@ -55,13 +55,13 @@ impl VariableStorage {
         sav: SerializableGlobalVariableStorage,
         replace: &ReplaceInfo,
     ) -> Result<()> {
-        self.variables.retain(|_, (info, _)| info.is_global);
+        self.variables.retain(|_, (info, _)| !info.is_global);
         self.variables.extend(sav.variables);
 
         self.local_variables
             .values_mut()
-            .for_each(|v| v.retain(|_, (info, _)| info.is_global));
-        self.local_variables.retain(|_, v| v.is_empty());
+            .for_each(|v| v.retain(|_, (info, _)| !info.is_global));
+        self.local_variables.retain(|_, v| !v.is_empty());
         for (fn_name, vars) in sav.local_variables {
             self.local_variables.entry(fn_name).or_default().extend(vars);
         }
@@ -79,13 +79,13 @@ impl VariableStorage {
         self.character_len = sav.character_len;
         self.rng = SeedableRng::from_seed(sav.rand_seed);
 
-        self.variables.retain(|_, (info, _)| !info.is_global);
+        self.variables.retain(|_, (info, _)| info.is_global);
         self.variables.extend(sav.variables);
 
         self.local_variables
             .values_mut()
-            .for_each(|v| v.retain(|_, (info, _)| !info.is_global));
-        self.local_variables.retain(|_, v| v.is_empty());
+            .for_each(|v| v.retain(|_, (info, _)| info.is_global));
+        self.local_variables.retain(|_, v| !v.is_empty());
         for (fn_name, vars) in sav.local_variables {
             self.local_variables.entry(fn_name).or_default().extend(vars);
         }
