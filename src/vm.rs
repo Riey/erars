@@ -662,28 +662,33 @@ impl TerminalVm {
                     BuiltinMethod::ChkData => {
                         check_arg_count!(1);
                         let idx = get_arg!(@i64: args, ctx);
-                        let file = self.sav_path.join(format!("save{idx:02}.yml"));
+                        let file = self.sav_path.join(format!("save{idx:02}.msgpack"));
 
                         let ret = if !file.exists() {
                             1
                         } else {
-                            std::fs::read_to_string(file)
-                                .ok()
-                                .and_then(|s| {
-                                    match serde_yaml::from_str::<(
-                                        String,
-                                        SerializableVariableStorage,
-                                    )>(&s)
+                            match std::fs::read(file) {
+                                Ok(s) => {
+                                    match rmp_serde::from_read::<
+                                        _,
+                                        (String, SerializableVariableStorage),
+                                    >(s.as_slice())
                                     {
-                                        Ok(_) => Some(0),
+                                        Ok(_) => 0,
                                         Err(err) => {
                                             log::error!("Save load error: {err}");
-                                            None
+                                            4
                                         }
                                     }
-                                })
-                                .unwrap_or(4)
+                                }
+                                Err(err) => {
+                                    log::error!("File read error: {err}");
+                                    4
+                                }
+                            }
                         };
+
+                        log::debug!("Check save {idx}, result: {ret}");
 
                         ctx.push(ret);
                     }
@@ -936,6 +941,16 @@ impl TerminalVm {
                             &rmp_serde::to_vec(&(description, ctx.var.get_serializable()))?,
                         )?;
                     }
+                    BuiltinCommand::LoadData => {
+                        let idx = get_arg!(@i64: args, ctx);
+
+                        let file =
+                            std::fs::read(self.sav_path.join(format!("save{idx:02}.msgpack")))?;
+
+                        let data: (String, SerializableVariableStorage) =
+                            rmp_serde::from_read(file.as_slice())?;
+                        ctx.var.load_serializable(data.1, &ctx.header_info.replace)?;
+                    }
                     BuiltinCommand::SaveGlobal => {
                         if !self.sav_path.exists() {
                             std::fs::create_dir(&self.sav_path).ok();
@@ -973,9 +988,6 @@ impl TerminalVm {
                                 }
                             }
                         }
-                    }
-                    BuiltinCommand::LoadData => {
-                        log::warn!("TODO: Save/Load");
                     }
                     _ => {
                         bail!("TODO: Command {}({:?})", com, args.collect_vec());
