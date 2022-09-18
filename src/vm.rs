@@ -1064,6 +1064,11 @@ impl TerminalVm {
 
                 Ok(())
             }
+            BeginType::AfterTrain => {
+                call_event!(EventType::End);
+
+                Ok(())
+            }
             BeginType::Shop => {
                 call_event!(EventType::Shop);
 
