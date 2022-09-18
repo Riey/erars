@@ -645,6 +645,20 @@ impl TerminalVm {
                         ctx.push(ret);
                     }
 
+                    BuiltinMethod::GetTime => {
+                        let now = time::OffsetDateTime::now_local()?;
+
+                        ctx.push(format!(
+                            "{year:04}年{month:02}月{day:02}日 {hour:02}:{minute:02}:{second:02}",
+                            year = now.year(),
+                            month = now.month(),
+                            day = now.day(),
+                            hour = now.hour(),
+                            minute = now.minute(),
+                            second = now.second()
+                        ));
+                    }
+
                     BuiltinMethod::ChkData => {
                         check_arg_count!(1);
                         let idx = get_arg!(@i64: args, ctx);
