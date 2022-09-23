@@ -6,3 +6,4 @@ last_test_log.log
 /logs
 massif*
 *~undo-tree~
+heaptrack*

@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use std::{path::PathBuf, sync::Arc, time::Instant};
@@ -198,11 +197,11 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
                 let source = std::fs::read_to_string(&erb).unwrap();
                 let ctx = ParserContext::new(header_info.clone(), erb.to_str().unwrap().into());
 
-                log::debug!("Parse {}", erb.display());
+                log::debug!("Parse And Compile {}", erb.display());
 
-                let program = ctx.parse(&mut Lexer::new(source.as_str()));
+                let program = ctx.parse_and_compile(&mut Lexer::new(source.as_str()));
 
-                let program = match program {
+                match program {
                     Ok(p) => p,
                     Err((err, span)) => {
                         let file_id = files.lock().add(erb.to_str().unwrap().to_string(), source);
@@ -212,14 +211,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
                             .push(Label::primary(file_id, span).with_message(format!("{}", err)));
                         Vec::new()
                     }
-                };
-
-                log::debug!("Compile {}", erb.display());
-
-                program
-                    .into_iter()
-                    .map(|f| erars_compiler::compile(f).unwrap())
-                    .collect_vec()
+                }
             })
             .collect::<Vec<CompiledFunction>>();
 

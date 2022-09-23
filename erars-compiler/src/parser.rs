@@ -3,7 +3,8 @@ mod expr;
 
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, EventType,
-    Expr, Function, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable, VariableInfo,
+    Expr, Function, FunctionHeader, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable,
+    VariableInfo,
 };
 use erars_lexer::{ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -18,6 +19,7 @@ use std::{
 };
 
 pub use crate::error::{ParserError, ParserResult};
+use crate::CompiledFunction;
 pub use expr::normal_form_str;
 
 macro_rules! error {
@@ -764,6 +766,100 @@ impl ParserContext {
         };
 
         Ok(StmtWithPos(stmt, first_pos))
+    }
+
+    pub fn parse_and_compile<'s>(
+        &self,
+        lex: &mut Lexer<'s, Token<'s>>,
+    ) -> ParserResult<Vec<CompiledFunction>> {
+        let mut out = Vec::with_capacity(1024);
+        let mut compiler = crate::compiler::Compiler::new();
+
+        let mut current_func_header = FunctionHeader::default();
+
+        loop {
+            match self.next_token(lex)? {
+                Some(Token::At(left)) => {
+                    let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+                    if !current_func_header.name.is_empty() {
+                        out.push(CompiledFunction {
+                            header: mem::take(&mut current_func_header),
+                            body: compiler.out.into_boxed_slice(),
+                            goto_labels: compiler.goto_labels,
+                        });
+                        compiler = crate::compiler::Compiler::new();
+                    }
+                    self.local_strs.borrow_mut().clear();
+                    current_func_header.file_path = self.file_path.clone();
+                    current_func_header.name = label.into();
+                    current_func_header.args = args;
+                }
+                Some(Token::Function) => {
+                    current_func_header.infos.push(FunctionInfo::Function);
+                }
+                Some(Token::FunctionS) => {
+                    current_func_header.infos.push(FunctionInfo::FunctionS);
+                }
+                Some(Token::Pri) => {
+                    current_func_header
+                        .infos
+                        .push(FunctionInfo::EventFlag(EventFlags::Pre));
+                }
+                Some(Token::Later) => {
+                    current_func_header
+                        .infos
+                        .push(FunctionInfo::EventFlag(EventFlags::Later));
+                }
+                Some(Token::Single) => {
+                    current_func_header
+                        .infos
+                        .push(FunctionInfo::EventFlag(EventFlags::Single));
+                }
+                Some(Token::Dim(left)) => {
+                    let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
+                    current_func_header.infos.push(FunctionInfo::Dim(var));
+                }
+                Some(Token::DimS(left)) => {
+                    let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
+                    self.local_strs.borrow_mut().insert(var.var.clone());
+                    current_func_header.infos.push(FunctionInfo::Dim(var));
+                }
+                Some(Token::LocalSize(size)) => {
+                    let var = try_nom!(lex, self::expr::expr(self)(size))
+                        .1
+                        .into_const_int()
+                        .unwrap();
+                    current_func_header.infos.push(FunctionInfo::LocalSize(var as usize));
+                }
+                Some(Token::LocalSSize(size)) => {
+                    let var = try_nom!(lex, self::expr::expr(self)(size))
+                        .1
+                        .into_const_int()
+                        .unwrap();
+                    current_func_header.infos.push(FunctionInfo::LocalSSize(var as usize));
+                }
+                Some(other) => match self.parse_stmt(other, lex) {
+                    Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
+                        Ok(_) => {}
+                        Err(err) => error!(lex, err.to_string()),
+                    },
+                    Err(err) => {
+                        return Err(err);
+                    }
+                },
+                None => break,
+            }
+        }
+
+        if !current_func_header.name.is_empty() {
+            out.push(CompiledFunction {
+                header: mem::take(&mut current_func_header),
+                body: compiler.out.into_boxed_slice(),
+                goto_labels: compiler.goto_labels,
+            });
+        }
+
+        Ok(out)
     }
 
     pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Vec<Function>> {

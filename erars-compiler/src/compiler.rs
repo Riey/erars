@@ -14,11 +14,11 @@ pub struct CompiledFunction {
     pub body: Box<[Instruction]>,
 }
 
-struct Compiler {
-    out: Vec<Instruction>,
-    goto_labels: HashMap<SmolStr, u32>,
-    continue_marks: Vec<Vec<u32>>,
-    break_marks: Vec<Vec<u32>>,
+pub struct Compiler {
+    pub out: Vec<Instruction>,
+    pub goto_labels: HashMap<SmolStr, u32>,
+    pub continue_marks: Vec<Vec<u32>>,
+    pub break_marks: Vec<Vec<u32>>,
 }
 
 impl Compiler {
