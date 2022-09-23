@@ -7,8 +7,8 @@ use smol_str::SmolStr;
 use strum::{Display, EnumString};
 
 use crate::{
-    command::BuiltinMethod, Alignment, BinaryOperator, BuiltinCommand, EventFlags, EventType,
-    LocalVariable, UnaryOperator, Value, Variable,
+    command::BuiltinMethod, Alignment, BinaryOperator, BuiltinCommand, BuiltinVariable, EventFlags,
+    EventType, LocalVariable, UnaryOperator, Value, Variable,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -108,6 +108,7 @@ pub enum Expr {
     Int(i64),
     FormText(FormText),
     Var(Variable),
+    BuiltinVar(BuiltinVariable, Vec<Self>),
     Method(Box<str>, Vec<Self>),
     BuiltinMethod(BuiltinMethod, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),

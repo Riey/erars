@@ -1,6 +1,5 @@
 use anyhow::{bail, Result};
 use arrayvec::ArrayVec;
-use rand::Rng;
 use smol_str::SmolStr;
 use std::fmt;
 use std::sync::Arc;
@@ -89,42 +88,9 @@ impl VmContext {
     }
 
     pub fn read_var_ref(&mut self, var_ref: &VariableRef) -> Result<Value> {
-        let value = match var_ref.name.as_str() {
-            "GAMEBASE_VERSION" => Value::Int(0),
-            "GAMEBASE_AUTHOR" => "Riey".into(),
-            "GAMEBASE_YEAR" => Value::Int(2022),
-            "GAMEBASE_TITLE" => "eraTHYMKR".into(),
-            "GAMEBASE_INFO" => "".into(),
-            "CHARANUM" => (self.var.character_len() as i64).into(),
-            "ITEMPRICE" => {
-                let arg = var_ref.idxs[0] as u32;
-                self.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
-            }
-            "TRAINNAME" | "ITEMNAME" | "FLAGNAME" | "ABLNAME" | "TALENTNAME" | "MARKNAME"
-            | "EXNAME" | "EXPNAME" | "CFLAGNAME" | "CSTRNAME" | "STRNAME" | "SAVESTRNAME"
-            | "TSTRNAME" | "EQUIPNAME" | "TEQUIPNAME" | "PALAMNAME" | "SOURCENAME"
-            | "STAINNAME" | "TCVARNAME" | "GLOBALNAME" | "GLOBALSNAME" => {
-                let name = var_ref.name.as_str().strip_suffix("NAME").unwrap();
-                let arg = var_ref.idxs[0] as u32;
-                self.header_info
-                    .var_name_var
-                    .get(name)
-                    .and_then(|d| Some(d.get(&arg)?.as_str()))
-                    .unwrap_or("")
-                    .into()
-            }
-            "RAND" => {
-                let max = var_ref.idxs[0];
-                Value::Int(self.var.rng().gen_range(0..max) as i64)
-            }
-            _ => {
-                let (_, var, idx) = self.resolve_var_ref(&var_ref)?;
+        let (_, var, idx) = self.resolve_var_ref(&var_ref)?;
 
-                var.get(idx)?
-            }
-        };
-
-        Ok(value)
+        var.get(idx)
     }
 
     pub fn set_var_ref(&mut self, var_ref: &VariableRef, value: Value) -> Result<()> {

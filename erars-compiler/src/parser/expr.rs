@@ -290,36 +290,49 @@ fn ident_or_method_expr<'c, 'a>(
                     let var = ident;
                     if !ctx.is_arg.get() {
                         let (i, args) = variable_arg(ctx, &var)(i)?;
-                        Ok((
-                            i,
-                            Expr::Var(Variable {
-                                var: var.into(),
-                                func_extern,
-                                args,
-                            }),
-                        ))
+
+                        if let Ok(var) = var.parse() {
+                            Ok((i, Expr::BuiltinVar(var, args)))
+                        } else {
+                            Ok((
+                                i,
+                                Expr::Var(Variable {
+                                    var: var.into(),
+                                    func_extern,
+                                    args,
+                                }),
+                            ))
+                        }
                     } else {
-                        Ok((
-                            i,
-                            Expr::Var(Variable {
-                                var: var.into(),
-                                func_extern,
-                                args: Vec::new(),
-                            }),
-                        ))
+                        if let Ok(var) = var.parse() {
+                            Ok((i, Expr::BuiltinVar(var, Vec::new())))
+                        } else {
+                            Ok((
+                                i,
+                                Expr::Var(Variable {
+                                    var: var.into(),
+                                    func_extern,
+                                    args: Vec::new(),
+                                }),
+                            ))
+                        }
                     }
                 }
                 Cow::Owned(m) => {
                     if !ctx.is_arg.get() && is_ident(&m) {
                         let (i, args) = variable_arg(ctx, &m)(i)?;
-                        Ok((
-                            i,
-                            Expr::Var(Variable {
-                                var: m.into_boxed_str(),
-                                func_extern,
-                                args,
-                            }),
-                        ))
+                        if let Ok(var) = m.parse() {
+                            Ok((i, Expr::BuiltinVar(var, args)))
+                        } else {
+                            Ok((
+                                i,
+                                Expr::Var(Variable {
+                                    var: m.into_boxed_str(),
+                                    func_extern,
+                                    args,
+                                }),
+                            ))
+                        }
                     } else {
                         match expr(ctx)(&m) {
                             Ok((left, expr)) => {

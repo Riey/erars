@@ -1,6 +1,52 @@
 use crate::{value::Value, Expr};
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
+use strum::{Display, EnumString, IntoStaticStr};
+
+/// This variables are readonly system variables
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, Serialize, Deserialize, IntoStaticStr,
+)]
+#[strum(serialize_all = "UPPERCASE")]
+pub enum BuiltinVariable {
+    AblName,
+    TalentName,
+    ItemName,
+    FlagName,
+    ExName,
+    ExpName,
+    CflagName,
+    CstrName,
+    StrName,
+    TstrName,
+    EquipName,
+    TequipName,
+    PalamName,
+    SourceName,
+    StainName,
+    TcvarName,
+    GlobalName,
+    GlobalsName,
+
+    ItemPrice,
+
+    CharaNum,
+
+    Rand,
+
+    #[strum(to_string = "GAMEBASE_AUTHOR")]
+    GamebaseAuthor,
+    #[strum(to_string = "GAMEBASE_CODE")]
+    GamebaseCode,
+    #[strum(to_string = "GAMEBASE_VERSION")]
+    GamebaseVersion,
+    #[strum(to_string = "GAMEBASE_YEAR")]
+    GamebaseYear,
+    #[strum(to_string = "GAMEBASE_TITLE")]
+    GamebaseTitle,
+    #[strum(to_string = "GAMEBASE_INFO")]
+    GamebaseInfo,
+}
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Variable {

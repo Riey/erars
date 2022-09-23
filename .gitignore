@@ -2,6 +2,7 @@
 /.direnv
 /.idea
 last_log.log
+last_test_log.log
 /logs
 massif*
 *~undo-tree~

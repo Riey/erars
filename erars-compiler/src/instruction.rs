@@ -1,6 +1,6 @@
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventType, NotNan,
-    PrintFlags, ScriptPosition, UnaryOperator,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable,
+    EventType, NotNan, PrintFlags, ScriptPosition, UnaryOperator,
 };
 use serde::{Deserialize, Serialize};
 
@@ -42,8 +42,9 @@ pub enum Instruction {
     Print(PrintFlags),
     ReuseLastLine,
     ConcatString(u32),
-    Command(BuiltinCommand, u32),
-    Method(BuiltinMethod, u32),
+    BuiltinVar(BuiltinVariable, u32),
+    BuiltinCommand(BuiltinCommand, u32),
+    BuiltinMethod(BuiltinMethod, u32),
     BinaryOperator(BinaryOperator),
     UnaryOperator(UnaryOperator),
     SetAlignment(Alignment),

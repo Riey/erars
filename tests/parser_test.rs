@@ -751,12 +751,9 @@ mod body {
 [
     StmtWithPos(
         Repeat(
-            Var(
-                Variable {
-                    var: "CHARANUM",
-                    func_extern: None,
-                    args: [],
-                },
+            BuiltinVar(
+                CharaNum,
+                [],
             ),
             [
                 StmtWithPos(
@@ -1155,16 +1152,13 @@ BinopExpr(
     ),
     Add,
     BinopExpr(
-        Var(
-            Variable {
-                var: "RAND",
-                func_extern: None,
-                args: [
-                    Int(
-                        10,
-                    ),
-                ],
-            },
+        BuiltinVar(
+            Rand,
+            [
+                Int(
+                    10,
+                ),
+            ],
         ),
         Mul,
         Int(
@@ -1951,7 +1945,7 @@ Function {
                 },
                 None,
                 FormText(
-                    {Var(Variable { var: "PALAMNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [Int(1)] })] })}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [] }), NotEqual, Var(Variable { var: "TARGET", func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {BuiltinMethod(Abs, [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })])},
+                    {BuiltinVar(PalamName, [Var(Variable { var: "ARG", func_extern: None, args: [Int(1)] })])}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [] }), NotEqual, Var(Variable { var: "TARGET", func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(Method("SIGN", [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {BuiltinMethod(Abs, [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })])},
                 ),
             ),
             ScriptPosition {

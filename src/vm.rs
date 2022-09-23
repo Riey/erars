@@ -15,8 +15,8 @@ use strum::Display;
 use hashbrown::HashMap;
 
 use erars_ast::{
-    BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventType, PrintFlags,
-    ScriptPosition, UnaryOperator, Value,
+    BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
+    PrintFlags, ScriptPosition, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext};
 
@@ -25,13 +25,10 @@ pub use self::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
+use crate::ui::{ConsoleResult, InputRequest};
 use crate::{
     function::{FunctionBody, FunctionDic},
     ui::ConsoleSender,
-};
-use crate::{
-    ui::{ConsoleResult, InputRequest},
-    vm::variable::SerializableVariableStorage,
 };
 
 macro_rules! report_error {
@@ -311,7 +308,45 @@ impl TerminalVm {
 
                 ctx.push(text.pad_to_width_with_alignment(size as usize, align));
             }
-            Instruction::Method(meth, c) => {
+            Instruction::BuiltinVar(var, c) => {
+                let args = ctx.take_arg_list(*c)?;
+
+                use BuiltinVariable::*;
+
+                let value = match var {
+                    GamebaseVersion => Value::Int(0),
+                    GamebaseAuthor => "Riey".into(),
+                    GamebaseYear => Value::Int(2022),
+                    GamebaseTitle => "eraTHYMKR".into(),
+                    GamebaseInfo => "".into(),
+                    GamebaseCode => Value::Int(0),
+                    CharaNum => (ctx.var.character_len() as i64).into(),
+                    ItemPrice => {
+                        let arg = args[0] as u32;
+                        ctx.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
+                    }
+
+                    AblName | TalentName | ItemName | FlagName | ExName | ExpName | CflagName
+                    | CstrName | StrName | TstrName | EquipName | TequipName | PalamName
+                    | SourceName | StainName | TcvarName | GlobalName | GlobalsName => {
+                        let name = <&str>::from(var).strip_suffix("NAME").unwrap();
+                        let arg = args[0] as u32;
+                        ctx.header_info
+                            .var_name_var
+                            .get(name)
+                            .and_then(|d| Some(d.get(&arg)?.as_str()))
+                            .unwrap_or("")
+                            .into()
+                    }
+                    Rand => {
+                        let max = args[0];
+                        Value::Int(ctx.var.rng().gen_range(0..max) as i64)
+                    }
+                };
+
+                ctx.push(value);
+            }
+            Instruction::BuiltinMethod(meth, c) => {
                 let mut args = ctx.take_list(*c).collect::<Vec<_>>().into_iter();
 
                 macro_rules! check_arg_count {
@@ -675,7 +710,7 @@ impl TerminalVm {
                     _ => bail!("TODO: unimplemented builtin method {meth}"),
                 }
             }
-            Instruction::Command(com, c) => {
+            Instruction::BuiltinCommand(com, c) => {
                 let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
 
                 match com {
