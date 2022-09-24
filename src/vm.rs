@@ -84,7 +84,7 @@ impl TerminalVm {
     pub fn new(function_dic: FunctionDic, game_path: PathBuf) -> Self {
         Self {
             dic: function_dic,
-            sav_path: game_path.join("savs"),
+            sav_path: game_path.join("sav"),
         }
     }
 
