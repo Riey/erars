@@ -510,7 +510,20 @@ pub enum CsvToken<'s> {
 
     #[error]
     // BOM
-    #[token("\u{FEFF}", logos::skip, priority = 10)]
+    #[token("\u{FEFF}", logos::skip)]
+    #[regex(r"[ \t\r\n　]+", logos::skip)]
+    #[regex(r";[^\n]*", logos::skip)]
+    Error,
+}
+
+#[derive(Clone, Copy, Debug, Logos)]
+pub enum ConfigToken<'s> {
+    #[regex(r"[^:\r\n\u{FEFF}][^:\r\n]*:[^\r\n]*", |lex| lex.slice().split_once(':').unwrap())]
+    Line((&'s str, &'s str)),
+
+    #[error]
+    // BOM
+    #[token("\u{FEFF}", logos::skip)]
     #[regex(r"[ \t\r\n　]+", logos::skip)]
     #[regex(r";[^\n]*", logos::skip)]
     Error,

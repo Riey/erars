@@ -6,7 +6,7 @@ use erars_ast::{
     Expr, Function, FunctionHeader, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable,
     VariableInfo,
 };
-use erars_lexer::{ErhToken, JumpType, PrintType, Token};
+use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
 use logos::{internal::LexerInternal, Lexer};
 use smol_str::SmolStr;
@@ -17,6 +17,7 @@ use std::{
     mem,
     sync::Arc,
 };
+use strum::{Display, EnumString};
 
 pub use crate::error::{ParserError, ParserResult};
 use crate::CompiledFunction;
@@ -129,6 +130,58 @@ impl Default for ReplaceInfo {
             pband_init: 4,
             relation_init: 0,
         }
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct EraConfig {
+    pub lang: Language,
+}
+
+impl EraConfig {
+    pub fn to_text(&self) -> String {
+        format!("内部で使用する東アジア言語:{lang}", lang = self.lang)
+    }
+
+    pub fn from_text(s: &str) -> ParserResult<Self> {
+        let mut ret = Self::default();
+
+        let mut lex = Lexer::new(s);
+
+        while let Some(line) = lex.next() {
+            match line {
+                ConfigToken::Line((key, value)) => match key {
+                    "内部で使用する東アジア言語" => {
+                        ret.lang = match value.parse() {
+                            Ok(l) => l,
+                            Err(_) => error!(lex, format!("Invalid language {value}")),
+                        };
+                    }
+                    _ => {}
+                },
+                ConfigToken::Error => error!(lex, format!("Invalid token: {}", lex.slice())),
+            }
+        }
+
+        Ok(ret)
+    }
+}
+
+#[derive(Clone, Copy, Debug, EnumString, Display)]
+pub enum Language {
+    #[strum(to_string = "JAPANESE")]
+    Japanese,
+    #[strum(to_string = "KOREAN")]
+    Korean,
+    #[strum(to_string = "CHINESE_HANS")]
+    ChineseHant,
+    #[strum(to_string = "CHINESE_HANT")]
+    ChineseHans,
+}
+
+impl Default for Language {
+    fn default() -> Self {
+        Self::Japanese
     }
 }
 

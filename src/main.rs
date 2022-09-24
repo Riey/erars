@@ -1,6 +1,10 @@
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::{path::PathBuf, sync::Arc, time::Instant};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+    time::Instant,
+};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -11,6 +15,7 @@ use codespan_reporting::{
     },
 };
 use erars::{
+    erars_compiler::EraConfig,
     function::FunctionDic,
     ui::{ConsoleChannel, ConsoleSender, EraApp, StdioBackend},
     vm::{TerminalVm, VmContext},
@@ -39,6 +44,26 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
 
     {
         check_time!("Initialize");
+
+        let config_path = format!("{target_path}/emuera.config");
+
+        let config = if Path::new(&config_path).exists() {
+            match std::fs::read_to_string(&config_path) {
+                Ok(s) => EraConfig::from_text(&s).unwrap(),
+                Err(err) => {
+                    log::error!("config file load error: {err}");
+                    EraConfig::default()
+                }
+            }
+        } else {
+            let config = EraConfig::default();
+            std::fs::write(&config_path, config.to_text()).ok();
+            config
+        };
+
+        log::info!("Load config: {config:?}");
+
+        let config = Arc::new(config);
 
         let infos: HashMap<SmolStr, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
@@ -152,14 +177,14 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
         check_time!("Merge CSV");
 
         for (k, (path, v)) in chara_csv_dic.into_iter() {
-                        log::debug!("Merge {k}.CSV");
+            log::debug!("Merge {k}.CSV");
             match info.merge_chara_csv(&v) {
-                            Ok(()) => {}
-                            Err((err, span)) => {
+                Ok(()) => {}
+                Err((err, span)) => {
                     let file_id = files.lock().add(path.display().to_string(), v);
-                                diagnostic.lock().labels.push(
-                                    Label::primary(file_id, span).with_message(format!("{}", err)),
-                                );
+                    diagnostic.lock().labels.push(
+                        Label::primary(file_id, span).with_message(format!("{}", err)),
+                    );
                 }
             }
         }
@@ -217,7 +242,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
             })
             .collect::<Vec<CompiledFunction>>();
 
-        ctx = VmContext::new(header_info.clone());
+        ctx = VmContext::new(header_info.clone(), config);
 
         for input in inputs {
             tx.push_input(input);

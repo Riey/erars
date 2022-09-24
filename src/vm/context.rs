@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
-use erars_compiler::HeaderInfo;
+use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::vm::{VariableStorage, VmVariable};
 
@@ -16,19 +16,21 @@ pub struct VmContext {
     pub var: VariableStorage,
     pub begin: Option<BeginType>,
     pub header_info: Arc<HeaderInfo>,
+    pub config: Arc<EraConfig>,
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
     current_pos: ScriptPosition,
 }
 
 impl VmContext {
-    pub fn new(header_info: Arc<HeaderInfo>) -> Self {
+    pub fn new(header_info: Arc<HeaderInfo>, config: Arc<EraConfig>) -> Self {
         let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
             header_info,
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
+            config,
             current_pos: ScriptPosition::default(),
         };
 

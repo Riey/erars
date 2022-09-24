@@ -28,7 +28,7 @@ fn run_test() {
     let header = test_util::get_ctx("").header;
 
     for erb_file in erb_files {
-        let mut ctx = VmContext::new(header.clone());
+        let mut ctx = VmContext::new(header.clone(), Arc::default());
         let erb_file = erb_file.unwrap();
         let ron_file = erb_file.parent().unwrap().join(format!(
             "{}.ron",
