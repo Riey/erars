@@ -146,7 +146,7 @@ impl VariableStorage {
 
         for (fn_name, vars) in self.local_variables.iter() {
             for (name, (info, var)) in vars.iter() {
-                if !info.is_global {
+                if info.is_savedata && !info.is_global {
                     local_variables
                         .entry(fn_name.clone())
                         .or_default()
@@ -181,7 +181,7 @@ impl VariableStorage {
 
         for (fn_name, vars) in self.local_variables.iter() {
             for (name, (info, var)) in vars.iter() {
-                if info.is_global {
+                if info.is_savedata && info.is_global {
                     local_variables
                         .entry(fn_name.clone())
                         .or_default()
