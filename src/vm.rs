@@ -452,7 +452,8 @@ impl TerminalVm {
                         let value = get_arg!(@value args, ctx);
 
                         let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
-                        let end = get_arg!(@opt @usize: args, ctx).unwrap_or(ctx.var.character_len());
+                        let end =
+                            get_arg!(@opt @usize: args, ctx).unwrap_or(ctx.var.character_len());
 
                         key.idxs.insert(0, start);
 

@@ -129,10 +129,10 @@ impl EraApp for StdioBackend {
             if let Some(req) = self.req {
                 let size = stdin.read_line(&mut input)?;
 
-                let s = &input[..size.saturating_sub(1)];
+                let s = input[..size].trim_end_matches(&['\r', '\n']);
 
                 match req {
-                    InputRequest::Int => match s.parse() {
+                    InputRequest::Int => match s.trim().parse() {
                         Ok(i) => {
                             chan.send_ret(ConsoleResult::Value(Value::Int(i)));
                             self.req = None;
