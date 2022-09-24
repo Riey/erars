@@ -82,7 +82,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
             ..Default::default()
         };
 
-        let csv_dic = csvs
+        let mut csv_dic = csvs
             .par_bridge()
             .filter_map(|csv| match csv {
                 Ok(csv) => {
@@ -98,18 +98,20 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
             })
             .collect::<HashMap<_, _>>();
 
+        let chara_csv_dic = csv_dic.drain_filter(|k, _v| k.starts_with("CHARA")).collect::<HashMap<_, _>>();
+
         check_time!("Load CSV");
 
-        for (k, (path, v)) in csv_dic.iter() {
+        for (k, (path, v)) in csv_dic.into_iter() {
             match k.as_str() {
                 "ABL" | "BASE" | "CFLAG" | "EQUIP" | "TEQUIP" | "PALAM" | "EXP" | "EX" | "FLAG"
                 | "TFLAG" | "TALENT" | "STAIN" | "SOURCE" | "TSTR" | "CSTR" | "STR" | "SAVESTR"
                 | "GLOBAL" | "GLOBALS" | "TRAIN" => {
                     log::debug!("Merge {k}.CSV");
-                    match info.merge_name_csv(k, v) {
+                    match info.merge_name_csv(&k, &v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(path.display().to_string(), v.clone());
+                            let file_id = files.lock().add(path.display().to_string(), v);
                             diagnostic.lock().labels.push(
                                 Label::primary(file_id, span).with_message(format!("{}", err)),
                             );
@@ -118,10 +120,10 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
                 }
                 "_REPLACE" => {
                     log::debug!("Merge _REPLACE.CSV");
-                    match info.merge_replace_csv(v) {
+                    match info.merge_replace_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(format!("{k}.CSV"), v.clone());
+                            let file_id = files.lock().add(path.display().to_string(), v);
                             diagnostic.lock().labels.push(
                                 Label::primary(file_id, span).with_message(format!("{}", err)),
                             );
@@ -131,10 +133,10 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
                 }
                 "ITEM" => {
                     log::debug!("Merge ITEM.CSV");
-                    match info.merge_item_csv(v) {
+                    match info.merge_item_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(format!("{k}.CSV"), v.clone());
+                            let file_id = files.lock().add(path.display().to_string(), v);
                             diagnostic.lock().labels.push(
                                 Label::primary(file_id, span).with_message(format!("{}", err)),
                             );
@@ -142,27 +144,27 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
                     }
                 }
                 other => {
-                    if k.starts_with("CHARA") {
-                        log::debug!("Merge {k}.CSV");
-                        match info.merge_chara_csv(v) {
-                            Ok(()) => {}
-                            Err((err, span)) => {
-                                let file_id = files.lock().add(format!("{k}.CSV"), v.clone());
-                                diagnostic.lock().labels.push(
-                                    Label::primary(file_id, span).with_message(format!("{}", err)),
-                                );
-                            }
-                        }
-                    } else {
-                        log::warn!("Unknown csv name {other}");
-                    }
+                    log::warn!("Unknown csv name {other}");
                 }
             }
         }
 
-        drop(csv_dic);
-
         check_time!("Merge CSV");
+
+        for (k, (path, v)) in chara_csv_dic.into_iter() {
+                        log::debug!("Merge {k}.CSV");
+            match info.merge_chara_csv(&v) {
+                            Ok(()) => {}
+                            Err((err, span)) => {
+                    let file_id = files.lock().add(path.display().to_string(), v);
+                                diagnostic.lock().labels.push(
+                                    Label::primary(file_id, span).with_message(format!("{}", err)),
+                                );
+                }
+            }
+        }
+
+        check_time!("Merge chara CSV");
 
         tx.print_line(info.replace.start_message.clone());
 
