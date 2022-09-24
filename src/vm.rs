@@ -326,9 +326,9 @@ impl TerminalVm {
                         ctx.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
                     }
 
-                    AblName | TalentName | ItemName | FlagName | ExName | ExpName | MarkName | CflagName
-                    | CstrName | StrName | TstrName | EquipName | TequipName | PalamName
-                    | SourceName | StainName | TcvarName | GlobalName | GlobalsName => {
+                    AblName | TalentName | ItemName | FlagName | ExName | ExpName | MarkName
+                    | CflagName | CstrName | StrName | TstrName | EquipName | TequipName
+                    | PalamName | SourceName | StainName | TcvarName | GlobalName | GlobalsName => {
                         let name = <&str>::from(var).strip_suffix("NAME").unwrap();
                         let arg = args[0] as u32;
                         ctx.header_info
@@ -1278,10 +1278,14 @@ impl TerminalVm {
 
                                 log::debug!("sales: {sales}");
 
-                                #[allow(unreachable_code)]
-                                #[allow(unused_variables)]
                                 if sales != 0 {
-                                    let price = todo!("ITEMPRICE");
+                                    let price = ctx
+                                        .header_info
+                                        .item_price
+                                        .get(&(i as u32))
+                                        .copied()
+                                        .unwrap_or_default()
+                                        as i64;
                                     let money = ctx.var.ref_int("MONEY", &[])?;
 
                                     if *money >= price {
