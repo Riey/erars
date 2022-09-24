@@ -123,7 +123,9 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
             })
             .collect::<HashMap<_, _>>();
 
-        let chara_csv_dic = csv_dic.drain_filter(|k, _v| k.starts_with("CHARA")).collect::<HashMap<_, _>>();
+        let chara_csv_dic = csv_dic
+            .drain_filter(|k, _v| k.starts_with("CHARA"))
+            .collect::<HashMap<_, _>>();
 
         check_time!("Load CSV");
 
@@ -182,9 +184,10 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
                 Ok(()) => {}
                 Err((err, span)) => {
                     let file_id = files.lock().add(path.display().to_string(), v);
-                    diagnostic.lock().labels.push(
-                        Label::primary(file_id, span).with_message(format!("{}", err)),
-                    );
+                    diagnostic
+                        .lock()
+                        .labels
+                        .push(Label::primary(file_id, span).with_message(format!("{}", err)));
                 }
             }
         }

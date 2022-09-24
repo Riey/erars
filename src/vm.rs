@@ -892,7 +892,12 @@ impl TerminalVm {
                         return Ok(Some(Workflow::Return));
                     }
                     BuiltinCommand::DrawLine => {
-                        tx.draw_line();
+                        tx.draw_line(ctx.header_info.replace.drawline_str.clone());
+                        tx.request_redraw();
+                    }
+                    BuiltinCommand::CustomDrawLine => {
+                        let s = ctx.pop_str()?;
+                        tx.draw_line(s);
                         tx.request_redraw();
                     }
                     BuiltinCommand::FontStyle => {

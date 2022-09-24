@@ -12,17 +12,13 @@ use erars_ast::Value;
 
 enum ConsoleLinePart {
     Normal(String, Color),
-    Line(Color),
 }
 
 impl ConsoleLinePart {
-    fn draw(&self, drawline_str: &str, mut out: impl Write) -> anyhow::Result<()> {
+    fn draw(&self, mut out: impl Write) -> anyhow::Result<()> {
         match self {
             ConsoleLinePart::Normal(s, c) => {
                 write!(out, "{}", c.paint(s))?;
-            }
-            ConsoleLinePart::Line(c) => {
-                write!(out, "{}", c.paint(drawline_str))?;
             }
         }
 
@@ -57,7 +53,7 @@ impl StdioBackend {
             .push(ConsoleLinePart::Normal(s.into(), Color::White));
     }
 
-    fn draw_line(&mut self) {
+    fn draw_line(&mut self, line_str: &str) {
         self.need_redraw = true;
         if !self.lines.last().unwrap().is_empty() {
             self.new_line();
@@ -65,7 +61,7 @@ impl StdioBackend {
         self.lines
             .last_mut()
             .unwrap()
-            .push(ConsoleLinePart::Line(Color::White));
+            .push(ConsoleLinePart::Normal(line_str.repeat(30), Color::White));
         self.new_line();
     }
 
@@ -73,7 +69,7 @@ impl StdioBackend {
         if self.need_redraw {
             for line in self.lines.iter() {
                 for part in line.iter() {
-                    part.draw("LINE", &mut out)?;
+                    part.draw(&mut out)?;
                 }
                 writeln!(out)?;
             }
@@ -107,7 +103,7 @@ impl EraApp for StdioBackend {
                 while let Some(msg) = chan.recv_msg() {
                     log::trace!("[UI] Recv: {msg:?}");
                     match msg {
-                        ConsoleMessage::DrawLine => self.draw_line(),
+                        ConsoleMessage::DrawLine(line_str) => self.draw_line(&line_str),
                         ConsoleMessage::Print(str) => self.print(str),
                         ConsoleMessage::PrintButton(_, str) => self.print(str),
                         ConsoleMessage::NewLine => self.new_line(),

@@ -18,7 +18,7 @@ pub use stdio_backend::StdioBackend;
 pub enum ConsoleMessage {
     Print(String),
     NewLine,
-    DrawLine,
+    DrawLine(String),
     PrintButton(Value, String),
     ReuseLastLine(String),
     Alignment(Alignment),
@@ -126,10 +126,10 @@ impl ConsoleSender {
         self.chan.send_msg(ConsoleMessage::NewLine);
     }
 
-    pub fn draw_line(&mut self) {
+    pub fn draw_line(&mut self, s: String) {
         self.printc_count = 0;
         self.line_is_empty = true;
-        self.chan.send_msg(ConsoleMessage::DrawLine);
+        self.chan.send_msg(ConsoleMessage::DrawLine(s));
     }
 
     pub fn set_color(&mut self, r: u8, g: u8, b: u8) {
