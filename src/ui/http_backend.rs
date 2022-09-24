@@ -69,6 +69,19 @@ async fn start(port: u16, chan: Arc<super::ConsoleChannel>) -> anyhow::Result<()
             "/input",
             post(|request: String| async move {
                 let mut current_req = current_req.lock();
+                let mut msgs = msgs_.lock();
+                if current_req.is_none() {
+                    while let Some(msg) = chan.recv_msg() {
+                        match msg {
+                            ConsoleMessage::Input(req) => {
+                                *current_req = Some(req);
+                            }
+                            msg => msgs.push(msg),
+                        }
+                    }
+                }
+
+                log::info!("[UI] {current_req:?} <- {request}");
 
                 match *current_req {
                     Some(InputRequest::Anykey | InputRequest::EnterKey) => {
