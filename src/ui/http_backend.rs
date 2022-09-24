@@ -110,7 +110,7 @@ async fn start(
                         *current_req = None;
                         StatusCode::OK
                     }
-                    Some(InputRequest::Int) => match request.parse::<i64>() {
+                    Some(InputRequest::Int) => match request.trim().parse::<i64>() {
                         Ok(i) => {
                             chan.send_ret(ConsoleResult::Value(Value::Int(i)));
                             *current_req = None;
