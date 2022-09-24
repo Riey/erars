@@ -1645,6 +1645,7 @@ Function {
                         is_chara: false,
                         is_str: false,
                         is_global: false,
+                        is_savedata: false,
                         default_int: 0,
                         size: [],
                         init: [
