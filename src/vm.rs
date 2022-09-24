@@ -326,7 +326,7 @@ impl TerminalVm {
                         ctx.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
                     }
 
-                    AblName | TalentName | ItemName | FlagName | ExName | ExpName | CflagName
+                    AblName | TalentName | ItemName | FlagName | ExName | ExpName | MarkName | CflagName
                     | CstrName | StrName | TstrName | EquipName | TequipName | PalamName
                     | SourceName | StainName | TcvarName | GlobalName | GlobalsName => {
                         let name = <&str>::from(var).strip_suffix("NAME").unwrap();

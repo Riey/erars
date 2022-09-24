@@ -27,6 +27,7 @@ pub enum BuiltinVariable {
     TcvarName,
     GlobalName,
     GlobalsName,
+    MarkName,
 
     ItemPrice,
 
