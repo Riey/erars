@@ -687,7 +687,7 @@ impl TerminalVm {
                         ctx.push(format!(
                             "{year:04}年{month:02}月{day:02}日 {hour:02}:{minute:02}:{second:02}",
                             year = now.year(),
-                            month = now.month(),
+                            month = now.month() as u8,
                             day = now.day(),
                             hour = now.hour(),
                             minute = now.minute(),
