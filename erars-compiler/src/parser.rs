@@ -424,7 +424,7 @@ impl ParserContext {
     }
 
     pub fn is_str_var(&self, ident: &str) -> bool {
-        if matches!(ident, "LOCALS" | "ARGS" | "SAVESTR") {
+        if matches!(ident, "LOCALS" | "ARGS") {
             true
         } else if self.local_strs.borrow().contains(ident) {
             true

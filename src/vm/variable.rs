@@ -51,22 +51,65 @@ impl VariableStorage {
         }
     }
 
+    fn load_variables(
+        &mut self,
+        variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
+        local_variables: HashMap<
+            SmolStr,
+            HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>,
+        >,
+    ) {
+        for (k, (info, var)) in variables {
+            let (now_info, now_var) = match self.variables.get_mut(&k) {
+                Some(v) => v,
+                _ => {
+                    log::warn!("Ignore non existing variable {k}");
+                    continue;
+                }
+            };
+
+            if info != *now_info {
+                log::warn!("Info mismatched! Ignore load variable {k}");
+                continue;
+            }
+
+            *now_var = var;
+        }
+
+        for (func_name, vars) in local_variables {
+            let now_local_var = match self.local_variables.get_mut(&func_name) {
+                Some(v) => v,
+                None => {
+                    log::warn!("Ignore non existing function {func_name}");
+                    continue;
+                }
+            };
+
+            for (k, (info, var)) in vars {
+                let (now_info, now_var) = match now_local_var.get_mut(&k) {
+                    Some(v) => v,
+                    _ => {
+                        log::warn!("Ignore non existing variable {func_name}@{k}");
+                        continue;
+                    }
+                };
+
+                if info != *now_info {
+                    log::warn!("Info mismatched! Ignore load variable {k}");
+                    continue;
+                }
+
+                *now_var = var;
+            }
+        }
+    }
+
     pub fn load_global_serializable(
         &mut self,
         sav: SerializableGlobalVariableStorage,
         replace: &ReplaceInfo,
     ) -> Result<()> {
-        self.variables.retain(|_, (info, _)| !info.is_global);
-        self.variables.extend(sav.variables);
-
-        self.local_variables
-            .values_mut()
-            .for_each(|v| v.retain(|_, (info, _)| !info.is_global));
-        self.local_variables.retain(|_, v| !v.is_empty());
-        for (fn_name, vars) in sav.local_variables {
-            self.local_variables.entry(fn_name).or_default().extend(vars);
-        }
-
+        self.load_variables(sav.variables, sav.local_variables);
         self.init_replace(replace)?;
 
         Ok(())
@@ -80,17 +123,7 @@ impl VariableStorage {
         self.character_len = sav.character_len;
         self.rng = SeedableRng::from_seed(sav.rand_seed);
 
-        self.variables.retain(|_, (info, _)| info.is_global);
-        self.variables.extend(sav.variables);
-
-        self.local_variables
-            .values_mut()
-            .for_each(|v| v.retain(|_, (info, _)| info.is_global));
-        self.local_variables.retain(|_, v| !v.is_empty());
-        for (fn_name, vars) in sav.local_variables {
-            self.local_variables.entry(fn_name).or_default().extend(vars);
-        }
-
+        self.load_variables(sav.variables, sav.local_variables);
         self.init_replace(replace)?;
 
         Ok(())
