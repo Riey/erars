@@ -682,6 +682,7 @@ impl TerminalVm {
                     }
 
                     BuiltinMethod::GetTime => {
+                        check_arg_count!(0);
                         let now = time::OffsetDateTime::now_local()?;
 
                         ctx.push(format!(
