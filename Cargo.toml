@@ -42,11 +42,15 @@ rand_chacha = "0.3.1"
 flexi_logger = "0.23.3"
 time = { version = "0.3.14", features = ["local-offset", "serde"] }
 rmp-serde = "1.1.0"
+flate2 = "1.0.24"
 
 [dev-dependencies]
 criterion = "0.3.5"
 k9 = "0.11.1"
 glob = "0.3.0"
+
+[profile.dev.package."*"]
+opt-level = 3
 
 [[bench]]
 name = "parse"
