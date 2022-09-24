@@ -48,6 +48,7 @@ pub enum BuiltinMethod {
 
     ChkData,
     ChkCharaData,
+    FindChara,
     #[strum(serialize = "FIND_CHARADATA")]
     FindCharaData,
 
@@ -120,7 +121,6 @@ pub enum BuiltinCommand {
     AddChara,
     DelChara,
     SwapChara,
-    FindChara,
     SortChara,
     PickupChara,
 

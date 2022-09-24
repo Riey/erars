@@ -355,9 +355,9 @@ impl TerminalVm {
                             bail!("메소드 {meth}의 매개변수는 {}개여야합니다.", $expect);
                         }
                     };
-                    ($expect:expr, $expect2:expr) => {
-                        if *c != $expect && *c != $expect2 {
-                            bail!("메소드 {meth}의 매개변수는 {}개여야합니다.", $expect);
+                    ($min:expr, $max:expr) => {
+                        if *c < $min || *c > $max {
+                            bail!("메소드 {meth}의 매개변수는 {}~{}개여야합니다.", $min, $max);
                         }
                     };
                     (@atleast $expect:expr) => {
@@ -445,6 +445,28 @@ impl TerminalVm {
                     }
                     BuiltinMethod::CsvCflag => {
                         csv_method!(@arr cflag);
+                    }
+                    BuiltinMethod::FindChara => {
+                        check_arg_count!(1, 4);
+                        let mut key = get_arg!(@var args);
+                        let value = get_arg!(@value args, ctx);
+
+                        let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                        let end = get_arg!(@opt @usize: args, ctx).unwrap_or(ctx.var.character_len());
+
+                        key.idxs.insert(0, start);
+
+                        let mut ret = -1;
+
+                        for chara_idx in start..end {
+                            key.idxs[0] = chara_idx;
+
+                            if value == ctx.read_var_ref(&key)? {
+                                ret = chara_idx as i64;
+                            }
+                        }
+
+                        ctx.push(ret);
                     }
                     BuiltinMethod::Rand => {
                         check_arg_count!(1, 2);
