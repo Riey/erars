@@ -699,11 +699,13 @@ impl TerminalVm {
                         check_arg_count!(1);
                         let idx = get_arg!(@i64: args, ctx);
 
-                        let ret = match self::save_data::read_save_data(&self.sav_path, idx) {
-                            Ok(_) => 0,
-                            Err(err) => err,
+                        let (ret, rets) = match self::save_data::read_save_data(&self.sav_path, idx)
+                        {
+                            Ok(data) => (0, data.description),
+                            Err(err) => (err, "セーブデータのバーションが異なります".into()),
                         };
 
+                        ctx.var.set_results(rets);
                         ctx.push(ret);
                     }
 
@@ -945,6 +947,8 @@ impl TerminalVm {
                     BuiltinCommand::SaveData => {
                         let idx = get_arg!(@i64: args, ctx);
                         let description = get_arg!(@String: args, ctx);
+
+                        log::info!("Save {idx}: {description}");
 
                         self::save_data::write_save_data(
                             &self.sav_path,
