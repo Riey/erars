@@ -2,30 +2,77 @@
     description = "erars";
 
     inputs = {
-        nixpkgs.url = github:NixOS/nixpkgs;
+        nixpkgs.url = github:NixOS/nixpkgs/ee3be6b246f4e8cad9f161b6c46eec4ddeaa6b43;
         flake-utils.url = github:numtide/flake-utils;
+        filter.url = github:numtide/nix-filter;
     };
 
-    outputs = { self, nixpkgs, flake-utils }:
+    outputs = { self, nixpkgs, flake-utils, filter }:
         flake-utils.lib.eachDefaultSystem
             (system:
                 let
-                    pkgs = nixpkgs.legacyPackages.${system};
-                    deps = with pkgs; [
-                    ];
-                in
+                    pkgs = import nixpkgs {
+                        system = system;
+                        overlays = [ filter.overlays.default ];
+                    };
+                    crossPkgs = pkgs.pkgsCross.mingwW64;
+
+                    buildErars = (pkgs:
+                        pkgs.rustPlatform.buildRustPackage rec {
+                            pname = "erars";
+                            version = "0.1.0";
+
+                            src = pkgs.nix-filter {
+                                root = ./.;
+                                include = [
+                                    ".cargo"
+                                    "CSV"
+                                    "ERB"
+                                    "benches"
+                                    "examples"
+                                    "erars-ast"
+                                    "erars-compiler"
+                                    "erars-lexer"
+                                    "src"
+                                    "tests"
+                                    "Cargo.toml"
+                                    "Cargo.lock"
+                                ];
+                            };
+
+                            cargoLock = {
+                                lockFile = ./Cargo.lock;
+                            };
+
+                            meta = with pkgs.lib; {
+                                description = "ERA emulator in Rust";
+                                homepage = "https://github.com/Riey/erars";
+                                license = licenses.gpl3Plus;
+                                platforms = platforms.all;
+                                maintainers = with maintainers; [ riey ];
+                            };
+                        }
+                    );
+                in rec
                 {
                     devShell = pkgs.mkShell {
                         name = "erars-shell";
-                        buildInputs = deps;
                         nativeBuildInputs = with pkgs; [
                             pkg-config
                             rustfmt
                             rustc
                             cargo
+                            just
                         ];
                         RUST_BACKTRACE=1;
                     };
+
+                    packages = flake-utils.lib.flattenTree {
+                        erars = buildErars pkgs;
+                        erarsWin = buildErars crossPkgs;
+                    };
+
+                    defaultPackage = packages.erars;
                 }
             );
 }
