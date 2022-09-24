@@ -1,3 +1,4 @@
+use slab::Slab;
 use std::{
     net::SocketAddr,
     sync::{
@@ -6,11 +7,16 @@ use std::{
     },
     time::Duration,
 };
+use tokio::sync::Mutex as AsyncMutex;
 
 use erars_ast::Value;
 use parking_lot::Mutex;
 
 use axum::{
+    extract::{
+        ws::{Message, WebSocket},
+        WebSocketUpgrade,
+    },
     http::StatusCode,
     routing::{get, post},
     Router,
@@ -31,16 +37,31 @@ impl HttpBackend {
     }
 }
 
-async fn start(port: u16, chan: Arc<super::ConsoleChannel>) -> anyhow::Result<()> {
+async fn start(
+    port: u16,
+    chan: Arc<super::ConsoleChannel>,
+    clients: Arc<AsyncMutex<Slab<(usize, WebSocket)>>>,
+) -> anyhow::Result<()> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let current_req = Arc::new(Mutex::new(None));
     let msgs = Arc::new(Mutex::new(Vec::new()));
+    let msgs_ = msgs.clone();
 
     let current_req_ = current_req.clone();
-    let chan_ = chan.clone();
+    let chan1 = chan.clone();
 
     let app = Router::new()
         .layer(CompressionLayer::new())
+        .route(
+            "/listen",
+            get(|ws: WebSocketUpgrade| async move {
+                ws.on_upgrade(|socket: WebSocket| async move {
+                    let mut clients = clients.lock().await;
+                    let key = clients.vacant_key();
+                    clients.insert((key, socket));
+                });
+            }),
+        )
         .route(
             "/",
             get(|| async move {
@@ -48,7 +69,7 @@ async fn start(port: u16, chan: Arc<super::ConsoleChannel>) -> anyhow::Result<()
 
                 let mut msgs = msgs.lock();
                 if current_req.is_none() {
-                    while let Some(msg) = chan_.recv_msg() {
+                    while let Some(msg) = chan1.recv_msg() {
                         match msg {
                             ConsoleMessage::Input(req) => {
                                 *current_req = Some(req);
@@ -120,20 +141,41 @@ async fn start(port: u16, chan: Arc<super::ConsoleChannel>) -> anyhow::Result<()
 
 impl EraApp for HttpBackend {
     fn run(&mut self, chan: Arc<super::ConsoleChannel>) -> anyhow::Result<()> {
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build()?;
+        let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
 
         let _guard = rt.enter();
         let end = Arc::new(AtomicBool::new(false));
+        let need_redraw = Arc::new(AtomicBool::new(false));
 
         let end_inner = end.clone();
         chan.set_exit_fn(move || {
             end_inner.store(true, SeqCst);
         });
+        let need_redraw_inner = need_redraw.clone();
+        chan.set_redraw_fn(move || {
+            need_redraw_inner.store(true, SeqCst);
+        });
 
-        rt.spawn(start(self.port, chan));
+        let clients = Arc::new(AsyncMutex::new(Slab::<(usize, WebSocket)>::new()));
+
+        rt.spawn(start(self.port, chan, clients.clone()));
 
         rt.block_on(async move {
             while !end.load(SeqCst) {
+                if need_redraw.swap(false, SeqCst) {
+                    let mut clients = clients.lock().await;
+                    let mut invalid_clients = Vec::new();
+                    for (_, (idx, client)) in clients.iter_mut() {
+                        if client.send(Message::Binary(vec![1])).await.is_err() {
+                            invalid_clients.push(*idx);
+                        }
+                    }
+                    for invalid_idx in invalid_clients {
+                        clients.remove(invalid_idx);
+                    }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                }
                 tokio::time::sleep(Duration::from_millis(500)).await;
             }
         });
