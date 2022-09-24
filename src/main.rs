@@ -17,7 +17,7 @@ use codespan_reporting::{
 use erars::{
     erars_compiler::EraConfig,
     function::FunctionDic,
-    ui::{ConsoleChannel, ConsoleSender, EraApp, StdioBackend},
+    ui::{ConsoleChannel, ConsoleSender, EraApp},
     vm::{TerminalVm, VmContext},
 };
 use erars_ast::{Value, VariableInfo};
@@ -279,7 +279,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
     log::info!("Program Terminated");
 }
 
-fn run(mut backend: impl EraApp, target_path: String, inputs: Vec<Value>) -> anyhow::Result<()> {
+fn run(backend: &mut dyn EraApp, target_path: String, inputs: Vec<Value>) -> anyhow::Result<()> {
     let chan = Arc::new(ConsoleChannel::new());
     let tx = ConsoleSender::new(chan.clone());
 
@@ -307,6 +307,12 @@ struct Args {
         help = "Log level (error, warn, info, debug, trace)"
     )]
     log_level: String,
+
+    #[clap(
+        long,
+        help = "Http port number if this flag set, this program'll work with http mode"
+    )]
+    port: Option<u16>,
 
     #[clap(long, help = "Don't print logs")]
     quite: bool,
@@ -346,5 +352,14 @@ fn main() {
         None => Vec::new(),
     };
 
-    run(StdioBackend::new(), args.target_path, inputs).unwrap();
+    match args.port {
+        Some(port) => {
+            let mut backend = erars::ui::HttpBackend::new(port);
+            run(&mut backend, args.target_path, inputs).unwrap();
+        }
+        None => {
+            let mut backend = erars::ui::StdioBackend::new();
+            run(&mut backend, args.target_path, inputs).unwrap();
+        }
+    }
 }

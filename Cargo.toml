@@ -11,6 +11,15 @@ members = [
 ]
 
 [dependencies]
+
+# stdio
+ansi_term = { version = "0.12.1", optional = true }
+
+# http
+tokio = { version = "1.21.1", features = ["bytes", "rt", "net", "time"], optional = true }
+axum = { version = "0.5.16", optional = true }
+
+
 erars-ast = { path = "./erars-ast" }
 erars-compiler = { path = "./erars-compiler" }
 anyhow = "1.0.52"
@@ -23,29 +32,32 @@ hashbrown = { version = "0.12", features = ["serde", "rayon"] }
 itertools = "0.10.3"
 log = "0.4.14"
 serde = { version = "1.0.132", features = ["derive"] }
-serde_yaml = "0.8.23"
-strum = { version = "0.23.0", features = ["derive"] }
+serde_yaml = "0.9.13"
+strum = { version = "0.24.1", features = ["derive"] }
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
 smol_str = { version = "0.1.23", features = ["serde"] }
 rayon = "1.5.3"
 parking_lot = "0.12.1"
 log-panics = { version = "2.1.0", features = ["with-backtrace"] }
-ansi_term = { version = "0.12.1", optional = true }
 unicode-width = "0.1.9"
 encoding_rs = "0.8.31"
 pad = "0.1.6"
 clap = { version = "3.2.17", features = ["suggestions", "derive"] }
-ron = "0.7.0"
+ron = "0.8.0"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 flexi_logger = "0.23.3"
 time = { version = "0.3.14", features = ["local-offset", "serde"] }
 rmp-serde = "1.1.0"
 flate2 = "1.0.24"
+serde_json = "1.0.85"
+tower-http = { version = "0.3.4", features = ["compression-full"] }
+
+
 
 [dev-dependencies]
-criterion = "0.3.5"
+criterion = "0.4.0"
 k9 = "0.11.1"
 glob = "0.3.0"
 
@@ -57,5 +69,6 @@ name = "parse"
 harness = false
 
 [features]
-default = ["stdio-backend"]
+default = ["stdio-backend", "http-backend"]
+http-backend = ["axum", "tokio"]
 stdio-backend = ["ansi_term"]

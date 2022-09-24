@@ -11,8 +11,14 @@ use std::time::Duration;
 #[cfg(feature = "stdio-backend")]
 mod stdio_backend;
 
+#[cfg(feature = "http-backend")]
+mod http_backend;
+
 #[cfg(feature = "stdio-backend")]
 pub use stdio_backend::StdioBackend;
+
+#[cfg(feature = "http-backend")]
+pub use http_backend::HttpBackend;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConsoleMessage {
