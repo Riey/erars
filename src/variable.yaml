@@ -2,14 +2,18 @@
   # is_chara: false
   # is_str: false
   # is_global: false
+  # is_savedata: false
   # size: [1000]
 
 PALAMLV:
   size: [100]
+  is_savedata: true
 EXPLV:
   size: [100]
+  is_savedata: true
 PBAND:
   size: [1000]
+  is_savedata: true
 SAVESTR:
   size: []
   is_str: true
@@ -17,144 +21,183 @@ SAVESTR:
 STR:
   size: [1000]
   is_str: true
+  is_savedata: true
 
 TSTR:
   size: [1000]
   is_str: true
+  is_savedata: true
 
 CSTR:
   size: [1000]
   is_chara: true
   is_str: true
+  is_savedata: true
 
 NO:
   size: []
   is_chara: true
+  is_savedata: true
 
 ISASSI:
   size: []
   is_chara: true
+  is_savedata: true
 
 CFLAG:
   size: [10000]
   is_chara: true
+  is_savedata: true
 
 EQUIP:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 ABL:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 EX:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 NOWEX:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 EXP:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 RELATION:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 EJAC:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 MARK:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 LOSEBASE:
   size: [1000]
+  is_savedata: true
 BASE:
   size: [1000]
   is_chara: true
+  is_savedata: true
 MAXBASE:
   size: [1000]
   is_chara: true
+  is_savedata: true
 DOWNBASE:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 TALENT:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 NAME:
   size: []
   is_chara: true
   is_str: true
+  is_savedata: true
 
 CALLNAME:
   size: []
   is_chara: true
   is_str: true
+  is_savedata: true
 
 NICKNAME:
   size: []
   is_chara: true
   is_str: true
+  is_savedata: true
 
 MASTERNAME:
   size: []
   is_chara: true
   is_str: true
+  is_savedata: true
 
 MASTER:
   size: [1000]
+  is_savedata: true
 
 ASSI:
   size: [1000]
+  is_savedata: true
 
 TARGET:
   size: [1000]
 
 PLAYER:
   size: [1000]
+  is_savedata: true
+
 
 COUNT:
   size: [1000]
+  is_savedata: true
 
 FLAG:
   size: [10000]
+  is_savedata: true
 
 TCVAR:
   size: [10000]
   is_chara: true
+  is_savedata: true
 
 TFLAG:
   size: [10000]
+  is_savedata: true
 
 DAY:
   size: [1000]
+  is_savedata: true
 
 TIME:
   size: [1000]
+  is_savedata: true
 
 MONEY:
   size: [1000]
+  is_savedata: true
 
 ITEM:
   size: [1000]
+  is_savedata: true
 
 ITEMSALES:
   size: [1000]
+  is_savedata: true
 
 NOITEM:
   size: [1000]
+  is_savedata: true
 
 DITEMTYPE:
   size: [1000,1000]
+  is_savedata: true
 
 RESULT:
   size: [1000]
+  is_savedata: true
 
 RESULTS:
   size: [1000]
@@ -163,6 +206,7 @@ RESULTS:
 PALAM:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 STAIN:
   size: [1000]
@@ -171,103 +215,143 @@ STAIN:
 JUEL:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 GOTJUEL:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 SOURCE:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 UP:
   size: [1000]
+  is_savedata: true
 
 DOWN:
   size: [1000]
+  is_savedata: true
 
 CUP:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 CDOWN:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 TEQUIP:
   size: [1000]
   is_chara: true
+  is_savedata: true
 
 ASSIPLAY:
   size: [1000]
+  is_savedata: true
 
 SELECTCOM:
   size: [1000]
+  is_savedata: true
 
 PREVCOM:
   size: [1000]
+  is_savedata: true
 
 NEXTCOM:
   size: [1000]
+  is_savedata: true
 
 GLOBAL:
   is_global: true
+  is_savedata: true
   size: [1000]
 
 GLOBALS:
   is_global: true
   is_str: true
+  is_savedata: true
   size: [1000]
 
 A:
   size: [1000]
+  is_savedata: true
 B:
   size: [1000]
+  is_savedata: true
 C:
   size: [1000]
+  is_savedata: true
 D:
   size: [1000]
+  is_savedata: true
 E:
   size: [1000]
+  is_savedata: true
 F:
   size: [1000]
+  is_savedata: true
 G:
   size: [1000]
+  is_savedata: true
 H:
   size: [1000]
+  is_savedata: true
 I:
   size: [1000]
+  is_savedata: true
 J:
   size: [1000]
+  is_savedata: true
 K:
   size: [1000]
+  is_savedata: true
 L:
   size: [1000]
+  is_savedata: true
 M:
   size: [1000]
+  is_savedata: true
 N:
   size: [1000]
+  is_savedata: true
 O:
   size: [1000]
+  is_savedata: true
 P:
   size: [1000]
+  is_savedata: true
 Q:
   size: [1000]
+  is_savedata: true
 R:
   size: [1000]
+  is_savedata: true
 S:
   size: [1000]
+  is_savedata: true
 T:
   size: [1000]
+  is_savedata: true
 U:
   size: [1000]
+  is_savedata: true
 V:
   size: [1000]
+  is_savedata: true
 W:
   size: [1000]
+  is_savedata: true
 X:
   size: [1000]
+  is_savedata: true
 Y:
   size: [1000]
+  is_savedata: true
 Z:
   size: [1000]
+  is_savedata: true

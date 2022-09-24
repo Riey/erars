@@ -134,7 +134,7 @@ impl VariableStorage {
             .variables
             .iter()
             .filter_map(|(name, (info, var))| {
-                if !info.is_global {
+                if info.is_savedata && !info.is_global {
                     Some((name.clone(), (info.clone(), var.clone())))
                 } else {
                     None
@@ -169,7 +169,7 @@ impl VariableStorage {
             .variables
             .iter()
             .filter_map(|(name, (info, var))| {
-                if info.is_global {
+                if info.is_savedata && info.is_global {
                     Some((name.clone(), (info.clone(), var.clone())))
                 } else {
                     None

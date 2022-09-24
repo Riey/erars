@@ -711,26 +711,27 @@ pub fn dim_line<'c, 'a>(
     ctx: &'c ParserContext,
     is_str: bool,
 ) -> impl FnMut(&'a str) -> IResult<'a, LocalVariable> + 'c {
-    move |mut i| {
+    move |i| {
         let mut info = VariableInfo::default();
         info.is_str = is_str;
 
-        let var = loop {
-            let (i_, id) = ident(i)?;
-            i = i_;
-            match id {
-                "CHARADATA" => {
-                    info.is_chara = true;
-                }
-                other => break other,
-            }
-        };
-        let (i, sizes) = separated_list0(char_sp(','), map(u32, |i| i as usize))(i)?;
-        info.size = sizes;
-        let (i, init) = opt(preceded(
-            char_sp('='),
-            separated_list0(char_sp(','), map(expr(ctx), |expr| const_eval(ctx, expr))),
+        let (i, (is_chara, is_save, var, size, init)) = tuple((
+            opt(value((), de_sp(tag("CHARADATA")))),
+            opt(value((), de_sp(tag("SAVEDATA")))),
+            de_sp(ident),
+            opt(preceded(
+                char_sp(','),
+                separated_list0(char_sp(','), map(u32, |i| i as usize)),
+            )),
+            opt(preceded(
+                char_sp('='),
+                separated_list0(char_sp(','), map(expr(ctx), |expr| const_eval(ctx, expr))),
+            )),
         ))(i)?;
+
+        info.is_chara = is_chara.is_some();
+        info.is_savedata = is_save.is_some();
+        info.size = size.unwrap_or_default();
         info.init = init.unwrap_or_default();
 
         Ok((

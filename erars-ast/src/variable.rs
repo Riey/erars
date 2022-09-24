@@ -67,6 +67,7 @@ pub struct VariableInfo {
     pub is_chara: bool,
     pub is_str: bool,
     pub is_global: bool,
+    pub is_savedata: bool,
     pub default_int: i64,
     pub size: Vec<usize>,
     pub init: Vec<Value>,
