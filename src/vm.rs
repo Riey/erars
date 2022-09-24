@@ -463,6 +463,7 @@ impl TerminalVm {
 
                             if value == ctx.read_var_ref(&key)? {
                                 ret = chara_idx as i64;
+                                break;
                             }
                         }
 
@@ -650,9 +651,10 @@ impl TerminalVm {
                         ctx.push(tx.hl_color() as i64);
                     }
                     BuiltinMethod::GetChara => {
-                        check_arg_count!(1);
+                        check_arg_count!(1, 2);
 
                         let no = get_arg!(@i64: args, ctx);
+                        let _sp = get_arg!(@opt @i64: args, ctx);
 
                         let idx = ctx.var.get_chara(no)?;
 
