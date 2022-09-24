@@ -18,7 +18,7 @@ use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
     PrintFlags, ScriptPosition, UnaryOperator, Value,
 };
-use erars_compiler::{Instruction, ParserContext};
+use erars_compiler::{Instruction, Language, ParserContext};
 
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
@@ -485,7 +485,17 @@ impl TerminalVm {
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);
-                        ctx.push(encoding_rs::SHIFT_JIS.encode(&s).0.as_ref().len() as i64);
+                        let encoding = match ctx.config.lang {
+                            // 949
+                            Language::Korean => encoding_rs::EUC_KR,
+                            // 932
+                            Language::Japanese => encoding_rs::SHIFT_JIS,
+                            // 936
+                            Language::ChineseHans => encoding_rs::GBK,
+                            // 950
+                            Language::ChineseHant => encoding_rs::BIG5,
+                        };
+                        ctx.push(encoding.encode(&s).0.as_ref().len() as i64);
                     }
                     BuiltinMethod::StrLenSU => {
                         check_arg_count!(1);
