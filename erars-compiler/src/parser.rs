@@ -80,6 +80,7 @@ pub struct CharacterTemplate {
     pub base: HashMap<u32, u32>,
     pub abl: HashMap<u32, u32>,
     pub cflag: HashMap<u32, u32>,
+    pub equip: HashMap<u32, u32>,
     pub juel: HashMap<u32, u32>,
     pub cstr: HashMap<u32, String>,
     pub talent: HashMap<u32, u32>,
@@ -271,6 +272,7 @@ impl HeaderInfo {
                 "能力" => insert_template!("ABL", abl, val1, val2),
                 "経験" => insert_template!("EXP", exp, val1, val2),
                 "相性" => insert_template!("RELATION", relation, val1, val2),
+                "装着物" => insert_template!("EQUIP", equip, val1, val2),
                 "フラグ" => insert_template!("CFLAG", cflag, val1, val2),
                 other => log::warn!("Unknown character template name: {other}"),
             }

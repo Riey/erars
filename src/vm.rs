@@ -437,6 +437,9 @@ impl TerminalVm {
                     BuiltinMethod::CsvExp => {
                         csv_method!(@arr exp);
                     }
+                    BuiltinMethod::CsvEquip => {
+                        csv_method!(@arr equip);
+                    }
                     BuiltinMethod::CsvMark => {
                         csv_method!(@arr mark);
                     }
