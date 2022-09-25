@@ -482,6 +482,12 @@ impl TerminalVm {
 
                         ctx.push(ret);
                     }
+                    BuiltinMethod::Power => {
+                        check_arg_count!(2);
+                        let x = get_arg!(@i64: args, ctx);
+                        let y = get_arg!(@i64: args, ctx);
+                        ctx.push(x ^ y);
+                    }
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);
@@ -744,8 +750,6 @@ impl TerminalVm {
                         ctx.var.set_results(rets);
                         ctx.push(ret);
                     }
-
-                    _ => bail!("TODO: unimplemented builtin method {meth}"),
                 }
             }
             Instruction::BuiltinCommand(com, c) => {
