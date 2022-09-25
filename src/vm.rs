@@ -473,6 +473,14 @@ impl TerminalVm {
 
                         ctx.push(ret);
                     }
+                    BuiltinMethod::FindCharaData => {
+                        log::warn!("FIND_CHARADATA");
+                        ctx.push(0);
+                    }
+                    BuiltinMethod::ChkCharaData => {
+                        log::warn!("CHKCHARADATA");
+                        ctx.push(1);
+                    }
                     BuiltinMethod::Rand => {
                         check_arg_count!(1, 2);
                         let n1 = get_arg!(@i64: args, ctx);
