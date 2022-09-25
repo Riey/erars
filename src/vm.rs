@@ -587,6 +587,16 @@ impl TerminalVm {
                         let v = get_arg!(@i64: args, ctx);
                         ctx.push(v.abs());
                     }
+                    BuiltinMethod::Log => {
+                        check_arg_count!(1);
+                        let v = get_arg!(@i64: args, ctx);
+                        ctx.push((v as f32).ln() as i64);
+                    }
+                    BuiltinMethod::Log10 => {
+                        check_arg_count!(1);
+                        let v = get_arg!(@i64: args, ctx);
+                        ctx.push((v as f32).log10() as i64);
+                    }
                     BuiltinMethod::LineIsEmpty => {
                         check_arg_count!(0);
                         ctx.push(tx.line_is_empty());
@@ -665,6 +675,20 @@ impl TerminalVm {
                                 })?
                                 .to_string(),
                         );
+                    }
+
+                    BuiltinMethod::GetDefColor => {
+                        check_arg_count!(0);
+                        ctx.push(0xFFFFFF);
+                    }
+                    BuiltinMethod::GetDefBgColor => {
+                        check_arg_count!(0);
+                        ctx.push(0);
+                    }
+                    BuiltinMethod::GetFont => {
+                        check_arg_count!(0);
+                        log::warn!("GETFONT");
+                        ctx.push("");
                     }
 
                     BuiltinMethod::GetColor => {
