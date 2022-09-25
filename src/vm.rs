@@ -985,15 +985,56 @@ impl TerminalVm {
                         log::warn!("TODO: RESETBGCOLOR");
                         // chan.send_msg(ConsoleMessage::SetColor(0xFF, 0xFF, 0xFF));
                     }
-                    BuiltinCommand::Input | BuiltinCommand::InputS => {
+                    BuiltinCommand::Wait => match tx.input(InputRequest::EnterKey) {
+                        ConsoleResult::Value(_) => {}
+                        ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
+                    },
+                    BuiltinCommand::WaitAnykey => match tx.input(InputRequest::Anykey) {
+                        ConsoleResult::Value(_) => {}
+                        ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
+                    },
+                    BuiltinCommand::Input
+                    | BuiltinCommand::InputS
+                    | BuiltinCommand::TInput
+                    | BuiltinCommand::TInputS
+                    | BuiltinCommand::TOneInput
+                    | BuiltinCommand::TOneInputS
+                    | BuiltinCommand::OneInput
+                    | BuiltinCommand::OneInputS => {
                         let req = match com {
-                            BuiltinCommand::InputS => InputRequest::Str,
-                            BuiltinCommand::Input => InputRequest::Int,
+                            BuiltinCommand::InputS
+                            | BuiltinCommand::OneInputS
+                            | BuiltinCommand::TInputS
+                            | BuiltinCommand::TOneInputS => InputRequest::Str,
+                            BuiltinCommand::Input
+                            | BuiltinCommand::OneInput
+                            | BuiltinCommand::TInput
+                            | BuiltinCommand::TOneInput => InputRequest::Int,
                             _ => unreachable!(),
                         };
+
+                        if matches!(
+                            com,
+                            BuiltinCommand::TInput
+                                | BuiltinCommand::TInputS
+                                | BuiltinCommand::TOneInputS
+                                | BuiltinCommand::TOneInput
+                        ) {
+                            log::warn!("[TODO] {com}: timeout is not implemented");
+                        }
+
+                        if matches!(
+                            com,
+                            BuiltinCommand::OneInput
+                                | BuiltinCommand::OneInputS
+                                | BuiltinCommand::TOneInputS
+                                | BuiltinCommand::TOneInput
+                        ) {
+                            log::warn!("[TODO] {com}: one input is not implemented");
+                        }
+
                         match tx.input(req) {
                             ConsoleResult::Quit => {
-                                log::info!("User Quit");
                                 return Ok(Some(Workflow::Exit));
                             }
                             ConsoleResult::Value(ret) => match ret {
@@ -1031,6 +1072,15 @@ impl TerminalVm {
                             }
                             None => {}
                         }
+                    }
+                    BuiltinCommand::Redraw => {
+                        tx.request_redraw();
+                    }
+                    BuiltinCommand::ClearLine => {
+                        log::warn!("TODO: CLEARLINE");
+                    }
+                    BuiltinCommand::CallTrain => {
+                        todo!("CALLTRAIN");
                     }
                     BuiltinCommand::DelChara => {
                         let idx = get_arg!(@i64: args, ctx);
