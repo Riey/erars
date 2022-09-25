@@ -416,6 +416,9 @@ impl TerminalVm {
                     BuiltinMethod::CsvCallName => {
                         csv_method!(call_name);
                     }
+                    BuiltinMethod::CsvMasterName => {
+                        csv_method!(master_name);
+                    }
                     BuiltinMethod::CsvCstr => {
                         csv_method!(@arr cstr);
                     }

@@ -76,6 +76,7 @@ pub struct CharacterTemplate {
     pub name: String,
     pub call_name: String,
     pub nick_name: String,
+    pub master_name: String,
     pub base: HashMap<u32, u32>,
     pub abl: HashMap<u32, u32>,
     pub cflag: HashMap<u32, u32>,
@@ -256,6 +257,7 @@ impl HeaderInfo {
             match name {
                 "番号" => template.no = val1.parse().unwrap(),
                 "名前" => template.name = val1.into(),
+                "主人の呼び方" => template.master_name = val1.into(),
                 "呼び名" => template.call_name = val1.into(),
                 "あだ名" => template.nick_name = val1.into(),
                 "助手" => template.is_assi = val1.trim() == "1",
