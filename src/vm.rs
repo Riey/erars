@@ -488,6 +488,11 @@ impl TerminalVm {
                         let y = get_arg!(@i64: args, ctx);
                         ctx.push(x ^ y);
                     }
+                    BuiltinMethod::Sqrt => {
+                        check_arg_count!(1);
+                        let x = get_arg!(@i64: args, ctx);
+                        ctx.push((x as f32).sqrt() as i64);
+                    }
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);

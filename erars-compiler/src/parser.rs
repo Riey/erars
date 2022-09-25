@@ -513,7 +513,7 @@ impl ParserContext {
             Token::LabelLine(label) => Stmt::Label(label.into()),
             Token::StrLenForm(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Method(BuiltinMethod::StrLenForm, vec![form])
+                Stmt::Method(BuiltinMethod::StrLenS, vec![form])
             }
             Token::PutForm(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
@@ -521,7 +521,7 @@ impl ParserContext {
             }
             Token::StrLenFormU(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Method(BuiltinMethod::StrLenFormU, vec![form])
+                Stmt::Method(BuiltinMethod::StrLenSU, vec![form])
             }
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::Throw(left) => Stmt::Command(

@@ -23,8 +23,6 @@ pub enum BuiltinMethod {
 
     StrLenS,
     StrLenSU,
-    StrLenForm,
-    StrLenFormU,
     SubString,
     SubStringU,
 
