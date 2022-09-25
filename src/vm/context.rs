@@ -39,6 +39,21 @@ impl VmContext {
         ret
     }
 
+    pub fn encoding(&self) -> &'static encoding_rs::Encoding {
+        use erars_compiler::Language;
+
+        match self.config.lang {
+            // 949
+            Language::Korean => encoding_rs::EUC_KR,
+            // 932
+            Language::Japanese => encoding_rs::SHIFT_JIS,
+            // 936
+            Language::ChineseHans => encoding_rs::GBK,
+            // 950
+            Language::ChineseHant => encoding_rs::BIG5,
+        }
+    }
+
     fn init_variable(&mut self) -> Result<()> {
         let info = self.header_info.clone();
         let replace = &info.replace;

@@ -18,7 +18,7 @@ use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
     PrintFlags, ScriptPosition, UnaryOperator, Value,
 };
-use erars_compiler::{Instruction, Language, ParserContext};
+use erars_compiler::{Instruction, ParserContext};
 
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
@@ -496,17 +496,7 @@ impl TerminalVm {
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);
-                        let encoding = match ctx.config.lang {
-                            // 949
-                            Language::Korean => encoding_rs::EUC_KR,
-                            // 932
-                            Language::Japanese => encoding_rs::SHIFT_JIS,
-                            // 936
-                            Language::ChineseHans => encoding_rs::GBK,
-                            // 950
-                            Language::ChineseHant => encoding_rs::BIG5,
-                        };
-                        ctx.push(encoding.encode(&s).0.as_ref().len() as i64);
+                        ctx.push(ctx.encoding().encode(&s).0.as_ref().len() as i64);
                     }
                     BuiltinMethod::StrLenSU => {
                         check_arg_count!(1);
@@ -619,6 +609,23 @@ impl TerminalVm {
                         let l = get_arg!(@i64: args, ctx);
                         let r = get_arg!(@i64: args, ctx);
                         ctx.push((l >> r) & 1);
+                    }
+
+                    BuiltinMethod::SubString => {
+                        check_arg_count!(1, 3);
+                        let text = get_arg!(@String: args, ctx);
+                        let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                        let length = get_arg!(@opt @usize: args, ctx);
+
+                        let bytes = ctx.encoding().encode(&text).0;
+
+                        let sub_bytes = match length {
+                            Some(length) => &bytes.as_ref()[start..(start + length)],
+                            None => &bytes.as_ref()[start..],
+                        };
+
+                        let sub_str = ctx.encoding().decode(sub_bytes).0;
+                        ctx.push(sub_str.into_owned());
                     }
 
                     BuiltinMethod::SubStringU => {
