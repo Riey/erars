@@ -15,7 +15,7 @@ PBAND:
   size: [1000]
   is_savedata: true
 SAVESTR:
-  size: []
+  size: [1000]
   is_str: true
 
 STR:
