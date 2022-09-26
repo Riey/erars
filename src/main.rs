@@ -147,7 +147,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
                 }
                 "VARIABLESIZE" => {
                     log::debug!("Merge VARIABLESIZE.CSV");
-                    
+
                     match info.merge_variable_size_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
@@ -265,7 +265,11 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
         }
 
         for func in funcs {
-            function_dic.insert_compiled_func(&mut ctx.var_mut(), func);
+            function_dic.insert_compiled_func(
+                &mut ctx.var,
+                &ctx.header_info.default_local_size,
+                func,
+            );
         }
 
         check_time!("Parse/Compile ERB");

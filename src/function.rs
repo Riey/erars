@@ -1,6 +1,7 @@
 use anyhow::{anyhow, Result};
 use arrayvec::ArrayVec;
 use enum_map::EnumMap;
+use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
@@ -106,7 +107,12 @@ impl FunctionDic {
         }
     }
 
-    pub fn insert_compiled_func(&mut self, var_dic: &mut VariableStorage, func: CompiledFunction) {
+    pub fn insert_compiled_func(
+        &mut self,
+        var_dic: &mut VariableStorage,
+        default_var_size: &DefaultLocalVarSize,
+        func: CompiledFunction,
+    ) {
         let mut body = FunctionBody {
             body: func.body,
             goto_labels: func.goto_labels,
@@ -135,16 +141,16 @@ impl FunctionDic {
         }
 
         let mut flags = EventFlags::None;
-        let mut local_size = 1000;
-        let mut locals_size = 100;
+        let mut local_size = default_var_size.default_local_size;
+        let mut locals_size = default_var_size.default_locals_size;
 
         for info in header.infos {
             match info {
                 FunctionInfo::LocalSize(size) => {
-                    local_size = size;
+                    local_size = Some(size);
                 }
                 FunctionInfo::LocalSSize(size) => {
-                    locals_size = size;
+                    locals_size = Some(size);
                 }
                 FunctionInfo::EventFlag(f) => {
                     flags = f;
@@ -170,43 +176,51 @@ impl FunctionDic {
         static ARG: SmolStr = SmolStr::new_inline("ARG");
         static ARGS: SmolStr = SmolStr::new_inline("ARGS");
 
-        var_dic.add_local_info(
-            header.name.clone(),
-            LOCAL.clone(),
-            VariableInfo {
-                size: vec![local_size],
-                ..Default::default()
-            },
-        );
+        if let Some(local_size) = local_size {
+            var_dic.add_local_info(
+                header.name.clone(),
+                LOCAL.clone(),
+                VariableInfo {
+                    size: vec![local_size],
+                    ..Default::default()
+                },
+            );
+        }
 
-        var_dic.add_local_info(
-            header.name.clone(),
-            LOCALS.clone(),
-            VariableInfo {
-                is_str: true,
-                size: vec![locals_size],
-                ..Default::default()
-            },
-        );
+        if let Some(locals_size) = locals_size {
+            var_dic.add_local_info(
+                header.name.clone(),
+                LOCALS.clone(),
+                VariableInfo {
+                    is_str: true,
+                    size: vec![locals_size],
+                    ..Default::default()
+                },
+            );
+        }
 
-        var_dic.add_local_info(
-            header.name.clone(),
-            ARG.clone(),
-            VariableInfo {
-                size: vec![1000],
-                ..Default::default()
-            },
-        );
+        if let Some(arg_size) = default_var_size.default_arg_size {
+            var_dic.add_local_info(
+                header.name.clone(),
+                ARG.clone(),
+                VariableInfo {
+                    size: vec![arg_size],
+                    ..Default::default()
+                },
+            );
+        }
 
-        var_dic.add_local_info(
-            header.name.clone(),
-            ARGS.clone(),
-            VariableInfo {
-                is_str: true,
-                size: vec![100],
-                ..Default::default()
-            },
-        );
+        if let Some(args_size) = default_var_size.default_args_size {
+            var_dic.add_local_info(
+                header.name.clone(),
+                ARGS.clone(),
+                VariableInfo {
+                    is_str: true,
+                    size: vec![args_size],
+                    ..Default::default()
+                },
+            );
+        }
 
         if let Ok(ty) = header.name.parse::<EventType>() {
             self.insert_event(Event { ty, flags }, body);

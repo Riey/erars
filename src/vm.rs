@@ -328,7 +328,8 @@ impl TerminalVm {
 
                     AblName | TalentName | ItemName | FlagName | ExName | ExpName | MarkName
                     | CflagName | CstrName | StrName | TstrName | EquipName | TequipName
-                    | PalamName | SourceName | StainName | TcvarName | GlobalName | GlobalsName | SaveStrName => {
+                    | PalamName | SourceName | StainName | TcvarName | GlobalName | GlobalsName
+                    | SaveStrName => {
                         let name = <&str>::from(var).strip_suffix("NAME").unwrap();
                         let arg = args[0] as u32;
                         ctx.header_info
