@@ -311,6 +311,40 @@ impl HeaderInfo {
         Ok(())
     }
 
+    pub fn merge_variable_size_csv(
+        &mut self,
+        s: &str,
+    ) -> ParserResult<()> {
+        let mut lex = Lexer::new(s);
+
+        while let Some((name, sizes)) = self::csv::variable_size_line(&mut lex)? {
+            match sizes {
+                Some(sizes) => match self.global_variables.get_mut(name.as_str()) {
+                    Some(info) => {
+                        let info_len = info.size.len();
+                        if info.size.len() != sizes.len() {
+                            log::error!("Variable size for {name} is not matched! Expected: {info_len} Actual: {size_len}", size_len = sizes.len());
+                        } else {
+                            info.size.copy_from_slice(&sizes[..info_len]);
+                        }
+                    }
+                    None => {
+                        log::error!(
+                            "Variable {name} is not exists but defined in variablesize.csv"
+                        );
+                    }
+                },
+                None => {
+                    // FORBIDDEN
+                    log::info!("FORBIDDEN {name}");
+                    self.global_variables.remove(name.as_str());
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn merge_replace_csv(&mut self, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
 

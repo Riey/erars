@@ -65,7 +65,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
 
         let config = Arc::new(config);
 
-        let infos: HashMap<SmolStr, VariableInfo> =
+        let var_infos: HashMap<SmolStr, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
         let csvs = glob::glob_with(
@@ -103,7 +103,7 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
             Mutex::new(Diagnostic::error().with_code("E0001").with_message("Compile ERROR"));
 
         let mut info = HeaderInfo {
-            global_variables: infos,
+            global_variables: var_infos,
             ..Default::default()
         };
 
@@ -136,6 +136,19 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
                 | "GLOBAL" | "GLOBALS" | "TRAIN" => {
                     log::debug!("Merge {k}.CSV");
                     match info.merge_name_csv(&k, &v) {
+                        Ok(()) => {}
+                        Err((err, span)) => {
+                            let file_id = files.lock().add(path.display().to_string(), v);
+                            diagnostic.lock().labels.push(
+                                Label::primary(file_id, span).with_message(format!("{}", err)),
+                            );
+                        }
+                    }
+                }
+                "VARIABLESIZE" => {
+                    log::debug!("Merge VARIABLESIZE.CSV");
+                    
+                    match info.merge_variable_size_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
                             let file_id = files.lock().add(path.display().to_string(), v);
