@@ -15,24 +15,24 @@ PBAND:
   size: [1000]
   is_savedata: true
 SAVESTR:
-  size: [1000]
+  size: [100]
   is_str: true
 
 BOUGHT:
   size: [1000]
 
 STR:
-  size: [1000]
+  size: [20000]
   is_str: true
   is_savedata: true
 
 TSTR:
-  size: [1000]
+  size: [100]
   is_str: true
   is_savedata: true
 
 CSTR:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_str: true
   is_savedata: true
@@ -93,18 +93,18 @@ MARK:
   is_savedata: true
 
 LOSEBASE:
-  size: [1000]
+  size: [100]
   is_savedata: true
 BASE:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 MAXBASE:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 DOWNBASE:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 
@@ -207,7 +207,7 @@ RESULTS:
   is_str: true
 
 PALAM:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 
@@ -216,40 +216,40 @@ STAIN:
   is_chara: true
 
 JUEL:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 
 GOTJUEL:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 
 SOURCE:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 
 UP:
-  size: [1000]
+  size: [100]
   is_savedata: true
 
 DOWN:
-  size: [1000]
+  size: [100]
   is_savedata: true
 
 CUP:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 
 CDOWN:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 
 TEQUIP:
-  size: [1000]
+  size: [100]
   is_chara: true
   is_savedata: true
 
@@ -272,13 +272,13 @@ NEXTCOM:
 GLOBAL:
   is_global: true
   is_savedata: true
-  size: [1000]
+  size: [100]
 
 GLOBALS:
   is_global: true
   is_str: true
   is_savedata: true
-  size: [1000]
+  size: [100]
 
 A:
   size: [1000]
