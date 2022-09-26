@@ -372,8 +372,9 @@ impl TerminalVm {
                     ($field:ident) => {
                         check_arg_count!(1, 2);
                         let no = get_arg!(@i64: args, ctx) as u32;
+                        let sp = get_arg!(@opt @i64: args, ctx);
 
-                        if *c == 2 {
+                        if sp != Some(0) {
                             log::warn!("Ignore SP feature");
                         }
 
@@ -391,8 +392,9 @@ impl TerminalVm {
                         check_arg_count!(2, 3);
                         let no = get_arg!(@i64: args, ctx) as u32;
                         let idx = get_arg!(@i64: args, ctx) as u32;
+                        let sp = get_arg!(@opt @i64: args, ctx);
 
-                        if *c == 3 {
+                        if sp != Some(0) {
                             log::warn!("Ignore SP feature");
                         }
 
@@ -951,7 +953,7 @@ impl TerminalVm {
                         tx.request_redraw();
                     }
                     BuiltinCommand::CustomDrawLine => {
-                        let s = ctx.pop_str()?;
+                        let s = get_arg!(@String: args, ctx);
                         tx.draw_line(s);
                         tx.request_redraw();
                     }

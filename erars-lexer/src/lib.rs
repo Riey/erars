@@ -351,6 +351,8 @@ pub enum Token<'s> {
     Times(&'s str),
     #[token("THROW", lex_line_left)]
     Throw(&'s str),
+    #[token("CUSTOMDRAWLINE", lex_line_left)]
+    CustomDrawLine(&'s str),
 
     #[token("VARSET", |lex| normal_expr_command(lex, BuiltinCommand::Varset))]
     #[token("CVARSET", |lex| normal_expr_command(lex, BuiltinCommand::CVarset))]
@@ -366,7 +368,6 @@ pub enum Token<'s> {
     #[token("RETURN", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
     #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::ReturnF))]
     #[token("CALLTRAIN", |lex| normal_expr_command(lex, BuiltinCommand::CallTrain))]
-    #[token("CUSTOMDRAWLINE", |lex| normal_expr_command(lex, BuiltinCommand::CustomDrawLine))]
     #[token("CLEARLINE", |lex| normal_expr_command(lex, BuiltinCommand::ClearLine))]
     #[token("SETCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetColor))]
     #[token("SETBGCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColor))]

@@ -593,6 +593,9 @@ impl ParserContext {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
                 Stmt::Command(BuiltinCommand::PutForm, vec![form])
             }
+            Token::CustomDrawLine(custom) => {
+                Stmt::Command(BuiltinCommand::CustomDrawLine, vec![Expr::str(custom)])
+            }
             Token::StrLenFormU(left) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
                 Stmt::Method(BuiltinMethod::StrLenSU, vec![form])

@@ -212,7 +212,7 @@ impl VmContext {
     pub fn pop(&mut self) -> Result<LocalValue> {
         if let Some(last_stack) = self.call_stack.last() {
             if last_stack.stack_base >= self.stack.len() {
-                bail!("다른 함수의 스택을 침범했습니다.");
+                bail!("다른 함수의 스택을 침범했습니다. 이전 함수 콜스택: {last_stack:?} 현재 스택 길이: {}", self.stack.len());
             }
         }
 

@@ -43,7 +43,11 @@ fn run_test() {
         let mut dic = FunctionDic::new();
 
         for func in program {
-            dic.insert_compiled_func(&mut ctx.var, &ctx.header_info.default_local_size, compile(func).unwrap());
+            dic.insert_compiled_func(
+                &mut ctx.var,
+                &ctx.header_info.default_local_size,
+                compile(func).unwrap(),
+            );
         }
 
         log::info!("FunctionDic: {dic:#?}");
