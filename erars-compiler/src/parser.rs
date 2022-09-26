@@ -370,7 +370,7 @@ impl HeaderInfo {
                         },
                         None => {
                             // FORBIDDEN
-                            log::info!("FORBIDDEN {name}");
+                            log::info!("Don't use {name}");
                             self.global_variables.remove(name);
                         }
                     }
