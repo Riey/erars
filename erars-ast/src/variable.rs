@@ -28,6 +28,7 @@ pub enum BuiltinVariable {
     GlobalName,
     GlobalsName,
     MarkName,
+    SaveStrName,
 
     ItemPrice,
 
