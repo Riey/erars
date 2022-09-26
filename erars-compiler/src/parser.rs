@@ -187,6 +187,25 @@ impl Default for Language {
     }
 }
 
+#[derive(Debug)]
+pub struct DefaultLocalVarSize {
+    pub default_local_size: Option<usize>,
+    pub default_locals_size: Option<usize>,
+    pub default_arg_size: Option<usize>,
+    pub default_args_size: Option<usize>,
+}
+
+impl Default for DefaultLocalVarSize {
+    fn default() -> Self {
+        Self {
+            default_arg_size: Some(1000),
+            default_local_size: Some(1000),
+            default_args_size: Some(100),
+            default_locals_size: Some(100),
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
@@ -196,6 +215,7 @@ pub struct HeaderInfo {
     pub var_names: HashMap<(SmolStr, SmolStr), u32>,
     pub var_name_var: HashMap<SmolStr, BTreeMap<u32, SmolStr>>,
     pub global_variables: HashMap<SmolStr, VariableInfo>,
+    pub default_local_size: DefaultLocalVarSize,
 }
 
 impl HeaderInfo {
@@ -306,6 +326,56 @@ impl HeaderInfo {
             self.item_price.insert(n, price);
             self.var_names.insert((var.clone(), s.clone()), n);
             self.var_name_var.entry(var.clone()).or_default().insert(n, s);
+        }
+
+        Ok(())
+    }
+
+    pub fn merge_variable_size_csv(&mut self, s: &str) -> ParserResult<()> {
+        let mut lex = Lexer::new(s);
+
+        while let Some((name, sizes)) = self::csv::variable_size_line(&mut lex)? {
+            match name.as_str() {
+                "ARG" => {
+                    self.default_local_size.default_arg_size = sizes.and_then(|v| v.get(0).copied())
+                }
+                "ARGS" => {
+                    self.default_local_size.default_args_size =
+                        sizes.and_then(|v| v.get(0).copied())
+                }
+                "LOCAL" => {
+                    self.default_local_size.default_local_size =
+                        sizes.and_then(|v| v.get(0).copied())
+                }
+                "LOCALS" => {
+                    self.default_local_size.default_locals_size =
+                        sizes.and_then(|v| v.get(0).copied())
+                }
+                name => {
+                    match sizes {
+                        Some(sizes) => match self.global_variables.get_mut(name) {
+                            Some(info) => {
+                                let info_len = info.size.len();
+                                if info.size.len() != sizes.len() {
+                                    log::error!("Variable size for {name} is not matched! Expected: {info_len} Actual: {size_len}", size_len = sizes.len());
+                                } else {
+                                    info.size.copy_from_slice(&sizes[..info_len]);
+                                }
+                            }
+                            None => {
+                                log::error!(
+                                    "Variable {name} is not exists but defined in variablesize.csv"
+                                );
+                            }
+                        },
+                        None => {
+                            // FORBIDDEN
+                            log::info!("Don't use {name}");
+                            self.global_variables.remove(name);
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())

@@ -8,5 +8,6 @@ pub use error::{CompileError, CompileResult, ParserError, ParserResult};
 pub use instruction::Instruction;
 pub use logos::Lexer;
 pub use parser::{
-    normal_form_str, CharacterTemplate, EraConfig, HeaderInfo, Language, ParserContext, ReplaceInfo,
+    normal_form_str, CharacterTemplate, DefaultLocalVarSize, EraConfig, HeaderInfo, Language,
+    ParserContext, ReplaceInfo,
 };

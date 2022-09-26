@@ -15,8 +15,11 @@ PBAND:
   size: [1000]
   is_savedata: true
 SAVESTR:
-  size: []
+  size: [1000]
   is_str: true
+
+BOUGHT:
+  size: [1000]
 
 STR:
   size: [1000]
@@ -354,4 +357,25 @@ Y:
   is_savedata: true
 Z:
   size: [1000]
+  is_savedata: true
+DA:
+  size: [1000, 1000]
+  is_savedata: true
+DB:
+  size: [1000, 1000]
+  is_savedata: true
+DC:
+  size: [1000, 1000]
+  is_savedata: true
+DD:
+  size: [1000, 1000]
+  is_savedata: true
+DE:
+  size: [1000, 1000]
+  is_savedata: true
+TA:
+  size: [1000, 1000, 1000]
+  is_savedata: true
+TB:
+  size: [1000, 1000, 1000]
   is_savedata: true
