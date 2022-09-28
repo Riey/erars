@@ -12,6 +12,6 @@ erars provides fast start time and cross-platform support.
 
 ## Current start time
 
-In my machine (r7 5800x) loading eraTHYMKR(about 1445295 ERB lines) with Emuera takes 7 seconds.
+In my machine (r7 5800x) loading eraTHYMKR(about 1,445,295 ERB lines) with Emuera takes 7 seconds.
 
 And with erars, it takes 0.5 second. Note that this program supports multi threading. 
