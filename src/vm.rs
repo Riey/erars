@@ -855,17 +855,13 @@ impl TerminalVm {
                         let var = var.as_vm_var(target);
 
                         if info.is_str {
-                            let empty_value = empty_value.try_into()?;
                             let var = var.as_str()?;
-                            var[start..].rotate_right(count);
-                            let max = var.len().min(start + count);
-                            var[start..max].fill(empty_value);
-                        } else {
                             let empty_value = empty_value.try_into()?;
+                            array_shift(var, empty_value, start, count)?;
+                        } else {
                             let var = var.as_int()?;
-                            var[start..].rotate_right(count);
-                            let max = var.len().min(start + count);
-                            var[start..max].fill(empty_value);
+                            let empty_value = empty_value.try_into()?;
+                            array_shift(var, empty_value, start, count)?;
                         }
                     }
                     BuiltinCommand::Throw => {
@@ -1648,4 +1644,36 @@ impl TerminalVm {
 
         Ok(())
     }
+}
+
+fn array_shift<T: Clone>(
+    arr: &mut [T],
+    empty_value: T,
+    start: usize,
+    count: usize,
+) -> anyhow::Result<()> {
+    if start >= arr.len() {
+        bail!("ARRAYSHIFT start value exceed");
+    }
+
+    let arr = &mut arr[start..];
+
+    if count < arr.len() {
+        arr.rotate_right(count);
+        arr[..count].fill(empty_value);
+    } else {
+        arr.fill(empty_value);
+    }
+
+    Ok(())
+}
+
+#[test]
+fn shift_test() {
+    let mut arr = [1, 1, 1, 1];
+    array_shift(&mut arr, 0, 1, 2).unwrap();
+    k9::assert_equal!(arr, [1, 0, 0, 1]);
+    arr.fill(1);
+    array_shift(&mut arr, 0, 1, 10).unwrap();
+    k9::assert_equal!(arr, [1, 0, 0, 0]);
 }
