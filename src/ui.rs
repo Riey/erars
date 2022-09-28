@@ -29,7 +29,9 @@ pub enum ConsoleMessage {
     ReuseLastLine(String),
     Alignment(Alignment),
     Input(InputRequest),
+
     SetColor(u8, u8, u8),
+    SetBgColor(u8, u8, u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -141,6 +143,11 @@ impl ConsoleSender {
     pub fn set_color(&mut self, r: u8, g: u8, b: u8) {
         self.color = u32::from_le_bytes([r, g, b, 0]);
         self.chan.send_msg(ConsoleMessage::SetColor(r, g, b));
+    }
+
+    pub fn set_bg_color(&mut self, r: u8, g: u8, b: u8) {
+        self.color = u32::from_le_bytes([r, g, b, 0]);
+        self.chan.send_msg(ConsoleMessage::SetBgColor(r, g, b));
     }
 
     pub fn set_align(&mut self, align: Alignment) {

@@ -7,20 +7,33 @@ use super::{
     VariableStorage,
 };
 
+fn make_save_file_name(idx: i64) -> String {
+    format!("save{idx:02}.msgpack.gz")
+}
+
+static GLOBAL_SAVE_FILE_NAME: &str = "global.msgpack";
+
 pub fn write_save_data(sav_path: &Path, idx: i64, var: &VariableStorage, description: String) {
     if !sav_path.exists() {
         std::fs::create_dir(&sav_path).ok();
     }
 
-    let mut file =
-        std::fs::File::create(sav_path.join(format!("save{idx:02}.msgpack.gz"))).unwrap();
+    let mut file = std::fs::File::create(sav_path.join(make_save_file_name(idx))).unwrap();
     let mut encoder = write::GzEncoder::new(&mut file, flate2::Compression::fast());
 
     rmp_serde::encode::write(&mut encoder, &var.get_serializable(description)).unwrap();
 }
 
+pub fn delete_save_data(sav_path: &Path, idx: i64) -> std::io::Result<()> {
+    if !sav_path.exists() {
+        std::fs::create_dir(&sav_path)?;
+    }
+
+    std::fs::remove_file(sav_path.join(make_save_file_name(idx)))
+}
+
 pub fn read_save_data(sav_path: &Path, idx: i64) -> Result<SerializableVariableStorage, i64> {
-    let file = sav_path.join(format!("save{idx:02}.msgpack.gz"));
+    let file = sav_path.join(make_save_file_name(idx));
 
     let ret = if !file.exists() {
         1
@@ -53,14 +66,14 @@ pub fn write_global_data(sav_path: &Path, var: &VariableStorage) {
 
     // Don't compress global data since it's pretty small
     std::fs::write(
-        sav_path.join(format!("global.msgpack")),
+        sav_path.join(GLOBAL_SAVE_FILE_NAME),
         &rmp_serde::to_vec(&var.get_global_serializable()).unwrap(),
     )
     .unwrap();
 }
 
 pub fn read_global_data(sav_path: &Path) -> Result<SerializableGlobalVariableStorage, i64> {
-    let file = sav_path.join(format!("global.msgpack"));
+    let file = sav_path.join(GLOBAL_SAVE_FILE_NAME);
 
     let ret = if !file.exists() {
         1

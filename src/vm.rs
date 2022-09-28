@@ -823,7 +823,50 @@ impl TerminalVm {
                         *cursor = 0;
                     }
                     BuiltinCommand::SetBit => {
-                        bail!("TODO: SETBIT");
+                        let v = get_arg!(@var args);
+                        let idx = get_arg!(@usize: args, ctx);
+                        let i = ctx.ref_int_var_ref(&v)?;
+                        *i |= 1 << idx;
+                    }
+                    BuiltinCommand::ClearBit => {
+                        let v = get_arg!(@var args);
+                        let idx = get_arg!(@usize: args, ctx);
+                        let i = ctx.ref_int_var_ref(&v)?;
+                        *i &= !(1 << idx);
+                    }
+                    BuiltinCommand::InvertBit => {
+                        let v = get_arg!(@var args);
+                        let idx = get_arg!(@usize: args, ctx);
+                        let i = ctx.ref_int_var_ref(&v)?;
+                        *i ^= 1 << idx;
+                    }
+                    BuiltinCommand::ArrayShift => {
+                        let v = get_arg!(@var args);
+                        let empty_value = get_arg!(@value args, ctx);
+                        let start = get_arg!(@usize: args, ctx);
+                        let count = get_arg!(@usize: args, ctx);
+
+                        let target = if let Some(idx) = v.idxs.get(0).copied() {
+                            idx
+                        } else {
+                            ctx.var.read_int("TARGET", &[])?.try_into()?
+                        };
+                        let (info, var) = ctx.var.get_maybe_local_var(&v.func_name, &v.name)?;
+                        let var = var.as_vm_var(target);
+
+                        if info.is_str {
+                            let empty_value = empty_value.try_into()?;
+                            let var = var.as_str()?;
+                            var[start..].rotate_right(count);
+                            let max = var.len().min(start + count);
+                            var[start..max].fill(empty_value);
+                        } else {
+                            let empty_value = empty_value.try_into()?;
+                            let var = var.as_int()?;
+                            var[start..].rotate_right(count);
+                            let max = var.len().min(start + count);
+                            var[start..max].fill(empty_value);
+                        }
                     }
                     BuiltinCommand::Throw => {
                         let msg = get_arg!(@opt @String: args, ctx);
@@ -862,6 +905,30 @@ impl TerminalVm {
                                 }
                             }
                             _ => unreachable!(),
+                        }
+                    }
+                    BuiltinCommand::CVarset => {
+                        let var = get_arg!(@var args);
+                        let index = get_arg!(@usize: args, ctx);
+                        let value = get_arg!(@opt @value args, ctx);
+                        let start = get_arg!(@opt @usize: args, ctx);
+
+                        let (info, var) = ctx.var.get_var(&var.name)?;
+
+                        let value = value.unwrap_or_else(|| {
+                            if info.is_str {
+                                Value::String(String::new())
+                            } else {
+                                Value::Int(0)
+                            }
+                        });
+
+                        let start = start.unwrap_or(0);
+
+                        let cvar = var.assume_chara_vec();
+
+                        for var in &mut cvar[start..] {
+                            var.set(index, value.clone())?;
                         }
                     }
                     BuiltinCommand::Split => {
@@ -960,7 +1027,20 @@ impl TerminalVm {
                     BuiltinCommand::FontStyle => {
                         log::warn!("TODO: fontstyle({})", get_arg!(@i64: args, ctx));
                     }
-                    BuiltinCommand::FontBold
+                    BuiltinCommand::GetStyle => {
+                        log::warn!("TODO: GETSTYLE");
+                        ctx.push(0);
+                    }
+                    BuiltinCommand::ChkFont => {
+                        log::warn!("TODO: CHKFONT");
+                        ctx.push(0);
+                    }
+                    BuiltinCommand::GetFont => {
+                        log::warn!("TODO: GETFONT");
+                        ctx.push("");
+                    }
+                    BuiltinCommand::SetFont
+                    | BuiltinCommand::FontBold
                     | BuiltinCommand::FontRegular
                     | BuiltinCommand::FontItalic => {
                         log::warn!("TODO: {com}");
@@ -980,6 +1060,25 @@ impl TerminalVm {
                         };
 
                         tx.set_color(r, g, b);
+                    }
+                    BuiltinCommand::SetColorByName | BuiltinCommand::SetBgColorByName => {
+                        bail!("SETCOLORBYNAME");
+                    }
+                    BuiltinCommand::SetBgColor => {
+                        let c = get_arg!(@i64: args, ctx);
+
+                        let (r, g, b) = match get_arg!(@opt @i64: args, ctx) {
+                            Some(g) => {
+                                let b = get_arg!(@i64: args, ctx);
+                                (c as u8, g as u8, b as u8)
+                            }
+                            None => {
+                                let [r, g, b, _] = (c as u32).to_le_bytes();
+                                (r, g, b)
+                            }
+                        };
+
+                        tx.set_bg_color(r, g, b);
                     }
                     BuiltinCommand::ResetColor => {
                         tx.set_color(0xFF, 0xFF, 0xFF);
@@ -1083,7 +1182,7 @@ impl TerminalVm {
                         log::warn!("TODO: CLEARLINE");
                     }
                     BuiltinCommand::CallTrain => {
-                        todo!("CALLTRAIN");
+                        bail!("CALLTRAIN");
                     }
                     BuiltinCommand::DelChara => {
                         let idx = get_arg!(@i64: args, ctx);
@@ -1115,6 +1214,11 @@ impl TerminalVm {
                             _ => {}
                         }
                     }
+                    BuiltinCommand::DelData => {
+                        let idx = get_arg!(@i64: args, ctx);
+
+                        let _ = self::save_data::delete_save_data(&self.sav_path, idx);
+                    }
                     BuiltinCommand::SaveGlobal => {
                         self::save_data::write_global_data(&self.sav_path, &ctx.var);
                     }
@@ -1129,9 +1233,34 @@ impl TerminalVm {
                             }
                         }
                     }
-                    _ => {
-                        bail!("TODO: Command {}({:?})", com, args.collect_vec());
+                    BuiltinCommand::Swap => {
+                        let v1 = get_arg!(@var args);
+                        let v2 = get_arg!(@var args);
+
+                        let temp1 = ctx.read_var_ref(&v1)?;
+                        let temp2 = ctx.read_var_ref(&v2)?;
+
+                        ctx.set_var_ref(&v1, temp2)?;
+                        ctx.set_var_ref(&v2, temp1)?;
                     }
+                    BuiltinCommand::SaveNos => {
+                        let nos = ctx.config.save_nos;
+                        ctx.push(nos as i64);
+                    }
+                    BuiltinCommand::PutForm => {
+                        bail!("SAVEGAME");
+                    }
+                    BuiltinCommand::ResetStain => {
+                        let chara = get_arg!(@usize: args, ctx);
+                        let stain = ctx.var.get_var("STAIN")?.1.assume_chara(chara);
+                        let stain_init = &ctx.header_info.replace.stain_init;
+                        stain.as_int()?[..stain_init.len()].copy_from_slice(&stain_init);
+                    }
+                    BuiltinCommand::SaveChara => bail!("SAVECHARA"),
+                    BuiltinCommand::LoadChara => bail!("LOADCHARA"),
+                    BuiltinCommand::SwapChara => bail!("SWAPCHARA"),
+                    BuiltinCommand::SortChara => bail!("SORTCHARA"),
+                    BuiltinCommand::PickupChara => bail!("PICKUPCHARA"),
                 }
             }
             _ => bail!("TODO: {:?}", inst),

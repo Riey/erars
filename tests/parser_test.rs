@@ -301,19 +301,23 @@ mod body {
                 r#"tests/parse_tests/bodys/command.erb"#,
                 ParserContext::parse_body_str
             ),
-            "
+            r#"
 [
     StmtWithPos(
         Command(
             CustomDrawLine,
-            [],
+            [
+                String(
+                    "=",
+                ),
+            ],
         ),
         ScriptPosition {
             line: 0,
         },
     ),
 ]
-"
+"#
         );
     }
 

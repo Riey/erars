@@ -110,6 +110,14 @@ impl VmContext {
         var.get(idx)
     }
 
+    pub fn ref_int_var_ref(&mut self, var_ref: &VariableRef) -> Result<&mut i64> {
+        let (_, var, idx) = self.resolve_var_ref(&var_ref)?;
+
+        var.as_int()?
+            .get_mut(idx)
+            .ok_or_else(|| anyhow::anyhow!("Variable {} out of index", var_ref.name))
+    }
+
     pub fn set_var_ref(&mut self, var_ref: &VariableRef, value: Value) -> Result<()> {
         let (_, var, idx) = self.resolve_var_ref(var_ref)?;
         var.set(idx, value)?;

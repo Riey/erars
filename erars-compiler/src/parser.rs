@@ -138,6 +138,7 @@ impl Default for ReplaceInfo {
 #[derive(Default, Clone, Debug)]
 pub struct EraConfig {
     pub lang: Language,
+    pub save_nos: usize,
 }
 
 impl EraConfig {
@@ -157,6 +158,12 @@ impl EraConfig {
                         ret.lang = match value.parse() {
                             Ok(l) => l,
                             Err(_) => error!(lex, format!("Invalid language {value}")),
+                        };
+                    }
+                    "表示するセーブデータ数" => {
+                        ret.save_nos = match value.parse() {
+                            Ok(l) => l,
+                            Err(_) => error!(lex, format!("Invalid save_nos {value}")),
                         };
                     }
                     _ => {}
