@@ -663,6 +663,14 @@ impl TerminalVm {
                         ctx.push((l >> r) & 1);
                     }
 
+                    BuiltinMethod::StrCount => {
+                        check_arg_count!(2);
+                        let text = get_arg!(@String: args, ctx);
+                        let m = get_arg!(@String: args, ctx);
+
+                        let r = regex::Regex::new(&m)?;
+                        ctx.push(r.find_iter(&text).count() as i64);
+                    }
                     BuiltinMethod::SubString => {
                         check_arg_count!(1, 3);
                         let text = get_arg!(@String: args, ctx);

@@ -4,6 +4,7 @@
     Print("LIMIT 0 35 100"), NewLine,
     Print("GROUPMATCH 3 2"), NewLine,
     Print("SUMARRAY 3 6"), NewLine,
+    Print("STRCOUNT 1 3"), NewLine,
     Print("SUBSTRINGU 무"), NewLine,
     Print("GETBIT 1 0"), NewLine,
 ]

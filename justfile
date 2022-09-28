@@ -17,5 +17,8 @@ build-release:
 test:
     cargo test
 
+test-update:
+    K9_UPDATE_SNAPSHOTS=1 cargo test
+
 run-ym:
     cargo run --release -- --use-input=toriko.ron ../eraTHYMKR

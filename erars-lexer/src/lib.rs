@@ -410,6 +410,7 @@ pub enum Token<'s> {
     #[token("GETEXPLV", |lex| normal_expr_method(lex, BuiltinMethod::GetExpLv))]
     #[token("GETPALAMLV", |lex| normal_expr_method(lex, BuiltinMethod::GetPalamLv))]
     #[token("UNICODE", |lex| normal_expr_method(lex, BuiltinMethod::Unicode))]
+    #[token("STRCOUNT", |lex| normal_expr_method(lex, BuiltinMethod::StrCount))]
     #[token("SUBSTRING", |lex| normal_expr_method(lex, BuiltinMethod::SubString))]
     #[token("SUBSTRINGU", |lex| normal_expr_method(lex, BuiltinMethod::SubStringU))]
     #[token("GETCHARA", |lex| normal_expr_method(lex, BuiltinMethod::GetChara))]

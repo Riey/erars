@@ -25,6 +25,7 @@ pub enum BuiltinMethod {
 
     StrLenS,
     StrLenSU,
+    StrCount,
     SubString,
     SubStringU,
     BarStr,

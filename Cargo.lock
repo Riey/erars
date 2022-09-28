@@ -567,6 +567,7 @@ dependencies = [
  "rand",
  "rand_chacha",
  "rayon",
+ "regex",
  "rmp-serde",
  "ron",
  "serde",
