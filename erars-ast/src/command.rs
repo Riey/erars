@@ -17,6 +17,8 @@ pub enum BuiltinMethod {
     Power,
     Sqrt,
     Abs,
+    Sign,
+    InRange,
     LineIsEmpty,
     GroupMatch,
     SumArray,

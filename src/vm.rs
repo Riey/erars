@@ -617,6 +617,18 @@ impl TerminalVm {
                         let v = get_arg!(@i64: args, ctx);
                         ctx.push(v.abs());
                     }
+                    BuiltinMethod::Sign => {
+                        check_arg_count!(1);
+                        let v = get_arg!(@i64: args, ctx);
+                        ctx.push(-v);
+                    }
+                    BuiltinMethod::InRange => {
+                        check_arg_count!(3);
+                        let v = get_arg!(@i64: args, ctx);
+                        let l = get_arg!(@i64: args, ctx);
+                        let h = get_arg!(@i64: args, ctx);
+                        ctx.push(v >= l && v <= h);
+                    }
                     BuiltinMethod::Log => {
                         check_arg_count!(1);
                         let v = get_arg!(@i64: args, ctx);
