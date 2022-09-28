@@ -168,7 +168,11 @@ impl TerminalVm {
                 }
                 tx.request_redraw();
 
-                // TODO: PRINTW
+                if flags.contains(PrintFlags::WAIT) {
+                    if tx.input(InputRequest::Anykey) == ConsoleResult::Quit {
+                        return Ok(Some(Workflow::Exit));
+                    }
+                }
             }
             Instruction::TryCall(c) => {
                 let func = ctx.pop_str()?;
