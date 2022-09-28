@@ -401,6 +401,7 @@ pub enum Token<'s> {
     #[token("LIMIT", |lex| normal_expr_method(lex, BuiltinMethod::Limit))]
     #[token("STRLENS", |lex| normal_expr_method(lex, BuiltinMethod::StrLenS))]
     #[token("STRLENSU", |lex| normal_expr_method(lex, BuiltinMethod::StrLenSU))]
+    #[token("BARSTR", |lex| normal_expr_method(lex, BuiltinMethod::BarStr))]
     #[token("GETBIT", |lex| normal_expr_method(lex, BuiltinMethod::GetBit))]
     #[token("POWER", |lex| normal_expr_method(lex, BuiltinMethod::Power))]
     #[token("GETEXPLV", |lex| normal_expr_method(lex, BuiltinMethod::GetExpLv))]

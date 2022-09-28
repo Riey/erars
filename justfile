@@ -16,3 +16,6 @@ build-release:
 
 test:
     cargo test
+
+run-ym:
+    cargo run --release -- --use-input=toriko.ron ../eraTHYMKR

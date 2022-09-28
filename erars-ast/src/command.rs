@@ -25,6 +25,7 @@ pub enum BuiltinMethod {
     StrLenSU,
     SubString,
     SubStringU,
+    BarStr,
 
     Unicode,
     GetExpLv,

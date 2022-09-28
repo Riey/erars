@@ -18,7 +18,7 @@ use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
     PrintFlags, ScriptPosition, UnaryOperator, Value,
 };
-use erars_compiler::{Instruction, ParserContext};
+use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
 
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
@@ -514,6 +514,15 @@ impl TerminalVm {
                         let x = get_arg!(@i64: args, ctx);
                         ctx.push((x as f32).sqrt() as i64);
                     }
+                    BuiltinMethod::BarStr => {
+                        check_arg_count!(3);
+
+                        let var = get_arg!(@i64: args, ctx);
+                        let max = get_arg!(@i64: args, ctx).max(1);
+                        let length = get_arg!(@i64: args, ctx).max(0);
+
+                        ctx.push(make_bar_str(&ctx.header_info.replace, var, max, length));
+                    }
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);
@@ -949,25 +958,7 @@ impl TerminalVm {
                         let max = get_arg!(@i64: args, ctx).max(1);
                         let length = get_arg!(@i64: args, ctx).max(0);
 
-                        let bar_length =
-                            ((var as f32 / max as f32).clamp(0.0, 1.0) * length as f32) as usize;
-                        let blank = length as usize - bar_length;
-
-                        let mut ret = String::with_capacity(length as usize);
-
-                        ret.push('[');
-
-                        for _ in 0..bar_length {
-                            ret.push_str(&ctx.header_info.replace.bar_str1);
-                        }
-
-                        for _ in 0..blank {
-                            ret.push_str(&ctx.header_info.replace.bar_str2);
-                        }
-
-                        ret.push(']');
-
-                        tx.print(ret);
+                        tx.print(make_bar_str(&ctx.header_info.replace, var, max, length));
                     }
                     BuiltinCommand::ReturnF => {
                         let ret = get_arg!(@value args, ctx);
@@ -1648,6 +1639,27 @@ impl TerminalVm {
 
         Ok(())
     }
+}
+
+fn make_bar_str(replace: &ReplaceInfo, var: i64, max: i64, length: i64) -> String {
+    let bar_length = ((var as f32 / max as f32).clamp(0.0, 1.0) * length as f32) as usize;
+    let blank = length as usize - bar_length;
+
+    let mut ret = String::with_capacity(length as usize);
+
+    ret.push('[');
+
+    for _ in 0..bar_length {
+        ret.push_str(&replace.bar_str1);
+    }
+
+    for _ in 0..blank {
+        ret.push_str(&replace.bar_str2);
+    }
+
+    ret.push(']');
+
+    ret
 }
 
 fn array_shift<T: Clone>(
