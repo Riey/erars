@@ -30,8 +30,21 @@ pub enum ConsoleMessage {
     Alignment(Alignment),
     Input(InputRequest),
 
+    SetFont(String),
+    SetStyle(FontStyle),
     SetColor(u8, u8, u8),
     SetBgColor(u8, u8, u8),
+}
+
+bitflags::bitflags! {
+    #[derive(Serialize, Deserialize)]
+    pub struct FontStyle: u32 {
+        const NORMAL = 0x0;
+        const BOLD = 0x1;
+        const ITALIC = 0x2;
+        const STRIKELINE = 0x4;
+        const UNDERLINE = 0x8;
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +73,8 @@ pub struct ConsoleSender {
     hl_color: u32,
     bg_color: u32,
     align: Alignment,
+    style: FontStyle,
+    font: String,
     inputs: VecDeque<Value>,
 }
 
@@ -74,6 +89,8 @@ impl ConsoleSender {
             hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
             bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
             align: Alignment::Left,
+            font: "".into(),
+            style: FontStyle::NORMAL,
             inputs: VecDeque::new(),
         }
     }
@@ -155,6 +172,16 @@ impl ConsoleSender {
         self.chan.send_msg(ConsoleMessage::Alignment(align));
     }
 
+    pub fn set_style(&mut self, style: FontStyle) {
+        self.style = style;
+        self.chan.send_msg(ConsoleMessage::SetStyle(style));
+    }
+
+    pub fn set_font(&mut self, font: String) {
+        self.font = font.clone();
+        self.chan.send_msg(ConsoleMessage::SetFont(font));
+    }
+
     pub fn exit(&self) {
         self.chan.exit();
     }
@@ -173,6 +200,14 @@ impl ConsoleSender {
 
     pub fn bg_color(&self) -> u32 {
         self.bg_color
+    }
+
+    pub fn font(&self) -> &str {
+        &self.font
+    }
+
+    pub fn style(&self) -> FontStyle {
+        self.style
     }
 
     pub fn request_redraw(&self) {

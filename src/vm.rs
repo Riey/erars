@@ -25,7 +25,7 @@ pub use self::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
-use crate::ui::{ConsoleResult, InputRequest};
+use crate::ui::{ConsoleResult, InputRequest, FontStyle};
 use crate::{
     function::{FunctionBody, FunctionDic},
     ui::ConsoleSender,
@@ -737,8 +737,7 @@ impl TerminalVm {
                     }
                     BuiltinMethod::GetFont => {
                         check_arg_count!(0);
-                        log::warn!("GETFONT");
-                        ctx.push("");
+                        ctx.push(tx.font().to_string());
                     }
 
                     BuiltinMethod::GetColor => {
@@ -1036,25 +1035,29 @@ impl TerminalVm {
                         tx.request_redraw();
                     }
                     BuiltinCommand::FontStyle => {
-                        log::warn!("TODO: fontstyle({})", get_arg!(@i64: args, ctx));
+                        let style: u32 = get_arg!(@i64: args, ctx).try_into()?;
+                        let style = FontStyle::from_bits_truncate(style);
+                        tx.set_style(style);
                     }
                     BuiltinCommand::GetStyle => {
-                        log::warn!("TODO: GETSTYLE");
-                        ctx.push(0);
+                        ctx.push(tx.style());
                     }
                     BuiltinCommand::ChkFont => {
                         log::warn!("TODO: CHKFONT");
                         ctx.push(0);
                     }
-                    BuiltinCommand::GetFont => {
-                        log::warn!("TODO: GETFONT");
-                        ctx.push("");
+                    BuiltinCommand::SetFont => {
+                        let font = get_arg!(@String: args, ctx);
+                        tx.set_font(font);
                     }
-                    BuiltinCommand::SetFont
-                    | BuiltinCommand::FontBold
-                    | BuiltinCommand::FontRegular
-                    | BuiltinCommand::FontItalic => {
-                        log::warn!("TODO: {com}");
+                    BuiltinCommand::FontBold => {
+                        tx.set_style(FontStyle::BOLD);
+                    }
+                    BuiltinCommand::FontRegular => {
+                        tx.set_style(FontStyle::NORMAL);
+                    }
+                    BuiltinCommand::FontItalic => {
+                        tx.set_style(FontStyle::ITALIC);
                     }
                     BuiltinCommand::SetColor => {
                         let c = get_arg!(@i64: args, ctx);

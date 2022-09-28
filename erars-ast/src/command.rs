@@ -139,7 +139,6 @@ pub enum BuiltinCommand {
     FontStyle,
     GetStyle,
     SetFont,
-    GetFont,
     ChkFont,
 
     Bar,

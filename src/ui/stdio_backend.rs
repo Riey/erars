@@ -115,6 +115,8 @@ impl EraApp for StdioBackend {
                             self.new_line();
                         }
                         ConsoleMessage::Alignment(_)
+                        | ConsoleMessage::SetStyle(_)
+                        | ConsoleMessage::SetFont(_)
                         | ConsoleMessage::SetColor(..)
                         | ConsoleMessage::SetBgColor(..) => {}
                     }
