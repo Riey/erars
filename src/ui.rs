@@ -294,7 +294,9 @@ impl ConsoleSender {
     }
 
     pub fn input(&mut self, req: InputRequest) -> ConsoleResult {
-        if let Some(i) = self.inputs.pop_front() {
+        if matches!(req, InputRequest::Anykey | InputRequest::EnterKey) && !self.inputs.is_empty() {
+            ConsoleResult::Value(0.into())
+        } else if let Some(i) = self.inputs.pop_front() {
             ConsoleResult::Value(i)
         } else {
             self.chan.send_msg(ConsoleMessage::Input(req));
