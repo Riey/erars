@@ -1192,7 +1192,7 @@ impl TerminalVm {
                         tx.request_redraw();
                     }
                     BuiltinCommand::ClearLine => {
-                        log::warn!("TODO: CLEARLINE");
+                        tx.clear_line(get_arg!(@usize: args, ctx));
                     }
                     BuiltinCommand::CallTrain => {
                         bail!("CALLTRAIN");

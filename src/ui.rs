@@ -164,6 +164,13 @@ impl VirtualConsole {
                     .push(ConsoleLinePart::Line(text, self.style.clone()));
                 self.lines.push(ConsoleLine::default());
             }
+            ConsoleMessage::ClearLine(c) => {
+                if c == self.lines.len() {
+                    self.lines = Vec1::new(ConsoleLine::default());
+                } else {
+                    drop(self.lines.drain(self.lines.len() - c..));
+                }
+            }
             ConsoleMessage::Print(text) => {
                 self.lines.last_mut().push_text(text, &self.style);
             }
@@ -207,6 +214,7 @@ pub enum ConsoleMessage {
     Print(String),
     NewLine,
     DrawLine(String),
+    ClearLine(usize),
     PrintButton(Value, String),
     ReuseLastLine(String),
     Alignment(Alignment),
@@ -337,6 +345,11 @@ impl ConsoleSender {
         self.printc_count = 0;
         self.line_is_empty = true;
         self.chan.send_msg(ConsoleMessage::DrawLine(s));
+    }
+
+    pub fn clear_line(&mut self, c: usize) {
+        self.line_is_empty = false;
+        self.chan.send_msg(ConsoleMessage::ClearLine(c));
     }
 
     pub fn set_color(&mut self, r: u8, g: u8, b: u8) {
