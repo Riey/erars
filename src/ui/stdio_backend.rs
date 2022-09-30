@@ -1,33 +1,19 @@
-use super::{ConsoleChannel, ConsoleMessage, ConsoleResult, EraApp, InputRequest};
+use super::{
+    ConsoleChannel, ConsoleLinePart, ConsoleResult, EraApp, FontStyle,
+    InputRequest, TextStyle, VirtualConsole,
+};
 use std::{
-    io::{self, BufRead, Write},
+    io::{self, BufRead},
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc,
     },
 };
 
-use ansi_term::Color;
 use erars_ast::Value;
 
-enum ConsoleLinePart {
-    Normal(String, Color),
-}
-
-impl ConsoleLinePart {
-    fn draw(&self, mut out: impl Write) -> anyhow::Result<()> {
-        match self {
-            ConsoleLinePart::Normal(s, c) => {
-                write!(out, "{}", c.paint(s))?;
-            }
-        }
-
-        Ok(())
-    }
-}
-
 pub struct StdioBackend {
-    lines: Vec<Vec<ConsoleLinePart>>,
+    vconsole: VirtualConsole,
     req: Option<InputRequest>,
     need_redraw: bool,
 }
@@ -35,46 +21,32 @@ pub struct StdioBackend {
 impl StdioBackend {
     pub fn new() -> Self {
         Self {
-            lines: vec![Vec::new()],
+            vconsole: VirtualConsole::new(),
             req: None,
             need_redraw: true,
         }
     }
 
-    fn new_line(&mut self) {
-        self.lines.push(Vec::new());
-    }
-
-    fn print(&mut self, s: impl Into<String>) {
-        self.need_redraw = true;
-        self.lines
-            .last_mut()
-            .unwrap()
-            .push(ConsoleLinePart::Normal(s.into(), Color::White));
-    }
-
-    fn draw_line(&mut self, line_str: &str) {
-        self.need_redraw = true;
-        if !self.lines.last().unwrap().is_empty() {
-            self.new_line();
-        }
-        self.lines
-            .last_mut()
-            .unwrap()
-            .push(ConsoleLinePart::Normal(line_str.repeat(30), Color::White));
-        self.new_line();
-    }
-
     fn draw(&mut self, mut out: impl io::Write) -> anyhow::Result<()> {
         if self.need_redraw {
-            for line in self.lines.iter() {
-                for part in line.iter() {
-                    part.draw(&mut out)?;
+            for line in self.vconsole.lines().iter() {
+                for part in line.parts.iter() {
+                    match part {
+                        ConsoleLinePart::Text(text, style) => {
+                            write!(out, "{}", paint(style, text, false))?;
+                        }
+                        ConsoleLinePart::Button(btns, _value) => {
+                            for (text, style) in btns.iter() {
+                                write!(out, "{}", paint(style, text, true))?;
+                            }
+                        }
+                        ConsoleLinePart::Line(text, style) => {
+                            write!(out, "{}", paint(style, &text.repeat(30), false))?;
+                        }
+                    }
                 }
                 writeln!(out)?;
             }
-            let no = self.lines.len();
-            self.lines.drain(..no - 1);
             self.need_redraw = false;
         }
 
@@ -102,23 +74,13 @@ impl EraApp for StdioBackend {
             if self.req.is_none() {
                 while let Some(msg) = chan.recv_msg() {
                     log::trace!("[UI] Recv: {msg:?}");
-                    match msg {
-                        ConsoleMessage::DrawLine(line_str) => self.draw_line(&line_str),
-                        ConsoleMessage::Print(str) => self.print(str),
-                        ConsoleMessage::PrintButton(_, str) => self.print(str),
-                        ConsoleMessage::NewLine => self.new_line(),
-                        ConsoleMessage::Input(req) => {
+                    match self.vconsole.push_msg(msg) {
+                        Some(req) => {
                             self.req = Some(req);
                         }
-                        ConsoleMessage::ReuseLastLine(str) => {
-                            self.print(str);
-                            self.new_line();
+                        None => {
+                            self.need_redraw = true;
                         }
-                        ConsoleMessage::Alignment(_)
-                        | ConsoleMessage::SetStyle(_)
-                        | ConsoleMessage::SetFont(_)
-                        | ConsoleMessage::SetColor(..)
-                        | ConsoleMessage::SetBgColor(..) => {}
                     }
                 }
             }
@@ -152,4 +114,22 @@ impl EraApp for StdioBackend {
             }
         }
     }
+}
+
+fn paint<'a>(
+    style: &TextStyle,
+    text: &'a str,
+    is_btn: bool,
+) -> ansi_term::ANSIGenericString<'a, str> {
+    let color = ansi_term::Color::RGB(style.color.0[0], style.color.0[1], style.color.0[2]);
+
+    let mut s = color.paint(text);
+
+    s.style_ref_mut().is_bold = style.font_style.contains(FontStyle::BOLD);
+    s.style_ref_mut().is_italic = style.font_style.contains(FontStyle::ITALIC);
+    s.style_ref_mut().is_strikethrough = style.font_style.contains(FontStyle::STRIKELINE);
+    s.style_ref_mut().is_underline = style.font_style.contains(FontStyle::UNDERLINE);
+    s.style_ref_mut().is_reverse = is_btn;
+
+    s
 }

@@ -562,6 +562,7 @@ dependencies = [
  "k9",
  "log",
  "log-panics",
+ "once_cell",
  "pad",
  "parking_lot",
  "rand",
@@ -580,6 +581,7 @@ dependencies = [
  "tokio",
  "tower-http",
  "unicode-width",
+ "vec1",
 ]
 
 [[package]]
@@ -1103,6 +1105,9 @@ name = "once_cell"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e82dad04139b71a90c080c8463fe0dc7902db5192d939bd0950f074d014339e1"
+dependencies = [
+ "parking_lot_core",
+]
 
 [[package]]
 name = "oorandom"
@@ -1880,6 +1885,15 @@ name = "utf8-decode"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca61eb27fa339aa08826a29f03e87b99b4d8f0fc2255306fd266bb1b6a9de498"
+
+[[package]]
+name = "vec1"
+version = "1.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fc1631c774f0f9570797191e01247cbefde789eebfbf128074cb934115a6133"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "version_check"

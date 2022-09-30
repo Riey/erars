@@ -22,3 +22,6 @@ test-update:
 
 run-ym:
     cargo run --release -- --use-input=toriko.ron ../eraTHYMKR
+
+run-ym-log:
+    cargo run --release -- --use-input=toriko.ron --log-level=trace ../eraTHYMKR

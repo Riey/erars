@@ -1,12 +1,16 @@
 use crossbeam_channel::{bounded, Receiver, Sender};
 use erars_ast::{Alignment, Value};
+use once_cell::sync::Lazy;
 use pad::PadStr;
 use parking_lot::Mutex;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use smol_str::SmolStr;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::Arc;
 use std::time::Duration;
+use vec1::Vec1;
 
 #[cfg(feature = "stdio-backend")]
 mod stdio_backend;
@@ -21,6 +25,184 @@ pub use stdio_backend::StdioBackend;
 pub use http_backend::HttpBackend;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TextStyle {
+    color: Color,
+    font_family: SmolStr,
+    font_style: FontStyle,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Color(pub [u8; 3]);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+enum ConsoleLinePart {
+    Text(String, TextStyle),
+    Line(String, TextStyle),
+    Button(Vec<(String, TextStyle)>, Value),
+}
+
+impl ConsoleLinePart {
+    fn as_text(&self) -> &str {
+        match self {
+            Self::Text(t, _) => t.as_str(),
+            _ => unreachable!(),
+        }
+    }
+
+    fn into_text(self) -> (String, TextStyle) {
+        match self {
+            Self::Text(t, s) => (t, s),
+            _ => unreachable!(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+struct ConsoleLine {
+    align: Alignment,
+    #[serde(skip)]
+    button_start: Option<usize>,
+    parts: Vec<ConsoleLinePart>,
+}
+
+impl ConsoleLine {
+    pub fn push_text(&mut self, text: String, style: &TextStyle) {
+        static BUTTON_REGEX: Lazy<Regex> =
+            Lazy::new(|| Regex::new(r#"[^\[]*\[ *(\d+) *\][^\]]*"#).unwrap());
+
+        if text.contains(']') {
+            match self.button_start.take() {
+                Some(prev_btn_part) => {
+                    let mut btn_buf = String::new();
+
+                    for part in self.parts[prev_btn_part..].iter() {
+                        btn_buf.push_str(part.as_text());
+                    }
+
+                    btn_buf.push_str(&text);
+
+                    let captures = BUTTON_REGEX.captures(&btn_buf);
+
+                    if let Some(captures) = captures {
+                        log::info!("Find button {captures:?}");
+                        let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
+                        let btn_str = self
+                            .parts
+                            .drain(prev_btn_part..)
+                            .map(ConsoleLinePart::into_text)
+                            .chain(Some((text, style.clone())))
+                            .collect();
+                        self.parts.push(ConsoleLinePart::Button(btn_str, Value::Int(num)));
+                        return;
+                    }
+                }
+                None => match BUTTON_REGEX.captures(&text) {
+                    Some(captures) => {
+                        log::info!("Find button {captures:?}");
+                        let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
+                        self.parts.push(ConsoleLinePart::Button(
+                            vec![(text, style.clone())],
+                            Value::Int(num),
+                        ));
+                        return;
+                    }
+                    None => {}
+                },
+            }
+        }
+
+        let has_lb = text.contains('[');
+
+        match self.parts.last_mut() {
+            Some(ConsoleLinePart::Text(prev_text, prev_style)) if *prev_style == *style => {
+                prev_text.push_str(&text);
+            }
+            _ => {
+                self.parts.push(ConsoleLinePart::Text(text, style.clone()));
+            }
+        }
+
+        if has_lb {
+            self.button_start = Some(self.parts.len() - 1);
+        }
+    }
+}
+
+/// Used by ui backend
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct VirtualConsole {
+    lines: Vec1<ConsoleLine>,
+    style: TextStyle,
+    bg_color: Color,
+}
+
+impl VirtualConsole {
+    fn new() -> Self {
+        Self {
+            lines: Vec1::new(ConsoleLine::default()),
+            style: TextStyle {
+                color: Color([255, 255, 255]),
+                font_family: "".into(),
+                font_style: FontStyle::NORMAL,
+            },
+            bg_color: Color([0, 0, 0]),
+        }
+    }
+
+    fn lines(&self) -> &[ConsoleLine] {
+        &self.lines
+    }
+
+    fn push_msg(&mut self, com: ConsoleMessage) -> Option<InputRequest> {
+        match com {
+            ConsoleMessage::Input(req) => return Some(req),
+            ConsoleMessage::Alignment(align) => self.lines.last_mut().align = align,
+            ConsoleMessage::DrawLine(text) => {
+                self.lines
+                    .last_mut()
+                    .parts
+                    .push(ConsoleLinePart::Line(text, self.style.clone()));
+                self.lines.push(ConsoleLine::default());
+            }
+            ConsoleMessage::Print(text) => {
+                self.lines.last_mut().push_text(text, &self.style);
+            }
+            ConsoleMessage::PrintButton(value, text) => {
+                let parts = &mut self.lines.last_mut().parts;
+
+                parts.push(ConsoleLinePart::Button(
+                    vec![(text, self.style.clone())],
+                    value,
+                ));
+            }
+            ConsoleMessage::ReuseLastLine(text) => {
+                let parts = &mut self.lines.last_mut().parts;
+
+                parts.clear();
+                parts.push(ConsoleLinePart::Text(text, self.style.clone()));
+            }
+            ConsoleMessage::NewLine => {
+                self.lines.push(ConsoleLine::default());
+            }
+            ConsoleMessage::SetColor(color) => {
+                self.style.color = color;
+            }
+            ConsoleMessage::SetBgColor(color) => {
+                self.bg_color = color;
+            }
+            ConsoleMessage::SetFont(family) => {
+                self.style.font_family = family.into();
+            }
+            ConsoleMessage::SetStyle(font_style) => {
+                self.style.font_style = font_style;
+            }
+        }
+
+        None
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ConsoleMessage {
     Print(String),
     NewLine,
@@ -32,8 +214,8 @@ pub enum ConsoleMessage {
 
     SetFont(String),
     SetStyle(FontStyle),
-    SetColor(u8, u8, u8),
-    SetBgColor(u8, u8, u8),
+    SetColor(Color),
+    SetBgColor(Color),
 }
 
 bitflags::bitflags! {
@@ -159,12 +341,12 @@ impl ConsoleSender {
 
     pub fn set_color(&mut self, r: u8, g: u8, b: u8) {
         self.color = u32::from_le_bytes([r, g, b, 0]);
-        self.chan.send_msg(ConsoleMessage::SetColor(r, g, b));
+        self.chan.send_msg(ConsoleMessage::SetColor(Color([r, g, b])));
     }
 
     pub fn set_bg_color(&mut self, r: u8, g: u8, b: u8) {
         self.color = u32::from_le_bytes([r, g, b, 0]);
-        self.chan.send_msg(ConsoleMessage::SetBgColor(r, g, b));
+        self.chan.send_msg(ConsoleMessage::SetBgColor(Color([r, g, b])));
     }
 
     pub fn set_align(&mut self, align: Alignment) {

@@ -1040,7 +1040,7 @@ impl TerminalVm {
                         tx.set_style(style);
                     }
                     BuiltinCommand::GetStyle => {
-                        ctx.push(tx.style());
+                        ctx.push(tx.style().bits() as i64);
                     }
                     BuiltinCommand::ChkFont => {
                         log::warn!("TODO: CHKFONT");
@@ -1098,8 +1098,7 @@ impl TerminalVm {
                         tx.set_color(0xFF, 0xFF, 0xFF);
                     }
                     BuiltinCommand::ResetBgColor => {
-                        log::warn!("TODO: RESETBGCOLOR");
-                        // chan.send_msg(ConsoleMessage::SetColor(0xFF, 0xFF, 0xFF));
+                        tx.set_bg_color(0, 0, 0);
                     }
                     BuiltinCommand::Wait => match tx.input(InputRequest::EnterKey) {
                         ConsoleResult::Value(_) => {}
