@@ -27,7 +27,9 @@ pub use http_backend::HttpBackend;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextStyle {
     color: Color,
+    #[serde(skip_serializing_if = "<str>::is_empty")]
     font_family: SmolStr,
+    #[serde(skip_serializing_if = "FontStyle::is_empty")]
     font_style: FontStyle,
 }
 
@@ -59,9 +61,11 @@ impl ConsoleLinePart {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct ConsoleLine {
+    #[serde(skip_serializing_if = "is_left_alignment")]
     align: Alignment,
     #[serde(skip)]
     button_start: Option<usize>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     parts: Vec<ConsoleLinePart>,
 }
 
@@ -493,3 +497,8 @@ impl ConsoleChannel {
         self.ret.1.recv().unwrap()
     }
 }
+
+fn is_left_alignment(align: &Alignment) -> bool {
+    *align == Alignment::Left
+}
+
