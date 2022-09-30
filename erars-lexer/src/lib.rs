@@ -437,6 +437,7 @@ pub enum Token<'s> {
 
     #[regex(r"REUSELASTLINE( [^\r\n]*)?", |lex| unsafe { parse_reuse(lex.slice()) })]
     #[token("GETTIME", |_| single_method(BuiltinMethod::GetTime))]
+    #[token("GETFONT", |_| single_method(BuiltinMethod::GetFont))]
     #[token("GETCOLOR", |_| single_method(BuiltinMethod::GetColor))]
     #[token("GETDEFCOLOR", |_| single_method(BuiltinMethod::GetDefColor))]
     #[token("GETBGCOLOR", |_| single_method(BuiltinMethod::GetBgColor))]
@@ -452,7 +453,6 @@ pub enum Token<'s> {
     #[token("RESETCOLOR", |_| single_command(BuiltinCommand::ResetColor))]
     #[token("RESETBGCOLOR", |_| single_command(BuiltinCommand::ResetBgColor))]
     #[token("ADDDEFCHARA", |_| single_command(BuiltinCommand::AddDefChara))]
-    #[token("GETFONT", |_| single_command(BuiltinCommand::GetFont))]
     #[token("FONTBOLD", |_| single_command(BuiltinCommand::FontBold))]
     #[token("FONTITALIC", |_| single_command(BuiltinCommand::FontItalic))]
     #[token("FONTREGULAR", |_| single_command(BuiltinCommand::FontRegular))]
