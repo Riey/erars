@@ -20,6 +20,9 @@ test:
 test-update:
     K9_UPDATE_SNAPSHOTS=1 cargo test
 
+run-ym-http:
+    cargo run --release -- --use-input=toriko.ron --port=8000 ../eraTHYMKR
+
 run-ym:
     cargo run --release -- --use-input=toriko.ron ../eraTHYMKR
 

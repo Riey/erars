@@ -23,9 +23,9 @@ use axum::{
 };
 use tower_http::compression::CompressionLayer;
 
-use crate::ui::{ConsoleMessage, ConsoleResult, InputRequest};
+use crate::ui::{ConsoleResult, InputRequest};
 
-use super::EraApp;
+use super::{EraApp, VirtualConsole};
 
 pub struct HttpBackend {
     pub port: u16,
@@ -44,8 +44,8 @@ async fn start(
 ) -> anyhow::Result<()> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let current_req = Arc::new(Mutex::new(None));
-    let msgs = Arc::new(Mutex::new(Vec::new()));
-    let msgs_ = msgs.clone();
+    let vconsole = Arc::new(Mutex::new(VirtualConsole::new()));
+    let vconsole_ = vconsole.clone();
 
     let current_req_ = current_req.clone();
     let chan1 = chan.clone();
@@ -67,14 +67,14 @@ async fn start(
             get(|| async move {
                 let mut current_req = current_req_.lock();
 
-                let mut msgs = msgs.lock();
+                let mut vconsole = vconsole.lock();
                 if current_req.is_none() {
                     while let Some(msg) = chan1.recv_msg() {
-                        match msg {
-                            ConsoleMessage::Input(req) => {
+                        match vconsole.push_msg(msg) {
+                            Some(req) => {
                                 *current_req = Some(req);
                             }
-                            msg => msgs.push(msg),
+                            _ => {}
                         }
                     }
                 }
@@ -82,7 +82,7 @@ async fn start(
                 (
                     StatusCode::OK,
                     [("Content-Type", "text/json")],
-                    serde_json::to_string(&*msgs).unwrap(),
+                    serde_json::to_string(vconsole.lines()).unwrap(),
                 )
             }),
         )
@@ -90,14 +90,14 @@ async fn start(
             "/input",
             post(|request: String| async move {
                 let mut current_req = current_req.lock();
-                let mut msgs = msgs_.lock();
+                let mut vconsole = vconsole_.lock();
                 if current_req.is_none() {
                     while let Some(msg) = chan.recv_msg() {
-                        match msg {
-                            ConsoleMessage::Input(req) => {
+                        match vconsole.push_msg(msg) {
+                            Some(req) => {
                                 *current_req = Some(req);
                             }
-                            msg => msgs.push(msg),
+                            _ => {}
                         }
                     }
                 }
