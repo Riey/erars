@@ -29,7 +29,7 @@ impl StdioBackend {
 
     fn draw(&mut self, mut out: impl io::Write) -> anyhow::Result<()> {
         if self.need_redraw {
-            for line in self.vconsole.lines().iter() {
+            for line in self.vconsole.lines.drain(..) {
                 for part in line.parts.iter() {
                     match part {
                         ConsoleLinePart::Text(text, style) => {

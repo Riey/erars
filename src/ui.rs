@@ -10,7 +10,6 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::Arc;
 use std::time::Duration;
-use vec1::Vec1;
 
 #[cfg(feature = "stdio-backend")]
 mod stdio_backend;
@@ -133,7 +132,7 @@ impl ConsoleLine {
 /// Used by ui backend
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct VirtualConsole {
-    lines: Vec1<ConsoleLine>,
+    lines: Vec<ConsoleLine>,
     style: TextStyle,
     bg_color: Color,
 }
@@ -141,7 +140,7 @@ struct VirtualConsole {
 impl VirtualConsole {
     fn new() -> Self {
         Self {
-            lines: Vec1::new(ConsoleLine::default()),
+            lines: Vec::new(),
             style: TextStyle {
                 color: Color([255, 255, 255]),
                 font_family: "".into(),
@@ -156,28 +155,28 @@ impl VirtualConsole {
     }
 
     fn push_msg(&mut self, com: ConsoleMessage) -> Option<InputRequest> {
+        if self.lines.is_empty() {
+            self.lines.push(ConsoleLine::default());
+        }
         match com {
             ConsoleMessage::Input(req) => return Some(req),
-            ConsoleMessage::Alignment(align) => self.lines.last_mut().align = align,
+            ConsoleMessage::Alignment(align) => self.lines.last_mut().unwrap().align = align,
             ConsoleMessage::DrawLine(text) => {
                 self.lines
                     .last_mut()
+                    .unwrap()
                     .parts
                     .push(ConsoleLinePart::Line(text, self.style.clone()));
                 self.lines.push(ConsoleLine::default());
             }
             ConsoleMessage::ClearLine(c) => {
-                if c == self.lines.len() {
-                    self.lines = Vec1::new(ConsoleLine::default());
-                } else {
-                    drop(self.lines.drain(self.lines.len() - c..));
-                }
+                self.lines.truncate(self.lines.len().saturating_sub(c));
             }
             ConsoleMessage::Print(text) => {
-                self.lines.last_mut().push_text(text, &self.style);
+                self.lines.last_mut().unwrap().push_text(text, &self.style);
             }
             ConsoleMessage::PrintButton(value, text) => {
-                let parts = &mut self.lines.last_mut().parts;
+                let parts = &mut self.lines.last_mut().unwrap().parts;
 
                 parts.push(ConsoleLinePart::Button(
                     vec![(text, self.style.clone())],
@@ -185,7 +184,7 @@ impl VirtualConsole {
                 ));
             }
             ConsoleMessage::ReuseLastLine(text) => {
-                let parts = &mut self.lines.last_mut().parts;
+                let parts = &mut self.lines.last_mut().unwrap().parts;
 
                 parts.clear();
                 parts.push(ConsoleLinePart::Text(text, self.style.clone()));
