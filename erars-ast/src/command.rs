@@ -24,6 +24,7 @@ pub enum BuiltinMethod {
     SumArray,
 
     Escape,
+    Replace,
     StrLenS,
     StrLenSU,
     StrCount,

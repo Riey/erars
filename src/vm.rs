@@ -531,6 +531,15 @@ impl TerminalVm {
                         let s = get_arg!(@String: args, ctx);
                         ctx.push(regex::escape(&s));
                     }
+                    BuiltinMethod::Replace => {
+                        check_arg_count!(3);
+                        let base = get_arg!(@String: args, ctx);
+                        let from = get_arg!(@String: args, ctx);
+                        let to = get_arg!(@String: args, ctx);
+
+                        let regex = regex::Regex::new(&from)?;
+                        ctx.push(regex.replace_all(&base, &to).into_owned());
+                    }
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);
