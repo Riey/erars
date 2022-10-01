@@ -1180,6 +1180,14 @@ impl TerminalVm {
                         tx.exit();
                         return Ok(Some(Workflow::Exit));
                     }
+                    BuiltinCommand::SwapChara => {
+                        let a = get_arg!(@usize: args, ctx);
+                        let b = get_arg!(@usize: args, ctx);
+
+                        ctx.var.swap_chara(a, b);
+                    }
+                    BuiltinCommand::SortChara => bail!("SORTCHARA"),
+                    BuiltinCommand::PickupChara => bail!("PICKUPCHARA"),
                     BuiltinCommand::AddChara => {
                         let no = get_arg!(@i64: args, ctx).try_into()?;
                         let template = ctx
@@ -1309,9 +1317,6 @@ impl TerminalVm {
                     }
                     BuiltinCommand::SaveChara => bail!("SAVECHARA"),
                     BuiltinCommand::LoadChara => bail!("LOADCHARA"),
-                    BuiltinCommand::SwapChara => bail!("SWAPCHARA"),
-                    BuiltinCommand::SortChara => bail!("SORTCHARA"),
-                    BuiltinCommand::PickupChara => bail!("PICKUPCHARA"),
                 }
             }
             _ => bail!("TODO: {:?}", inst),

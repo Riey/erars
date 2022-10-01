@@ -598,6 +598,12 @@ impl VariableStorage {
         Ok(())
     }
 
+    pub fn swap_chara(&mut self, a: usize, b: usize) {
+        self.variables.values_mut().for_each(|(_, var)| {
+            var.swap_chara(a, b);
+        });
+    }
+
     pub fn add_chara(&mut self) {
         self.character_len += 1;
         self.variables.values_mut().for_each(|(info, var)| {
@@ -799,6 +805,13 @@ impl UniformVariable {
         match self {
             Self::Character(c) => &mut c[idx],
             _ => panic!("Variable is not character variable"),
+        }
+    }
+
+    pub fn swap_chara(&mut self, a: usize, b: usize) {
+        match self {
+            UniformVariable::Character(c) => c.swap(a, b),
+            _ => {}
         }
     }
 
