@@ -293,6 +293,31 @@ impl ConsoleSender {
         self.inputs.push_back(value);
     }
 
+    /// Request Int input
+    ///
+    /// If response is String, try again
+    ///
+    /// Return `None` if console send `Quit`
+    pub fn input_int(&mut self) -> Option<i64> {
+        loop {
+            if let Some(i) = self.inputs.pop_front() {
+                match i {
+                    Value::String(_) => continue,
+                    Value::Int(i) => break Some(i),
+                }
+            } else {
+                self.chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
+                let ret = self.chan.recv_ret();
+
+                match ret {
+                    ConsoleResult::Quit => break None,
+                    ConsoleResult::Value(Value::Int(i)) => break Some(i),
+                    ConsoleResult::Value(Value::String(_)) => continue,
+                }
+            }
+        }
+    }
+
     pub fn input(&mut self, req: InputRequest) -> ConsoleResult {
         if matches!(req, InputRequest::Anykey | InputRequest::EnterKey) && !self.inputs.is_empty() {
             ConsoleResult::Value(0.into())
@@ -503,4 +528,3 @@ impl ConsoleChannel {
 fn is_left_alignment(align: &Alignment) -> bool {
     *align == Alignment::Left
 }
-

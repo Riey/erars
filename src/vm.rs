@@ -20,16 +20,19 @@ use erars_ast::{
 };
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
 
+use self::variable::SerializableVariableStorage;
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
-use crate::ui::{ConsoleResult, InputRequest, FontStyle};
+use crate::ui::{ConsoleResult, FontStyle, InputRequest};
 use crate::{
     function::{FunctionBody, FunctionDic},
     ui::ConsoleSender,
 };
+
+const SAVE_COUNT: usize = 20;
 
 macro_rules! report_error {
     ($tx:expr, $($t:tt)+) => {
@@ -1260,8 +1263,29 @@ impl TerminalVm {
                         let nos = ctx.config.save_nos;
                         ctx.push(nos as i64);
                     }
+                    BuiltinCommand::SaveGame => {
+                        if self.run_save_game(tx, ctx)? == Workflow::Exit {
+                            return Ok(Some(Workflow::Exit));
+                        }
+                    }
+                    BuiltinCommand::LoadGame => {
+                        if self.run_load_game(tx, ctx)? != Workflow::Exit {
+                            // begin shop
+                            ctx.begin = Some(BeginType::Shop);
+                        }
+
+                        return Ok(Some(Workflow::Exit));
+                    }
                     BuiltinCommand::PutForm => {
-                        bail!("SAVEGAME");
+                        let arg = get_arg!(@String: args, ctx);
+                        match ctx.put_form_buf.as_mut() {
+                            Some(buf) => {
+                                buf.push_str(&arg);
+                            }
+                            None => {
+                                bail!("PUTFORM called in no @SAVEINFO function");
+                            }
+                        }
                     }
                     BuiltinCommand::ResetStain => {
                         let chara = get_arg!(@usize: args, ctx);
@@ -1280,6 +1304,108 @@ impl TerminalVm {
         }
 
         Ok(None)
+    }
+
+    fn load_savs(&self) -> HashMap<usize, SerializableVariableStorage> {
+        let mut savs = HashMap::new();
+
+        for i in 0..SAVE_COUNT {
+            if let Ok(sav) = save_data::read_save_data(&self.sav_path, i as i64) {
+                savs.insert(i, sav);
+            }
+        }
+
+        savs
+    }
+
+    fn print_sav_data_list(
+        savs: &HashMap<usize, SerializableVariableStorage>,
+        tx: &mut ConsoleSender,
+    ) {
+        for i in 0..SAVE_COUNT {
+            match savs.get(&i) {
+                Some(sav) => {
+                    tx.print_line(format!("[{i:02}] - {}", sav.description));
+                }
+                None => {
+                    tx.print_line(format!("[{i:02}] - NO DATA"));
+                }
+            }
+        }
+
+        tx.print_line("[100] Return".into());
+    }
+
+    fn run_load_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
+        let mut savs = self.load_savs();
+
+        loop {
+            Self::print_sav_data_list(&savs, tx);
+            match tx.input_int() {
+                None => return Ok(Workflow::Exit),
+                Some(100) => return Ok(Workflow::Return),
+                Some(i) if i >= 0 && i < SAVE_COUNT as i64 => {
+                    if let Some(sav) = savs.remove(&(i as usize)) {
+                        ctx.var.load_serializable(sav, &ctx.header_info.replace)?;
+                        break;
+                    }
+                }
+                Some(_) => continue,
+            }
+        }
+
+        if self.try_call("SYSTEM_LOADEND", &[], tx, ctx)? == Some(Workflow::Exit) {
+            return Ok(Workflow::Exit);
+        }
+
+        self.call_event(EventType::Load, tx, ctx)
+    }
+
+    fn run_save_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
+        let savs = self.load_savs();
+
+        loop {
+            Self::print_sav_data_list(&savs, tx);
+
+            match tx.input_int() {
+                None => return Ok(Workflow::Exit),
+                Some(100) => break,
+                Some(i) if i >= 0 && i < SAVE_COUNT as i64 => {
+                    let i = i as usize;
+                    let write = if savs.contains_key(&i) {
+                        tx.print_line(format!("SAVE {i} already exists. Overwrite?"));
+                        tx.print_line(format!("[0] Yes [1] No"));
+                        loop {
+                            match tx.input_int() {
+                                None => return Ok(Workflow::Exit),
+                                Some(0) => break true,
+                                Some(1) => break false,
+                                Some(_) => continue,
+                            }
+                        }
+                    } else {
+                        true
+                    };
+
+                    if write {
+                        ctx.put_form_buf = Some(String::new());
+                        if self.try_call("SAVEINFO", &[], tx, ctx)? == Some(Workflow::Exit) {
+                            return Ok(Workflow::Exit);
+                        }
+                        save_data::write_save_data(
+                            &self.sav_path,
+                            i as i64,
+                            &ctx.var,
+                            ctx.put_form_buf.take().unwrap(),
+                        );
+                        break;
+                    }
+                }
+                _ => continue,
+            }
+        }
+
+        Ok(Workflow::Return)
     }
 
     fn run_body(

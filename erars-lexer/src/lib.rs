@@ -446,6 +446,8 @@ pub enum Token<'s> {
     #[token("QUIT", |_| single_command(BuiltinCommand::Quit))]
     #[token("WAIT", |_| single_command(BuiltinCommand::Wait))]
     #[token("RESTART", |_| single_command(BuiltinCommand::Restart))]
+    #[token("SAVEGAME", |_| single_command(BuiltinCommand::SaveGame))]
+    #[token("LOADGAME", |_| single_command(BuiltinCommand::LoadGame))]
     #[token("SAVEGLOBAL", |_| single_command(BuiltinCommand::SaveGlobal))]
     #[token("LOADGLOBAL", |_| single_command(BuiltinCommand::LoadGlobal))]
     #[token("DRAWLINE", |_| single_command(BuiltinCommand::DrawLine))]

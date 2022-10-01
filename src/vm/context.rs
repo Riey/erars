@@ -17,6 +17,10 @@ pub struct VmContext {
     pub begin: Option<BeginType>,
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
+
+    /// Set `Some` during SAVEGAME
+    pub(crate) put_form_buf: Option<String>,
+
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
     current_pos: ScriptPosition,
@@ -30,6 +34,7 @@ impl VmContext {
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
+            put_form_buf: None,
             config,
             current_pos: ScriptPosition::default(),
         };

@@ -114,6 +114,9 @@ pub enum BuiltinCommand {
     DelData,
     SaveNos,
 
+    SaveGame,
+    LoadGame,
+
     SaveGlobal,
     LoadGlobal,
 
