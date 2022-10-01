@@ -88,7 +88,6 @@ impl ConsoleLine {
                     let captures = BUTTON_REGEX.captures(&btn_buf);
 
                     if let Some(captures) = captures {
-                        log::info!("Find button {captures:?}");
                         let normal_str = captures.get(1).unwrap().as_str();
                         let num: i64 = captures.get(2).unwrap().as_str().parse().unwrap();
                         let mut btn_str = self
@@ -110,11 +109,8 @@ impl ConsoleLine {
                 }
                 None => match BUTTON_REGEX.captures(&text) {
                     Some(captures) => {
-                        log::info!("Find button {captures:?}");
-
                         let normal_str = captures.get(1).unwrap().as_str();
                         let num: i64 = captures.get(2).unwrap().as_str().parse().unwrap();
-
                         if !normal_str.is_empty() {
                             self.parts
                                 .push(ConsoleLinePart::Text(normal_str.into(), style.clone()));
