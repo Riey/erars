@@ -526,6 +526,11 @@ impl TerminalVm {
 
                         ctx.push(make_bar_str(&ctx.header_info.replace, var, max, length));
                     }
+                    BuiltinMethod::Escape => {
+                        check_arg_count!(1);
+                        let s = get_arg!(@String: args, ctx);
+                        ctx.push(regex::escape(&s));
+                    }
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);

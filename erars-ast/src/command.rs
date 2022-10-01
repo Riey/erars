@@ -23,6 +23,7 @@ pub enum BuiltinMethod {
     GroupMatch,
     SumArray,
 
+    Escape,
     StrLenS,
     StrLenSU,
     StrCount,

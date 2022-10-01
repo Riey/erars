@@ -399,6 +399,7 @@ pub enum Token<'s> {
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[token("LIMIT", |lex| normal_expr_method(lex, BuiltinMethod::Limit))]
+    #[token("ESCAPE", |lex| normal_expr_method(lex, BuiltinMethod::Escape))]
     #[token("STRLENS", |lex| normal_expr_method(lex, BuiltinMethod::StrLenS))]
     #[token("STRLENSU", |lex| normal_expr_method(lex, BuiltinMethod::StrLenSU))]
     #[token("BARSTR", |lex| normal_expr_method(lex, BuiltinMethod::BarStr))]
