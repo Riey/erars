@@ -25,7 +25,7 @@ pub use self::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
-use crate::ui::{ConsoleResult, InputRequest, FontStyle};
+use crate::ui::{ConsoleResult, FontStyle, InputRequest};
 use crate::{
     function::{FunctionBody, FunctionDic},
     ui::ConsoleSender,

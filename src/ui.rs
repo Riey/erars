@@ -70,9 +70,9 @@ struct ConsoleLine {
 }
 
 impl ConsoleLine {
-    pub fn push_text(&mut self, text: String, style: &TextStyle) {
+    pub fn push_text(&mut self, mut text: String, style: &TextStyle) {
         static BUTTON_REGEX: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r#"[^\[]*\[ *(\d+) *\][^\]]*"#).unwrap());
+            Lazy::new(|| Regex::new(r#"([^\[]*)\[ *(\d+) *\][^\]]*"#).unwrap());
 
         if text.contains(']') {
             match self.button_start.take() {
@@ -89,13 +89,21 @@ impl ConsoleLine {
 
                     if let Some(captures) = captures {
                         log::info!("Find button {captures:?}");
-                        let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
-                        let btn_str = self
+                        let normal_str = captures.get(1).unwrap().as_str();
+                        let num: i64 = captures.get(2).unwrap().as_str().parse().unwrap();
+                        let mut btn_str = self
                             .parts
                             .drain(prev_btn_part..)
                             .map(ConsoleLinePart::into_text)
                             .chain(Some((text, style.clone())))
-                            .collect();
+                            .collect::<Vec<_>>();
+                        if !normal_str.is_empty() {
+                            self.parts.push(ConsoleLinePart::Text(
+                                normal_str.into(),
+                                btn_str[0].1.clone(),
+                            ));
+                            drop(btn_str[0].0.drain(..normal_str.len()));
+                        }
                         self.parts.push(ConsoleLinePart::Button(btn_str, Value::Int(num)));
                         return;
                     }
@@ -103,7 +111,15 @@ impl ConsoleLine {
                 None => match BUTTON_REGEX.captures(&text) {
                     Some(captures) => {
                         log::info!("Find button {captures:?}");
-                        let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
+
+                        let normal_str = captures.get(1).unwrap().as_str();
+                        let num: i64 = captures.get(2).unwrap().as_str().parse().unwrap();
+
+                        if !normal_str.is_empty() {
+                            self.parts
+                                .push(ConsoleLinePart::Text(normal_str.into(), style.clone()));
+                            drop(text.drain(..normal_str.len()));
+                        }
                         self.parts.push(ConsoleLinePart::Button(
                             vec![(text, style.clone())],
                             Value::Int(num),
@@ -503,4 +519,3 @@ impl ConsoleChannel {
 fn is_left_alignment(align: &Alignment) -> bool {
     *align == Alignment::Left
 }
-

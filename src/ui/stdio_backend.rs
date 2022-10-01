@@ -1,6 +1,6 @@
 use super::{
-    ConsoleChannel, ConsoleLinePart, ConsoleResult, EraApp, FontStyle,
-    InputRequest, TextStyle, VirtualConsole,
+    ConsoleChannel, ConsoleLinePart, ConsoleResult, EraApp, FontStyle, InputRequest, TextStyle,
+    VirtualConsole,
 };
 use std::{
     io::{self, BufRead},
