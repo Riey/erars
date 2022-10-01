@@ -29,7 +29,7 @@ impl StdioBackend {
 
     fn draw(&mut self, mut out: impl io::Write) -> anyhow::Result<()> {
         if self.need_redraw {
-            for line in self.vconsole.lines().iter() {
+            for line in self.vconsole.lines.drain(..) {
                 for part in line.parts.iter() {
                     match part {
                         ConsoleLinePart::Text(text, style) => {
@@ -121,7 +121,11 @@ fn paint<'a>(
     text: &'a str,
     is_btn: bool,
 ) -> ansi_term::ANSIGenericString<'a, str> {
-    let color = ansi_term::Color::RGB(style.color.0[0], style.color.0[1], style.color.0[2]);
+    let color = if is_btn {
+        ansi_term::Color::Yellow
+    } else {
+        ansi_term::Color::RGB(style.color.0[0], style.color.0[1], style.color.0[2])
+    };
 
     let mut s = color.paint(text);
 
@@ -129,7 +133,6 @@ fn paint<'a>(
     s.style_ref_mut().is_italic = style.font_style.contains(FontStyle::ITALIC);
     s.style_ref_mut().is_strikethrough = style.font_style.contains(FontStyle::STRIKELINE);
     s.style_ref_mut().is_underline = style.font_style.contains(FontStyle::UNDERLINE);
-    s.style_ref_mut().is_reverse = is_btn;
 
     s
 }
