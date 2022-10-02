@@ -2,7 +2,7 @@ mod context;
 mod save_data;
 mod variable;
 
-use std::{io, path::PathBuf};
+use std::{collections::BTreeSet, io, path::PathBuf};
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -1187,7 +1187,30 @@ impl TerminalVm {
                         ctx.var.swap_chara(a, b);
                     }
                     BuiltinCommand::SortChara => bail!("SORTCHARA"),
-                    BuiltinCommand::PickupChara => bail!("PICKUPCHARA"),
+                    BuiltinCommand::PickupChara => {
+                        let list = args
+                            .map(|v| ctx.reduce_local_value(v).and_then(usize::try_from))
+                            .collect::<Result<BTreeSet<_>>>()?;
+
+                        let target = ctx.var.read_int("TARGET", &[])?;
+                        let master = ctx.var.read_int("MASTER", &[])?;
+                        let assi = ctx.var.read_int("ASSI", &[])?;
+
+                        let recalculate_idx = |chara_idx: i64| match usize::try_from(chara_idx) {
+                            Ok(idx) => list
+                                .iter()
+                                .find_position(|i| **i == idx)
+                                .map(|(idx, _)| idx as i64)
+                                .unwrap_or(-1),
+                            _ => chara_idx,
+                        };
+
+                        *ctx.var.ref_int("TARGET", &[])? = recalculate_idx(target);
+                        *ctx.var.ref_int("MASTER", &[])? = recalculate_idx(master);
+                        *ctx.var.ref_int("ASSI", &[])? = recalculate_idx(assi);
+
+                        ctx.var.del_chara_list(&list);
+                    }
                     BuiltinCommand::AddChara => {
                         let no = get_arg!(@i64: args, ctx).try_into()?;
                         let template = ctx

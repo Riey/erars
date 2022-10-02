@@ -114,7 +114,9 @@ fn lex_line_left_erh<'s>(lex: &mut Lexer<'s, ErhToken<'s>>) -> &'s str {
         }
     };
 
-    s.strip_prefix(' ').unwrap_or(s)
+    let s = s.strip_prefix(' ').unwrap_or(s);
+
+    s.strip_suffix('\r').unwrap_or(s)
 }
 
 fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
@@ -130,7 +132,9 @@ fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
         }
     };
 
-    s.strip_prefix(' ').unwrap_or(s)
+    let s = s.strip_prefix(' ').unwrap_or(s);
+
+    s.strip_suffix('\r').unwrap_or(s)
 }
 
 fn call_jump_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> (CallJumpInfo, &'s str) {

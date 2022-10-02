@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, bail, Result};
 use erars_ast::{Value, VariableInfo};
@@ -618,6 +618,13 @@ impl VariableStorage {
         });
     }
 
+    pub fn del_chara_list(&mut self, list: &BTreeSet<usize>) {
+        self.character_len -= list.len();
+        self.variables.values_mut().for_each(|(_, var)| {
+            var.del_chara_list(list);
+        });
+    }
+
     pub fn get_chara(&mut self, target: i64) -> Result<Option<usize>> {
         let (_, no_var) = self.variables.get_mut("NO").unwrap();
         match no_var {
@@ -826,6 +833,19 @@ impl UniformVariable {
         match self {
             Self::Character(c) => {
                 c.remove(idx);
+            }
+            _ => {}
+        }
+    }
+
+    pub fn del_chara_list(&mut self, list: &BTreeSet<usize>) {
+        match self {
+            Self::Character(c) => {
+                for i in (0..c.len()).rev() {
+                    if !list.contains(&i) {
+                        c.remove(i);
+                    }
+                }
             }
             _ => {}
         }
