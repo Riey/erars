@@ -9,7 +9,7 @@ env:
 
 jobs:
   release-linux:
-    runs-on: ubuntu-lastest
+    runs-on: ubuntu-latest
     
     steps:
     - name: Cargo Target Cache
@@ -29,7 +29,7 @@ jobs:
         path: target/release/erars
 
   release-win:
-    runs-on: windows
+    runs-on: windows-latest
     
     steps:
     - name: Cargo Target Cache
