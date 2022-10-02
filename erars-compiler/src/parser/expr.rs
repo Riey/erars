@@ -176,7 +176,7 @@ pub fn form_str<'c, 'a>(
         let normal_str = parse_form_normal_str(ty);
         let (mut i, (normal, mut ty)) = normal_str(i)?;
 
-        let mut form = FormText::new(normal.into());
+        let mut form = FormText::new(normal);
 
         loop {
             let (left, expr, padding, align) = match ty {
@@ -289,7 +289,7 @@ fn ident_or_method_expr<'c, 'a>(
                 Cow::Borrowed(ident) => {
                     let var = ident;
                     if !ctx.is_arg.get() {
-                        let (i, args) = variable_arg(ctx, &var)(i)?;
+                        let (i, args) = variable_arg(ctx, var)(i)?;
 
                         if let Ok(var) = var.parse() {
                             Ok((i, Expr::BuiltinVar(var, args)))
@@ -304,6 +304,7 @@ fn ident_or_method_expr<'c, 'a>(
                             ))
                         }
                     } else {
+                        #[allow(clippy::collapsible_else_if)]
                         if let Ok(var) = var.parse() {
                             Ok((i, Expr::BuiltinVar(var, Vec::new())))
                         } else {
@@ -493,6 +494,7 @@ fn bin_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a
         let mut stack = Vec::with_capacity(8);
 
         loop {
+            #[allow(clippy::collapsible_if)]
             if ctx.is_arg.get() {
                 if i.starts_with("++") || i.starts_with("--") {
                     break;
@@ -558,7 +560,7 @@ pub fn call_arg_list<'c, 'a>(
     }
 }
 
-pub fn assign_op<'a>(i: &'a str) -> IResult<'a, Option<BinaryOperator>> {
+pub fn assign_op(i: &str) -> IResult<Option<BinaryOperator>> {
     let op = alt((
         value(BinaryOperator::Add, char('+')),
         value(BinaryOperator::Sub, char('-')),
@@ -843,7 +845,7 @@ pub fn variable<'c, 'a>(
     move |i| {
         let (i, name) = de_sp(ident)(i)?;
 
-        if !is_ident(&name) {
+        if !is_ident(name) {
             panic!("Variable error");
         }
 

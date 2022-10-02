@@ -152,8 +152,8 @@ fn call_jump_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> (CallJumpInfo, &'s str)
         com = c;
     }
 
-    if let Some(c) = com.strip_prefix("C") {
-        if !c.starts_with("A") {
+    if let Some(c) = com.strip_prefix('C') {
+        if !c.starts_with('A') {
             info.is_catch = true;
             com = c;
         }

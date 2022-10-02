@@ -82,14 +82,14 @@ impl Compiler {
                     self.push(Instruction::LoadInt(1));
                     self.push(Instruction::BinaryOperator(op));
                     self.push(Instruction::Duplicate);
-                    self.store_var(var.clone())?;
+                    self.store_var(var)?;
                 } else {
                     self.push_var(var.clone())?;
                     self.push(Instruction::ReadVar);
                     self.push(Instruction::Duplicate);
                     self.push(Instruction::LoadInt(1));
                     self.push(Instruction::BinaryOperator(op));
-                    self.store_var(var.clone())?;
+                    self.store_var(var)?;
                 }
             }
             Expr::BuiltinVar(var, args) => {
@@ -329,7 +329,7 @@ impl Compiler {
                 for (i, part) in list.into_iter().enumerate() {
                     let start = self.current_no();
 
-                    self.insert(branch + i as u32 * 4 + 0, Instruction::Duplicate);
+                    self.insert(branch + i as u32 * 4, Instruction::Duplicate);
                     self.insert(branch + i as u32 * 4 + 1, Instruction::LoadInt(i as _));
                     self.insert(
                         branch + i as u32 * 4 + 2,
@@ -472,7 +472,7 @@ impl Compiler {
                 self.insert(end, Instruction::GotoIfNot(self.current_no()));
                 self.end_loop_block(start);
             }
-            Stmt::For(var, init, end, step, body) => self.push_for(var, init, end, step, body)?,
+            Stmt::For(var, args, body) => self.push_for(var, args.0, args.1, args.2, body)?,
             Stmt::If(else_ifs, else_part) => {
                 let mut end_stack = Vec::with_capacity(32);
 
@@ -533,6 +533,7 @@ impl Compiler {
                     }
                     self.insert(try_end, Instruction::Goto(self.current_no()));
                 } else {
+                    #[allow(clippy::collapsible_else_if)]
                     if is_jump {
                         self.push(Instruction::Jump(count));
                     } else {

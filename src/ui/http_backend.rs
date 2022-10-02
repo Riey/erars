@@ -93,11 +93,8 @@ async fn start(
                 let mut vconsole = vconsole_.lock();
                 if current_req.is_none() {
                     while let Some(msg) = chan.recv_msg() {
-                        match vconsole.push_msg(msg) {
-                            Some(req) => {
-                                *current_req = Some(req);
-                            }
-                            _ => {}
+                        if let Some(req) = vconsole.push_msg(msg) {
+                            *current_req = Some(req);
                         }
                     }
                 }

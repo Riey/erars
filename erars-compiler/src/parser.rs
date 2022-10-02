@@ -344,19 +344,20 @@ impl HeaderInfo {
         while let Some((name, sizes)) = self::csv::variable_size_line(&mut lex)? {
             match name.as_str() {
                 "ARG" => {
-                    self.default_local_size.default_arg_size = sizes.and_then(|v| v.get(0).copied())
+                    self.default_local_size.default_arg_size =
+                        sizes.and_then(|v| v.first().copied())
                 }
                 "ARGS" => {
                     self.default_local_size.default_args_size =
-                        sizes.and_then(|v| v.get(0).copied())
+                        sizes.and_then(|v| v.first().copied())
                 }
                 "LOCAL" => {
                     self.default_local_size.default_local_size =
-                        sizes.and_then(|v| v.get(0).copied())
+                        sizes.and_then(|v| v.first().copied())
                 }
                 "LOCALS" => {
                     self.default_local_size.default_locals_size =
-                        sizes.and_then(|v| v.get(0).copied())
+                        sizes.and_then(|v| v.first().copied())
                 }
                 name => {
                     match sizes {
@@ -558,9 +559,7 @@ impl ParserContext {
     }
 
     pub fn is_str_var(&self, ident: &str) -> bool {
-        if matches!(ident, "LOCALS" | "ARGS") {
-            true
-        } else if self.local_strs.borrow().contains(ident) {
+        if matches!(ident, "LOCALS" | "ARGS") || self.local_strs.borrow().contains(ident) {
             true
         } else if let Some(v) = self.header.global_variables.get(ident) {
             v.is_str
@@ -771,7 +770,9 @@ impl ParserContext {
 
                 loop {
                     match self.next_token(lex)? {
-                        Some(Token::Next) => break Stmt::For(var, init, end, step, body),
+                        Some(Token::Next) => {
+                            break Stmt::For(var, Box::new((init, end, step)), body)
+                        }
                         Some(other) => {
                             body.push(self.parse_stmt(other, lex)?);
                         }

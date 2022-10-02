@@ -63,7 +63,7 @@ impl VmContext {
         let info = self.header_info.clone();
         let replace = &info.replace;
 
-        self.var.init_replace(&replace)?;
+        self.var.init_replace(replace)?;
 
         Ok(())
     }
@@ -82,7 +82,7 @@ impl VmContext {
 
     pub fn update_last_call_stack(&mut self) {
         if let Some(stack) = self.call_stack.last_mut() {
-            stack.script_position = self.current_pos.clone();
+            stack.script_position = self.current_pos;
         }
     }
 
@@ -110,13 +110,13 @@ impl VmContext {
     }
 
     pub fn read_var_ref(&mut self, var_ref: &VariableRef) -> Result<Value> {
-        let (_, var, idx) = self.resolve_var_ref(&var_ref)?;
+        let (_, var, idx) = self.resolve_var_ref(var_ref)?;
 
         var.get(idx)
     }
 
     pub fn ref_int_var_ref(&mut self, var_ref: &VariableRef) -> Result<&mut i64> {
-        let (_, var, idx) = self.resolve_var_ref(&var_ref)?;
+        let (_, var, idx) = self.resolve_var_ref(var_ref)?;
 
         var.as_int()?
             .get_mut(idx)

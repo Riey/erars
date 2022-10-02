@@ -46,7 +46,7 @@ pub enum Stmt {
     Repeat(Expr, Vec<StmtWithPos>),
     Do(Expr, Vec<StmtWithPos>),
     While(Expr, Vec<StmtWithPos>),
-    For(Variable, Expr, Expr, Expr, Vec<StmtWithPos>),
+    For(Variable, Box<(Expr, Expr, Expr)>, Vec<StmtWithPos>),
     Continue,
     Break,
     Command(BuiltinCommand, Vec<Expr>),
@@ -57,7 +57,7 @@ pub enum Stmt {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StmtWithPos(pub Stmt, pub ScriptPosition);
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScriptPosition {
     /// 0 based line index
     pub line: u32,
@@ -69,19 +69,10 @@ impl fmt::Display for ScriptPosition {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
     pub header: FunctionHeader,
     pub body: Vec<StmtWithPos>,
-}
-
-impl Default for Function {
-    fn default() -> Self {
-        Self {
-            header: FunctionHeader::default(),
-            body: Vec::default(),
-        }
-    }
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]

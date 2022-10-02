@@ -203,9 +203,9 @@ impl VariableStorage {
     fn upcheck_internal(
         tx: &mut ConsoleSender,
         palam_name: &BTreeMap<u32, SmolStr>,
-        palam: &mut Vec<i64>,
-        up: &mut Vec<i64>,
-        down: &mut Vec<i64>,
+        palam: &mut [i64],
+        up: &mut [i64],
+        down: &mut [i64],
     ) -> Result<()> {
         itertools::multizip((palam.iter_mut(), up.iter_mut(), down.iter_mut()))
             .enumerate()
@@ -454,7 +454,7 @@ impl VariableStorage {
 
         let vm_var = match var {
             UniformVariable::Character(cvar) => {
-                let c_idx = c_idx.unwrap_or_else(|| target as usize);
+                let c_idx = c_idx.unwrap_or(target as usize);
                 cvar.get_mut(c_idx).ok_or_else(|| {
                     anyhow!("Variable {name}@{func_name} Character index {c_idx} not exists")
                 })?
@@ -795,59 +795,54 @@ impl UniformVariable {
     }
 
     pub fn assume_normal(&mut self) -> &mut VmVariable {
-        match self {
-            Self::Normal(v) => v,
-            _ => panic!("Variable is not normal variable"),
+        if let Self::Normal(v) = self {
+            v
+        } else {
+            panic!("Variable is not normal variable")
         }
     }
 
     pub fn assume_chara_vec(&mut self) -> &mut Vec<VmVariable> {
-        match self {
-            Self::Character(c) => c,
-            _ => panic!("Variable is not character variable"),
+        if let Self::Character(c) = self {
+            c
+        } else {
+            panic!("Variable is not character variable")
         }
     }
 
     pub fn assume_chara(&mut self, idx: usize) -> &mut VmVariable {
-        match self {
-            Self::Character(c) => &mut c[idx],
-            _ => panic!("Variable is not character variable"),
+        if let Self::Character(c) = self {
+            &mut c[idx]
+        } else {
+            panic!("Variable is not character variable")
         }
     }
 
     pub fn swap_chara(&mut self, a: usize, b: usize) {
-        match self {
-            UniformVariable::Character(c) => c.swap(a, b),
-            _ => {}
+        if let Self::Character(c) = self {
+            c.swap(a, b);
         }
     }
 
     pub fn add_chara(&mut self, info: &VariableInfo) {
-        match self {
-            UniformVariable::Character(c) => c.push(VmVariable::new(info)),
-            _ => {}
+        if let Self::Character(c) = self {
+            c.push(VmVariable::new(info));
         }
     }
 
     pub fn del_chara(&mut self, idx: usize) {
-        match self {
-            Self::Character(c) => {
-                c.remove(idx);
-            }
-            _ => {}
+        if let Self::Character(c) = self {
+            c.remove(idx);
         }
     }
 
     pub fn del_chara_list(&mut self, list: &BTreeSet<usize>) {
-        match self {
-            Self::Character(c) => {
-                for i in (0..c.len()).rev() {
-                    if !list.contains(&i) {
-                        c.remove(i);
-                    }
+        if let Self::Character(c) = self {
+            for i in (0..c.len()).rev() {
+                if !list.contains(&i) {
+                    c.remove(i);
                 }
             }
-            _ => {}
         }
     }
 }

@@ -337,14 +337,16 @@ mod body {
                 func_extern: None,
                 args: [],
             },
-            Int(
-                0,
-            ),
-            Int(
-                10,
-            ),
-            Int(
-                1,
+            (
+                Int(
+                    0,
+                ),
+                Int(
+                    10,
+                ),
+                Int(
+                    1,
+                ),
             ),
             [
                 StmtWithPos(

@@ -261,21 +261,11 @@ impl TerminalVm {
                     BinaryOperator::And => Value::Int(i64::from(lhs.as_bool() && rhs.as_bool())),
                     BinaryOperator::Or => Value::Int(i64::from(lhs.as_bool() || rhs.as_bool())),
                     BinaryOperator::Xor => Value::Int(i64::from(lhs.as_bool() ^ rhs.as_bool())),
-                    BinaryOperator::BitAnd => {
-                        Value::Int(i64::from(lhs.try_into_int()? & rhs.try_into_int()?))
-                    }
-                    BinaryOperator::BitOr => {
-                        Value::Int(i64::from(lhs.try_into_int()? | rhs.try_into_int()?))
-                    }
-                    BinaryOperator::BitXor => {
-                        Value::Int(i64::from(lhs.try_into_int()? ^ rhs.try_into_int()?))
-                    }
-                    BinaryOperator::Lhs => {
-                        Value::Int(i64::from(lhs.try_into_int()? << rhs.try_into_int()?))
-                    }
-                    BinaryOperator::Rhs => {
-                        Value::Int(i64::from(lhs.try_into_int()? >> rhs.try_into_int()?))
-                    }
+                    BinaryOperator::BitAnd => Value::Int(lhs.try_into_int()? & rhs.try_into_int()?),
+                    BinaryOperator::BitOr => Value::Int(lhs.try_into_int()? | rhs.try_into_int()?),
+                    BinaryOperator::BitXor => Value::Int(lhs.try_into_int()? ^ rhs.try_into_int()?),
+                    BinaryOperator::Lhs => Value::Int(lhs.try_into_int()? << rhs.try_into_int()?),
+                    BinaryOperator::Rhs => Value::Int(lhs.try_into_int()? >> rhs.try_into_int()?),
                 };
 
                 ctx.push(ret);
@@ -468,8 +458,8 @@ impl TerminalVm {
                         let value = get_arg!(@value args, ctx);
 
                         let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
-                        let end =
-                            get_arg!(@opt @usize: args, ctx).unwrap_or(ctx.var.character_len());
+                        let end = get_arg!(@opt @usize: args, ctx)
+                            .unwrap_or_else(|| ctx.var.character_len());
 
                         key.idxs.insert(0, start);
 
@@ -895,7 +885,7 @@ impl TerminalVm {
                         let start = get_arg!(@usize: args, ctx);
                         let count = get_arg!(@usize: args, ctx);
 
-                        let target = if let Some(idx) = v.idxs.get(0).copied() {
+                        let target = if let Some(idx) = v.idxs.first().copied() {
                             idx
                         } else {
                             ctx.var.read_int("TARGET", &[])?.try_into()?
@@ -938,12 +928,13 @@ impl TerminalVm {
                             (Some(value), start, end) => {
                                 let var = match var {
                                     UniformVariable::Character(cvar) => {
-                                        &mut cvar[chara_idx.unwrap_or_else(|| target as usize)]
+                                        &mut cvar[chara_idx.unwrap_or(target as usize)]
                                     }
                                     UniformVariable::Normal(var) => var,
                                 };
                                 let start = start.unwrap_or(0);
-                                let end = end.unwrap_or(info.size.last().copied().unwrap_or(1));
+                                let end =
+                                    end.unwrap_or_else(|| info.size.last().copied().unwrap_or(1));
 
                                 for i in start..end {
                                     var.set(idx + i, value.clone())?;
@@ -1023,7 +1014,7 @@ impl TerminalVm {
                             .try_collect()?;
 
                         let ((_, result), (_, results)) =
-                            ctx.var.get_var2("RESULT".into(), "RESULTS".into()).unwrap();
+                            ctx.var.get_var2("RESULT", "RESULTS").unwrap();
                         let result = result.assume_normal();
                         let results = results.assume_normal();
 
@@ -1268,11 +1259,8 @@ impl TerminalVm {
                     BuiltinCommand::LoadData => {
                         let idx = get_arg!(@i64: args, ctx);
 
-                        match self::save_data::read_save_data(&self.sav_path, idx) {
-                            Ok(data) => {
-                                ctx.var.load_serializable(data, &ctx.header_info.replace)?;
-                            }
-                            _ => {}
+                        if let Ok(data) = self::save_data::read_save_data(&self.sav_path, idx) {
+                            ctx.var.load_serializable(data, &ctx.header_info.replace)?;
                         }
                     }
                     BuiltinCommand::DelData => {
@@ -1747,7 +1735,6 @@ impl TerminalVm {
 
                                     if *money >= price {
                                         *money -= price;
-                                        drop(money);
                                         *ctx.var.ref_int("ITEM", &[i as usize])? += 1;
                                     }
                                 }
@@ -1776,7 +1763,7 @@ impl TerminalVm {
                 .transpose()
         }
 
-        let position = position.unwrap_or(stack.script_position.clone());
+        let position = position.unwrap_or(stack.script_position);
 
         match &stack.func_name {
             Ok(name) => match read_source(stack.file_path.as_str(), &position) {
@@ -1798,7 +1785,7 @@ impl TerminalVm {
             },
             Err(ty) => match read_source(stack.file_path.as_str(), &position) {
                 Ok(Some(s)) => {
-                    let source = s.replace("\n", "\\n");
+                    let source = s.replace('\n', "\\n");
                     report_error!(tx, "    at {ty}{position} `{}` [{source}]", stack.file_path,);
                 }
                 _ => {
