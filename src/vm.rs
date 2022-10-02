@@ -72,10 +72,37 @@ macro_rules! get_arg {
     };
 }
 
+/// 해당 함수를 호출하고 존재할경우 true, 반대면 false를 반환함
+///
+/// 해당 함수에서 게임이 종료되면 그대로 종료
+macro_rules! call {
+    ($self:expr, $name:expr, $tx:expr, $ctx:expr) => {
+        match $self.try_call($name, &[], $tx, $ctx)? {
+            Some(Workflow::Exit) => return Ok(Workflow::Exit),
+            Some(Workflow::Return) => true,
+            None => false,
+        }
+    };
+}
+
+macro_rules! call_event {
+    ($self:expr, $ty:expr, $tx:expr, $ctx:expr) => {
+        if $self.call_event($ty, $tx, $ctx)? == Workflow::Exit {
+            return Ok(Workflow::Exit);
+        }
+    };
+}
+
 #[derive(Display, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Workflow {
     Return,
     Exit,
+}
+
+impl Default for Workflow {
+    fn default() -> Self {
+        Self::Return
+    }
 }
 
 pub struct TerminalVm {
@@ -1234,7 +1261,20 @@ impl TerminalVm {
                         tx.clear_line(get_arg!(@usize: args, ctx));
                     }
                     BuiltinCommand::CallTrain => {
-                        bail!("CALLTRAIN");
+                        let count = get_arg!(@usize: args, ctx);
+                        let commands = ctx
+                            .var
+                            .get_var("SELECTCOM")?
+                            .1
+                            .assume_normal()
+                            .as_int()?[..count]
+                            .iter()
+                            .map(|c| usize::try_from(*c).map_err(anyhow::Error::from))
+                            .collect::<Result<Vec<usize>>>()?;
+
+                        if self.run_call_train(tx, ctx, commands)? == Workflow::Exit {
+                            return Ok(Some(Workflow::Exit));
+                        }
                     }
                     BuiltinCommand::DelChara => {
                         let idx = get_arg!(@i64: args, ctx);
@@ -1366,6 +1406,36 @@ impl TerminalVm {
         tx.print_line("[100] Return".into());
     }
 
+    fn run_call_train(
+        &self,
+        tx: &mut ConsoleSender,
+        ctx: &mut VmContext,
+        commands: Vec<usize>,
+    ) -> Result<Workflow> {
+        for command in commands {
+            call!(self, "SHOW_STATUS", tx, ctx);
+
+            ctx.var.prepare_train_data()?;
+            ctx.var.reset_var("NOWEX")?;
+            *ctx.var.ref_int("SELECTCOM", &[])? = command as i64;
+
+            call_event!(self, EventType::Com, tx, ctx);
+            call!(self, &format!("COM{command}"), tx, ctx);
+
+            if ctx.var.get_result() == 0 {
+                continue;
+            }
+
+            call!(self, "SOURCE_CHECK", tx, ctx);
+            ctx.var.reset_var("SOURCE")?;
+            call_event!(self, EventType::ComEnd, tx, ctx);
+        }
+
+        call!(self, "CALLTRAINEND", tx, ctx);
+
+        Ok(Workflow::Return)
+    }
+
     fn run_load_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
         let mut savs = self.load_savs();
 
@@ -1384,11 +1454,10 @@ impl TerminalVm {
             }
         }
 
-        if self.try_call("SYSTEM_LOADEND", &[], tx, ctx)? == Some(Workflow::Exit) {
-            return Ok(Workflow::Exit);
-        }
+        call!(self, "SYSTEM_LOADEND", tx, ctx);
+        call_event!(self, EventType::Load, tx, ctx);
 
-        self.call_event(EventType::Load, tx, ctx)
+        Ok(Workflow::Return)
     }
 
     fn run_save_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
@@ -1558,70 +1627,48 @@ impl TerminalVm {
         })
     }
 
-    fn begin(&self, ty: BeginType, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<()> {
+    fn begin(
+        &self,
+        ty: BeginType,
+        tx: &mut ConsoleSender,
+        ctx: &mut VmContext,
+    ) -> Result<Workflow> {
         log::trace!("Begin {ty}");
-
-        /// 해당 함수를 호출하고 존재할경우 true, 반대면 false를 반환함
-        ///
-        /// 해당 함수에서 게임이 종료되면 그대로 종료
-        macro_rules! call {
-            ($name:expr) => {
-                match self.try_call($name, &[], tx, ctx)? {
-                    Some(Workflow::Exit) => return Ok(()),
-                    Some(Workflow::Return) => true,
-                    None => false,
-                }
-            };
-        }
-
-        macro_rules! call_event {
-            ($ty:expr) => {
-                if self.call_event($ty, tx, ctx)? == Workflow::Exit {
-                    return Ok(());
-                }
-            };
-        }
 
         match ty {
             BeginType::Title => {
-                if !call!("SYSTEM_TITLE") {
+                if !call!(self, "SYSTEM_TITLE", tx, ctx) {
                     todo!("Default TITLE");
                 }
-                Ok(())
             }
             BeginType::First => {
-                call_event!(EventType::First);
-                Ok(())
+                call_event!(self, EventType::First, tx, ctx);
             }
             BeginType::Train => {
                 ctx.var.reset_train_data()?;
-                call_event!(EventType::Train);
+                call_event!(self, EventType::Train, tx, ctx);
 
                 while ctx.begin.is_none() {
                     let com_no = match ctx.var.read_int("NEXTCOM", &[])? {
                         no if no >= 0 => no,
                         _ => {
-                            call!("SHOW_STATUS");
+                            call!(self, "SHOW_STATUS", tx, ctx);
 
                             for (no, name) in ctx.header_info.clone().var_name_var["TRAIN"].iter() {
-                                if call!(&format!("COM_ABLE{no}")) && ctx.var.get_result() != 0
+                                if call!(self, &format!("COM_ABLE{no}"), tx, ctx)
+                                    && ctx.var.get_result() != 0
                                     || ctx.header_info.replace.comable_init != 0
                                 {
                                     tx.printrc(&format!("{name}[{no:3}]"));
                                 }
                             }
 
-                            call!("SHOW_USERCOM");
+                            call!(self, "SHOW_USERCOM", tx, ctx);
 
-                            ctx.var.reset_var("UP")?;
-                            ctx.var.reset_var("DOWN")?;
-                            ctx.var.reset_var("LOSEBASE")?;
-                            ctx.var.reset_var("CUP")?;
-                            ctx.var.reset_var("CDOWN")?;
-                            ctx.var.reset_var("DOWNBASE")?;
+                            ctx.var.prepare_train_data()?;
 
                             match tx.input(InputRequest::Int) {
-                                ConsoleResult::Quit => return Ok(()),
+                                ConsoleResult::Quit => return Ok(Workflow::Exit),
                                 ConsoleResult::Value(Value::String(_)) => unreachable!(),
                                 ConsoleResult::Value(Value::Int(no)) => {
                                     ctx.var.set_result(no);
@@ -1639,7 +1686,7 @@ impl TerminalVm {
                                     if com_exists {
                                         no
                                     } else {
-                                        call!("USERCOM");
+                                        call!(self, "USERCOM", tx, ctx);
 
                                         continue;
                                     }
@@ -1652,44 +1699,40 @@ impl TerminalVm {
 
                     *ctx.var.ref_int("SELECTCOM", &[])? = com_no;
 
-                    call_event!(EventType::Com);
-                    call!(&format!("COM{com_no}"));
+                    call_event!(self, EventType::Com, tx, ctx);
+                    call!(self, &format!("COM{com_no}"), tx, ctx);
 
                     if ctx.var.get_result() == 0 {
                         continue;
                     }
 
-                    call!("SOURCE_CHECK");
+                    call!(self, "SOURCE_CHECK", tx, ctx);
 
                     ctx.var.reset_var("SOURCE")?;
 
-                    call_event!(EventType::ComEnd);
+                    call_event!(self, EventType::ComEnd, tx, ctx);
                 }
-
-                Ok(())
             }
             BeginType::AfterTrain => {
-                call_event!(EventType::End);
-
-                Ok(())
+                call_event!(self, EventType::End, tx, ctx);
             }
             BeginType::AblUp => {
                 while ctx.begin.is_none() {
-                    call!("SHOW_JUEL");
-                    call!("SHOW_ABLUP_SELECT");
+                    call!(self, "SHOW_JUEL", tx, ctx);
+                    call!(self, "SHOW_ABLUP_SELECT", tx, ctx);
 
                     loop {
                         match tx.input(InputRequest::Int) {
-                            ConsoleResult::Quit => return Ok(()),
+                            ConsoleResult::Quit => return Ok(Workflow::Exit),
                             ConsoleResult::Value(Value::Int(i)) => {
                                 ctx.var.set_result(i);
 
                                 if matches!(i, 0..=99) {
-                                    if call!(&format!("ABLUP{i}")) {
+                                    if call!(self, &format!("ABLUP{i}"), tx, ctx) {
                                         break;
                                     }
                                 } else {
-                                    call!("USERABLUP");
+                                    call!(self, "USERABLUP", tx, ctx);
                                     break;
                                 }
                             }
@@ -1697,19 +1740,15 @@ impl TerminalVm {
                         }
                     }
                 }
-
-                Ok(())
             }
             BeginType::TurnEnd => {
-                call_event!(EventType::TurnEnd);
-
-                Ok(())
+                call_event!(self, EventType::TurnEnd, tx, ctx);
             }
             BeginType::Shop => {
-                call_event!(EventType::Shop);
+                call_event!(self, EventType::Shop, tx, ctx);
 
                 while ctx.begin.is_none() {
-                    call!("SHOW_SHOP");
+                    call!(self, "SHOW_SHOP", tx, ctx);
 
                     match tx.input(InputRequest::Int) {
                         ConsoleResult::Quit => break,
@@ -1739,7 +1778,7 @@ impl TerminalVm {
                                     }
                                 }
                             } else {
-                                call!("USERSHOP");
+                                call!(self, "USERSHOP", tx, ctx);
                             }
                         }
                         ConsoleResult::Value(Value::String(_)) => {
@@ -1748,10 +1787,10 @@ impl TerminalVm {
                         }
                     }
                 }
-
-                Ok(())
             }
         }
+
+        Ok(Workflow::Return)
     }
 
     fn report_stack(stack: &Callstack, tx: &mut ConsoleSender, position: Option<ScriptPosition>) {
@@ -1798,7 +1837,7 @@ impl TerminalVm {
     pub fn start(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<()> {
         while let Some(begin) = ctx.take_begin() {
             match self.begin(begin, tx, ctx) {
-                Ok(()) => {}
+                Ok(_) => {}
                 Err(err) => {
                     tx.new_line();
                     report_error!(tx, "VM failed with: {err}");

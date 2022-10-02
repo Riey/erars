@@ -12,6 +12,24 @@ use smol_str::SmolStr;
 
 use crate::ui::ConsoleSender;
 
+macro_rules! set_var {
+    ($self:expr, $name:expr, $value:expr) => {
+        *$self.ref_int($name, &[])? = $value;
+    };
+    (@all $self:expr, $name:expr, $value:expr) => {
+        match $self.get_var($name)?.1 {
+            UniformVariable::Character(ref mut cvar) => {
+                for var in cvar {
+                    var.as_int()?.fill($value);
+                }
+            }
+            UniformVariable::Normal(ref mut var) => {
+                var.as_int()?.fill($value);
+            }
+        }
+    };
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SerializableVariableStorage {
     pub description: String,
@@ -268,35 +286,28 @@ impl VariableStorage {
         Self::upcheck_internal(tx, palam_name, palam, up, down)
     }
 
+    pub fn prepare_train_data(&mut self) -> Result<()> {
+        self.reset_var("UP")?;
+        self.reset_var("DOWN")?;
+        self.reset_var("LOSEBASE")?;
+        self.reset_var("CUP")?;
+        self.reset_var("CDOWN")?;
+        self.reset_var("DOWNBASE")?;
+
+        Ok(())
+    }
+
     pub fn reset_train_data(&mut self) -> Result<()> {
-        macro_rules! set_var {
-            ($name:expr, $value:expr) => {
-                *self.ref_int($name, &[])? = $value;
-            };
-            (@all $name:expr, $value:expr) => {
-                match self.get_var($name)?.1 {
-                    UniformVariable::Character(ref mut cvar) => {
-                        for var in cvar {
-                            var.as_int()?.fill($value);
-                        }
-                    }
-                    UniformVariable::Normal(ref mut var) => {
-                        var.as_int()?.fill($value);
-                    }
-                }
-            };
-        }
+        set_var!(self, "ASSIPLAY", 0);
+        set_var!(self, "PREVCOM", -1);
+        set_var!(self, "NEXTCOM", -1);
 
-        set_var!("ASSIPLAY", 0);
-        set_var!("PREVCOM", -1);
-        set_var!("NEXTCOM", -1);
-
-        set_var!(@all "TFLAG", 0);
-        set_var!(@all "TEQUIP", 0);
-        set_var!(@all "PALAM", 0);
-        set_var!(@all "STAIN", 0);
-        set_var!(@all "SOURCE", 0);
-        set_var!(@all "GOTJUEL", 0);
+        set_var!(@all self, "TFLAG", 0);
+        set_var!(@all self, "TEQUIP", 0);
+        set_var!(@all self, "PALAM", 0);
+        set_var!(@all self, "STAIN", 0);
+        set_var!(@all self, "SOURCE", 0);
+        set_var!(@all self, "GOTJUEL", 0);
 
         Ok(())
     }
