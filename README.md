@@ -4,6 +4,10 @@
 
 ERA runtime made with Rust
 
+## Run nightly
+
+Download `erars.exe` from https://github.com/Riey/erars/actions/workflows/nightly.yml
+
 ## Why new runtime
 
 There is `Emuera` which has emerged as an alternative to eramaker, but at this point it's very slow and dependent on the Windows platform.
