@@ -38,6 +38,8 @@ fn run_test() {
         log::info!("Run {}", erb_file.display());
 
         let ron_source = std::fs::read_to_string(ron_file).unwrap();
+        let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();
+
         let program =
             test_util::do_test(erb_file.to_str().unwrap(), ParserContext::parse_program_str);
         let mut dic = FunctionDic::new();
@@ -53,7 +55,6 @@ fn run_test() {
         log::info!("FunctionDic: {dic:#?}");
 
         let ret = test_runner(dic, ctx);
-        let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();
 
         k9::assert_equal!(ret, expected_ret);
     }

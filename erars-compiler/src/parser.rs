@@ -2,7 +2,7 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, EventType,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
     Expr, Function, FunctionHeader, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable,
     VariableInfo,
 };
@@ -591,20 +591,16 @@ impl ParserContext {
             Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
             Token::CallEvent => Stmt::CallEvent(take_ident!(EventType, lex)),
             Token::LabelLine(label) => Stmt::Label(label.into()),
-            Token::StrLenForm(left) => {
+            Token::StrFormMethod((method, left)) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Method(BuiltinMethod::StrLenS, vec![form])
+                Stmt::Method(method, vec![form])
             }
-            Token::PutForm(left) => {
+            Token::StrFormCommand((com, left)) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Command(BuiltinCommand::PutForm, vec![form])
+                Stmt::Command(com, vec![form])
             }
             Token::CustomDrawLine(custom) => {
                 Stmt::Command(BuiltinCommand::CustomDrawLine, vec![Expr::str(custom)])
-            }
-            Token::StrLenFormU(left) => {
-                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Method(BuiltinMethod::StrLenSU, vec![form])
             }
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::Throw(left) => Stmt::Command(

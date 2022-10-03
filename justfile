@@ -1,12 +1,4 @@
-push-program:
-    nix build --json \
-        | jq -r '.[].outputs | to_entries[].value' \
-        | cachix push erars
-
-push-win-program:
-    nix build .#packages.x86_64-linux.erarsWin --json \
-        | jq -r '.[].outputs | to_entries[].value' \
-        | cachix push erars
+default: (build-release)
 
 build:
     cargo build
@@ -31,3 +23,7 @@ run-ym-log:
 
 run-ym-toriko:
     cargo run --release -- --use-input=toriko.ron ../eraTHYMKR
+
+gen-test name:
+    echo "@SYSTEM_TITLE" > tests/run_tests/basic/{{name}}.erb
+    echo "[]" > tests/run_tests/basic/{{name}}.ron

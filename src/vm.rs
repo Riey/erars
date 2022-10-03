@@ -1111,7 +1111,26 @@ impl TerminalVm {
                         tx.set_color(r, g, b);
                     }
                     BuiltinCommand::SetColorByName | BuiltinCommand::SetBgColorByName => {
-                        bail!("SETCOLORBYNAME");
+                        let name = get_arg!(@String: args, ctx);
+
+                        let rgb: css_color::Srgb = match name.parse() {
+                            Ok(color) => color,
+                            Err(_) => {
+                                bail!("Unknown color name {name}");
+                            }
+                        };
+
+                        let (r, g, b) = (
+                            (rgb.red * 255.0) as u8,
+                            (rgb.green * 255.0) as u8,
+                            (rgb.blue * 255.0) as u8,
+                        );
+
+                        if *com == BuiltinCommand::SetColorByName {
+                            tx.set_color(r, g, b);
+                        } else {
+                            tx.set_bg_color(r, g, b);
+                        }
                     }
                     BuiltinCommand::SetBgColor => {
                         let c = get_arg!(@i64: args, ctx);
@@ -1262,12 +1281,8 @@ impl TerminalVm {
                     }
                     BuiltinCommand::CallTrain => {
                         let count = get_arg!(@usize: args, ctx);
-                        let commands = ctx
-                            .var
-                            .get_var("SELECTCOM")?
-                            .1
-                            .assume_normal()
-                            .as_int()?[..count]
+                        let commands = ctx.var.get_var("SELECTCOM")?.1.assume_normal().as_int()?
+                            [..count]
                             .iter()
                             .map(|c| usize::try_from(*c).map_err(anyhow::Error::from))
                             .collect::<Result<Vec<usize>>>()?;

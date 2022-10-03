@@ -277,9 +277,6 @@ pub enum Token<'s> {
     #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
     Ident(&'s str),
 
-    #[token("PUTFORM", lex_line_left)]
-    PutForm(&'s str),
-
     #[token("CALLEVENT")]
     CallEvent,
 
@@ -347,16 +344,22 @@ pub enum Token<'s> {
     Alignment,
     #[token("BEGIN")]
     Begin,
-    #[token("STRLENFORM", lex_line_left)]
-    StrLenForm(&'s str),
-    #[token("STRLENFORMU", lex_line_left)]
-    StrLenFormU(&'s str),
     #[token("TIMES", lex_line_left)]
     Times(&'s str),
     #[token("THROW", lex_line_left)]
     Throw(&'s str),
     #[token("CUSTOMDRAWLINE", lex_line_left)]
     CustomDrawLine(&'s str),
+
+    #[token("RETURNFORM", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
+    #[token("PUTFORM", |lex| normal_expr_command(lex, BuiltinCommand::PutForm))]
+    #[token("SETCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetColorByName))]
+    #[token("SETBGCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColorByName))]
+    StrFormCommand((BuiltinCommand, &'s str)),
+
+    #[token("STRLENFORM", |lex| normal_expr_method(lex, BuiltinMethod::StrLenS))]
+    #[token("STRLENFORMU", |lex| normal_expr_method(lex, BuiltinMethod::StrLenSU))]
+    StrFormMethod((BuiltinMethod, &'s str)),
 
     #[token("VARSET", |lex| normal_expr_command(lex, BuiltinCommand::Varset))]
     #[token("CVARSET", |lex| normal_expr_command(lex, BuiltinCommand::CVarset))]
@@ -375,8 +378,6 @@ pub enum Token<'s> {
     #[token("CLEARLINE", |lex| normal_expr_command(lex, BuiltinCommand::ClearLine))]
     #[token("SETCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetColor))]
     #[token("SETBGCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColor))]
-    #[token("SETCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetColorByName))]
-    #[token("SETBGCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColorByName))]
     #[token("SETBIT", |lex| normal_expr_command(lex, BuiltinCommand::SetBit))]
     #[token("CLEARBIT", |lex| normal_expr_command(lex, BuiltinCommand::ClearBit))]
     #[token("INVERTBIT", |lex| normal_expr_command(lex, BuiltinCommand::InvertBit))]
