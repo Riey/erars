@@ -32,7 +32,7 @@ pub struct TextStyle {
     font_style: FontStyle,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Color(pub [u8; 3]);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +136,7 @@ struct VirtualConsole {
     lines: Vec<ConsoleLine>,
     style: TextStyle,
     bg_color: Color,
+    hl_color: Color,
 }
 
 impl VirtualConsole {
@@ -149,6 +150,7 @@ impl VirtualConsole {
                 font_style: FontStyle::NORMAL,
             },
             bg_color: Color([0, 0, 0]),
+            hl_color: Color([255, 255, 0]),
         }
     }
 
@@ -200,6 +202,9 @@ impl VirtualConsole {
             ConsoleMessage::SetBgColor(color) => {
                 self.bg_color = color;
             }
+            ConsoleMessage::SetHlColor(color) => {
+                self.hl_color = color;
+            }
             ConsoleMessage::SetFont(family) => {
                 self.style.font_family = family.into();
             }
@@ -225,6 +230,7 @@ pub enum ConsoleMessage {
     SetStyle(FontStyle),
     SetColor(Color),
     SetBgColor(Color),
+    SetHlColor(Color),
 }
 
 bitflags::bitflags! {
@@ -390,8 +396,13 @@ impl ConsoleSender {
     }
 
     pub fn set_bg_color(&mut self, r: u8, g: u8, b: u8) {
-        self.color = u32::from_le_bytes([r, g, b, 0]);
+        self.bg_color = u32::from_le_bytes([r, g, b, 0]);
         self.chan.send_msg(ConsoleMessage::SetBgColor(Color([r, g, b])));
+    }
+
+    pub fn set_hl_color(&mut self, r: u8, g: u8, b: u8) {
+        self.hl_color = u32::from_le_bytes([r, g, b, 0]);
+        self.chan.send_msg(ConsoleMessage::SetHlColor(Color([r, g, b])));
     }
 
     pub fn set_align(&mut self, align: Alignment) {

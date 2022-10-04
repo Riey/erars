@@ -1,6 +1,5 @@
 use super::{
-    ConsoleChannel, ConsoleLinePart, ConsoleResult, EraApp, FontStyle, InputRequest, TextStyle,
-    VirtualConsole,
+    ConsoleChannel, ConsoleLinePart, ConsoleResult, EraApp, FontStyle, InputRequest, VirtualConsole,
 };
 use std::{
     io::{self, BufRead},
@@ -31,15 +30,23 @@ impl StdioBackend {
                 for part in line.parts.iter() {
                     match part {
                         ConsoleLinePart::Text(text, style) => {
-                            write!(out, "{}", paint(style, text, false))?;
+                            write!(out, "{}", paint(style.color, style.font_style, text))?;
                         }
                         ConsoleLinePart::Button(btns, _value) => {
                             for (text, style) in btns.iter() {
-                                write!(out, "{}", paint(style, text, true))?;
+                                write!(
+                                    out,
+                                    "{}",
+                                    paint(self.vconsole.hl_color, style.font_style, text)
+                                )?;
                             }
                         }
                         ConsoleLinePart::Line(text, style) => {
-                            write!(out, "{}", paint(style, &text.repeat(30), false))?;
+                            write!(
+                                out,
+                                "{}",
+                                paint(style.color, style.font_style, &text.repeat(30))
+                            )?;
                         }
                     }
                 }
@@ -113,22 +120,18 @@ impl EraApp for StdioBackend {
 }
 
 fn paint<'a>(
-    style: &TextStyle,
+    color: super::Color,
+    font_style: FontStyle,
     text: &'a str,
-    is_btn: bool,
 ) -> ansi_term::ANSIGenericString<'a, str> {
-    let color = if is_btn {
-        ansi_term::Color::Yellow
-    } else {
-        ansi_term::Color::RGB(style.color.0[0], style.color.0[1], style.color.0[2])
-    };
+    let color = ansi_term::Color::RGB(color.0[0], color.0[1], color.0[2]);
 
     let mut s = color.paint(text);
 
-    s.style_ref_mut().is_bold = style.font_style.contains(FontStyle::BOLD);
-    s.style_ref_mut().is_italic = style.font_style.contains(FontStyle::ITALIC);
-    s.style_ref_mut().is_strikethrough = style.font_style.contains(FontStyle::STRIKELINE);
-    s.style_ref_mut().is_underline = style.font_style.contains(FontStyle::UNDERLINE);
+    s.style_ref_mut().is_bold = font_style.contains(FontStyle::BOLD);
+    s.style_ref_mut().is_italic = font_style.contains(FontStyle::ITALIC);
+    s.style_ref_mut().is_strikethrough = font_style.contains(FontStyle::STRIKELINE);
+    s.style_ref_mut().is_underline = font_style.contains(FontStyle::UNDERLINE);
 
     s
 }

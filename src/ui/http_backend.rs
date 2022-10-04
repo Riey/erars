@@ -23,7 +23,7 @@ use axum::{
 };
 use tower_http::compression::CompressionLayer;
 
-use crate::ui::{ConsoleLine, ConsoleResult, InputRequest};
+use crate::ui::{Color, ConsoleLine, ConsoleResult, InputRequest};
 
 use super::{EraApp, VirtualConsole};
 
@@ -66,6 +66,8 @@ async fn start(
                 #[derive(serde::Serialize)]
                 struct Ret<'a> {
                     current_req: Option<InputRequest>,
+                    bg_color: Color,
+                    hl_color: Color,
                     lines: &'a [ConsoleLine],
                 }
 
@@ -74,6 +76,8 @@ async fn start(
                     [("Content-Type", "text/json")],
                     serde_json::to_string(&Ret {
                         current_req: vconsole.current_req,
+                        bg_color: vconsole.bg_color,
+                        hl_color: vconsole.hl_color,
                         lines: vconsole.lines(),
                     })
                     .unwrap(),
