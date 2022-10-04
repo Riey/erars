@@ -1,34 +1,34 @@
 # GET /
 
-```
+```rust
 
-Ret {
-    current_req: Option\<InputRequest>,
+struct Ret {
+    current_req: Option<InputRequest>,
     bg_color: Color,
     hl_color: Color,
     lines: [{parts: [ConsoleLinePart]}]
 }
 
-InputRequest {
+enum InputRequest {
     Anykey,
     EnterKey,
     Int,
     Str,
 }
 
-ConsoleLinePart {
-    Text: (String, TextStyle),
-    Line: (String, TextStyle),
-    Button: ([(String, TextStyle)], {Int or String}),
+enum ConsoleLinePart {
+    Text(String, TextStyle),
+    Line(String, TextStyle),
+    Button([(String, TextStyle)], {Int or String}),
 }
 
-TextStyle {
+struct TextStyle {
     color: Color,
     font_family: String,
     font_style: FontStyle,
 }
 
-FontStyle {
+bitset FontStyle {
     NORMAL = 0x0;
     BOLD = 0x1;
     ITALIC = 0x2;
@@ -36,7 +36,7 @@ FontStyle {
     UNDERLINE = 0x8;
 }
 
-Color = [u8; 3]
+type Color = [u8; 3];
 
 ```
 
