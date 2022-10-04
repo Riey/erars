@@ -1,5 +1,7 @@
 # GET /
 
+```
+
 Ret {
     current_req: Option\<InputRequest>,
     bg_color: Color,
@@ -35,6 +37,8 @@ FontStyle {
 }
 
 Color = [u8; 3]
+
+```
 
 ## Query
 
