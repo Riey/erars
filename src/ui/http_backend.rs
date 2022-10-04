@@ -37,6 +37,12 @@ impl HttpBackend {
     }
 }
 
+#[derive(serde::Deserialize)]
+struct GetRootQuery {
+    #[serde(default)]
+    from: usize,
+}
+
 async fn start(
     port: u16,
     chan: Arc<super::ConsoleChannel>,
@@ -60,7 +66,7 @@ async fn start(
         )
         .route(
             "/",
-            get(|| async move {
+            get(|axum::extract::Query(params): axum::extract::Query<GetRootQuery>| async move {
                 let vconsole = vconsole.read();
 
                 #[derive(serde::Serialize)]
@@ -78,7 +84,7 @@ async fn start(
                         current_req: vconsole.current_req,
                         bg_color: vconsole.bg_color,
                         hl_color: vconsole.hl_color,
-                        lines: vconsole.lines(),
+                        lines: vconsole.lines().get(params.from..).unwrap_or(&[]),
                     })
                     .unwrap(),
                 )
