@@ -13,7 +13,7 @@ test-update:
     K9_UPDATE_SNAPSHOTS=1 cargo test
 
 run-ym-http:
-    cargo run --release --port=8000 ../eraTHYMKR
+    cargo run --release -- --port=8000 ../eraTHYMKR
 
 run-ym:
     cargo run --release -- ../eraTHYMKR

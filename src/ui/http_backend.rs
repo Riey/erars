@@ -23,7 +23,7 @@ use axum::{
 };
 use tower_http::compression::CompressionLayer;
 
-use crate::ui::{ConsoleResult, InputRequest};
+use crate::ui::{ConsoleLine, ConsoleResult, InputRequest};
 
 use super::{EraApp, VirtualConsole};
 
@@ -79,10 +79,20 @@ async fn start(
                     }
                 }
 
+                #[derive(serde::Serialize)]
+                struct Ret<'a> {
+                    current_req: Option<InputRequest>,
+                    lines: &'a [ConsoleLine],
+                }
+
                 (
                     StatusCode::OK,
                     [("Content-Type", "text/json")],
-                    serde_json::to_string(vconsole.lines()).unwrap(),
+                    serde_json::to_string(&Ret {
+                        current_req: current_req.clone(),
+                        lines: vconsole.lines(),
+                    })
+                    .unwrap(),
                 )
             }),
         )

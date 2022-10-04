@@ -2,9 +2,8 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
-    Expr, Function, FunctionHeader, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable,
-    VariableInfo,
+    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType, Expr, Function,
+    FunctionHeader, FunctionInfo, ScriptPosition, Stmt, StmtWithPos, Variable, VariableInfo,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
