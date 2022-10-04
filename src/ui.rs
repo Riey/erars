@@ -132,6 +132,7 @@ impl ConsoleLine {
 /// Used by ui backend
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct VirtualConsole {
+    pub current_req: Option<InputRequest>,
     lines: Vec<ConsoleLine>,
     style: TextStyle,
     bg_color: Color,
@@ -140,6 +141,7 @@ struct VirtualConsole {
 impl VirtualConsole {
     fn new() -> Self {
         Self {
+            current_req: None,
             lines: Vec::new(),
             style: TextStyle {
                 color: Color([255, 255, 255]),
@@ -154,12 +156,12 @@ impl VirtualConsole {
         &self.lines
     }
 
-    fn push_msg(&mut self, com: ConsoleMessage) -> Option<InputRequest> {
+    fn push_msg(&mut self, com: ConsoleMessage) {
         if self.lines.is_empty() {
             self.lines.push(ConsoleLine::default());
         }
         match com {
-            ConsoleMessage::Input(req) => return Some(req),
+            ConsoleMessage::Input(req) => self.current_req = Some(req),
             ConsoleMessage::Alignment(align) => self.lines.last_mut().unwrap().align = align,
             ConsoleMessage::DrawLine(text) => {
                 self.lines
@@ -205,8 +207,6 @@ impl VirtualConsole {
                 self.style.font_style = font_style;
             }
         }
-
-        None
     }
 }
 
@@ -296,6 +296,8 @@ impl ConsoleSender {
     ///
     /// Return `None` if console send `Quit`
     pub fn input_int(&mut self) -> Option<i64> {
+        self.request_redraw();
+
         loop {
             if let Some(i) = self.inputs.pop_front() {
                 match i {
@@ -316,6 +318,8 @@ impl ConsoleSender {
     }
 
     pub fn input(&mut self, req: InputRequest) -> ConsoleResult {
+        self.request_redraw();
+
         if matches!(req, InputRequest::Anykey | InputRequest::EnterKey) && !self.inputs.is_empty() {
             ConsoleResult::Value(0.into())
         } else if let Some(i) = self.inputs.pop_front() {

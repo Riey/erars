@@ -14,7 +14,6 @@ use erars_ast::Value;
 
 pub struct StdioBackend {
     vconsole: VirtualConsole,
-    req: Option<InputRequest>,
     need_redraw: bool,
 }
 
@@ -22,7 +21,6 @@ impl StdioBackend {
     pub fn new() -> Self {
         Self {
             vconsole: VirtualConsole::new(),
-            req: None,
             need_redraw: true,
         }
     }
@@ -71,23 +69,21 @@ impl EraApp for StdioBackend {
                 break Ok(());
             }
 
-            if self.req.is_none() {
+            if self.vconsole.current_req.is_none() {
+                self.need_redraw = true;
                 while let Some(msg) = chan.recv_msg() {
                     log::trace!("[UI] Recv: {msg:?}");
-                    match self.vconsole.push_msg(msg) {
-                        Some(req) => {
-                            self.req = Some(req);
-                        }
-                        None => {
-                            self.need_redraw = true;
-                        }
+                    self.vconsole.push_msg(msg);
+
+                    if self.vconsole.current_req.is_some() {
+                        break;
                     }
                 }
             }
 
             self.draw(&mut lock)?;
 
-            if let Some(req) = self.req {
+            if let Some(req) = self.vconsole.current_req {
                 let size = stdin.read_line(&mut input)?;
 
                 let s = input[..size].trim_end_matches(&['\r', '\n']);
@@ -96,17 +92,17 @@ impl EraApp for StdioBackend {
                     InputRequest::Int => match s.trim().parse() {
                         Ok(i) => {
                             chan.send_ret(ConsoleResult::Value(Value::Int(i)));
-                            self.req = None;
+                            self.vconsole.current_req = None;
                         }
                         Err(_) => {}
                     },
                     InputRequest::Str => {
                         chan.send_ret(ConsoleResult::Value(Value::String(s.into())));
-                        self.req = None;
+                        self.vconsole.current_req = None;
                     }
                     InputRequest::Anykey | InputRequest::EnterKey => {
                         chan.send_ret(ConsoleResult::Value(Value::Int(0)));
-                        self.req = None;
+                        self.vconsole.current_req = None;
                     }
                 }
 

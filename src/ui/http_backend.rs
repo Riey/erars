@@ -10,7 +10,7 @@ use std::{
 use tokio::sync::Mutex as AsyncMutex;
 
 use erars_ast::Value;
-use parking_lot::Mutex;
+use parking_lot::RwLock;
 
 use axum::{
     extract::{
@@ -41,14 +41,10 @@ async fn start(
     port: u16,
     chan: Arc<super::ConsoleChannel>,
     clients: Arc<AsyncMutex<Slab<(usize, WebSocket)>>>,
+    vconsole: Arc<RwLock<VirtualConsole>>,
 ) -> anyhow::Result<()> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
-    let current_req = Arc::new(Mutex::new(None));
-    let vconsole = Arc::new(Mutex::new(VirtualConsole::new()));
     let vconsole_ = vconsole.clone();
-
-    let current_req_ = current_req.clone();
-    let chan1 = chan.clone();
 
     let app = Router::new()
         .layer(CompressionLayer::new())
@@ -65,19 +61,7 @@ async fn start(
         .route(
             "/",
             get(|| async move {
-                let mut current_req = current_req_.lock();
-
-                let mut vconsole = vconsole.lock();
-                if current_req.is_none() {
-                    while let Some(msg) = chan1.recv_msg() {
-                        match vconsole.push_msg(msg) {
-                            Some(req) => {
-                                *current_req = Some(req);
-                            }
-                            _ => {}
-                        }
-                    }
-                }
+                let vconsole = vconsole.read();
 
                 #[derive(serde::Serialize)]
                 struct Ret<'a> {
@@ -89,7 +73,7 @@ async fn start(
                     StatusCode::OK,
                     [("Content-Type", "text/json")],
                     serde_json::to_string(&Ret {
-                        current_req: current_req.clone(),
+                        current_req: vconsole.current_req,
                         lines: vconsole.lines(),
                     })
                     .unwrap(),
@@ -99,28 +83,23 @@ async fn start(
         .route(
             "/input",
             post(|request: String| async move {
-                let mut current_req = current_req.lock();
-                let mut vconsole = vconsole_.lock();
-                if current_req.is_none() {
-                    while let Some(msg) = chan.recv_msg() {
-                        if let Some(req) = vconsole.push_msg(msg) {
-                            *current_req = Some(req);
-                        }
-                    }
-                }
+                let mut vconsole = vconsole_.write();
 
-                log::info!("[UI] {current_req:?} <- {request}");
+                log::info!(
+                    "[UI] {current_req:?} <- {request}",
+                    current_req = vconsole.current_req
+                );
 
-                match *current_req {
+                match vconsole.current_req {
                     Some(InputRequest::Anykey | InputRequest::EnterKey) => {
                         chan.send_ret(ConsoleResult::Value(Value::Int(0)));
-                        *current_req = None;
+                        vconsole.current_req = None;
                         StatusCode::OK
                     }
                     Some(InputRequest::Int) => match request.trim().parse::<i64>() {
                         Ok(i) => {
                             chan.send_ret(ConsoleResult::Value(Value::Int(i)));
-                            *current_req = None;
+                            vconsole.current_req = None;
                             StatusCode::OK
                         }
                         _ => {
@@ -130,7 +109,7 @@ async fn start(
                     },
                     Some(InputRequest::Str) => {
                         chan.send_ret(ConsoleResult::Value(Value::String(request)));
-                        *current_req = None;
+                        vconsole.current_req = None;
                         StatusCode::OK
                     }
                     None => StatusCode::GONE,
@@ -163,13 +142,29 @@ impl EraApp for HttpBackend {
             need_redraw_inner.store(true, SeqCst);
         });
 
+        let vconsole = Arc::new(RwLock::new(VirtualConsole::new()));
         let clients = Arc::new(AsyncMutex::new(Slab::<(usize, WebSocket)>::new()));
 
-        rt.spawn(start(self.port, chan, clients.clone()));
+        rt.spawn(start(
+            self.port,
+            chan.clone(),
+            clients.clone(),
+            vconsole.clone(),
+        ));
 
         rt.block_on(async move {
             while !end.load(SeqCst) {
                 if need_redraw.swap(false, SeqCst) {
+                    let mut vconsole = vconsole.write();
+                    if vconsole.current_req.is_none() {
+                        while let Some(msg) = chan.recv_msg() {
+                            vconsole.push_msg(msg);
+
+                            if vconsole.current_req.is_some() {
+                                break;
+                            }
+                        }
+                    }
                     let mut clients = clients.lock().await;
                     let mut invalid_clients = Vec::new();
                     for (_, (idx, client)) in clients.iter_mut() {

@@ -182,7 +182,6 @@ impl TerminalVm {
             Instruction::ReuseLastLine => {
                 let s = ctx.pop_str()?;
                 tx.reuse_last_line(s);
-                tx.request_redraw();
             }
             Instruction::Print(flags) => {
                 let s = ctx.pop_str()?;
@@ -196,8 +195,6 @@ impl TerminalVm {
                 if flags.contains(PrintFlags::NEWLINE) {
                     tx.new_line();
                 }
-                tx.request_redraw();
-
                 if flags.contains(PrintFlags::WAIT) {
                     if tx.input(InputRequest::Anykey) == ConsoleResult::Quit {
                         return Ok(Some(Workflow::Exit));
@@ -1062,12 +1059,10 @@ impl TerminalVm {
                     }
                     BuiltinCommand::DrawLine => {
                         tx.draw_line(ctx.header_info.replace.drawline_str.clone());
-                        tx.request_redraw();
                     }
                     BuiltinCommand::CustomDrawLine => {
                         let s = get_arg!(@String: args, ctx);
                         tx.draw_line(s);
-                        tx.request_redraw();
                     }
                     BuiltinCommand::FontStyle => {
                         let style: u32 = get_arg!(@i64: args, ctx).try_into()?;
