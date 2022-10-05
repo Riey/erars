@@ -22,6 +22,7 @@ use axum::{
     Router,
 };
 use tower_http::compression::CompressionLayer;
+use tower_http::cors;
 
 use crate::ui::{Color, ConsoleLine, ConsoleResult, InputRequest};
 
@@ -53,7 +54,6 @@ async fn start(
     let vconsole_ = vconsole.clone();
 
     let app = Router::new()
-        .layer(CompressionLayer::new())
         .route(
             "/listen",
             get(|ws: WebSocketUpgrade| async move {
@@ -66,29 +66,31 @@ async fn start(
         )
         .route(
             "/",
-            get(|axum::extract::Query(params): axum::extract::Query<GetRootQuery>| async move {
-                let vconsole = vconsole.read();
+            get(
+                |axum::extract::Query(params): axum::extract::Query<GetRootQuery>| async move {
+                    let vconsole = vconsole.read();
 
-                #[derive(serde::Serialize)]
-                struct Ret<'a> {
-                    current_req: Option<InputRequest>,
-                    bg_color: Color,
-                    hl_color: Color,
-                    lines: &'a [ConsoleLine],
-                }
+                    #[derive(serde::Serialize)]
+                    struct Ret<'a> {
+                        current_req: Option<InputRequest>,
+                        bg_color: Color,
+                        hl_color: Color,
+                        lines: &'a [ConsoleLine],
+                    }
 
-                (
-                    StatusCode::OK,
-                    [("Content-Type", "text/json")],
-                    serde_json::to_string(&Ret {
-                        current_req: vconsole.current_req,
-                        bg_color: vconsole.bg_color,
-                        hl_color: vconsole.hl_color,
-                        lines: vconsole.lines().get(params.from..).unwrap_or(&[]),
-                    })
-                    .unwrap(),
-                )
-            }),
+                    (
+                        StatusCode::OK,
+                        [("Content-Type", "text/json")],
+                        serde_json::to_string(&Ret {
+                            current_req: vconsole.current_req,
+                            bg_color: vconsole.bg_color,
+                            hl_color: vconsole.hl_color,
+                            lines: vconsole.lines().get(params.from..).unwrap_or(&[]),
+                        })
+                        .unwrap(),
+                    )
+                },
+            ),
         )
         .route(
             "/input",
@@ -125,7 +127,9 @@ async fn start(
                     None => StatusCode::GONE,
                 }
             }),
-        );
+        )
+        .layer(CompressionLayer::new())
+        .layer(cors::CorsLayer::permissive());
 
     log::info!("Listening on {addr}");
     eprintln!("Listening on {addr}");
