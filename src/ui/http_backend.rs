@@ -61,7 +61,7 @@ async fn start(
                     let mut clients = clients.lock().await;
                     let key = clients.vacant_key();
                     clients.insert((key, socket));
-                });
+                })
             }),
         )
         .route(
