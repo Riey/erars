@@ -1235,26 +1235,6 @@ impl TerminalVm {
                             _ => unreachable!(),
                         };
 
-                        if matches!(
-                            com,
-                            BuiltinCommand::TInput
-                                | BuiltinCommand::TInputS
-                                | BuiltinCommand::TOneInputS
-                                | BuiltinCommand::TOneInput
-                        ) {
-                            log::warn!("[TODO] {com}: timeout is not implemented");
-                        }
-
-                        if matches!(
-                            com,
-                            BuiltinCommand::OneInput
-                                | BuiltinCommand::OneInputS
-                                | BuiltinCommand::TOneInputS
-                                | BuiltinCommand::TOneInput
-                        ) {
-                            log::warn!("[TODO] {com}: one input is not implemented");
-                        }
-
                         match tx.input(req) {
                             ConsoleResult::Quit => {
                                 return Ok(Some(Workflow::Exit));
