@@ -268,7 +268,7 @@ pub enum InputRequestType {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 /// input timeout
 pub struct Timeout {
-    /// unix timestamp + milliseconds
+    /// Unix timestamp in nanos
     pub timeout: i128,
     #[serde(skip)]
     pub default_value: Value,

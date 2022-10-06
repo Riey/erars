@@ -24,7 +24,7 @@ enum InputRequestType {
 }
 
 struct Timeout {
-    // Unix timestamp in nanos
+    /// Unix timestamp in nanos
     timeout: i128,
     show_timer: bool,
     timeout_msg: String,
