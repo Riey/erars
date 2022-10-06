@@ -176,11 +176,23 @@ impl EraApp for HttpBackend {
                         vconsole_.push_msg(msg);
                     }
                     if let Some((timeout, gen, default_value)) = vconsole_.timeout.take() {
+                        let vconsole = vconsole.clone();
                         let chan = chan.clone();
                         let clients = clients.clone();
                         tokio::spawn(async move {
                             tokio::time::sleep_until(timeout).await;
                             if chan.send_input(default_value, gen) {
+                                // clear current_req
+                                match &mut vconsole.write().current_req {
+                                    opt_req
+                                        if opt_req
+                                            .as_ref()
+                                            .map_or(false, |req| req.generation == gen) =>
+                                    {
+                                        *opt_req = None;
+                                    }
+                                    _ => {}
+                                }
                                 log::debug!("Timeout {gen}");
                                 let mut clients = clients.lock().await;
                                 send_code(event_codes::TIMEOUT, &mut clients).await;
@@ -190,6 +202,7 @@ impl EraApp for HttpBackend {
                     drop(vconsole_);
                     let mut clients = clients.lock().await;
                     send_code(event_codes::REDRAW, &mut clients).await;
+                    drop(clients);
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     continue;
                 }

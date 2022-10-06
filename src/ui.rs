@@ -168,9 +168,6 @@ impl VirtualConsole {
         }
         match com {
             ConsoleMessage::Input(req) => {
-                if self.current_req.is_some() {
-                    log::warn!("Input overwrited");
-                }
                 if let Some(timeout) = req.timeout.as_ref() {
                     self.timeout = Some((
                         Instant::now() + Duration::from_millis(timeout.timeout as _),
