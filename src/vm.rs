@@ -196,7 +196,8 @@ impl TerminalVm {
                     tx.new_line();
                 }
                 if flags.contains(PrintFlags::WAIT) {
-                    if tx.input(InputRequest::normal(InputRequestType::AnyKey))
+                    let gen = tx.input_gen();
+                    if tx.input(InputRequest::normal(gen, InputRequestType::AnyKey))
                         == ConsoleResult::Quit
                     {
                         return Ok(Some(Workflow::Exit));
@@ -1152,14 +1153,16 @@ impl TerminalVm {
                     BuiltinCommand::ResetBgColor => {
                         tx.set_bg_color(0, 0, 0);
                     }
-                    BuiltinCommand::Wait => {
-                        match tx.input(InputRequest::normal(InputRequestType::EnterKey)) {
-                            ConsoleResult::Value(_) => {}
-                            ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
-                        }
-                    }
-                    BuiltinCommand::WaitAnykey => {
-                        match tx.input(InputRequest::normal(InputRequestType::AnyKey)) {
+                    BuiltinCommand::Wait | BuiltinCommand::WaitAnykey => {
+                        let gen = tx.input_gen();
+                        match tx.input(InputRequest::normal(
+                            gen,
+                            if *com == BuiltinCommand::Wait {
+                                InputRequestType::EnterKey
+                            } else {
+                                InputRequestType::AnyKey
+                            },
+                        )) {
                             ConsoleResult::Value(_) => {}
                             ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
                         }
@@ -1173,46 +1176,58 @@ impl TerminalVm {
                     | BuiltinCommand::OneInput
                     | BuiltinCommand::OneInputS => {
                         let req = match com {
-                            BuiltinCommand::InputS => InputRequest::normal(InputRequestType::Str),
-                            BuiltinCommand::Input => InputRequest::normal(InputRequestType::Int),
+                            BuiltinCommand::InputS => {
+                                InputRequest::normal(tx.input_gen(), InputRequestType::Str)
+                            }
+                            BuiltinCommand::Input => {
+                                InputRequest::normal(tx.input_gen(), InputRequestType::Int)
+                            }
                             BuiltinCommand::OneInputS => {
-                                InputRequest::oneinput(InputRequestType::Str)
+                                InputRequest::oneinput(tx.input_gen(), InputRequestType::Str)
                             }
                             BuiltinCommand::OneInput => {
-                                InputRequest::oneinput(InputRequestType::Int)
+                                InputRequest::oneinput(tx.input_gen(), InputRequestType::Int)
                             }
                             BuiltinCommand::TInputS => InputRequest {
+                                generation: tx.input_gen(),
                                 ty: InputRequestType::Str,
                                 is_one: false,
                                 timeout: Some(Timeout {
                                     timeout: get_arg!(@u32: args, ctx),
+                                    default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
                                 }),
                             },
                             BuiltinCommand::TInput => InputRequest {
+                                generation: tx.input_gen(),
                                 ty: InputRequestType::Int,
                                 is_one: false,
                                 timeout: Some(Timeout {
                                     timeout: get_arg!(@u32: args, ctx),
+                                    default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
                                 }),
                             },
                             BuiltinCommand::TOneInputS => InputRequest {
+                                generation: tx.input_gen(),
                                 ty: InputRequestType::Str,
                                 is_one: true,
                                 timeout: Some(Timeout {
                                     timeout: get_arg!(@u32: args, ctx),
+                                    default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
                                 }),
                             },
                             BuiltinCommand::TOneInput => InputRequest {
+                                generation: tx.input_gen(),
                                 ty: InputRequestType::Int,
                                 is_one: true,
                                 timeout: Some(Timeout {
                                     timeout: get_arg!(@u32: args, ctx),
+                                    default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
                                 }),

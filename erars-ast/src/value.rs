@@ -13,6 +13,12 @@ pub enum Value {
     String(String),
 }
 
+impl Default for Value {
+    fn default() -> Self {
+        Value::Int(0)
+    }
+}
+
 impl Value {
     pub const ZERO: Value = Value::Int(0);
     pub const ONE: Value = Value::Int(1);

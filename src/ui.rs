@@ -7,9 +7,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use std::collections::VecDeque;
+use std::sync::atomic::AtomicU32;
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::time::Instant;
 
 #[cfg(feature = "stdio-backend")]
 mod stdio_backend;
@@ -130,9 +132,10 @@ impl ConsoleLine {
 }
 
 /// Used by ui backend
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct VirtualConsole {
     pub current_req: Option<InputRequest>,
+    timeout: Option<(Instant, u32, Value)>,
     lines: Vec<ConsoleLine>,
     style: TextStyle,
     bg_color: Color,
@@ -143,6 +146,7 @@ impl VirtualConsole {
     fn new() -> Self {
         Self {
             current_req: None,
+            timeout: None,
             lines: Vec::new(),
             style: TextStyle {
                 color: Color([255, 255, 255]),
@@ -166,6 +170,13 @@ impl VirtualConsole {
             ConsoleMessage::Input(req) => {
                 if self.current_req.is_some() {
                     log::warn!("Input overwrited");
+                }
+                if let Some(timeout) = req.timeout.as_ref() {
+                    self.timeout = Some((
+                        Instant::now() + Duration::from_millis(timeout.timeout as _),
+                        req.generation,
+                        timeout.default_value.clone(),
+                    ));
                 }
                 self.current_req = Some(req);
             }
@@ -261,12 +272,16 @@ pub enum InputRequestType {
 /// input timeout
 pub struct Timeout {
     pub timeout: u32,
+    #[serde(skip)]
+    pub default_value: Value,
     pub timeout_msg: Option<String>,
     pub show_timer: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputRequest {
+    /// InputRequest generation
+    pub generation: u32,
     /// type of request
     pub ty: InputRequestType,
     /// whether is ONEINPUT or not
@@ -277,16 +292,18 @@ pub struct InputRequest {
 }
 
 impl InputRequest {
-    pub fn normal(ty: InputRequestType) -> Self {
+    pub fn normal(gen: u32, ty: InputRequestType) -> Self {
         Self {
+            generation: gen,
             ty,
             is_one: false,
             timeout: None,
         }
     }
 
-    pub fn oneinput(ty: InputRequestType) -> Self {
+    pub fn oneinput(gen: u32, ty: InputRequestType) -> Self {
         Self {
+            generation: gen,
             ty,
             is_one: true,
             timeout: None,
@@ -356,6 +373,7 @@ impl ConsoleSender {
                 }
             } else {
                 self.chan.send_msg(ConsoleMessage::Input(InputRequest {
+                    generation: self.chan.input_gen(),
                     ty: InputRequestType::Int,
                     is_one: false,
                     timeout: None,
@@ -369,6 +387,10 @@ impl ConsoleSender {
                 }
             }
         }
+    }
+
+    pub fn input_gen(&self) -> u32 {
+        self.chan.input_gen()
     }
 
     pub fn input(&mut self, req: InputRequest) -> ConsoleResult {
@@ -521,6 +543,7 @@ pub struct ConsoleChannel {
     exit_fn: Mutex<Option<Box<dyn Fn() + Send + Sync>>>,
     delay_redraw: AtomicBool,
     delay_exit: AtomicBool,
+    input_generation: AtomicU32,
     console: (Sender<ConsoleMessage>, Receiver<ConsoleMessage>),
     ret: (Sender<ConsoleResult>, Receiver<ConsoleResult>),
 }
@@ -532,9 +555,14 @@ impl ConsoleChannel {
             exit_fn: Mutex::new(None),
             delay_redraw: AtomicBool::new(false),
             delay_exit: AtomicBool::new(false),
+            input_generation: AtomicU32::new(0),
             console: bounded(256),
             ret: bounded(8),
         }
+    }
+
+    pub fn input_gen(&self) -> u32 {
+        self.input_generation.load(SeqCst)
     }
 
     pub fn set_redraw_fn(&self, f: impl Fn() + Send + Sync + 'static) {
@@ -587,8 +615,21 @@ impl ConsoleChannel {
         self.console.1.recv_timeout(Duration::from_millis(50)).ok()
     }
 
-    pub fn send_ret(&self, ret: ConsoleResult) {
-        self.ret.0.send(ret).unwrap()
+    pub fn send_quit(&self) {
+        self.ret.0.send(ConsoleResult::Quit).unwrap()
+    }
+
+    pub fn send_input(&self, input: Value, gen: u32) -> bool {
+        if self
+            .input_generation
+            .compare_exchange(gen, gen.wrapping_add(1), SeqCst, SeqCst)
+            .is_ok()
+        {
+            self.ret.0.send(ConsoleResult::Value(input)).unwrap();
+            true
+        } else {
+            false
+        }
     }
 
     pub fn recv_ret(&self) -> ConsoleResult {
