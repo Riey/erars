@@ -1806,12 +1806,8 @@ impl TerminalVm {
                         Some(i) => {
                             ctx.var.set_result(i);
 
-                            log::debug!("SHOP: get {i}");
-
                             if i >= 0 && i < ctx.header_info.replace.sell_item_count {
                                 let sales = ctx.var.read_int("ITEMSALES", &[i as usize])?;
-
-                                log::debug!("sales: {sales}");
 
                                 if sales != 0 {
                                     let price = ctx
