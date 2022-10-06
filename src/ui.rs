@@ -49,13 +49,6 @@ impl ConsoleLinePart {
             _ => unreachable!(),
         }
     }
-
-    fn into_text(self) -> (String, TextStyle) {
-        match self {
-            Self::Text(t, s) => (t, s),
-            _ => unreachable!(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,7 +64,7 @@ struct ConsoleLine {
 impl ConsoleLine {
     pub fn push_text(&mut self, text: String, style: &TextStyle) {
         static BUTTON_REGEX: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r#"[^\[]*\[ *(\d+) *\][^\]]*"#).unwrap());
+            Lazy::new(|| Regex::new(r#"[^\[]*\[ *(\d+) *\][^\[\]]*"#).unwrap());
 
         if text.contains(']') {
             match self.button_start.take() {
@@ -84,30 +77,33 @@ impl ConsoleLine {
 
                     btn_buf.push_str(&text);
 
-                    let captures = BUTTON_REGEX.captures(&btn_buf);
-
-                    if let Some(captures) = captures {
-                        let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
-                        let btn_str = self
-                            .parts
-                            .drain(prev_btn_part..)
-                            .map(ConsoleLinePart::into_text)
-                            .chain(Some((text, style.clone())))
-                            .collect();
-                        self.parts.push(ConsoleLinePart::Button(btn_str, Value::Int(num)));
-                        return;
+                    if BUTTON_REGEX.is_match(&btn_buf) {
+                        // TODO: respect styles
+                        for captures in BUTTON_REGEX.captures_iter(&btn_buf) {
+                            let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
+                            let btn_str = vec![(
+                                captures.get(0).unwrap().as_str().to_string(),
+                                style.clone(),
+                            )];
+                            self.parts.push(ConsoleLinePart::Button(btn_str, Value::Int(num)));
+                        }
                     }
                 }
-                None => match BUTTON_REGEX.captures(&text) {
-                    Some(captures) => {
-                        let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
-                        self.parts.push(ConsoleLinePart::Button(
-                            vec![(text, style.clone())],
-                            Value::Int(num),
-                        ));
+                None => match BUTTON_REGEX.is_match(&text) {
+                    true => {
+                        for captures in BUTTON_REGEX.captures_iter(&text) {
+                            let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
+                            self.parts.push(ConsoleLinePart::Button(
+                                vec![(
+                                    captures.get(0).unwrap().as_str().to_string(),
+                                    style.clone(),
+                                )],
+                                Value::Int(num),
+                            ));
+                        }
                         return;
                     }
-                    None => {}
+                    false => {}
                 },
             }
         }
@@ -524,4 +520,99 @@ impl ConsoleChannel {
 
 fn is_left_alignment(align: &Alignment) -> bool {
     *align == Alignment::Left
+}
+
+#[test]
+fn button_test() {
+    let mut line = ConsoleLine::default();
+    line.push_text("[0] 1 [1] 2 [ 3] 3 [456 ] 745".into(), &TextStyle { color: Color([0; 3]), font_family: "".into(), font_style: FontStyle::NORMAL });
+    k9::assert_equal!(line.parts.len(), 4);
+    k9::snapshot!(line.parts, r#"
+[
+    Button(
+        [
+            (
+                "[0] 1 ",
+                TextStyle {
+                    color: Color(
+                        [
+                            0,
+                            0,
+                            0,
+                        ],
+                    ),
+                    font_family: "",
+                    font_style: NORMAL,
+                },
+            ),
+        ],
+        Int(
+            0,
+        ),
+    ),
+    Button(
+        [
+            (
+                "[1] 2 ",
+                TextStyle {
+                    color: Color(
+                        [
+                            0,
+                            0,
+                            0,
+                        ],
+                    ),
+                    font_family: "",
+                    font_style: NORMAL,
+                },
+            ),
+        ],
+        Int(
+            1,
+        ),
+    ),
+    Button(
+        [
+            (
+                "[ 3] 3 ",
+                TextStyle {
+                    color: Color(
+                        [
+                            0,
+                            0,
+                            0,
+                        ],
+                    ),
+                    font_family: "",
+                    font_style: NORMAL,
+                },
+            ),
+        ],
+        Int(
+            3,
+        ),
+    ),
+    Button(
+        [
+            (
+                "[456 ] 745",
+                TextStyle {
+                    color: Color(
+                        [
+                            0,
+                            0,
+                            0,
+                        ],
+                    ),
+                    font_family: "",
+                    font_style: NORMAL,
+                },
+            ),
+        ],
+        Int(
+            456,
+        ),
+    ),
+]
+"#);
 }
