@@ -76,12 +76,10 @@ impl EraApp for StdioBackend {
                 break Ok(());
             }
 
-            if self.vconsole.current_req.is_none() {
+            while let Some(msg) = chan.recv_msg() {
                 self.need_redraw = true;
-                while let Some(msg) = chan.recv_msg() {
-                    log::trace!("[UI] Recv: {msg:?}");
-                    self.vconsole.push_msg(msg);
-                }
+                log::trace!("[UI] Recv: {msg:?}");
+                self.vconsole.push_msg(msg);
             }
 
             self.draw(&mut lock)?;

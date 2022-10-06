@@ -170,10 +170,8 @@ impl EraApp for HttpBackend {
             while !end.load(SeqCst) {
                 if need_redraw.swap(false, SeqCst) {
                     let mut vconsole = vconsole.write();
-                    if vconsole.current_req.is_none() {
-                        while let Some(msg) = chan.recv_msg() {
-                            vconsole.push_msg(msg);
-                        }
+                    while let Some(msg) = chan.recv_msg() {
+                        vconsole.push_msg(msg);
                     }
                     drop(vconsole);
                     let mut clients = clients.lock().await;
