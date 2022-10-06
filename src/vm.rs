@@ -1175,6 +1175,10 @@ impl TerminalVm {
                     | BuiltinCommand::TOneInputS
                     | BuiltinCommand::OneInput
                     | BuiltinCommand::OneInputS => {
+                        fn to_time(time: time::OffsetDateTime) -> i128 {
+                            time.unix_timestamp_nanos()
+                        }
+
                         let req = match com {
                             BuiltinCommand::InputS => {
                                 InputRequest::normal(tx.input_gen(), InputRequestType::Str)
@@ -1193,7 +1197,7 @@ impl TerminalVm {
                                 ty: InputRequestType::Str,
                                 is_one: false,
                                 timeout: Some(Timeout {
-                                    timeout: get_arg!(@u32: args, ctx),
+                                    timeout: to_time(time::OffsetDateTime::now_utc() + time::Duration::milliseconds(get_arg!(@i64: args, ctx))),
                                     default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1204,7 +1208,7 @@ impl TerminalVm {
                                 ty: InputRequestType::Int,
                                 is_one: false,
                                 timeout: Some(Timeout {
-                                    timeout: get_arg!(@u32: args, ctx),
+                                    timeout: to_time(time::OffsetDateTime::now_utc() + time::Duration::milliseconds(get_arg!(@i64: args, ctx))),
                                     default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1215,7 +1219,7 @@ impl TerminalVm {
                                 ty: InputRequestType::Str,
                                 is_one: true,
                                 timeout: Some(Timeout {
-                                    timeout: get_arg!(@u32: args, ctx),
+                                    timeout: to_time(time::OffsetDateTime::now_utc() + time::Duration::milliseconds(get_arg!(@i64: args, ctx))),
                                     default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1226,7 +1230,7 @@ impl TerminalVm {
                                 ty: InputRequestType::Int,
                                 is_one: true,
                                 timeout: Some(Timeout {
-                                    timeout: get_arg!(@u32: args, ctx),
+                                    timeout: to_time(time::OffsetDateTime::now_utc() + time::Duration::milliseconds(get_arg!(@i64: args, ctx))),
                                     default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),

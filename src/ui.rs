@@ -170,7 +170,7 @@ impl VirtualConsole {
             ConsoleMessage::Input(req) => {
                 if let Some(timeout) = req.timeout.as_ref() {
                     self.timeout = Some((
-                        Instant::now() + Duration::from_millis(timeout.timeout as _),
+                        Instant::now() + Duration::from_nanos((timeout.timeout - time::OffsetDateTime::now_utc().unix_timestamp_nanos()) as _),
                         req.generation,
                         timeout.default_value.clone(),
                     ));
@@ -268,7 +268,8 @@ pub enum InputRequestType {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 /// input timeout
 pub struct Timeout {
-    pub timeout: u32,
+    /// unix timestamp + milliseconds
+    pub timeout: i128,
     #[serde(skip)]
     pub default_value: Value,
     pub timeout_msg: Option<String>,
