@@ -33,6 +33,7 @@ pub enum BuiltinVariable {
     ItemPrice,
 
     CharaNum,
+    LineCount,
 
     Rand,
 

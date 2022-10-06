@@ -269,6 +269,7 @@ pub trait EraApp {
 
 pub struct ConsoleSender {
     chan: Arc<ConsoleChannel>,
+    line_count: usize,
     line_is_empty: bool,
     printc_count: u32,
     color: u32,
@@ -286,6 +287,7 @@ impl ConsoleSender {
             chan,
 
             line_is_empty: true,
+            line_count: 1,
             printc_count: 0,
             color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
             hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
@@ -343,6 +345,10 @@ impl ConsoleSender {
         }
     }
 
+    pub fn line_count(&self) -> usize {
+        self.line_count
+    }
+
     pub fn line_is_empty(&self) -> bool {
         self.line_is_empty
     }
@@ -379,18 +385,21 @@ impl ConsoleSender {
     }
 
     pub fn new_line(&mut self) {
+        self.line_count += 1;
         self.printc_count = 0;
         self.line_is_empty = true;
         self.chan.send_msg(ConsoleMessage::NewLine);
     }
 
     pub fn draw_line(&mut self, s: String) {
+        self.line_count += 1;
         self.printc_count = 0;
         self.line_is_empty = true;
         self.chan.send_msg(ConsoleMessage::DrawLine(s));
     }
 
     pub fn clear_line(&mut self, c: usize) {
+        self.line_count = self.line_count.saturating_sub(c).min(1);
         self.line_is_empty = false;
         self.chan.send_msg(ConsoleMessage::ClearLine(c));
     }

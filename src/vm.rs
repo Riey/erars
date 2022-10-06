@@ -342,6 +342,7 @@ impl TerminalVm {
                     GamebaseInfo => "".into(),
                     GamebaseCode => Value::Int(0),
                     CharaNum => (ctx.var.character_len() as i64).into(),
+                    LineCount => (tx.line_count() as i64).into(),
                     ItemPrice => {
                         let arg = args[0] as u32;
                         ctx.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
