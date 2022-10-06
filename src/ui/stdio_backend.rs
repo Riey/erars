@@ -1,5 +1,6 @@
 use super::{
-    ConsoleChannel, ConsoleLinePart, ConsoleResult, EraApp, FontStyle, InputRequest, VirtualConsole,
+    ConsoleChannel, ConsoleLinePart, ConsoleResult, EraApp, FontStyle, InputRequestType,
+    VirtualConsole,
 };
 use std::{
     io::{self, BufRead},
@@ -84,24 +85,24 @@ impl EraApp for StdioBackend {
 
             self.draw(&mut lock)?;
 
-            if let Some(req) = self.vconsole.current_req {
+            if let Some(ty) = self.vconsole.current_req.as_ref().map(|i| i.ty) {
                 let size = stdin.read_line(&mut input)?;
 
                 let s = input[..size].trim_end_matches(&['\r', '\n']);
 
-                match req {
-                    InputRequest::Int => match s.trim().parse() {
+                match ty {
+                    InputRequestType::Int => match s.trim().parse() {
                         Ok(i) => {
                             chan.send_ret(ConsoleResult::Value(Value::Int(i)));
                             self.vconsole.current_req = None;
                         }
                         Err(_) => {}
                     },
-                    InputRequest::Str => {
+                    InputRequestType::Str => {
                         chan.send_ret(ConsoleResult::Value(Value::String(s.into())));
                         self.vconsole.current_req = None;
                     }
-                    InputRequest::Anykey | InputRequest::EnterKey => {
+                    InputRequestType::AnyKey | InputRequestType::EnterKey => {
                         chan.send_ret(ConsoleResult::Value(Value::Int(0)));
                         self.vconsole.current_req = None;
                     }

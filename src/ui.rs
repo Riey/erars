@@ -250,11 +250,48 @@ bitflags::bitflags! {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum InputRequest {
-    Anykey,
+pub enum InputRequestType {
+    AnyKey,
     EnterKey,
     Int,
     Str,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// input timeout
+pub struct Timeout {
+    pub timeout: u32,
+    pub timeout_msg: Option<String>,
+    pub show_timer: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InputRequest {
+    /// type of request
+    pub ty: InputRequestType,
+    /// whether is ONEINPUT or not
+    pub is_one: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    /// TINPUT
+    pub timeout: Option<Timeout>,
+}
+
+impl InputRequest {
+    pub fn normal(ty: InputRequestType) -> Self {
+        Self {
+            ty,
+            is_one: false,
+            timeout: None,
+        }
+    }
+
+    pub fn oneinput(ty: InputRequestType) -> Self {
+        Self {
+            ty,
+            is_one: true,
+            timeout: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -318,7 +355,11 @@ impl ConsoleSender {
                     Value::Int(i) => break Some(i),
                 }
             } else {
-                self.chan.send_msg(ConsoleMessage::Input(InputRequest::Int));
+                self.chan.send_msg(ConsoleMessage::Input(InputRequest {
+                    ty: InputRequestType::Int,
+                    is_one: false,
+                    timeout: None,
+                }));
                 let ret = self.chan.recv_ret();
 
                 match ret {
@@ -333,7 +374,11 @@ impl ConsoleSender {
     pub fn input(&mut self, req: InputRequest) -> ConsoleResult {
         self.request_redraw();
 
-        if matches!(req, InputRequest::Anykey | InputRequest::EnterKey) && !self.inputs.is_empty() {
+        if matches!(
+            req.ty,
+            InputRequestType::AnyKey | InputRequestType::EnterKey
+        ) && !self.inputs.is_empty()
+        {
             ConsoleResult::Value(0.into())
         } else if let Some(i) = self.inputs.pop_front() {
             ConsoleResult::Value(i)

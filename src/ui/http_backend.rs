@@ -24,7 +24,7 @@ use axum::{
 use tower_http::compression::CompressionLayer;
 use tower_http::cors;
 
-use crate::ui::{Color, ConsoleLine, ConsoleResult, InputRequest};
+use crate::ui::{Color, ConsoleLine, ConsoleResult, InputRequest, InputRequestType};
 
 use super::{EraApp, VirtualConsole};
 
@@ -72,7 +72,7 @@ async fn start(
 
                     #[derive(serde::Serialize)]
                     struct Ret<'a> {
-                        current_req: Option<InputRequest>,
+                        current_req: Option<&'a InputRequest>,
                         bg_color: Color,
                         hl_color: Color,
                         lines: &'a [ConsoleLine],
@@ -82,7 +82,7 @@ async fn start(
                         StatusCode::OK,
                         [("Content-Type", "text/json")],
                         serde_json::to_string(&Ret {
-                            current_req: vconsole.current_req,
+                            current_req: vconsole.current_req.as_ref(),
                             bg_color: vconsole.bg_color,
                             hl_color: vconsole.hl_color,
                             lines: vconsole.lines().get(params.from..).unwrap_or(&[]),
@@ -102,13 +102,13 @@ async fn start(
                     current_req = vconsole.current_req
                 );
 
-                match vconsole.current_req {
-                    Some(InputRequest::Anykey | InputRequest::EnterKey) => {
+                match vconsole.current_req.as_ref().map(|i| i.ty) {
+                    Some(InputRequestType::AnyKey | InputRequestType::EnterKey) => {
                         chan.send_ret(ConsoleResult::Value(Value::Int(0)));
                         vconsole.current_req = None;
                         StatusCode::OK
                     }
-                    Some(InputRequest::Int) => match request.trim().parse::<i64>() {
+                    Some(InputRequestType::Int) => match request.trim().parse::<i64>() {
                         Ok(i) => {
                             chan.send_ret(ConsoleResult::Value(Value::Int(i)));
                             vconsole.current_req = None;
@@ -119,7 +119,7 @@ async fn start(
                             StatusCode::BAD_REQUEST
                         }
                     },
-                    Some(InputRequest::Str) => {
+                    Some(InputRequestType::Str) => {
                         chan.send_ret(ConsoleResult::Value(Value::String(request)));
                         vconsole.current_req = None;
                         StatusCode::OK

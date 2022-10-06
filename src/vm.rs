@@ -26,7 +26,7 @@ pub use self::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
-use crate::ui::{ConsoleResult, FontStyle, InputRequest};
+use crate::ui::{ConsoleResult, FontStyle, InputRequest, InputRequestType, Timeout};
 use crate::{
     function::{FunctionBody, FunctionDic},
     ui::ConsoleSender,
@@ -196,7 +196,9 @@ impl TerminalVm {
                     tx.new_line();
                 }
                 if flags.contains(PrintFlags::WAIT) {
-                    if tx.input(InputRequest::Anykey) == ConsoleResult::Quit {
+                    if tx.input(InputRequest::normal(InputRequestType::AnyKey))
+                        == ConsoleResult::Quit
+                    {
                         return Ok(Some(Workflow::Exit));
                     }
                 }
@@ -1150,14 +1152,18 @@ impl TerminalVm {
                     BuiltinCommand::ResetBgColor => {
                         tx.set_bg_color(0, 0, 0);
                     }
-                    BuiltinCommand::Wait => match tx.input(InputRequest::EnterKey) {
-                        ConsoleResult::Value(_) => {}
-                        ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
-                    },
-                    BuiltinCommand::WaitAnykey => match tx.input(InputRequest::Anykey) {
-                        ConsoleResult::Value(_) => {}
-                        ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
-                    },
+                    BuiltinCommand::Wait => {
+                        match tx.input(InputRequest::normal(InputRequestType::EnterKey)) {
+                            ConsoleResult::Value(_) => {}
+                            ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
+                        }
+                    }
+                    BuiltinCommand::WaitAnykey => {
+                        match tx.input(InputRequest::normal(InputRequestType::AnyKey)) {
+                            ConsoleResult::Value(_) => {}
+                            ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
+                        }
+                    }
                     BuiltinCommand::Input
                     | BuiltinCommand::InputS
                     | BuiltinCommand::TInput
@@ -1167,14 +1173,50 @@ impl TerminalVm {
                     | BuiltinCommand::OneInput
                     | BuiltinCommand::OneInputS => {
                         let req = match com {
-                            BuiltinCommand::InputS
-                            | BuiltinCommand::OneInputS
-                            | BuiltinCommand::TInputS
-                            | BuiltinCommand::TOneInputS => InputRequest::Str,
-                            BuiltinCommand::Input
-                            | BuiltinCommand::OneInput
-                            | BuiltinCommand::TInput
-                            | BuiltinCommand::TOneInput => InputRequest::Int,
+                            BuiltinCommand::InputS => InputRequest::normal(InputRequestType::Str),
+                            BuiltinCommand::Input => InputRequest::normal(InputRequestType::Int),
+                            BuiltinCommand::OneInputS => {
+                                InputRequest::oneinput(InputRequestType::Str)
+                            }
+                            BuiltinCommand::OneInput => {
+                                InputRequest::oneinput(InputRequestType::Int)
+                            }
+                            BuiltinCommand::TInputS => InputRequest {
+                                ty: InputRequestType::Str,
+                                is_one: false,
+                                timeout: Some(Timeout {
+                                    timeout: get_arg!(@u32: args, ctx),
+                                    show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
+                                    timeout_msg: get_arg!(@opt @String: args, ctx),
+                                }),
+                            },
+                            BuiltinCommand::TInput => InputRequest {
+                                ty: InputRequestType::Int,
+                                is_one: false,
+                                timeout: Some(Timeout {
+                                    timeout: get_arg!(@u32: args, ctx),
+                                    show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
+                                    timeout_msg: get_arg!(@opt @String: args, ctx),
+                                }),
+                            },
+                            BuiltinCommand::TOneInputS => InputRequest {
+                                ty: InputRequestType::Str,
+                                is_one: true,
+                                timeout: Some(Timeout {
+                                    timeout: get_arg!(@u32: args, ctx),
+                                    show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
+                                    timeout_msg: get_arg!(@opt @String: args, ctx),
+                                }),
+                            },
+                            BuiltinCommand::TOneInput => InputRequest {
+                                ty: InputRequestType::Int,
+                                is_one: true,
+                                timeout: Some(Timeout {
+                                    timeout: get_arg!(@u32: args, ctx),
+                                    show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
+                                    timeout_msg: get_arg!(@opt @String: args, ctx),
+                                }),
+                            },
                             _ => unreachable!(),
                         };
 
@@ -1678,10 +1720,9 @@ impl TerminalVm {
 
                             ctx.var.prepare_train_data()?;
 
-                            match tx.input(InputRequest::Int) {
-                                ConsoleResult::Quit => return Ok(Workflow::Exit),
-                                ConsoleResult::Value(Value::String(_)) => unreachable!(),
-                                ConsoleResult::Value(Value::Int(no)) => {
+                            match tx.input_int() {
+                                None => return Ok(Workflow::Exit),
+                                Some(no) => {
                                     ctx.var.set_result(no);
 
                                     let com_exists = match no.try_into() {
@@ -1733,9 +1774,9 @@ impl TerminalVm {
                     call!(self, "SHOW_ABLUP_SELECT", tx, ctx);
 
                     loop {
-                        match tx.input(InputRequest::Int) {
-                            ConsoleResult::Quit => return Ok(Workflow::Exit),
-                            ConsoleResult::Value(Value::Int(i)) => {
+                        match tx.input_int() {
+                            None => return Ok(Workflow::Exit),
+                            Some(i) => {
                                 ctx.var.set_result(i);
 
                                 if matches!(i, 0..=99) {
@@ -1747,7 +1788,6 @@ impl TerminalVm {
                                     break;
                                 }
                             }
-                            _ => unreachable!(),
                         }
                     }
                 }
@@ -1761,9 +1801,9 @@ impl TerminalVm {
                 while ctx.begin.is_none() {
                     call!(self, "SHOW_SHOP", tx, ctx);
 
-                    match tx.input(InputRequest::Int) {
-                        ConsoleResult::Quit => break,
-                        ConsoleResult::Value(Value::Int(i)) => {
+                    match tx.input_int() {
+                        None => break,
+                        Some(i) => {
                             ctx.var.set_result(i);
 
                             log::debug!("SHOP: get {i}");
@@ -1791,10 +1831,6 @@ impl TerminalVm {
                             } else {
                                 call!(self, "USERSHOP", tx, ctx);
                             }
-                        }
-                        ConsoleResult::Value(Value::String(_)) => {
-                            log::error!("콘솔에서 잘못된 타입의 응답을 보냈습니다.");
-                            break;
                         }
                     }
                 }

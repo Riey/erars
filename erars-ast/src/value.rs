@@ -69,6 +69,17 @@ impl TryFrom<Value> for usize {
     }
 }
 
+impl TryFrom<Value> for u32 {
+    type Error = Error;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Int(i) => Ok(i.try_into()?),
+            _ => bail!("Value is not int"),
+        }
+    }
+}
+
 impl TryFrom<Value> for i64 {
     type Error = Error;
 
