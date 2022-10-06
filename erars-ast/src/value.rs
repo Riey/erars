@@ -13,6 +13,12 @@ pub enum Value {
     String(String),
 }
 
+impl Default for Value {
+    fn default() -> Self {
+        Value::Int(0)
+    }
+}
+
 impl Value {
     pub const ZERO: Value = Value::Int(0);
     pub const ONE: Value = Value::Int(1);
@@ -59,6 +65,17 @@ impl TryFrom<Value> for String {
 }
 
 impl TryFrom<Value> for usize {
+    type Error = Error;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Int(i) => Ok(i.try_into()?),
+            _ => bail!("Value is not int"),
+        }
+    }
+}
+
+impl TryFrom<Value> for u32 {
     type Error = Error;
 
     fn try_from(value: Value) -> Result<Self, Self::Error> {

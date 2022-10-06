@@ -9,11 +9,24 @@ struct Ret {
     lines: [{parts: [ConsoleLinePart]}]
 }
 
-enum InputRequest {
+struct InputRequest {
+    generation: u32,
+    ty: InputRequestType,
+    timeout: Option<Timeout>,
+    is_one: bool,
+}
+
+enum InputRequestType {
     Anykey,
     EnterKey,
     Int,
     Str,
+}
+
+struct Timeout {
+    timeout: u32,
+    show_timer: bool,
+    timeout_msg: String,
 }
 
 enum ConsoleLinePart {
@@ -56,4 +69,10 @@ Int일시엔 꼭 숫자 문자열로 전송 Str이면 그냥 그대로 전송
 
 웹소켓 연결 가능
 
-연결시 UI가 업데이트 될때마다 아무 메세지를 전송함
+연결시 이밴트 발생시 메세지로 전송해줌
+
+## 이밴트 목록
+
+* REDRAW(1)
+
+* TIMEOUT(2)

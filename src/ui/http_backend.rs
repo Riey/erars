@@ -24,7 +24,7 @@ use axum::{
 use tower_http::compression::CompressionLayer;
 use tower_http::cors;
 
-use crate::ui::{Color, ConsoleLine, ConsoleResult, InputRequest};
+use crate::ui::{Color, ConsoleLine, InputRequest, InputRequestType};
 
 use super::{EraApp, VirtualConsole};
 
@@ -72,7 +72,7 @@ async fn start(
 
                     #[derive(serde::Serialize)]
                     struct Ret<'a> {
-                        current_req: Option<InputRequest>,
+                        current_req: Option<&'a InputRequest>,
                         bg_color: Color,
                         hl_color: Color,
                         lines: &'a [ConsoleLine],
@@ -82,7 +82,7 @@ async fn start(
                         StatusCode::OK,
                         [("Content-Type", "text/json")],
                         serde_json::to_string(&Ret {
-                            current_req: vconsole.current_req,
+                            current_req: vconsole.current_req.as_ref(),
                             bg_color: vconsole.bg_color,
                             hl_color: vconsole.hl_color,
                             lines: vconsole.lines().get(params.from..).unwrap_or(&[]),
@@ -102,28 +102,30 @@ async fn start(
                     current_req = vconsole.current_req
                 );
 
-                match vconsole.current_req {
-                    Some(InputRequest::Anykey | InputRequest::EnterKey) => {
-                        chan.send_ret(ConsoleResult::Value(Value::Int(0)));
-                        vconsole.current_req = None;
-                        StatusCode::OK
-                    }
-                    Some(InputRequest::Int) => match request.trim().parse::<i64>() {
-                        Ok(i) => {
-                            chan.send_ret(ConsoleResult::Value(Value::Int(i)));
+                match vconsole.current_req.as_ref() {
+                    Some(req) => match req.ty {
+                        InputRequestType::AnyKey | InputRequestType::EnterKey => {
+                            chan.send_input(Value::Int(0), req.generation);
                             vconsole.current_req = None;
                             StatusCode::OK
                         }
-                        _ => {
-                            log::error!("{request} is not Int");
-                            StatusCode::BAD_REQUEST
+                        InputRequestType::Int => match request.trim().parse::<i64>() {
+                            Ok(i) => {
+                                chan.send_input(Value::Int(i), req.generation);
+                                vconsole.current_req = None;
+                                StatusCode::OK
+                            }
+                            _ => {
+                                log::error!("{request} is not Int");
+                                StatusCode::BAD_REQUEST
+                            }
+                        },
+                        InputRequestType::Str => {
+                            chan.send_input(Value::String(request), req.generation);
+                            vconsole.current_req = None;
+                            StatusCode::OK
                         }
                     },
-                    Some(InputRequest::Str) => {
-                        chan.send_ret(ConsoleResult::Value(Value::String(request)));
-                        vconsole.current_req = None;
-                        StatusCode::OK
-                    }
                     None => StatusCode::GONE,
                 }
             }),
@@ -169,21 +171,38 @@ impl EraApp for HttpBackend {
         rt.block_on(async move {
             while !end.load(SeqCst) {
                 if need_redraw.swap(false, SeqCst) {
-                    let mut vconsole = vconsole.write();
+                    let mut vconsole_ = vconsole.write();
                     while let Some(msg) = chan.recv_msg() {
-                        vconsole.push_msg(msg);
+                        vconsole_.push_msg(msg);
                     }
-                    drop(vconsole);
+                    if let Some((timeout, gen, default_value)) = vconsole_.timeout.take() {
+                        let vconsole = vconsole.clone();
+                        let chan = chan.clone();
+                        let clients = clients.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep_until(timeout).await;
+                            if chan.send_input(default_value, gen) {
+                                // clear current_req
+                                match &mut vconsole.write().current_req {
+                                    opt_req
+                                        if opt_req
+                                            .as_ref()
+                                            .map_or(false, |req| req.generation == gen) =>
+                                    {
+                                        *opt_req = None;
+                                    }
+                                    _ => {}
+                                }
+                                log::debug!("Timeout {gen}");
+                                let mut clients = clients.lock().await;
+                                send_code(event_codes::TIMEOUT, &mut clients).await;
+                            }
+                        });
+                    }
+                    drop(vconsole_);
                     let mut clients = clients.lock().await;
-                    let mut invalid_clients = Vec::new();
-                    for (_, (idx, client)) in clients.iter_mut() {
-                        if client.send(Message::Binary(vec![1])).await.is_err() {
-                            invalid_clients.push(*idx);
-                        }
-                    }
-                    for invalid_idx in invalid_clients {
-                        clients.remove(invalid_idx);
-                    }
+                    send_code(event_codes::REDRAW, &mut clients).await;
+                    drop(clients);
                     tokio::time::sleep(Duration::from_millis(100)).await;
                     continue;
                 }
@@ -195,4 +214,21 @@ impl EraApp for HttpBackend {
 
         Ok(())
     }
+}
+
+async fn send_code(code: u8, clients: &mut Slab<(usize, WebSocket)>) {
+    let mut invalid_clients = Vec::new();
+    for (_, (idx, client)) in clients.iter_mut() {
+        if client.send(Message::Binary(vec![code])).await.is_err() {
+            invalid_clients.push(*idx);
+        }
+    }
+    for invalid_idx in invalid_clients {
+        clients.remove(invalid_idx);
+    }
+}
+
+mod event_codes {
+    pub const REDRAW: u8 = 1;
+    pub const TIMEOUT: u8 = 2;
 }
