@@ -81,10 +81,6 @@ impl EraApp for StdioBackend {
                 while let Some(msg) = chan.recv_msg() {
                     log::trace!("[UI] Recv: {msg:?}");
                     self.vconsole.push_msg(msg);
-
-                    if self.vconsole.current_req.is_some() {
-                        break;
-                    }
                 }
             }
 

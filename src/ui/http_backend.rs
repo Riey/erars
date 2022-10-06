@@ -173,12 +173,9 @@ impl EraApp for HttpBackend {
                     if vconsole.current_req.is_none() {
                         while let Some(msg) = chan.recv_msg() {
                             vconsole.push_msg(msg);
-
-                            if vconsole.current_req.is_some() {
-                                break;
-                            }
                         }
                     }
+                    drop(vconsole);
                     let mut clients = clients.lock().await;
                     let mut invalid_clients = Vec::new();
                     for (_, (idx, client)) in clients.iter_mut() {

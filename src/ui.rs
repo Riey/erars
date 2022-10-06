@@ -163,7 +163,12 @@ impl VirtualConsole {
             self.lines.push(ConsoleLine::default());
         }
         match com {
-            ConsoleMessage::Input(req) => self.current_req = Some(req),
+            ConsoleMessage::Input(req) => {
+                if self.current_req.is_some() {
+                    log::warn!("Input overwrited");
+                }
+                self.current_req = Some(req);
+            }
             ConsoleMessage::Alignment(align) => self.lines.last_mut().unwrap().align = align,
             ConsoleMessage::DrawLine(text) => {
                 self.lines
