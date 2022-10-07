@@ -747,6 +747,42 @@ mod body {
     }
 
     #[test]
+    fn test_printc() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/printc.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    StmtWithPos(
+        Print(
+            LEFT_ALIGN,
+            String(
+                "LC",
+            ),
+        ),
+        ScriptPosition {
+            line: 0,
+        },
+    ),
+    StmtWithPos(
+        Print(
+            RIGHT_ALIGN,
+            String(
+                "C",
+            ),
+        ),
+        ScriptPosition {
+            line: 1,
+        },
+    ),
+]
+"#
+        );
+    }
+
+    #[test]
     fn test_repeat() {
         k9::snapshot!(
             do_test(
