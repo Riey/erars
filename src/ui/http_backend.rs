@@ -1,13 +1,6 @@
 use slab::Slab;
-use std::{
-    net::SocketAddr,
-    sync::{
-        atomic::{AtomicBool, Ordering::SeqCst},
-        Arc,
-    },
-    time::Duration,
-};
-use tokio::sync::Mutex as AsyncMutex;
+use std::{net::SocketAddr, sync::Arc};
+use tokio::sync::{Mutex as AsyncMutex, Notify};
 
 use erars_ast::Value;
 use parking_lot::RwLock;
@@ -146,16 +139,16 @@ impl EraApp for HttpBackend {
         let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
 
         let _guard = rt.enter();
-        let end = Arc::new(AtomicBool::new(false));
-        let need_redraw = Arc::new(AtomicBool::new(false));
+        let end = Arc::new(Notify::new());
+        let need_redraw = Arc::new(Notify::new());
 
         let end_inner = end.clone();
         chan.set_exit_fn(move || {
-            end_inner.store(true, SeqCst);
+            end_inner.notify_one();
         });
         let need_redraw_inner = need_redraw.clone();
         chan.set_redraw_fn(move || {
-            need_redraw_inner.store(true, SeqCst);
+            need_redraw_inner.notify_one();
         });
 
         let vconsole = Arc::new(RwLock::new(VirtualConsole::new()));
@@ -168,9 +161,10 @@ impl EraApp for HttpBackend {
             vconsole.clone(),
         ));
 
-        rt.block_on(async move {
-            while !end.load(SeqCst) {
-                if need_redraw.swap(false, SeqCst) {
+        rt.spawn(async move {
+            loop {
+                need_redraw.notified().await;
+                {
                     let mut vconsole_ = vconsole.write();
                     while let Some(msg) = chan.recv_msg() {
                         vconsole_.push_msg(msg);
@@ -199,16 +193,15 @@ impl EraApp for HttpBackend {
                             }
                         });
                     }
-                    drop(vconsole_);
-                    let mut clients = clients.lock().await;
-                    send_code(event_codes::REDRAW, &mut clients).await;
-                    drop(clients);
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                    continue;
                 }
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                let mut clients = clients.lock().await;
+                send_code(event_codes::REDRAW, &mut clients).await;
+                drop(clients);
+                continue;
             }
         });
+
+        rt.block_on(end.notified());
 
         rt.shutdown_background();
 
