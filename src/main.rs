@@ -43,6 +43,8 @@ fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>
         EraConfig::default()
     };
 
+    log::trace!("Config: {config:?}");
+
     let config = Arc::new(config);
     let mut tx = ConsoleSender::new(chan, config.printc_width);
 

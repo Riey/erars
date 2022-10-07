@@ -11,7 +11,7 @@ pub fn parse_print_flags(mut s: &str) -> (&str, PrintFlags) {
     }
 
     if let Some(ss) = s.strip_prefix('L') {
-        if let Some(ss) = s.strip_prefix('C') {
+        if let Some(ss) = ss.strip_prefix('C') {
             flags |= PrintFlags::LEFT_ALIGN;
             s = ss;
         } else {
@@ -72,7 +72,10 @@ unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
     let (s, f) = parse_print_flags(s);
     flags |= f;
 
-    (flags, ty, s.strip_prefix(' ').unwrap_or_default())
+    let s = s.strip_prefix(' ').unwrap_or(s);
+    let s = s.strip_suffix('\r').unwrap_or(s);
+
+    (flags, ty, s)
 }
 
 #[inline]
