@@ -166,7 +166,12 @@ impl VirtualConsole {
             ConsoleMessage::Input(req) => {
                 if let Some(timeout) = req.timeout.as_ref() {
                     self.timeout = Some((
-                        Instant::now() + Duration::from_nanos((timeout.timeout - time::OffsetDateTime::now_utc().unix_timestamp_nanos()) as _),
+                        Instant::now()
+                            + Duration::from_nanos(
+                                (timeout.timeout
+                                    - time::OffsetDateTime::now_utc().unix_timestamp_nanos())
+                                    as _,
+                            ),
                         req.generation,
                         timeout.default_value.clone(),
                     ));
@@ -317,9 +322,9 @@ pub trait EraApp {
 
 pub struct ConsoleSender {
     chan: Arc<ConsoleChannel>,
+    printc_width: usize,
     line_count: usize,
     line_is_empty: bool,
-    printc_count: u32,
     color: u32,
     hl_color: u32,
     bg_color: u32,
@@ -330,13 +335,13 @@ pub struct ConsoleSender {
 }
 
 impl ConsoleSender {
-    pub fn new(chan: Arc<ConsoleChannel>) -> Self {
+    pub fn new(chan: Arc<ConsoleChannel>, printc_width: usize) -> Self {
         Self {
             chan,
 
             line_is_empty: true,
             line_count: 1,
-            printc_count: 0,
+            printc_width,
             color: u32::from_le_bytes([0xFF, 0xFF, 0xFF, 0x00]),
             hl_color: u32::from_le_bytes([0xFF, 0xFF, 0x00, 0x00]),
             bg_color: u32::from_le_bytes([0x00, 0x00, 0x00, 0x00]),
@@ -430,31 +435,21 @@ impl ConsoleSender {
     }
 
     pub fn printlc(&mut self, s: &str) {
-        if self.printc_count == 3 {
-            self.new_line();
-        }
-        self.printc_count += 1;
-        self.print(s.pad_to_width_with_alignment(30, pad::Alignment::Left));
+        self.print(s.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Left));
     }
 
     pub fn printrc(&mut self, s: &str) {
-        if self.printc_count == 3 {
-            self.new_line();
-        }
-        self.printc_count += 1;
-        self.print(s.pad_to_width_with_alignment(30, pad::Alignment::Right));
+        self.print(s.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Right));
     }
 
     pub fn new_line(&mut self) {
         self.line_count += 1;
-        self.printc_count = 0;
         self.line_is_empty = true;
         self.chan.send_msg(ConsoleMessage::NewLine);
     }
 
     pub fn draw_line(&mut self, s: String) {
         self.line_count += 1;
-        self.printc_count = 0;
         self.line_is_empty = true;
         self.chan.send_msg(ConsoleMessage::DrawLine(s));
     }
@@ -638,9 +633,18 @@ fn is_left_alignment(align: &Alignment) -> bool {
 #[test]
 fn button_test() {
     let mut line = ConsoleLine::default();
-    line.push_text("[0] 1 [1] 2 [ 3] 3 [456 ] 745".into(), &TextStyle { color: Color([0; 3]), font_family: "".into(), font_style: FontStyle::NORMAL });
+    line.push_text(
+        "[0] 1 [1] 2 [ 3] 3 [456 ] 745".into(),
+        &TextStyle {
+            color: Color([0; 3]),
+            font_family: "".into(),
+            font_style: FontStyle::NORMAL,
+        },
+    );
     k9::assert_equal!(line.parts.len(), 4);
-    k9::snapshot!(line.parts, r#"
+    k9::snapshot!(
+        line.parts,
+        r#"
 [
     Button(
         [
@@ -727,5 +731,6 @@ fn button_test() {
         ),
     ),
 ]
-"#);
+"#
+    );
 }

@@ -491,6 +491,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b0dd6aab3061be00b739299a1d8b10da43848f0d857b30f30ab83226680cd06"
 
 [[package]]
+name = "derivative"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fcc3dd5e9e9c0b295d6e1e4d811fb6f157d5ffd784b8d202fc62eac8035a770b"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "diff"
 version = "0.1.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -613,6 +624,7 @@ name = "erars-compiler"
 version = "0.1.0"
 dependencies = [
  "bitflags",
+ "derivative",
  "enum-map",
  "erars-ast",
  "erars-lexer",

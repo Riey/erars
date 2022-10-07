@@ -26,8 +26,25 @@ use hashbrown::HashMap;
 use smol_str::SmolStr;
 
 #[allow(unused_assignments)]
-fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
+fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>) {
     let mut time = Instant::now();
+
+    let config_path = format!("{target_path}/emuera.config");
+
+    let config = if Path::new(&config_path).exists() {
+        match std::fs::read_to_string(&config_path) {
+            Ok(s) => EraConfig::from_text(&s).unwrap(),
+            Err(err) => {
+                log::error!("config file load error: {err}");
+                EraConfig::default()
+            }
+        }
+    } else {
+        EraConfig::default()
+    };
+
+    let config = Arc::new(config);
+    let mut tx = ConsoleSender::new(chan, config.printc_width);
 
     macro_rules! check_time {
         ($work:expr) => {
@@ -44,26 +61,6 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
 
     {
         check_time!("Initialize");
-
-        let config_path = format!("{target_path}/emuera.config");
-
-        let config = if Path::new(&config_path).exists() {
-            match std::fs::read_to_string(&config_path) {
-                Ok(s) => EraConfig::from_text(&s).unwrap(),
-                Err(err) => {
-                    log::error!("config file load error: {err}");
-                    EraConfig::default()
-                }
-            }
-        } else {
-            let config = EraConfig::default();
-            std::fs::write(&config_path, config.to_text()).ok();
-            config
-        };
-
-        log::info!("Load config: {config:?}");
-
-        let config = Arc::new(config);
 
         let var_infos: HashMap<SmolStr, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
@@ -298,9 +295,9 @@ fn run_script(mut tx: ConsoleSender, target_path: String, inputs: Vec<Value>) {
 
 fn run(backend: &mut dyn EraApp, target_path: String, inputs: Vec<Value>) -> anyhow::Result<()> {
     let chan = Arc::new(ConsoleChannel::new());
-    let tx = ConsoleSender::new(chan.clone());
 
-    std::thread::spawn(move || run_script(tx, target_path, inputs));
+    let chan_ = chan.clone();
+    std::thread::spawn(move || run_script(chan_, target_path, inputs));
 
     backend.run(chan)
 }

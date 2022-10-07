@@ -1197,7 +1197,12 @@ impl TerminalVm {
                                 ty: InputRequestType::Str,
                                 is_one: false,
                                 timeout: Some(Timeout {
-                                    timeout: to_time(time::OffsetDateTime::now_utc() + time::Duration::milliseconds(get_arg!(@i64: args, ctx))),
+                                    timeout: to_time(
+                                        time::OffsetDateTime::now_utc()
+                                            + time::Duration::milliseconds(
+                                                get_arg!(@i64: args, ctx),
+                                            ),
+                                    ),
                                     default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1208,7 +1213,12 @@ impl TerminalVm {
                                 ty: InputRequestType::Int,
                                 is_one: false,
                                 timeout: Some(Timeout {
-                                    timeout: to_time(time::OffsetDateTime::now_utc() + time::Duration::milliseconds(get_arg!(@i64: args, ctx))),
+                                    timeout: to_time(
+                                        time::OffsetDateTime::now_utc()
+                                            + time::Duration::milliseconds(
+                                                get_arg!(@i64: args, ctx),
+                                            ),
+                                    ),
                                     default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1219,7 +1229,12 @@ impl TerminalVm {
                                 ty: InputRequestType::Str,
                                 is_one: true,
                                 timeout: Some(Timeout {
-                                    timeout: to_time(time::OffsetDateTime::now_utc() + time::Duration::milliseconds(get_arg!(@i64: args, ctx))),
+                                    timeout: to_time(
+                                        time::OffsetDateTime::now_utc()
+                                            + time::Duration::milliseconds(
+                                                get_arg!(@i64: args, ctx),
+                                            ),
+                                    ),
                                     default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1230,7 +1245,12 @@ impl TerminalVm {
                                 ty: InputRequestType::Int,
                                 is_one: true,
                                 timeout: Some(Timeout {
-                                    timeout: to_time(time::OffsetDateTime::now_utc() + time::Duration::milliseconds(get_arg!(@i64: args, ctx))),
+                                    timeout: to_time(
+                                        time::OffsetDateTime::now_utc()
+                                            + time::Duration::milliseconds(
+                                                get_arg!(@i64: args, ctx),
+                                            ),
+                                    ),
                                     default_value: get_arg!(@Value: args, ctx),
                                     show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                                     timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1706,12 +1726,18 @@ impl TerminalVm {
                         _ => {
                             call!(self, "SHOW_STATUS", tx, ctx);
 
+                            let mut printc_count = 0;
+
                             for (no, name) in ctx.header_info.clone().var_name_var["TRAIN"].iter() {
                                 if call!(self, &format!("COM_ABLE{no}"), tx, ctx)
                                     && ctx.var.get_result() != 0
                                     || ctx.header_info.replace.comable_init != 0
                                 {
+                                    if printc_count == ctx.config.printc_count {
+                                        tx.new_line();
+                                    }
                                     tx.printrc(&format!("{name}[{no:3}]"));
+                                    printc_count += 1;
                                 }
                             }
 

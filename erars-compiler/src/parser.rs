@@ -134,17 +134,18 @@ impl Default for ReplaceInfo {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Clone, Debug, derivative::Derivative)]
+#[derivative(Default)]
 pub struct EraConfig {
     pub lang: Language,
     pub save_nos: usize,
+    #[derivative(Default(value = "4"))]
+    pub printc_count: usize,
+    #[derivative(Default(value = "30"))]
+    pub printc_width: usize,
 }
 
 impl EraConfig {
-    pub fn to_text(&self) -> String {
-        format!("内部で使用する東アジア言語:{lang}", lang = self.lang)
-    }
-
     pub fn from_text(s: &str) -> ParserResult<Self> {
         let mut ret = Self::default();
 
@@ -153,6 +154,18 @@ impl EraConfig {
         while let Some(line) = lex.next() {
             match line {
                 ConfigToken::Line((key, value)) => match key {
+                    "PRINTCを並べる数" => {
+                        ret.printc_count = match value.parse() {
+                            Ok(l) => l,
+                            Err(_) => error!(lex, format!("Invalid integer {value}")),
+                        };
+                    }
+                    "PRINTCの文字数" => {
+                        ret.printc_width = match value.parse() {
+                            Ok(l) => l,
+                            Err(_) => error!(lex, format!("Invalid integer {value}")),
+                        };
+                    }
                     "内部で使用する東アジア言語" => {
                         ret.lang = match value.parse() {
                             Ok(l) => l,
