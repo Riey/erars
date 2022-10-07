@@ -1,4 +1,4 @@
-use crossbeam_channel::{bounded, Receiver, Sender};
+use crossbeam_channel::{bounded, Receiver, Sender, TrySendError};
 use erars_ast::{Alignment, Value};
 use once_cell::sync::Lazy;
 use pad::PadStr;
@@ -545,7 +545,7 @@ impl ConsoleChannel {
             delay_redraw: AtomicBool::new(false),
             delay_exit: AtomicBool::new(false),
             input_generation: AtomicU32::new(0),
-            console: bounded(256),
+            console: bounded(64),
             ret: bounded(8),
         }
     }
@@ -597,7 +597,16 @@ impl ConsoleChannel {
     }
 
     pub fn send_msg(&self, msg: ConsoleMessage) {
-        self.console.0.send(msg).unwrap();
+        match self.console.0.try_send(msg) {
+            Ok(()) => {}
+            Err(TrySendError::Full(msg)) => {
+                // if draw queue is full, request frontend to flush the queue.
+                self.request_redraw();
+                // block until queue is available
+                self.console.0.send(msg).unwrap();
+            }
+            _ => unreachable!(),
+        }
     }
 
     pub fn recv_msg(&self) -> Option<ConsoleMessage> {
