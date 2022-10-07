@@ -1733,13 +1733,18 @@ impl TerminalVm {
                                     && ctx.var.get_result() != 0
                                     || ctx.header_info.replace.comable_init != 0
                                 {
-                                    if printc_count == ctx.config.printc_count {
+                                    if ctx.config.printc_count != 0
+                                        && printc_count == ctx.config.printc_count
+                                    {
+                                        printc_count = 0;
                                         tx.new_line();
                                     }
                                     tx.printrc(&format!("{name}[{no:3}]"));
                                     printc_count += 1;
                                 }
                             }
+
+                            tx.new_line();
 
                             call!(self, "SHOW_USERCOM", tx, ctx);
 
