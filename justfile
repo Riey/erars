@@ -1,28 +1,28 @@
 default: (build-release)
 
 build:
-    cargo build
+    cargo build --all
 
 build-release:
-    cargo build --release
+    cargo build --release --all
 
 test:
-    cargo test
+    cargo test --all
 
 test-update:
-    K9_UPDATE_SNAPSHOTS=1 cargo test
+    K9_UPDATE_SNAPSHOTS=1 cargo test --all
 
 run-ym-http:
-    cargo run --release -- --port=8000 ../eraTHYMKR
+    cargo run --release --bin erars-http -- --port=8000 ../eraTHYMKR
 
 run-ym:
-    cargo run --release -- ../eraTHYMKR
+    cargo run --release --bin erars-stdio -- ../eraTHYMKR
 
 run-ym-log:
-    cargo run --release -- --log-level=trace ../eraTHYMKR
+    cargo run --release --bin erars-stdio -- --log-level=trace ../eraTHYMKR
 
 run-ym-toriko:
-    cargo run --release -- --use-input=toriko.ron ../eraTHYMKR
+    cargo run --release --bin erars-stdio -- --use-input=toriko.ron ../eraTHYMKR
 
 gen-test name:
     echo "@SYSTEM_TITLE" > tests/run_tests/basic/{{name}}.erb
