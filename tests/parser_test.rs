@@ -1653,11 +1653,38 @@ Function {
             },
         ),
         StmtWithPos(
+            Call {
+                name: String(
+                    "BAZ",
+                ),
+                args: [
+                    CondExpr(
+                        Int(
+                            1,
+                        ),
+                        FormText(
+                            『촉촉한 상남자』,
+                        ),
+                        FormText(
+                            『가랑비 공주』,
+                        ),
+                    ),
+                ],
+                is_jump: false,
+                is_method: false,
+                try_body: [],
+                catch_body: None,
+            },
+            ScriptPosition {
+                line: 23,
+            },
+        ),
+        StmtWithPos(
             Label(
                 "LABEL",
             ),
             ScriptPosition {
-                line: 23,
+                line: 25,
             },
         ),
     ],
