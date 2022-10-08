@@ -37,14 +37,20 @@ pub enum BuiltinVariable {
 
     Rand,
 
-    #[strum(to_string = "GAMEBASE_AUTHOR")]
-    GamebaseAuthor,
     #[strum(to_string = "GAMEBASE_CODE")]
     GamebaseCode,
     #[strum(to_string = "GAMEBASE_VERSION")]
     GamebaseVersion,
+    #[strum(to_string = "GAMEBASE_ALLOWVERSION")]
+    GamebaseAllowVersion,
+    #[strum(to_string = "GAMEBASE_DEFAULTCHARA")]
+    GamebaseDefaultChara,
+    #[strum(to_string = "GAMEBASE_NOITEM")]
+    GamebaseNoItem,
     #[strum(to_string = "GAMEBASE_YEAR")]
     GamebaseYear,
+    #[strum(to_string = "GAMEBASE_AUTHOR")]
+    GamebaseAuthor,
     #[strum(to_string = "GAMEBASE_TITLE")]
     GamebaseTitle,
     #[strum(to_string = "GAMEBASE_INFO")]

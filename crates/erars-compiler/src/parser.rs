@@ -134,6 +134,19 @@ impl Default for ReplaceInfo {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct Gamebase {
+    pub code: u32,
+    pub version: u32,
+    pub allow_version: u32,
+    pub default_chara: u32,
+    pub no_item: u32,
+    pub author: String,
+    pub info: String,
+    pub year: String,
+    pub title: String,
+}
+
 #[derive(Clone, Debug, derivative::Derivative)]
 #[derivative(Default)]
 pub struct EraConfig {
@@ -228,6 +241,7 @@ impl Default for DefaultLocalVarSize {
 #[derive(Debug, Default)]
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
+    pub gamebase: Gamebase,
     pub replace: ReplaceInfo,
     pub character_templates: HashMap<u32, CharacterTemplate>,
     pub item_price: HashMap<u32, u32>,
@@ -315,6 +329,52 @@ impl HeaderInfo {
         }
 
         self.character_templates.insert(template.no, template);
+
+        Ok(())
+    }
+
+    pub fn merge_gamebase_csv(&mut self, s: &str) -> ParserResult<()> {
+        let mut lex = Lexer::new(s);
+
+        while let Some((name, val)) = self::csv::csv2_line_allow_other(&mut lex)? {
+            match name {
+                "コード" => {
+                    self.gamebase.code = match val.parse() {
+                        Ok(code) => code,
+                        Err(_) => error!(lex, "Invalid digits"),
+                    }
+                }
+                "バージョン" => {
+                    self.gamebase.version = match val.parse() {
+                        Ok(code) => code,
+                        Err(_) => error!(lex, "Invalid digits"),
+                    }
+                }
+                "バージョン違い認める" => {
+                    self.gamebase.allow_version = match val.parse() {
+                        Ok(code) => code,
+                        Err(_) => error!(lex, "Invalid digits"),
+                    }
+                }
+                "最初からいるキャラ" => {
+                    self.gamebase.default_chara = match val.parse() {
+                        Ok(code) => code,
+                        Err(_) => error!(lex, "Invalid digits"),
+                    }
+                }
+                "アイテムなし" => {
+                    self.gamebase.no_item = match val.parse() {
+                        Ok(code) => code,
+                        Err(_) => error!(lex, "Invalid digits"),
+                    }
+                }
+                "作者" => self.gamebase.author = val.into(),
+                "追加情報" => self.gamebase.info = val.into(),
+                "製作年" => self.gamebase.year = val.into(),
+                "タイトル" => self.gamebase.title = val.into(),
+                other => log::error!("Unknown gamebase key: {other}"),
+            }
+        }
 
         Ok(())
     }

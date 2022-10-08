@@ -135,6 +135,21 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
                         }
                     }
                 }
+                "GAMEBASE" => {
+                    log::debug!("Merge GAMEBASE.CSV");
+
+                    match info.merge_gamebase_csv(&v) {
+                        Ok(()) => {}
+                        Err((err, span)) => {
+                            let file_id = files.lock().add(path.display().to_string(), v);
+                            diagnostic.lock().labels.push(
+                                Label::primary(file_id, span).with_message(format!("{}", err)),
+                            );
+                        }
+                    }
+
+                    log::info!("GAMEBASE: {:?}", info.gamebase);
+                }
                 "VARIABLESIZE" => {
                     log::debug!("Merge VARIABLESIZE.CSV");
 

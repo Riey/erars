@@ -4,6 +4,15 @@ use smol_str::SmolStr;
 
 use crate::ParserResult;
 
+pub fn csv2_line_allow_other<'s>(
+    lex: &mut Lexer<'s, CsvToken<'s>>,
+) -> ParserResult<Option<(&'s str, &'s str)>> {
+    match lex.next() {
+        Some(CsvToken::Csv2((key, value))) => Ok(Some((key, value))),
+        _ => Ok(None),
+    }
+}
+
 pub fn csv2_line<'s>(
     lex: &mut Lexer<'s, CsvToken<'s>>,
 ) -> ParserResult<Option<(&'s str, &'s str)>> {

@@ -335,12 +335,15 @@ impl TerminalVm {
                 use BuiltinVariable::*;
 
                 let value = match var {
-                    GamebaseVersion => Value::Int(0),
-                    GamebaseAuthor => "Riey".into(),
-                    GamebaseYear => Value::Int(2022),
-                    GamebaseTitle => "eraTHYMKR".into(),
-                    GamebaseInfo => "".into(),
-                    GamebaseCode => Value::Int(0),
+                    GamebaseCode => ctx.header_info.gamebase.code.into(),
+                    GamebaseVersion => ctx.header_info.gamebase.version.into(),
+                    GamebaseAllowVersion => ctx.header_info.gamebase.allow_version.into(),
+                    GamebaseDefaultChara => ctx.header_info.gamebase.default_chara.into(),
+                    GamebaseNoItem => ctx.header_info.gamebase.no_item.into(),
+                    GamebaseAuthor => ctx.header_info.gamebase.author.clone().into(),
+                    GamebaseYear => ctx.header_info.gamebase.year.clone().into(),
+                    GamebaseTitle => ctx.header_info.gamebase.title.clone().into(),
+                    GamebaseInfo => ctx.header_info.gamebase.info.clone().into(),
                     CharaNum => (ctx.var.character_len() as i64).into(),
                     LineCount => (tx.line_count() as i64).into(),
                     ItemPrice => {
