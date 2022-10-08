@@ -174,9 +174,13 @@ impl VmContext {
     }
 
     pub fn return_func(&mut self) -> Result<impl Iterator<Item = Value>> {
-        let call_stack = self.call_stack.last().unwrap();
-        let count = self.stack.len() - call_stack.stack_base;
+        let count = self.current_stack_count();
         Ok(self.take_value_list(count as u32)?.into_iter())
+    }
+
+    pub fn current_stack_count(&self) -> usize {
+        let call_stack = self.call_stack.last().unwrap();
+        self.stack.len() - call_stack.stack_base
     }
 
     pub fn take_arg_list(

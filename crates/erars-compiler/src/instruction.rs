@@ -49,8 +49,6 @@ pub enum Instruction {
     UnaryOperator(UnaryOperator),
     SetAlignment(Alignment),
     Times(NotNan<f32>),
-    Return,
-    ReturnF,
     GotoLabel,
     /// if name is not exists, push 1
     TryGotoLabel,
