@@ -96,15 +96,21 @@ async fn start(
                 match vconsole.current_req.as_ref() {
                     Some(req) => match req.ty {
                         InputRequestType::AnyKey | InputRequestType::EnterKey => {
-                            chan.send_input(Value::Int(0), req.generation);
-                            vconsole.current_req = None;
-                            StatusCode::OK
+                            if chan.send_input(Value::Int(0), req.generation) {
+                                vconsole.current_req = None;
+                                StatusCode::OK
+                            } else {
+                                StatusCode::GONE
+                            }
                         }
                         InputRequestType::Int => match request.trim().parse::<i64>() {
                             Ok(i) => {
-                                chan.send_input(Value::Int(i), req.generation);
-                                vconsole.current_req = None;
-                                StatusCode::OK
+                                if chan.send_input(Value::Int(i), req.generation) {
+                                    vconsole.current_req = None;
+                                    StatusCode::OK
+                                } else {
+                                    StatusCode::GONE
+                                }
                             }
                             _ => {
                                 log::error!("{request} is not Int");
@@ -112,9 +118,12 @@ async fn start(
                             }
                         },
                         InputRequestType::Str => {
-                            chan.send_input(Value::String(request), req.generation);
-                            vconsole.current_req = None;
-                            StatusCode::OK
+                            if chan.send_input(Value::String(request), req.generation) {
+                                vconsole.current_req = None;
+                                StatusCode::OK
+                            } else {
+                                StatusCode::GONE
+                            }
                         }
                     },
                     None => StatusCode::GONE,
