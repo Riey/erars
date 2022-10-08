@@ -1371,6 +1371,8 @@ impl TerminalVm {
                         if let Ok(data) = self::save_data::read_save_data(&self.sav_path, idx) {
                             ctx.var.load_serializable(data, &ctx.header_info.replace)?;
                         }
+
+                        return self.load_data_end(tx, ctx).map(Some);
                     }
                     BuiltinCommand::DelData => {
                         let idx = get_arg!(@i64: args, ctx);
@@ -1411,12 +1413,7 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::LoadGame => {
-                        if self.run_load_game(tx, ctx)? != Workflow::Exit {
-                            // begin shop
-                            ctx.begin = Some(BeginType::Shop);
-                        }
-
-                        return Ok(Some(Workflow::Exit));
+                        return self.run_load_game(tx, ctx).map(Some);
                     }
                     BuiltinCommand::PutForm => {
                         let arg = get_arg!(@String: args, ctx);
@@ -1505,6 +1502,15 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
+    fn load_data_end(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
+        call!(self, "SYSTEM_LOADEND", tx, ctx);
+        call_event!(self, EventType::Load, tx, ctx);
+
+        ctx.set_begin(BeginType::Shop);
+
+        Ok(Workflow::Exit)
+    }
+
     fn run_load_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
         let mut savs = self.load_savs();
 
@@ -1523,10 +1529,7 @@ impl TerminalVm {
             }
         }
 
-        call!(self, "SYSTEM_LOADEND", tx, ctx);
-        call_event!(self, EventType::Load, tx, ctx);
-
-        Ok(Workflow::Return)
+        self.load_data_end(tx, ctx)
     }
 
     fn run_save_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
