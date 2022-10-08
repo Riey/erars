@@ -27,11 +27,11 @@ jobs:
     - uses: actions/upload-artifact@v3
       with:
         name: erars-stdio
-        path: target/release/erars_stdio
+        path: target/release/erars-stdio
     - uses: actions/upload-artifact@v3
       with:
         name: erars-http
-        path: target/release/erars_http
+        path: target/release/erars-http
 
   release-win:
     runs-on: windows-latest
