@@ -18,8 +18,12 @@ pub struct VmContext {
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
 
-    /// Set `Some` during SAVEGAME
-    pub(crate) put_form_buf: Option<String>,
+    /// Set `true` during SAVEGAME
+    pub(crate) put_form_enabled: bool,
+
+    pub(crate) lastload_version: u32,
+    pub(crate) lastload_no: u32,
+    pub(crate) lastload_text: String,
 
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
@@ -34,7 +38,10 @@ impl VmContext {
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
-            put_form_buf: None,
+            put_form_enabled: false,
+            lastload_no: 0,
+            lastload_text: "".into(),
+            lastload_version: 0,
             config,
             current_pos: ScriptPosition::default(),
         };

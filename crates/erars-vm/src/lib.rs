@@ -344,6 +344,11 @@ impl TerminalVm {
                     GamebaseYear => ctx.header_info.gamebase.year.clone().into(),
                     GamebaseTitle => ctx.header_info.gamebase.title.clone().into(),
                     GamebaseInfo => ctx.header_info.gamebase.info.clone().into(),
+
+                    LastLoadNo => ctx.lastload_no.into(),
+                    LastLoadText => ctx.lastload_text.clone().into(),
+                    LastLoadVersion => ctx.lastload_version.into(),
+
                     CharaNum => (ctx.var.character_len() as i64).into(),
                     LineCount => (tx.line_count() as i64).into(),
                     ItemPrice => {
@@ -1378,6 +1383,9 @@ impl TerminalVm {
                         if let Ok(data) =
                             self::save_data::read_save_data(&self.sav_path, &ctx.header_info, idx)
                         {
+                            ctx.lastload_text = data.description.clone();
+                            ctx.lastload_no = idx as _;
+                            ctx.lastload_version = data.version;
                             ctx.var.load_serializable(data, &ctx.header_info)?;
                         }
 
@@ -1430,14 +1438,13 @@ impl TerminalVm {
                     }
                     BuiltinCommand::PutForm => {
                         let arg = get_arg!(@String: args, ctx);
-                        match ctx.put_form_buf.as_mut() {
-                            Some(buf) => {
-                                buf.push_str(&arg);
-                            }
-                            None => {
-                                bail!("PUTFORM called in no @SAVEINFO function");
-                            }
-                        }
+
+                        anyhow::ensure!(
+                            ctx.put_form_enabled,
+                            "PUTFORM called in no @SAVEINFO function"
+                        );
+
+                        ctx.var.ref_str("SAVEDATA_TEXT", &[])?.push_str(&arg);
                     }
                     BuiltinCommand::ResetStain => {
                         let chara = get_arg!(@usize: args, ctx);
@@ -1534,6 +1541,9 @@ impl TerminalVm {
                 Some(100) => return Ok(Workflow::Return),
                 Some(i) if i >= 0 && i < SAVE_COUNT as i64 => {
                     if let Some(sav) = savs.remove(&(i as usize)) {
+                        ctx.lastload_text = sav.description.clone();
+                        ctx.lastload_no = i as _;
+                        ctx.lastload_version = sav.version;
                         ctx.var.load_serializable(sav, &ctx.header_info)?;
                         break;
                     }
@@ -1572,16 +1582,18 @@ impl TerminalVm {
                     };
 
                     if write {
-                        ctx.put_form_buf = Some(String::new());
+                        ctx.put_form_enabled = true;
                         if self.try_call("SAVEINFO", &[], tx, ctx)? == Some(Workflow::Exit) {
                             return Ok(Workflow::Exit);
                         }
+                        ctx.put_form_enabled = false;
+                        let save_text = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
                         save_data::write_save_data(
                             &self.sav_path,
                             i as i64,
                             &ctx.var,
                             &ctx.header_info,
-                            ctx.put_form_buf.take().unwrap(),
+                            save_text,
                         );
                         break;
                     }

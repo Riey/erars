@@ -37,6 +37,13 @@ pub enum BuiltinVariable {
 
     Rand,
 
+    #[strum(to_string = "LASTLOAD_VERSION")]
+    LastLoadVersion,
+    #[strum(to_string = "LASTLOAD_NO")]
+    LastLoadNo,
+    #[strum(to_string = "LASTLOAD_TEXT")]
+    LastLoadText,
+
     #[strum(to_string = "GAMEBASE_CODE")]
     GamebaseCode,
     #[strum(to_string = "GAMEBASE_VERSION")]
