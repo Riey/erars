@@ -861,8 +861,11 @@ impl TerminalVm {
                         check_arg_count!(1);
                         let idx = get_arg!(@i64: args, ctx);
 
-                        let (ret, rets) = match self::save_data::read_save_data(&self.sav_path, idx)
-                        {
+                        let (ret, rets) = match self::save_data::read_save_data(
+                            &self.sav_path,
+                            &ctx.header_info,
+                            idx,
+                        ) {
                             Ok(data) => (0, data.description),
                             Err(err) => (err, "セーブデータのバーションが異なります".into()),
                         };
@@ -1365,14 +1368,17 @@ impl TerminalVm {
                             &self.sav_path,
                             idx,
                             &ctx.var,
+                            &ctx.header_info,
                             description,
                         );
                     }
                     BuiltinCommand::LoadData => {
                         let idx = get_arg!(@i64: args, ctx);
 
-                        if let Ok(data) = self::save_data::read_save_data(&self.sav_path, idx) {
-                            ctx.var.load_serializable(data, &ctx.header_info.replace)?;
+                        if let Ok(data) =
+                            self::save_data::read_save_data(&self.sav_path, &ctx.header_info, idx)
+                        {
+                            ctx.var.load_serializable(data, &ctx.header_info)?;
                         }
 
                         return self.load_data_end(tx, ctx).map(Some);
@@ -1383,12 +1389,16 @@ impl TerminalVm {
                         let _ = self::save_data::delete_save_data(&self.sav_path, idx);
                     }
                     BuiltinCommand::SaveGlobal => {
-                        self::save_data::write_global_data(&self.sav_path, &ctx.var);
+                        self::save_data::write_global_data(
+                            &self.sav_path,
+                            &ctx.var,
+                            &ctx.header_info,
+                        );
                     }
                     BuiltinCommand::LoadGlobal => {
-                        match self::save_data::read_global_data(&self.sav_path) {
+                        match self::save_data::read_global_data(&self.sav_path, &ctx.header_info) {
                             Ok(data) => {
-                                ctx.var.load_global_serializable(data, &ctx.header_info.replace)?;
+                                ctx.var.load_global_serializable(data, &ctx.header_info)?;
                                 ctx.var.set_result(1);
                             }
                             _ => {
@@ -1445,11 +1455,11 @@ impl TerminalVm {
         Ok(None)
     }
 
-    fn load_savs(&self) -> HashMap<usize, SerializableVariableStorage> {
+    fn load_savs(&self, ctx: &mut VmContext) -> HashMap<usize, SerializableVariableStorage> {
         let mut savs = HashMap::new();
 
         for i in 0..SAVE_COUNT {
-            if let Ok(sav) = save_data::read_save_data(&self.sav_path, i as i64) {
+            if let Ok(sav) = save_data::read_save_data(&self.sav_path, &ctx.header_info, i as i64) {
                 savs.insert(i, sav);
             }
         }
@@ -1515,7 +1525,7 @@ impl TerminalVm {
     }
 
     fn run_load_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
-        let mut savs = self.load_savs();
+        let mut savs = self.load_savs(ctx);
 
         loop {
             Self::print_sav_data_list(&savs, tx);
@@ -1524,7 +1534,7 @@ impl TerminalVm {
                 Some(100) => return Ok(Workflow::Return),
                 Some(i) if i >= 0 && i < SAVE_COUNT as i64 => {
                     if let Some(sav) = savs.remove(&(i as usize)) {
-                        ctx.var.load_serializable(sav, &ctx.header_info.replace)?;
+                        ctx.var.load_serializable(sav, &ctx.header_info)?;
                         break;
                     }
                 }
@@ -1536,7 +1546,7 @@ impl TerminalVm {
     }
 
     fn run_save_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
-        let savs = self.load_savs();
+        let savs = self.load_savs(ctx);
 
         loop {
             Self::print_sav_data_list(&savs, tx);
@@ -1570,6 +1580,7 @@ impl TerminalVm {
                             &self.sav_path,
                             i as i64,
                             &ctx.var,
+                            &ctx.header_info,
                             ctx.put_form_buf.take().unwrap(),
                         );
                         break;

@@ -1,3 +1,4 @@
+use erars_compiler::HeaderInfo;
 use flate2::read;
 use flate2::write;
 use std::path::Path;
@@ -13,7 +14,13 @@ fn make_save_file_name(idx: i64) -> String {
 
 static GLOBAL_SAVE_FILE_NAME: &str = "global.msgpack";
 
-pub fn write_save_data(sav_path: &Path, idx: i64, var: &VariableStorage, description: String) {
+pub fn write_save_data(
+    sav_path: &Path,
+    idx: i64,
+    var: &VariableStorage,
+    header: &HeaderInfo,
+    description: String,
+) {
     if !sav_path.exists() {
         std::fs::create_dir(&sav_path).ok();
     }
@@ -21,7 +28,7 @@ pub fn write_save_data(sav_path: &Path, idx: i64, var: &VariableStorage, descrip
     let mut file = std::fs::File::create(sav_path.join(make_save_file_name(idx))).unwrap();
     let mut encoder = write::GzEncoder::new(&mut file, flate2::Compression::fast());
 
-    rmp_serde::encode::write(&mut encoder, &var.get_serializable(description)).unwrap();
+    rmp_serde::encode::write(&mut encoder, &var.get_serializable(header, description)).unwrap();
 }
 
 pub fn delete_save_data(sav_path: &Path, idx: i64) -> std::io::Result<()> {
@@ -32,7 +39,11 @@ pub fn delete_save_data(sav_path: &Path, idx: i64) -> std::io::Result<()> {
     std::fs::remove_file(sav_path.join(make_save_file_name(idx)))
 }
 
-pub fn read_save_data(sav_path: &Path, idx: i64) -> Result<SerializableVariableStorage, i64> {
+pub fn read_save_data(
+    sav_path: &Path,
+    header: &HeaderInfo,
+    idx: i64,
+) -> Result<SerializableVariableStorage, i64> {
     let file = sav_path.join(make_save_file_name(idx));
 
     let ret = if !file.exists() {
@@ -42,7 +53,17 @@ pub fn read_save_data(sav_path: &Path, idx: i64) -> Result<SerializableVariableS
             Ok(compressed) => {
                 let mut decoder = read::GzDecoder::new(compressed);
                 match rmp_serde::from_read::<_, SerializableVariableStorage>(&mut decoder) {
-                    Ok(ret) => return Ok(ret),
+                    Ok(ret) => {
+                        if ret.code != header.gamebase.code {
+                            // Invalid code
+                            2
+                        } else if ret.version < header.gamebase.allow_version {
+                            // Version is too low
+                            3
+                        } else {
+                            return Ok(ret);
+                        }
+                    }
                     Err(err) => {
                         log::error!("Save load error: {err}");
                         4
@@ -59,7 +80,7 @@ pub fn read_save_data(sav_path: &Path, idx: i64) -> Result<SerializableVariableS
     Err(ret)
 }
 
-pub fn write_global_data(sav_path: &Path, var: &VariableStorage) {
+pub fn write_global_data(sav_path: &Path, var: &VariableStorage, header: &HeaderInfo) {
     if !sav_path.exists() {
         std::fs::create_dir(&sav_path).ok();
     }
@@ -67,12 +88,15 @@ pub fn write_global_data(sav_path: &Path, var: &VariableStorage) {
     // Don't compress global data since it's pretty small
     std::fs::write(
         sav_path.join(GLOBAL_SAVE_FILE_NAME),
-        &rmp_serde::to_vec(&var.get_global_serializable()).unwrap(),
+        &rmp_serde::to_vec(&var.get_global_serializable(header)).unwrap(),
     )
     .unwrap();
 }
 
-pub fn read_global_data(sav_path: &Path) -> Result<SerializableGlobalVariableStorage, i64> {
+pub fn read_global_data(
+    sav_path: &Path,
+    header: &HeaderInfo,
+) -> Result<SerializableGlobalVariableStorage, i64> {
     let file = sav_path.join(GLOBAL_SAVE_FILE_NAME);
 
     let ret = if !file.exists() {
@@ -81,7 +105,17 @@ pub fn read_global_data(sav_path: &Path) -> Result<SerializableGlobalVariableSto
         match std::fs::read(file) {
             Ok(s) => {
                 match rmp_serde::from_read::<_, SerializableGlobalVariableStorage>(s.as_slice()) {
-                    Ok(ret) => return Ok(ret),
+                    Ok(ret) => {
+                        if ret.code != header.gamebase.code {
+                            // Invalid code
+                            2
+                        } else if ret.version < header.gamebase.allow_version {
+                            // Version is too low
+                            3
+                        } else {
+                            return Ok(ret);
+                        }
+                    }
                     Err(err) => {
                         log::error!("Save load error: {err}");
                         4
