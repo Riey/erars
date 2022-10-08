@@ -596,15 +596,17 @@ impl TerminalVm {
                             .map_or(-1, |n| n as i64);
                         ctx.push(pos);
                     }
-                    BuiltinMethod::StrLenS => {
+                    BuiltinMethod::StrLenS | BuiltinMethod::StrLenSU => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);
-                        ctx.push(ctx.encoding().encode(&s).0.as_ref().len() as i64);
-                    }
-                    BuiltinMethod::StrLenSU => {
-                        check_arg_count!(1);
-                        let s = get_arg!(@String: args, ctx);
-                        ctx.push(s.chars().count() as i64);
+                        let encoding = match meth {
+                            BuiltinMethod::StrLenS => ctx.encoding(),
+                            _ => encoding_rs::UTF_16LE,
+                        };
+
+                        let bytes = encoding.encode(&s).0;
+
+                        ctx.push(bytes.as_ref().len() as i64);
                     }
                     BuiltinMethod::SumArray => {
                         check_arg_count!(2, 3);
