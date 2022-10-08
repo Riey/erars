@@ -39,6 +39,13 @@ impl ConsoleLinePart {
             _ => unreachable!(),
         }
     }
+
+    fn into_text(self) -> (String, TextStyle) {
+        match self {
+            Self::Text(t, s) => (t, s),
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,6 +59,22 @@ pub struct ConsoleLine {
 }
 
 impl ConsoleLine {
+    fn push_button_merge(&mut self, text: String, style: TextStyle, value: Value) {
+        let len = self
+            .parts
+            .iter()
+            .rev()
+            .take_while(|part| matches!(part, ConsoleLinePart::Text(..)))
+            .count();
+        let mut parts = if len == 0 {
+            Vec::new()
+        } else {
+            let from = self.parts.len() - len;
+            self.parts.drain(from..).map(ConsoleLinePart::into_text).collect()
+        };
+        parts.push((text, style));
+        self.parts.push(ConsoleLinePart::Button(parts, value));
+    }
     pub fn push_text(&mut self, text: String, style: &TextStyle) {
         static BUTTON_REGEX: Lazy<Regex> =
             Lazy::new(|| Regex::new(r#"[^\[]*\[ *(\d+) *\][^\[\]]*"#).unwrap());
@@ -68,28 +91,28 @@ impl ConsoleLine {
                     btn_buf.push_str(&text);
 
                     if BUTTON_REGEX.is_match(&btn_buf) {
+                        drop(self.parts.drain(prev_btn_part..));
                         // TODO: respect styles
                         for captures in BUTTON_REGEX.captures_iter(&btn_buf) {
                             let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
-                            let btn_str = vec![(
+                            self.push_button_merge(
                                 captures.get(0).unwrap().as_str().to_string(),
                                 style.clone(),
-                            )];
-                            self.parts.push(ConsoleLinePart::Button(btn_str, Value::Int(num)));
+                                Value::Int(num),
+                            );
                         }
+                        return;
                     }
                 }
                 None => match BUTTON_REGEX.is_match(&text) {
                     true => {
                         for captures in BUTTON_REGEX.captures_iter(&text) {
                             let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
-                            self.parts.push(ConsoleLinePart::Button(
-                                vec![(
-                                    captures.get(0).unwrap().as_str().to_string(),
-                                    style.clone(),
-                                )],
+                            self.push_button_merge(
+                                captures.get(0).unwrap().as_str().to_string(),
+                                style.clone(),
                                 Value::Int(num),
-                            ));
+                            );
                         }
                         return;
                     }
@@ -98,18 +121,35 @@ impl ConsoleLine {
             }
         }
 
-        let has_lb = text.contains('[');
+        let has_lb = text.find('[');
 
         match self.parts.last_mut() {
             Some(ConsoleLinePart::Text(prev_text, prev_style)) if *prev_style == *style => {
                 prev_text.push_str(&text);
+            }
+            Some(ConsoleLinePart::Button(parts, _)) => {
+                if let Some(pos) = has_lb {
+                    let (left, right) = text.split_at(pos);
+                    if parts.last().unwrap().1 == *style {
+                        parts.last_mut().unwrap().0.push_str(left);
+                    } else {
+                        parts.push((left.into(), style.clone()));
+                    }
+                    self.parts.push(ConsoleLinePart::Text(right.into(), style.clone()));
+                } else {
+                    if parts.last().unwrap().1 == *style {
+                        parts.last_mut().unwrap().0.push_str(&text);
+                    } else {
+                        parts.push((text, style.clone()));
+                    }
+                }
             }
             _ => {
                 self.parts.push(ConsoleLinePart::Text(text, style.clone()));
             }
         }
 
-        if has_lb {
+        if has_lb.is_some() {
             self.button_start = Some(self.parts.len() - 1);
         }
     }
@@ -636,7 +676,7 @@ fn button_test() {
     );
     k9::assert_equal!(line.parts.len(), 4);
     k9::snapshot!(
-        line.parts,
+        &line.parts,
         r#"
 [
     Button(
@@ -722,6 +762,92 @@ fn button_test() {
         Int(
             456,
         ),
+    ),
+]
+"#
+    );
+
+    line = ConsoleLine::default();
+
+    line.push_text(
+        ">".into(),
+        &TextStyle {
+            color: Color([0; 3]),
+            font_family: "".into(),
+            font_style: FontStyle::NORMAL,
+        },
+    );
+
+    line.push_text(
+        "[ 9]".into(),
+        &TextStyle {
+            color: Color([0; 3]),
+            font_family: "".into(),
+            font_style: FontStyle::NORMAL,
+        },
+    );
+
+    line.push_text(
+        "2022年10月08日 22:52:52 1일째 [낮".into(),
+        &TextStyle {
+            color: Color([0; 3]),
+            font_family: "".into(),
+            font_style: FontStyle::NORMAL,
+        },
+    );
+    k9::assert_equal!(line.parts.len(), 2);
+    k9::snapshot!(
+        &line.parts,
+        r#"
+[
+    Button(
+        [
+            (
+                ">",
+                TextStyle {
+                    color: Color(
+                        [
+                            0,
+                            0,
+                            0,
+                        ],
+                    ),
+                    font_family: "",
+                    font_style: NORMAL,
+                },
+            ),
+            (
+                "[ 9]2022年10月08日 22:52:52 1일째 ",
+                TextStyle {
+                    color: Color(
+                        [
+                            0,
+                            0,
+                            0,
+                        ],
+                    ),
+                    font_family: "",
+                    font_style: NORMAL,
+                },
+            ),
+        ],
+        Int(
+            9,
+        ),
+    ),
+    Text(
+        "[낮",
+        TextStyle {
+            color: Color(
+                [
+                    0,
+                    0,
+                    0,
+                ],
+            ),
+            font_family: "",
+            font_style: NORMAL,
+        },
     ),
 ]
 "#
