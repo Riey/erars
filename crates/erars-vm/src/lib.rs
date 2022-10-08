@@ -159,6 +159,12 @@ impl TerminalVm {
             Instruction::GotoLabel => {
                 *cursor = goto_labels[ctx.pop_str()?.as_str()] as usize;
             }
+            Instruction::TryGotoLabel => match goto_labels.get(ctx.pop_str()?.as_str()) {
+                Some(pos) => *cursor = *pos as usize,
+                None => {
+                    ctx.push(false);
+                }
+            },
             Instruction::LoadExternVarRef(c) => {
                 let func_extern = ctx.pop_str()?;
                 let name = ctx.pop_str()?;
@@ -201,25 +207,34 @@ impl TerminalVm {
                     }
                 }
             }
-            Instruction::TryCall(c) => {
+            Instruction::TryCall(c) | Instruction::TryJump(c) => {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_value_list(*c)?;
 
                 match self.try_call(&func, &args, tx, ctx)? {
-                    Some(Workflow::Return) => ctx.push(true),
+                    Some(Workflow::Return) => {
+                        if matches!(inst, Instruction::TryJump(_)) {
+                            return Ok(Some(Workflow::Return));
+                        }
+                        ctx.push(true);
+                    }
                     Some(Workflow::Exit) => return Ok(Some(Workflow::Exit)),
                     None => {
                         ctx.push(false);
                     }
                 }
             }
-            Instruction::Call(c) => {
+            Instruction::Jump(c) | Instruction::Call(c) => {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_value_list(*c)?;
 
                 match self.call(&func, &args, tx, ctx)? {
                     Workflow::Exit => return Ok(Some(Workflow::Exit)),
-                    Workflow::Return => {}
+                    Workflow::Return => {
+                        if matches!(inst, Instruction::Jump(_)) {
+                            return Ok(Some(Workflow::Return));
+                        }
+                    }
                 }
             }
             Instruction::Begin(b) => {
@@ -1456,7 +1471,6 @@ impl TerminalVm {
                     BuiltinCommand::LoadChara => bail!("LOADCHARA"),
                 }
             }
-            _ => bail!("TODO: {:?}", inst),
         }
 
         Ok(None)
