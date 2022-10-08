@@ -411,6 +411,8 @@ pub enum Token<'s> {
     #[token("REPLACE", |lex| normal_expr_method(lex, BuiltinMethod::Replace))]
     #[token("STRLENS", |lex| normal_expr_method(lex, BuiltinMethod::StrLenS))]
     #[token("STRLENSU", |lex| normal_expr_method(lex, BuiltinMethod::StrLenSU))]
+    #[token("STRFIND", |lex| normal_expr_method(lex, BuiltinMethod::StrFind))]
+    #[token("STRFINDU", |lex| normal_expr_method(lex, BuiltinMethod::StrFindU))]
     #[token("BARSTR", |lex| normal_expr_method(lex, BuiltinMethod::BarStr))]
     #[token("GETBIT", |lex| normal_expr_method(lex, BuiltinMethod::GetBit))]
     #[token("ABS", |lex| normal_expr_method(lex, BuiltinMethod::Abs))]

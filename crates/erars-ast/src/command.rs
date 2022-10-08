@@ -30,6 +30,8 @@ pub enum BuiltinMethod {
     StrCount,
     SubString,
     SubStringU,
+    StrFind,
+    StrFindU,
     BarStr,
 
     Unicode,

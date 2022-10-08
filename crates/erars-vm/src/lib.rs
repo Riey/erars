@@ -578,6 +578,24 @@ impl TerminalVm {
                         let regex = regex::Regex::new(&from)?;
                         ctx.push(regex.replace_all(&base, &to).into_owned());
                     }
+                    BuiltinMethod::StrFind | BuiltinMethod::StrFindU => {
+                        check_arg_count!(2, 3);
+                        let s = get_arg!(@String: args, ctx);
+                        let find = get_arg!(@String: args, ctx);
+                        let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+
+                        let encoding = match meth {
+                            BuiltinMethod::StrFind => ctx.encoding(),
+                            _ => encoding_rs::UTF_16LE,
+                        };
+
+                        let bytes = encoding.encode(&s).0;
+                        let find = encoding.encode(&find).0;
+
+                        let pos = twoway::find_bytes(&bytes.as_ref()[start..], find.as_ref())
+                            .map_or(-1, |n| n as i64);
+                        ctx.push(pos);
+                    }
                     BuiltinMethod::StrLenS => {
                         check_arg_count!(1);
                         let s = get_arg!(@String: args, ctx);
