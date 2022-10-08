@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use erars_compiler::{compile, ParserContext};
+use erars_compiler::{compile, EraConfig, ParserContext};
 use erars_ui::{ConsoleChannel, ConsoleMessage, ConsoleSender};
 use erars_vm::*;
 use flexi_logger::*;
@@ -27,7 +27,10 @@ fn run_test() {
     let header = test_util::get_ctx("").header;
 
     for erb_file in erb_files {
-        let mut ctx = VmContext::new(header.clone(), Arc::default());
+        let mut ctx = VmContext::new(
+            header.clone(),
+            Arc::new(EraConfig::from_text(include_str!("../emuera.config")).unwrap()),
+        );
         let erb_file = erb_file.unwrap();
         let ron_file = erb_file.parent().unwrap().join(format!(
             "{}.ron",
