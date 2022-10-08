@@ -1,1 +1,4 @@
-[Print("                ")]
+[
+    Print("                "), NewLine,
+    Print("1234"), NewLine,
+]

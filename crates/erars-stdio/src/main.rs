@@ -2,9 +2,9 @@ mod stdio_frontend;
 
 use std::sync::Arc;
 
+use erars_ast::Value;
 use erars_loader::run_script;
 use erars_ui::ConsoleChannel;
-use erars_ast::Value;
 
 #[derive(clap::Parser)]
 #[clap(author, version, about)]

@@ -697,7 +697,11 @@ pub fn assign_line<'c, 'a>(
             ))
         } else if ctx.is_str_var(&var.var) {
             let (i, op) = delimited(sp, assign_op, opt(char(' ')))(i)?;
-            let (i, rhs) = normal_form_str(ctx)(i)?;
+            let (i, rhs) = if op.is_some() {
+                expr(ctx)(i)?
+            } else {
+                normal_form_str(ctx)(i)?
+            };
 
             Ok((i, Stmt::Assign(var, op, rhs)))
         } else {
