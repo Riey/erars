@@ -222,9 +222,10 @@ impl VirtualConsole {
                 self.lines.last_mut().unwrap().push_text(text, &self.style);
             }
             ConsoleMessage::PrintButton(value, text) => {
-                let parts = &mut self.lines.last_mut().unwrap().parts;
+                let line = &mut self.lines.last_mut().unwrap();
+                line.button_start = None;
 
-                parts.push(ConsoleLinePart::Button(
+                line.parts.push(ConsoleLinePart::Button(
                     vec![(text, self.style.clone())],
                     value,
                 ));
