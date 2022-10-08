@@ -121,9 +121,9 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
 
         for (k, (path, v)) in csv_dic.into_iter() {
             match k.as_str() {
-                "ABL" | "MARK" | "BASE" | "CFLAG" | "EQUIP" | "TEQUIP" | "PALAM" | "EXP" | "EX" | "FLAG"
-                | "TFLAG" | "TALENT" | "STAIN" | "SOURCE" | "TSTR" | "CSTR" | "STR" | "SAVESTR"
-                | "GLOBAL" | "GLOBALS" | "TRAIN" | "TCVAR" => {
+                "ABL" | "MARK" | "BASE" | "CFLAG" | "EQUIP" | "TEQUIP" | "PALAM" | "EXP" | "EX"
+                | "FLAG" | "TFLAG" | "TALENT" | "STAIN" | "SOURCE" | "TSTR" | "CSTR" | "STR"
+                | "SAVESTR" | "GLOBAL" | "GLOBALS" | "TRAIN" | "TCVAR" => {
                     log::debug!("Merge {k}.CSV");
                     match info.merge_name_csv(&k, &v) {
                         Ok(()) => {}

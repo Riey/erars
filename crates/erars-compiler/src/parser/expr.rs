@@ -17,7 +17,6 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Parser,
 };
-use smol_str::SmolStr;
 use unicode_xid::UnicodeXID;
 
 type Error<'a> = nom::error::VerboseError<&'a str>;
@@ -805,20 +804,10 @@ fn variable_named_arg<'c, 'a>(
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         // alias
-        let var = match var {
-            "MAXBASE" | "UPBASE" | "DOWNBASE" | "LOSEBASE" => "BASE",
-            "GOTJUEL" | "JUEL" | "UP" | "DOWN" => "PALAM",
-            "ITEMSALES" | "ITEMPRICE" => "ITEM",
-            "NOWEX" => "EX",
-            _ => var,
-        };
+        let var = erars_ast::var_name_alias(var);
 
         let (i, ident) = ident(i)?;
-        if let Some(v) = ctx
-            .header
-            .var_names
-            .get(&(SmolStr::new_inline(var), SmolStr::new_inline(ident)))
-        {
+        if let Some(v) = ctx.header.var_names.get(var).and_then(|names| names.get(ident)) {
             Ok((i, Expr::int(*v)))
         } else {
             Err(nom::Err::Error(error_position!(i, ErrorKind::Verify)))

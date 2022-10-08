@@ -14,3 +14,13 @@ pub use operator::*;
 pub use ordered_float::NotNan;
 pub use value::Value;
 pub use variable::*;
+
+pub fn var_name_alias(var: &str) -> &str {
+    match var {
+        "MAXBASE" | "UPBASE" | "DOWNBASE" | "LOSEBASE" => "BASE",
+        "GOTJUEL" | "JUEL" | "UP" | "DOWN" => "PALAM",
+        "ITEMSALES" | "ITEMPRICE" => "ITEM",
+        "NOWEX" => "EX",
+        _ => var,
+    }
+}
