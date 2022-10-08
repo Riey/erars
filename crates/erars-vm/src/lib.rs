@@ -1,4 +1,5 @@
 mod context;
+mod function;
 mod save_data;
 mod variable;
 
@@ -19,18 +20,14 @@ use erars_ast::{
     PrintFlags, ScriptPosition, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
+use erars_ui::{ConsoleResult, ConsoleSender, FontStyle, InputRequest, InputRequestType, Timeout};
 
-use self::variable::SerializableVariableStorage;
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
+    function::FunctionDic,
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
-
-use crate::ui::{ConsoleResult, FontStyle, InputRequest, InputRequestType, Timeout};
-use crate::{
-    function::{FunctionBody, FunctionDic},
-    ui::ConsoleSender,
-};
+use crate::{function::FunctionBody, variable::SerializableVariableStorage};
 
 const SAVE_COUNT: usize = 20;
 
@@ -506,11 +503,11 @@ impl TerminalVm {
                     }
                     BuiltinMethod::FindCharaData => {
                         log::warn!("FIND_CHARADATA");
-                        ctx.push(0);
+                        ctx.push(0i64);
                     }
                     BuiltinMethod::ChkCharaData => {
                         log::warn!("CHKCHARADATA");
-                        ctx.push(1);
+                        ctx.push(1i64);
                     }
                     BuiltinMethod::Rand => {
                         check_arg_count!(1, 2);
@@ -614,7 +611,7 @@ impl TerminalVm {
 
                         match get_arg!(@String: args, ctx).parse() {
                             Ok(i) => ctx.push(Value::Int(i)),
-                            Err(_) => ctx.push(0),
+                            Err(_) => ctx.push(0i64),
                         }
                     }
                     BuiltinMethod::Max => {
@@ -764,11 +761,11 @@ impl TerminalVm {
 
                     BuiltinMethod::GetDefColor => {
                         check_arg_count!(0);
-                        ctx.push(0xFFFFFF);
+                        ctx.push(0xFFFFFFu32);
                     }
                     BuiltinMethod::GetDefBgColor => {
                         check_arg_count!(0);
-                        ctx.push(0);
+                        ctx.push(0i64);
                     }
                     BuiltinMethod::GetFont => {
                         check_arg_count!(0);
@@ -1078,7 +1075,7 @@ impl TerminalVm {
                     }
                     BuiltinCommand::ChkFont => {
                         log::warn!("TODO: CHKFONT");
-                        ctx.push(0);
+                        ctx.push(0i64);
                     }
                     BuiltinCommand::SetFont => {
                         let font = get_arg!(@String: args, ctx);
@@ -1606,7 +1603,7 @@ impl TerminalVm {
         // exit without RETURN/RETURNF
 
         if body.is_function() {
-            ctx.push(0);
+            ctx.push(0i64);
         } else if body.is_functions() {
             ctx.push("");
         } else {

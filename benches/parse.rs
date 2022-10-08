@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use criterion::*;
-use erars::erars_compiler::{compile, ParserContext};
-use erars_compiler::HeaderInfo;
+use erars_compiler::{compile, HeaderInfo, ParserContext};
 
 fn gen_bench(count: usize) -> String {
     let mut ret = String::from("@FUNC\n");
@@ -17,7 +16,10 @@ fn gen_bench(count: usize) -> String {
 fn make_ctx() -> ParserContext {
     ParserContext::new(
         Arc::new(HeaderInfo {
-            global_variables: serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap(),
+            global_variables: serde_yaml::from_str(include_str!(
+                "../crates/erars-loader/src/variable.yaml"
+            ))
+            .unwrap(),
             ..Default::default()
         }),
         "bench.ERB".into(),

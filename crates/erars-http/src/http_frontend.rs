@@ -17,15 +17,13 @@ use axum::{
 use tower_http::compression::CompressionLayer;
 use tower_http::cors;
 
-use crate::ui::{Color, ConsoleLine, InputRequest, InputRequestType};
+use erars_ui::{Color, ConsoleLine, InputRequest, InputRequestType, VirtualConsole};
 
-use super::{EraApp, VirtualConsole};
-
-pub struct HttpBackend {
+pub struct HttpFrontend {
     pub port: u16,
 }
 
-impl HttpBackend {
+impl HttpFrontend {
     pub fn new(port: u16) -> Self {
         Self { port }
     }
@@ -134,8 +132,8 @@ async fn start(
     Ok(())
 }
 
-impl EraApp for HttpBackend {
-    fn run(&mut self, chan: Arc<super::ConsoleChannel>) -> anyhow::Result<()> {
+impl HttpFrontend {
+    pub fn run(&mut self, chan: Arc<super::ConsoleChannel>) -> anyhow::Result<()> {
         let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
 
         let _guard = rt.enter();
@@ -174,7 +172,7 @@ impl EraApp for HttpBackend {
                         let chan = chan.clone();
                         let clients = clients.clone();
                         tokio::spawn(async move {
-                            tokio::time::sleep_until(timeout).await;
+                            tokio::time::sleep_until(tokio::time::Instant::from_std(timeout)).await;
                             if chan.send_input(default_value, gen) {
                                 // clear current_req
                                 match &mut vconsole.write().current_req {

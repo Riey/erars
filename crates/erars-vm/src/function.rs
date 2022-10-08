@@ -9,8 +9,8 @@ use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, Variabl
 use erars_compiler::{CompiledFunction, Instruction};
 use serde::{Deserialize, Serialize};
 
-use crate::vm::VariableStorage;
-use crate::vm::Workflow;
+use crate::VariableStorage;
+use crate::Workflow;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FunctionBody {

@@ -14,7 +14,10 @@ use smol_str::SmolStr;
 
 pub fn get_ctx(file_path: impl Into<SmolStr>) -> ParserContext {
     let mut info = HeaderInfo {
-        global_variables: serde_yaml::from_str(include_str!("../src/variable.yaml")).unwrap(),
+        global_variables: serde_yaml::from_str(include_str!(
+            "../crates/erars-loader/src/variable.yaml"
+        ))
+        .unwrap(),
         ..Default::default()
     };
 

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
 
-use crate::vm::{VariableStorage, VmVariable};
+use crate::{VariableStorage, VmVariable};
 
 use super::UniformVariable;
 

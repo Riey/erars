@@ -1,4 +1,4 @@
-use super::{ConsoleChannel, ConsoleLinePart, EraApp, FontStyle, InputRequestType, VirtualConsole};
+use erars_ui::{ConsoleChannel, ConsoleLinePart, FontStyle, InputRequestType, VirtualConsole};
 use std::{
     io::{self, BufRead},
     sync::{
@@ -9,12 +9,12 @@ use std::{
 
 use erars_ast::Value;
 
-pub struct StdioBackend {
+pub struct StdioFrontend {
     vconsole: VirtualConsole,
     need_redraw: bool,
 }
 
-impl StdioBackend {
+impl StdioFrontend {
     pub fn new() -> Self {
         Self {
             vconsole: VirtualConsole::new(),
@@ -28,7 +28,7 @@ impl StdioBackend {
                 for part in line.parts.iter() {
                     match part {
                         ConsoleLinePart::Text(text, style) => {
-                            write!(out, "{}", paint(style.color, style.font_style, text))?;
+                            write!(out, "{}", paint(style.color, style.font_style, &text))?;
                         }
                         ConsoleLinePart::Button(btns, _value) => {
                             for (text, style) in btns.iter() {
@@ -55,10 +55,8 @@ impl StdioBackend {
 
         Ok(())
     }
-}
 
-impl EraApp for StdioBackend {
-    fn run(&mut self, chan: Arc<ConsoleChannel>) -> anyhow::Result<()> {
+    pub fn run(&mut self, chan: Arc<ConsoleChannel>) -> anyhow::Result<()> {
         let mut input = String::with_capacity(64);
         let mut stdin = io::stdin().lock();
         let mut lock = io::stdout().lock();
@@ -112,7 +110,7 @@ impl EraApp for StdioBackend {
 }
 
 fn paint<'a>(
-    color: super::Color,
+    color: erars_ui::Color,
     font_style: FontStyle,
     text: &'a str,
 ) -> ansi_term::ANSIGenericString<'a, str> {

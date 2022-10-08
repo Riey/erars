@@ -11,34 +11,22 @@ use std::sync::atomic::AtomicU32;
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::Instant;
-
-#[cfg(feature = "stdio-backend")]
-mod stdio_backend;
-
-#[cfg(feature = "http-backend")]
-mod http_backend;
-
-#[cfg(feature = "stdio-backend")]
-pub use stdio_backend::StdioBackend;
-
-#[cfg(feature = "http-backend")]
-pub use http_backend::HttpBackend;
+use std::time::Instant;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextStyle {
-    color: Color,
+    pub color: Color,
     #[serde(skip_serializing_if = "<str>::is_empty")]
-    font_family: SmolStr,
+    pub font_family: SmolStr,
     #[serde(skip_serializing_if = "FontStyle::is_empty")]
-    font_style: FontStyle,
+    pub font_style: FontStyle,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Color(pub [u8; 3]);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-enum ConsoleLinePart {
+pub enum ConsoleLinePart {
     Text(String, TextStyle),
     Line(String, TextStyle),
     Button(Vec<(String, TextStyle)>, Value),
@@ -54,13 +42,13 @@ impl ConsoleLinePart {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-struct ConsoleLine {
+pub struct ConsoleLine {
     #[serde(skip_serializing_if = "is_left_alignment")]
-    align: Alignment,
+    pub align: Alignment,
     #[serde(skip)]
-    button_start: Option<usize>,
+    pub button_start: Option<usize>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    parts: Vec<ConsoleLinePart>,
+    pub parts: Vec<ConsoleLinePart>,
 }
 
 impl ConsoleLine {
@@ -129,17 +117,17 @@ impl ConsoleLine {
 
 /// Used by ui backend
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct VirtualConsole {
+pub struct VirtualConsole {
     pub current_req: Option<InputRequest>,
-    timeout: Option<(Instant, u32, Value)>,
-    lines: Vec<ConsoleLine>,
-    style: TextStyle,
-    bg_color: Color,
-    hl_color: Color,
+    pub timeout: Option<(Instant, u32, Value)>,
+    pub lines: Vec<ConsoleLine>,
+    pub style: TextStyle,
+    pub bg_color: Color,
+    pub hl_color: Color,
 }
 
 impl VirtualConsole {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             current_req: None,
             timeout: None,
@@ -154,11 +142,11 @@ impl VirtualConsole {
         }
     }
 
-    fn lines(&self) -> &[ConsoleLine] {
+    pub fn lines(&self) -> &[ConsoleLine] {
         &self.lines
     }
 
-    fn push_msg(&mut self, com: ConsoleMessage) {
+    pub fn push_msg(&mut self, com: ConsoleMessage) {
         if self.lines.is_empty() {
             self.lines.push(ConsoleLine::default());
         }
@@ -316,10 +304,6 @@ pub enum ConsoleResult {
     Value(Value),
 }
 
-pub trait EraApp {
-    fn run(&mut self, chan: Arc<ConsoleChannel>) -> anyhow::Result<()>;
-}
-
 pub struct ConsoleSender {
     chan: Arc<ConsoleChannel>,
     printc_width: usize,
@@ -400,7 +384,7 @@ impl ConsoleSender {
             InputRequestType::AnyKey | InputRequestType::EnterKey
         ) && !self.inputs.is_empty()
         {
-            ConsoleResult::Value(0.into())
+            ConsoleResult::Value(0i64.into())
         } else if let Some(i) = self.inputs.pop_front() {
             ConsoleResult::Value(i)
         } else {

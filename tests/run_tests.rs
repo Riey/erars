@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use erars::function::FunctionDic;
-use erars::ui::{ConsoleChannel, ConsoleMessage, ConsoleSender};
-use erars::vm::*;
 use erars_compiler::{compile, ParserContext};
+use erars_ui::{ConsoleChannel, ConsoleMessage, ConsoleSender};
+use erars_vm::*;
 use flexi_logger::*;
 
 mod test_util;

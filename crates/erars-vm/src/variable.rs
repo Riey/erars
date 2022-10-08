@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
-use crate::ui::ConsoleSender;
+use erars_ui::ConsoleSender;
 
 macro_rules! set_var {
     ($self:expr, $name:expr, $value:expr) => {
