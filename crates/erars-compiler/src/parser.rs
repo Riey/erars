@@ -231,7 +231,7 @@ pub struct HeaderInfo {
     pub replace: ReplaceInfo,
     pub character_templates: HashMap<u32, CharacterTemplate>,
     pub item_price: HashMap<u32, u32>,
-    pub var_names: HashMap<(SmolStr, SmolStr), u32>,
+    pub var_names: HashMap<SmolStr, HashMap<SmolStr, u32>>,
     pub var_name_var: HashMap<SmolStr, BTreeMap<u32, SmolStr>>,
     pub global_variables: HashMap<SmolStr, VariableInfo>,
     pub default_local_size: DefaultLocalVarSize,
@@ -246,14 +246,13 @@ impl HeaderInfo {
             ($name:expr, $var:ident, $val1:expr, $val2:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
-                    Err(_) => match self
-                        .var_names
-                        .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
-                        .copied()
-                    {
-                        Some(idx) => idx,
-                        None => error!(lex, "잘못된 숫자입니다."),
-                    },
+                    Err(_) => {
+                        match self.var_names.get($name).and_then(|names| names.get($val1)).copied()
+                        {
+                            Some(idx) => idx,
+                            None => error!(lex, "잘못된 숫자입니다."),
+                        }
+                    }
                 };
 
                 let value = match $val2.parse::<u32>() {
@@ -266,28 +265,26 @@ impl HeaderInfo {
             (@bool $name:expr, $var:ident, $val1:expr, $val2:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
-                    Err(_) => match self
-                        .var_names
-                        .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
-                        .copied()
-                    {
-                        Some(idx) => idx,
-                        None => error!(lex, "잘못된 숫자입니다."),
-                    },
+                    Err(_) => {
+                        match self.var_names.get($name).and_then(|names| names.get($val1)).copied()
+                        {
+                            Some(idx) => idx,
+                            None => error!(lex, "잘못된 숫자입니다."),
+                        }
+                    }
                 };
                 template.$var.insert(idx, 1);
             }};
             (@str $name:expr, $var:ident, $val1:expr, $val2:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
-                    Err(_) => match self
-                        .var_names
-                        .get(&(SmolStr::new_inline($name), SmolStr::new($val1)))
-                        .copied()
-                    {
-                        Some(idx) => idx,
-                        None => error!(lex, "잘못된 숫자입니다."),
-                    },
+                    Err(_) => {
+                        match self.var_names.get($name).and_then(|names| names.get($val1)).copied()
+                        {
+                            Some(idx) => idx,
+                            None => error!(lex, "잘못된 숫자입니다."),
+                        }
+                    }
                 };
                 template.$var.insert(idx, $val2.into());
             }};
@@ -328,7 +325,7 @@ impl HeaderInfo {
         let mut name_var = BTreeMap::new();
 
         while let Some((n, s)) = self::csv::name_csv_line(&mut lex)? {
-            self.var_names.insert((var.clone(), s.clone()), n);
+            self.var_names.entry(var.clone()).or_default().insert(s.clone(), n);
             name_var.insert(n, s);
         }
 
@@ -343,7 +340,7 @@ impl HeaderInfo {
 
         while let Some((n, s, price)) = self::csv::name_item_line(&mut lex)? {
             self.item_price.insert(n, price);
-            self.var_names.insert((var.clone(), s.clone()), n);
+            self.var_names.entry(var.clone()).or_default().insert(s.clone(), n);
             self.var_name_var.entry(var.clone()).or_default().insert(n, s);
         }
 

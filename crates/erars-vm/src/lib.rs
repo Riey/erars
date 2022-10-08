@@ -162,12 +162,12 @@ impl TerminalVm {
             Instruction::LoadExternVarRef(c) => {
                 let func_extern = ctx.pop_str()?;
                 let name = ctx.pop_str()?;
-                let args = ctx.take_arg_list(*c)?;
+                let args = ctx.take_arg_list(None, *c)?;
                 ctx.push_var_ref(name, func_extern, args);
             }
             Instruction::LoadVarRef(c) => {
                 let name = ctx.pop_str()?;
-                let args = ctx.take_arg_list(*c)?;
+                let args = ctx.take_arg_list(Some(&name), *c)?;
                 ctx.push_var_ref(name, func_name.to_string(), args);
             }
             Instruction::StoreVar => {
@@ -330,7 +330,7 @@ impl TerminalVm {
                 ctx.push(text.pad_to_width_with_alignment(size as usize, align));
             }
             Instruction::BuiltinVar(var, c) => {
-                let args = ctx.take_arg_list(*c)?;
+                let args = ctx.take_arg_list(None, *c)?;
 
                 use BuiltinVariable::*;
 

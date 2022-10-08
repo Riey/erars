@@ -172,10 +172,24 @@ impl VmContext {
         Ok(self.take_value_list(count as u32)?.into_iter())
     }
 
-    pub fn take_arg_list(&mut self, count: u32) -> Result<ArrayVec<usize, 4>> {
+    pub fn take_arg_list(
+        &mut self,
+        var_name: Option<&str>,
+        count: u32,
+    ) -> Result<ArrayVec<usize, 4>> {
         self.take_value_list(count)?
             .into_iter()
-            .map(usize::try_from)
+            .map(|value| match value {
+                Value::Int(i) => usize::try_from(i).map_err(anyhow::Error::from),
+                Value::String(str) => match var_name
+                    .map(erars_ast::var_name_alias)
+                    .and_then(|var_name| self.header_info.var_names.get(var_name))
+                    .and_then(|names| names.get(str.as_str()))
+                {
+                    Some(value) => Ok(*value as usize),
+                    None => anyhow::bail!("Can't index variable with String"),
+                },
+            })
             .collect()
     }
 
