@@ -1,0 +1,19 @@
+[package]
+name = "erars-loader"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+erars-ast = { path = "../erars-ast" }
+erars-compiler = { path = "../erars-compiler" }
+erars-ui = { path = "../erars-ui" }
+erars-vm = { path = "../erars-vm" }
+rayon = "1.5.3"
+codespan = "0.11.1"
+codespan-reporting = "0.11.1"
+serde_yaml = "0.9.13"
+hashbrown = { version = "0.12", features = ["serde", "rayon"] }
+log = "0.4.17"
+glob = "0.3.0"
+parking_lot = "0.12.1"

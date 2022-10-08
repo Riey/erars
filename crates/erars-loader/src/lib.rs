@@ -1,10 +1,6 @@
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-    time::Instant,
-};
+use std::{path::Path, sync::Arc, time::Instant};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -14,19 +10,14 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars::{
-    erars_compiler::EraConfig,
-    function::FunctionDic,
-    ui::{ConsoleChannel, ConsoleSender, EraApp},
-    vm::{TerminalVm, VmContext},
-};
 use erars_ast::{Value, VariableInfo};
-use erars_compiler::{CompiledFunction, HeaderInfo, Lexer, ParserContext};
+use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
+use erars_ui::{ConsoleChannel, ConsoleSender};
+use erars_vm::{FunctionDic, TerminalVm, VmContext};
 use hashbrown::HashMap;
-use smol_str::SmolStr;
 
 #[allow(unused_assignments)]
-fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>) {
+pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>) {
     let mut time = Instant::now();
 
     let config_path = format!("{target_path}/emuera.config");
@@ -64,7 +55,7 @@ fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>
     {
         check_time!("Initialize");
 
-        let var_infos: HashMap<SmolStr, VariableInfo> =
+        let var_infos: HashMap<_, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
 
         let csvs = glob::glob_with(
@@ -293,89 +284,4 @@ fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>
     tx.exit();
 
     log::info!("Program Terminated");
-}
-
-fn run(backend: &mut dyn EraApp, target_path: String, inputs: Vec<Value>) -> anyhow::Result<()> {
-    let chan = Arc::new(ConsoleChannel::new());
-
-    let chan_ = chan.clone();
-    std::thread::spawn(move || run_script(chan_, target_path, inputs));
-
-    backend.run(chan)
-}
-
-#[derive(clap::Parser)]
-#[clap(author, version, about)]
-struct Args {
-    #[clap(
-        value_parser,
-        default_value = ".",
-        help = "ERA game path default is current path"
-    )]
-    target_path: String,
-
-    #[clap(long, help = "Accept input value from file")]
-    use_input: Option<PathBuf>,
-
-    #[clap(
-        long,
-        default_value = "info",
-        help = "Log level (error, warn, info, debug, trace)"
-    )]
-    log_level: String,
-
-    #[clap(
-        long,
-        help = "Http port number if this flag set, this program'll work with http mode"
-    )]
-    port: Option<u16>,
-
-    #[clap(long, help = "Don't print logs")]
-    quite: bool,
-}
-
-fn main() {
-    use flexi_logger::*;
-
-    let args: Args = clap::Parser::parse();
-
-    let _handle = if args.quite {
-        None
-    } else {
-        Some(
-            Logger::try_with_str(&args.log_level)
-                .unwrap()
-                .rotate(
-                    Criterion::AgeOrSize(Age::Day, 1024 * 1024),
-                    Naming::Numbers,
-                    Cleanup::KeepLogFiles(5),
-                )
-                .log_to_file(FileSpec::default().directory("logs").basename("erars"))
-                .write_mode(WriteMode::BufferAndFlush)
-                .create_symlink("last_log.log")
-                .use_utc()
-                .start()
-                .unwrap(),
-        )
-    };
-
-    log_panics::init();
-
-    let inputs = match args.use_input {
-        Some(input) => {
-            ron::from_str::<Vec<Value>>(&std::fs::read_to_string(input).unwrap()).unwrap()
-        }
-        None => Vec::new(),
-    };
-
-    match args.port {
-        Some(port) => {
-            let mut backend = erars::ui::HttpBackend::new(port);
-            run(&mut backend, args.target_path, inputs).unwrap();
-        }
-        None => {
-            let mut backend = erars::ui::StdioBackend::new();
-            run(&mut backend, args.target_path, inputs).unwrap();
-        }
-    }
 }
