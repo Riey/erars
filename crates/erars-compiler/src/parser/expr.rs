@@ -167,6 +167,26 @@ pub fn normal_form_str<'c>(
     move |i| form_str(FormStrType::Normal, ctx)(i)
 }
 
+fn form_str_cond_form<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
+    move |i| {
+        let (i, cond) = bin_expr(ctx)(i)?;
+        let (i, _) = de_sp(tag("?"))(i)?;
+        let (i, if_true) = form_str(FormStrType::FirstCond, ctx)(i)?;
+
+        if let Some(i) = i.strip_prefix('#') {
+            let (i, or_false) = preceded(sp, form_str(FormStrType::SecondCond, ctx))(i)?;
+            let i = i.strip_prefix("\\@").unwrap();
+            Ok((i, Expr::cond(cond, if_true, or_false)))
+        } else if let Some(i) = i.strip_prefix("\\@") {
+            Ok((i, Expr::cond(cond, if_true, Expr::str(""))))
+        } else {
+            unreachable!()
+        }
+    }
+}
+
 pub fn form_str<'c, 'a>(
     ty: FormStrType,
     ctx: &'c ParserContext,
@@ -207,20 +227,8 @@ pub fn form_str<'c, 'a>(
                     (i, ex, padding, align)
                 }
                 Some(FormType::At) => {
-                    let (i, cond) = bin_expr(ctx)(i)?;
-                    let (i, _) = de_sp(tag("?"))(i)?;
-                    let (i, if_true) = form_str(FormStrType::FirstCond, ctx)(i)?;
-
-                    if let Some(i) = i.strip_prefix('#') {
-                        let (i, or_false) =
-                            preceded(sp, form_str(FormStrType::SecondCond, ctx))(i)?;
-                        let i = i.strip_prefix("\\@").unwrap();
-                        (i, Expr::cond(cond, if_true, or_false), None, None)
-                    } else if let Some(i) = i.strip_prefix("\\@") {
-                        (i, Expr::cond(cond, if_true, Expr::str("")), None, None)
-                    } else {
-                        unreachable!()
-                    }
+                    let (i, cond) = form_str_cond_form(ctx)(i)?;
+                    (i, cond, None, None)
                 }
                 None => break,
             };
@@ -387,7 +395,10 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
             de_sp(alt((
                 value(Expr::Int(i64::MAX), tag("__INT_MAX__")),
                 value(Expr::Int(i64::MIN), tag("__INT_MIN__")),
+                // form string
                 delimited(tag("@\""), form_str(FormStrType::Str, ctx), tag("\"")),
+                // cond form string
+                preceded(tag("\\@"), form_str_cond_form(ctx)),
                 map(string, |s| Expr::String(s.into())),
                 map(preceded(tag("0x"), hex_digit1), |s| {
                     Expr::Int(i64::from_str_radix(s, 16).unwrap())
