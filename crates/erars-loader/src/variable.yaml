@@ -17,6 +17,11 @@ PBAND:
 SAVESTR:
   size: [100]
   is_str: true
+  is_savedata: true
+SAVEDATA_TEXT:
+  size: []
+  is_str: true
+  is_savedata: true
 
 BOUGHT:
   size: [1000]

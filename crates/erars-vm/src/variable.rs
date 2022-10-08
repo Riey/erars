@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{anyhow, bail, Result};
 use erars_ast::{Value, VariableInfo};
-use erars_compiler::{CharacterTemplate, ReplaceInfo};
+use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -33,6 +33,8 @@ macro_rules! set_var {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SerializableVariableStorage {
     pub description: String,
+    pub code: u32,
+    pub version: u32,
     character_len: usize,
     rand_seed: [u8; 32],
     variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
@@ -41,6 +43,8 @@ pub struct SerializableVariableStorage {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SerializableGlobalVariableStorage {
+    pub code: u32,
+    pub version: u32,
     variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
     local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
 }
@@ -125,10 +129,10 @@ impl VariableStorage {
     pub fn load_global_serializable(
         &mut self,
         sav: SerializableGlobalVariableStorage,
-        replace: &ReplaceInfo,
+        header: &HeaderInfo,
     ) -> Result<()> {
         self.load_variables(sav.variables, sav.local_variables);
-        self.init_replace(replace)?;
+        self.init_replace(&header.replace)?;
 
         Ok(())
     }
@@ -136,18 +140,22 @@ impl VariableStorage {
     pub fn load_serializable(
         &mut self,
         sav: SerializableVariableStorage,
-        replace: &ReplaceInfo,
+        header: &HeaderInfo,
     ) -> Result<()> {
         self.character_len = sav.character_len;
         self.rng = SeedableRng::from_seed(sav.rand_seed);
 
         self.load_variables(sav.variables, sav.local_variables);
-        self.init_replace(replace)?;
+        self.init_replace(&header.replace)?;
 
         Ok(())
     }
 
-    pub fn get_serializable(&self, description: String) -> SerializableVariableStorage {
+    pub fn get_serializable(
+        &self,
+        header: &HeaderInfo,
+        description: String,
+    ) -> SerializableVariableStorage {
         let variables = self
             .variables
             .iter()
@@ -174,6 +182,8 @@ impl VariableStorage {
         }
 
         SerializableVariableStorage {
+            code: header.gamebase.code,
+            version: header.gamebase.version,
             variables,
             description,
             local_variables,
@@ -182,7 +192,10 @@ impl VariableStorage {
         }
     }
 
-    pub fn get_global_serializable(&self) -> SerializableGlobalVariableStorage {
+    pub fn get_global_serializable(
+        &self,
+        header: &HeaderInfo,
+    ) -> SerializableGlobalVariableStorage {
         let variables = self
             .variables
             .iter()
@@ -209,6 +222,8 @@ impl VariableStorage {
         }
 
         SerializableGlobalVariableStorage {
+            code: header.gamebase.code,
+            version: header.gamebase.version,
             variables,
             local_variables,
         }

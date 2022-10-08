@@ -335,12 +335,20 @@ impl TerminalVm {
                 use BuiltinVariable::*;
 
                 let value = match var {
-                    GamebaseVersion => Value::Int(0),
-                    GamebaseAuthor => "Riey".into(),
-                    GamebaseYear => Value::Int(2022),
-                    GamebaseTitle => "eraTHYMKR".into(),
-                    GamebaseInfo => "".into(),
-                    GamebaseCode => Value::Int(0),
+                    GamebaseCode => ctx.header_info.gamebase.code.into(),
+                    GamebaseVersion => ctx.header_info.gamebase.version.into(),
+                    GamebaseAllowVersion => ctx.header_info.gamebase.allow_version.into(),
+                    GamebaseDefaultChara => ctx.header_info.gamebase.default_chara.into(),
+                    GamebaseNoItem => ctx.header_info.gamebase.no_item.into(),
+                    GamebaseAuthor => ctx.header_info.gamebase.author.clone().into(),
+                    GamebaseYear => ctx.header_info.gamebase.year.clone().into(),
+                    GamebaseTitle => ctx.header_info.gamebase.title.clone().into(),
+                    GamebaseInfo => ctx.header_info.gamebase.info.clone().into(),
+
+                    LastLoadNo => ctx.lastload_no.into(),
+                    LastLoadText => ctx.lastload_text.clone().into(),
+                    LastLoadVersion => ctx.lastload_version.into(),
+
                     CharaNum => (ctx.var.character_len() as i64).into(),
                     LineCount => (tx.line_count() as i64).into(),
                     ItemPrice => {
@@ -858,8 +866,11 @@ impl TerminalVm {
                         check_arg_count!(1);
                         let idx = get_arg!(@i64: args, ctx);
 
-                        let (ret, rets) = match self::save_data::read_save_data(&self.sav_path, idx)
-                        {
+                        let (ret, rets) = match self::save_data::read_save_data(
+                            &self.sav_path,
+                            &ctx.header_info,
+                            idx,
+                        ) {
                             Ok(data) => (0, data.description),
                             Err(err) => (err, "セーブデータのバーションが異なります".into()),
                         };
@@ -1362,14 +1373,20 @@ impl TerminalVm {
                             &self.sav_path,
                             idx,
                             &ctx.var,
+                            &ctx.header_info,
                             description,
                         );
                     }
                     BuiltinCommand::LoadData => {
                         let idx = get_arg!(@i64: args, ctx);
 
-                        if let Ok(data) = self::save_data::read_save_data(&self.sav_path, idx) {
-                            ctx.var.load_serializable(data, &ctx.header_info.replace)?;
+                        if let Ok(data) =
+                            self::save_data::read_save_data(&self.sav_path, &ctx.header_info, idx)
+                        {
+                            ctx.lastload_text = data.description.clone();
+                            ctx.lastload_no = idx as _;
+                            ctx.lastload_version = data.version;
+                            ctx.var.load_serializable(data, &ctx.header_info)?;
                         }
 
                         return self.load_data_end(tx, ctx).map(Some);
@@ -1380,12 +1397,16 @@ impl TerminalVm {
                         let _ = self::save_data::delete_save_data(&self.sav_path, idx);
                     }
                     BuiltinCommand::SaveGlobal => {
-                        self::save_data::write_global_data(&self.sav_path, &ctx.var);
+                        self::save_data::write_global_data(
+                            &self.sav_path,
+                            &ctx.var,
+                            &ctx.header_info,
+                        );
                     }
                     BuiltinCommand::LoadGlobal => {
-                        match self::save_data::read_global_data(&self.sav_path) {
+                        match self::save_data::read_global_data(&self.sav_path, &ctx.header_info) {
                             Ok(data) => {
-                                ctx.var.load_global_serializable(data, &ctx.header_info.replace)?;
+                                ctx.var.load_global_serializable(data, &ctx.header_info)?;
                                 ctx.var.set_result(1);
                             }
                             _ => {
@@ -1417,14 +1438,13 @@ impl TerminalVm {
                     }
                     BuiltinCommand::PutForm => {
                         let arg = get_arg!(@String: args, ctx);
-                        match ctx.put_form_buf.as_mut() {
-                            Some(buf) => {
-                                buf.push_str(&arg);
-                            }
-                            None => {
-                                bail!("PUTFORM called in no @SAVEINFO function");
-                            }
-                        }
+
+                        anyhow::ensure!(
+                            ctx.put_form_enabled,
+                            "PUTFORM called in no @SAVEINFO function"
+                        );
+
+                        ctx.var.ref_str("SAVEDATA_TEXT", &[])?.push_str(&arg);
                     }
                     BuiltinCommand::ResetStain => {
                         let chara = get_arg!(@usize: args, ctx);
@@ -1442,11 +1462,11 @@ impl TerminalVm {
         Ok(None)
     }
 
-    fn load_savs(&self) -> HashMap<usize, SerializableVariableStorage> {
+    fn load_savs(&self, ctx: &mut VmContext) -> HashMap<usize, SerializableVariableStorage> {
         let mut savs = HashMap::new();
 
         for i in 0..SAVE_COUNT {
-            if let Ok(sav) = save_data::read_save_data(&self.sav_path, i as i64) {
+            if let Ok(sav) = save_data::read_save_data(&self.sav_path, &ctx.header_info, i as i64) {
                 savs.insert(i, sav);
             }
         }
@@ -1512,7 +1532,7 @@ impl TerminalVm {
     }
 
     fn run_load_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
-        let mut savs = self.load_savs();
+        let mut savs = self.load_savs(ctx);
 
         loop {
             Self::print_sav_data_list(&savs, tx);
@@ -1521,7 +1541,10 @@ impl TerminalVm {
                 Some(100) => return Ok(Workflow::Return),
                 Some(i) if i >= 0 && i < SAVE_COUNT as i64 => {
                     if let Some(sav) = savs.remove(&(i as usize)) {
-                        ctx.var.load_serializable(sav, &ctx.header_info.replace)?;
+                        ctx.lastload_text = sav.description.clone();
+                        ctx.lastload_no = i as _;
+                        ctx.lastload_version = sav.version;
+                        ctx.var.load_serializable(sav, &ctx.header_info)?;
                         break;
                     }
                 }
@@ -1533,7 +1556,7 @@ impl TerminalVm {
     }
 
     fn run_save_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
-        let savs = self.load_savs();
+        let savs = self.load_savs(ctx);
 
         loop {
             Self::print_sav_data_list(&savs, tx);
@@ -1559,15 +1582,18 @@ impl TerminalVm {
                     };
 
                     if write {
-                        ctx.put_form_buf = Some(String::new());
+                        ctx.put_form_enabled = true;
                         if self.try_call("SAVEINFO", &[], tx, ctx)? == Some(Workflow::Exit) {
                             return Ok(Workflow::Exit);
                         }
+                        ctx.put_form_enabled = false;
+                        let save_text = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
                         save_data::write_save_data(
                             &self.sav_path,
                             i as i64,
                             &ctx.var,
-                            ctx.put_form_buf.take().unwrap(),
+                            &ctx.header_info,
+                            save_text,
                         );
                         break;
                     }
