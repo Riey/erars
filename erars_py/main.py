@@ -9,5 +9,4 @@ def export_functions() -> dict[str, Function]:
 
 def entry_point(vm):
     erars.VM = vm
-    pl("Hello, world!")
-    call()
+    begin(BEGIN_TITLE)

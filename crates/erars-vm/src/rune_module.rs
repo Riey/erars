@@ -1,77 +1,22 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
 use erars_ui::{ConsoleResult, ConsoleSender, InputRequest, InputRequestType, Timeout};
-use pyo3::prelude::*;
+use pyo3::exceptions::PyException;
 use pyo3::types::PyAny;
+use pyo3::{prelude::*, types::PyTuple};
 
 use crate::{TerminalVm, VmContext, Workflow};
 use erars_ast::Value;
 
-impl<'source> FromPyObject<'source> for Workflow {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        if bool::extract(ob)? {
-            Ok(Workflow::Exit)
-        } else {
-            Ok(Workflow::Return)
-        }
-    }
-}
-
-impl IntoPy<PyObject> for Workflow {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        matches!(self, Workflow::Exit).into_py(py)
-    }
-}
-
+#[repr(transparent)]
 pub struct ValueWrapper(Value);
+
+fn value_cast(wrapper: &[ValueWrapper]) -> &[Value] {
+    // SAFETY: ValueWrapper must be repr(transparent)
+    unsafe { std::mem::transmute(wrapper) }
+}
+
 pub struct InputRequestTypeWrapper(InputRequestType);
-
-impl From<Value> for ValueWrapper {
-    fn from(v: Value) -> Self {
-        Self(v)
-    }
-}
-
-impl IntoPy<PyObject> for ValueWrapper {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        match self.0 {
-            Value::Int(i) => i.into_py(py),
-            Value::String(s) => s.into_py(py),
-        }
-    }
-}
-
-impl<'source> FromPyObject<'source> for ValueWrapper {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        if let Ok(s) = String::extract(ob) {
-            Ok(Self(Value::String(s)))
-        } else {
-            Ok(Self(Value::Int(i64::extract(ob)?)))
-        }
-    }
-}
-
-impl IntoPy<PyObject> for InputRequestTypeWrapper {
-    fn into_py(self, py: Python<'_>) -> PyObject {
-        (self.0 as u32).into_py(py)
-    }
-}
-
-impl<'source> FromPyObject<'source> for InputRequestTypeWrapper {
-    fn extract(ob: &'source PyAny) -> PyResult<Self> {
-        Ok(Self(match u32::extract(ob)? {
-            3 => InputRequestType::Str,
-            2 => InputRequestType::Int,
-            1 => InputRequestType::EnterKey,
-            0 => InputRequestType::AnyKey,
-            _ => {
-                return Err(PyErr::new::<pyo3::exceptions::PyException, _>(
-                    "Invalid request type",
-                ))
-            }
-        }))
-    }
-}
 
 #[pyclass]
 pub struct VmProxy {
@@ -150,6 +95,23 @@ impl VmProxy {
     pub fn wait(&mut self, ty: InputRequestTypeWrapper, is_one: bool) -> PyResult<ValueWrapper> {
         self.wait_internal(ty.0, is_one, None)
     }
+
+    pub fn call(&mut self, name: &str, args: Vec<ValueWrapper>) -> PyResult<Workflow> {
+        self.vm
+            .call(name, value_cast(&args), &mut self.tx, &mut self.ctx)
+            .map_err(|err| {
+                log::error!("ERROR: {err}");
+                pyo3::exceptions::PyException::new_err("Call error")
+            })
+    }
+
+    pub fn var(&mut self, name: &str, args: Vec<usize>) -> PyResult<Workflow> {
+        let (_, var, idx) = self.ctx.var.index_var(name, &args).map_err(|err| PyException::new_err(err.to_string()))?;
+    }
+
+    pub fn begin_type(&mut self) -> i32 {
+        self.ctx.begin.map_or(-1, |ty| ty as i32)
+    }
 }
 
 #[pymodule]
@@ -157,4 +119,71 @@ impl VmProxy {
 pub fn module(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<VmProxy>()?;
     Ok(())
+}
+
+mod impls {
+    use super::*;
+
+    impl<'source> FromPyObject<'source> for Workflow {
+        fn extract(ob: &'source PyAny) -> PyResult<Self> {
+            if bool::extract(ob)? {
+                Ok(Workflow::Exit)
+            } else {
+                Ok(Workflow::Return)
+            }
+        }
+    }
+
+    impl IntoPy<PyObject> for Workflow {
+        fn into_py(self, py: Python<'_>) -> PyObject {
+            matches!(self, Workflow::Exit).into_py(py)
+        }
+    }
+
+    impl From<Value> for ValueWrapper {
+        fn from(v: Value) -> Self {
+            Self(v)
+        }
+    }
+
+    impl IntoPy<PyObject> for ValueWrapper {
+        fn into_py(self, py: Python<'_>) -> PyObject {
+            match self.0 {
+                Value::Int(i) => i.into_py(py),
+                Value::String(s) => s.into_py(py),
+            }
+        }
+    }
+
+    impl<'source> FromPyObject<'source> for ValueWrapper {
+        fn extract(ob: &'source PyAny) -> PyResult<Self> {
+            if let Ok(s) = String::extract(ob) {
+                Ok(Self(Value::String(s)))
+            } else {
+                Ok(Self(Value::Int(i64::extract(ob)?)))
+            }
+        }
+    }
+
+    impl IntoPy<PyObject> for InputRequestTypeWrapper {
+        fn into_py(self, py: Python<'_>) -> PyObject {
+            (self.0 as u32).into_py(py)
+        }
+    }
+
+    impl<'source> FromPyObject<'source> for InputRequestTypeWrapper {
+        fn extract(ob: &'source PyAny) -> PyResult<Self> {
+            Ok(Self(match u32::extract(ob)? {
+                3 => InputRequestType::Str,
+                2 => InputRequestType::Int,
+                1 => InputRequestType::EnterKey,
+                0 => InputRequestType::AnyKey,
+                _ => {
+                    return Err(PyErr::new::<pyo3::exceptions::PyException, _>(
+                        "Invalid request type",
+                    ))
+                }
+            }))
+        }
+    }
 }
