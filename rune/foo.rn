@@ -1,4 +1,0 @@
-pub fn foo(ctx) {
-    ctx.println("FOO");
-    ctx.printw("BAR");
-}

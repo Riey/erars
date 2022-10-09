@@ -5,6 +5,7 @@
 last_log.log
 last_test_log.log
 /logs
+/erars_py/__pycache__
 massif*
 *~undo-tree~
 heaptrack*
