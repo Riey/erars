@@ -1,6 +1,10 @@
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::{path::Path, sync::Arc, time::Instant};
+use std::{
+    path::Path,
+    sync::{atomic::AtomicBool, Arc},
+    time::Instant,
+};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -13,8 +17,10 @@ use codespan_reporting::{
 use erars_ast::{Value, VariableInfo};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
 use erars_ui::{ConsoleChannel, ConsoleSender};
-use erars_vm::{FunctionDic, TerminalVm, VmContext};
+use erars_vm::{FunctionBody, FunctionDic, RhaiFunctionBody, TerminalVm, VmContext};
 use hashbrown::HashMap;
+use pyo3::types::IntoPyDict;
+use pyo3::{prelude::*, types::PyFunction};
 
 #[allow(unused_assignments)]
 pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>) {
@@ -37,7 +43,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
     log::trace!("Config: {config:?}");
 
     let config = Arc::new(config);
-    let mut tx = ConsoleSender::new(chan, config.printc_width);
+    let mut tx = ConsoleSender::new(chan.clone(), config.printc_width);
 
     macro_rules! check_time {
         ($work:expr) => {
@@ -51,12 +57,51 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
     let mut function_dic = FunctionDic::new();
     let header_info;
     let mut ctx: VmContext;
+    let entry_point: Py<PyFunction>;
 
     {
         check_time!("Initialize");
 
         let var_infos: HashMap<_, VariableInfo> =
             serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
+
+        let file_path = smol_str::SmolStr::from(format!("{target_path}/erars_py/main.py"));
+
+        pyo3::prepare_freethreaded_python();
+
+        entry_point = Python::with_gil::<_, PyResult<_>>(|py| {
+            let sys_locals = [("sys", py.import("sys")?)].into_py_dict(py);
+            py.run(
+                &format!("sys.path.append(\"{target_path}/erars_py\")"),
+                None,
+                Some(sys_locals),
+            )?;
+            let main_module = py.import("main")?;
+            let main_module_dict = main_module.dict();
+            let export_functions = main_module_dict
+                .get_item("export_functions")
+                .expect("Find export_functions");
+            let entry = main_module_dict.get_item("entry_point").expect("Find entry_point");
+
+            let funcs: std::collections::HashMap<String, Py<PyFunction>> =
+                export_functions.call0()?.extract()?;
+
+            for (func_name, func) in funcs {
+                log::info!("Insert PyFunction {func_name}");
+                function_dic.insert_func(
+                    func_name.into(),
+                    FunctionBody::Rhai(RhaiFunctionBody {
+                        file_path: file_path.clone(),
+                        function: func,
+                    }),
+                )
+            }
+
+            entry.extract()
+        })
+        .unwrap();
+
+        check_time!("Check python functions");
 
         let csvs = glob::glob_with(
             &format!("{}/CSV/**/*.CSV", target_path),
@@ -294,9 +339,34 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
     }
 
     let vm = TerminalVm::new(function_dic, target_path.into());
-    let _ = vm.start(&mut tx, &mut ctx);
+    // let _ = vm.start(&mut tx, &mut ctx);
 
-    tx.exit();
+    let quited = Arc::new(AtomicBool::new(false));
+    let proxy = erars_vm::rune_module::VmProxy {
+        ctx,
+        vm,
+        tx,
+        quited: quited.clone(),
+    };
+
+    Python::with_gil(move |py| {
+        match entry_point.call1(py, (proxy,)) {
+            Ok(_) => {}
+            Err(err) => {
+                if quited.load(std::sync::atomic::Ordering::SeqCst) {
+                    // success
+                } else {
+                    log::error!("VM error: {err}");
+                    return Err(err);
+                }
+            }
+        }
+
+        Ok(())
+    })
+    .unwrap();
+
+    chan.exit();
 
     log::info!("Program Terminated");
 }

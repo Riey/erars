@@ -1,0 +1,37 @@
+mod foo;
+
+fn title(vm) {
+
+}
+
+struct Context {
+    vm,
+}
+
+impl Context {
+    pub fn pl(self, s) {
+        self.vm.println(s);
+    }
+
+    pub fn pw(self, s) {
+        self.vm.printw(s);
+    }
+
+    pub fn get_var(self, idx) {
+        self.pl(idx);
+    }
+}
+
+struct Variable 
+
+pub fn main(vm) {
+    let ctx = Context { vm };
+    ctx.pl("Hello, world!");
+    ctx["TARGET"];
+}
+
+pub fn entry() {
+    #{
+        "FOO": foo::foo
+    }
+}

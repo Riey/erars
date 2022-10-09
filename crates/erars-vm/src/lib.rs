@@ -1,5 +1,6 @@
 mod context;
 mod function;
+pub mod rune_module;
 mod save_data;
 mod variable;
 
@@ -24,10 +25,10 @@ use erars_ui::{ConsoleResult, ConsoleSender, FontStyle, InputRequest, InputReque
 
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
-    function::FunctionDic,
+    function::{ErbFunctionBody, FunctionBody, FunctionDic, RhaiFunctionBody},
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
-use crate::{function::FunctionBody, variable::SerializableVariableStorage};
+use crate::variable::SerializableVariableStorage;
 
 const SAVE_COUNT: usize = 20;
 
@@ -1649,38 +1650,75 @@ impl TerminalVm {
     fn run_body(
         &self,
         func_name: &str,
-        goto_labels: &HashMap<SmolStr, u32>,
+        args: &[Value],
         body: &FunctionBody,
         tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
-        let mut cursor = 0;
+        match body {
+            FunctionBody::Erb(body) => {
+                let mut args = args.iter().cloned();
+                for (var_idx, default_value, arg_indices) in body.args().iter() {
+                    let (info, var) = ctx.var.get_maybe_local_var(func_name, var_idx)?;
+                    let var = var.assume_normal();
+                    let idx = info.calculate_single_idx(arg_indices).1;
 
-        let insts = body.body();
+                    let arg = args.next().or_else(|| default_value.clone());
 
-        while let Some(inst) = insts.get(cursor) {
-            cursor += 1;
-            match self.run_instruction(func_name, goto_labels, inst, &mut cursor, tx, ctx) {
-                Ok(None) => {}
-                Ok(Some(Workflow::Return)) => return Ok(Workflow::Return),
-                Ok(Some(flow)) => return Ok(flow),
-                Err(err) => {
-                    return Err(err);
+                    if info.is_str {
+                        var.as_str()?[idx] = match arg {
+                            Some(Value::String(s)) => s,
+                            Some(_) => bail!("Argument type mismatched"),
+                            None => String::new(),
+                        };
+                    } else {
+                        var.as_int()?[idx] = match arg {
+                            Some(Value::Int(s)) => s,
+                            Some(_) => bail!("Argument type mismatched"),
+                            None => 0,
+                        };
+                    }
                 }
+
+                let mut cursor = 0;
+
+                let insts = body.body();
+
+                while let Some(inst) = insts.get(cursor) {
+                    cursor += 1;
+                    match self.run_instruction(
+                        func_name,
+                        body.goto_labels(),
+                        inst,
+                        &mut cursor,
+                        tx,
+                        ctx,
+                    ) {
+                        Ok(None) => {}
+                        Ok(Some(Workflow::Return)) => return Ok(Workflow::Return),
+                        Ok(Some(flow)) => return Ok(flow),
+                        Err(err) => {
+                            return Err(err);
+                        }
+                    }
+                }
+
+                // exit without RETURN/RETURNF
+
+                if body.is_function() {
+                    ctx.push(0i64);
+                } else if body.is_functions() {
+                    ctx.push("");
+                } else {
+                    ctx.var.set_result(0);
+                }
+
+                Ok(Workflow::Return)
+            }
+            FunctionBody::Rhai(_) => {
+                todo!("rhai")
             }
         }
-
-        // exit without RETURN/RETURNF
-
-        if body.is_function() {
-            ctx.push(0i64);
-        } else if body.is_functions() {
-            ctx.push("");
-        } else {
-            ctx.var.set_result(0);
-        }
-
-        Ok(Workflow::Return)
     }
 
     fn call_internal(
@@ -1694,31 +1732,7 @@ impl TerminalVm {
         log::trace!("CALL {label}({args:?})");
         ctx.new_func(Ok(label.into()), body.file_path().clone());
 
-        let mut args = args.iter().cloned();
-
-        for (var_idx, default_value, arg_indices) in body.args().iter() {
-            let (info, var) = ctx.var.get_maybe_local_var(label, var_idx)?;
-            let var = var.assume_normal();
-            let idx = info.calculate_single_idx(arg_indices).1;
-
-            let arg = args.next().or_else(|| default_value.clone());
-
-            if info.is_str {
-                var.as_str()?[idx] = match arg {
-                    Some(Value::String(s)) => s,
-                    Some(_) => bail!("Argument type mismatched"),
-                    None => String::new(),
-                };
-            } else {
-                var.as_int()?[idx] = match arg {
-                    Some(Value::Int(s)) => s,
-                    Some(_) => bail!("Argument type mismatched"),
-                    None => 0,
-                };
-            }
-        }
-
-        let ret = self.run_body(label, body.goto_labels(), body, tx, ctx)?;
+        let ret = self.run_body(label, args, body, tx, ctx)?;
 
         ctx.end_func();
 
@@ -1726,7 +1740,7 @@ impl TerminalVm {
     }
 
     #[inline]
-    fn call(
+    pub fn call(
         &self,
         label: &str,
         args: &[Value],
@@ -1737,7 +1751,7 @@ impl TerminalVm {
     }
 
     #[inline]
-    fn try_call(
+    pub fn try_call(
         &self,
         label: &str,
         args: &[Value],
@@ -1750,7 +1764,7 @@ impl TerminalVm {
         }
     }
 
-    fn call_event(
+    pub fn call_event(
         &self,
         ty: EventType,
         tx: &mut ConsoleSender,
@@ -1758,11 +1772,7 @@ impl TerminalVm {
     ) -> Result<Workflow> {
         self.dic.get_event(ty).run(|body| {
             let label: &str = ty.into();
-            ctx.new_func(Err(ty), body.file_path().clone());
-            let ret = self.run_body(label, body.goto_labels(), body, tx, ctx)?;
-            ctx.end_func();
-
-            Ok(ret)
+            self.call_internal(label, &[], tx, ctx, body)
         })
     }
 

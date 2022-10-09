@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use arrayvec::ArrayVec;
+use derivative::Derivative;
 use enum_map::EnumMap;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
@@ -12,17 +13,52 @@ use serde::{Deserialize, Serialize};
 use crate::VariableStorage;
 use crate::Workflow;
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FunctionBody {
-    file_path: SmolStr,
-    is_function: bool,
-    is_functions: bool,
-    body: Box<[Instruction]>,
-    goto_labels: HashMap<SmolStr, u32>,
-    args: Vec<(Box<str>, Option<Value>, ArrayVec<usize, 4>)>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FunctionBody {
+    Rhai(RhaiFunctionBody),
+    Erb(ErbFunctionBody),
 }
 
 impl FunctionBody {
+    pub fn file_path(&self) -> &SmolStr {
+        match self {
+            Self::Rhai(RhaiFunctionBody { file_path, .. })
+            | Self::Erb(ErbFunctionBody { file_path, .. }) => file_path,
+        }
+    }
+}
+
+impl From<RhaiFunctionBody> for FunctionBody {
+    fn from(body: RhaiFunctionBody) -> Self {
+        Self::Rhai(body)
+    }
+}
+
+impl From<ErbFunctionBody> for FunctionBody {
+    fn from(body: ErbFunctionBody) -> Self {
+        Self::Erb(body)
+    }
+}
+
+#[derive(Clone, Debug, Derivative)]
+#[derivative(PartialEq, Eq)]
+pub struct RhaiFunctionBody {
+    pub file_path: SmolStr,
+    #[derivative(PartialEq = "ignore")]
+    pub function: pyo3::Py<pyo3::types::PyFunction>,
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ErbFunctionBody {
+    pub file_path: SmolStr,
+    pub is_function: bool,
+    pub is_functions: bool,
+    pub body: Box<[Instruction]>,
+    pub goto_labels: HashMap<SmolStr, u32>,
+    pub args: Vec<(Box<str>, Option<Value>, ArrayVec<usize, 4>)>,
+}
+
+impl ErbFunctionBody {
     pub fn push_arg(
         &mut self,
         var: Box<str>,
@@ -57,7 +93,7 @@ impl FunctionBody {
     }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct EventCollection {
     single: Option<FunctionBody>,
     pre: Vec<FunctionBody>,
@@ -93,7 +129,7 @@ impl EventCollection {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionDic {
     normal: HashMap<SmolStr, FunctionBody>,
     event: EnumMap<EventType, EventCollection>,
@@ -113,7 +149,7 @@ impl FunctionDic {
         default_var_size: &DefaultLocalVarSize,
         func: CompiledFunction,
     ) {
-        let mut body = FunctionBody {
+        let mut body = ErbFunctionBody {
             body: func.body,
             goto_labels: func.goto_labels,
             ..Default::default()
@@ -223,9 +259,9 @@ impl FunctionDic {
         }
 
         if let Ok(ty) = header.name.parse::<EventType>() {
-            self.insert_event(Event { ty, flags }, body);
+            self.insert_event(Event { ty, flags }, body.into());
         } else {
-            self.insert_func(header.name, body);
+            self.insert_func(header.name, body.into());
         }
     }
 
