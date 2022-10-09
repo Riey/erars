@@ -227,12 +227,12 @@ option_set::option_set! {
 pub enum BeginType {
     #[strum(to_string = "TITLE")]
     Title,
-    #[strum(to_string = "TRAIN")]
-    Train,
     #[strum(to_string = "FIRST")]
     First,
     #[strum(to_string = "SHOP")]
     Shop,
+    #[strum(to_string = "TRAIN")]
+    Train,
     #[strum(to_string = "TURNEND")]
     TurnEnd,
     #[strum(to_string = "AFTERTRAIN")]

@@ -14,6 +14,10 @@ EXPLV:
 PBAND:
   size: [1000]
   is_savedata: true
+PYTHON_SAVESTR:
+  size: []
+  is_str: true
+  is_savedata: true
 SAVESTR:
   size: [100]
   is_str: true

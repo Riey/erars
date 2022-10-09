@@ -1,6 +1,6 @@
 mod context;
 mod function;
-pub mod rune_module;
+pub mod py_module;
 mod save_data;
 mod variable;
 
@@ -25,7 +25,7 @@ use erars_ui::{ConsoleResult, ConsoleSender, FontStyle, InputRequest, InputReque
 
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
-    function::{ErbFunctionBody, FunctionBody, FunctionDic, RhaiFunctionBody},
+    function::{ErbFunctionBody, FunctionBody, FunctionDic, PyFunctionBody},
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 use crate::variable::SerializableVariableStorage;
@@ -1715,8 +1715,20 @@ impl TerminalVm {
 
                 Ok(Workflow::Return)
             }
-            FunctionBody::Rhai(_) => {
-                todo!("rhai")
+            FunctionBody::Python(body) => {
+                pyo3::Python::with_gil(|py| {
+                    let args = crate::py_module::value_to_wrapper_slice(args);
+                    let tuple = pyo3::types::PyTuple::new(
+                        py,
+                        args.iter().map(|arg| pyo3::IntoPy::into_py(arg, py)),
+                    );
+                    body.function.call1(py, tuple)?;
+
+                    Ok(())
+                })
+                .map_err(|err: pyo3::PyErr| anyhow::anyhow!("Python err: {err}"))?;
+
+                Ok(Workflow::Return)
             }
         }
     }

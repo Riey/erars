@@ -23,17 +23,27 @@ printw = pw
 
 BEGIN_TITLE = 0
 BEGIN_FIRST = 1
+BEGIN_SHOP = 2
+
+INPUT_STR = 3
+INPUT_INT = 2
+INPUT_ENTER = 1
+INPUT_ANYKEY = 0
 
 def var(name: str, *args) -> int | str:
-    return VM.var(name, args)
+    return VM.get_var(name, args)
 
-def call(name: str, *args) -> int | str:
+def set_var(name: str, value: int | str, *args):
+    VM.set_var(name, value, args)
+
+def call(name: str, *args):
     VM.call(name, args)
-    return 0
 
 def begin(ty: int):
-    if ty == BEGIN_TITLE:
-        call("SYSTEM_TITLE")
-    else:
-        raise "Unknown begin type"
-    return
+    VM.begin(ty)
+
+def era_inputs() -> str:
+    VM.wait(INPUT_STR, False)
+
+def era_input() -> int:
+    VM.wait(INPUT_INT, False)

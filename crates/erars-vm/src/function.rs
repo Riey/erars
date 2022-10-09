@@ -15,22 +15,22 @@ use crate::Workflow;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FunctionBody {
-    Rhai(RhaiFunctionBody),
+    Python(PyFunctionBody),
     Erb(ErbFunctionBody),
 }
 
 impl FunctionBody {
     pub fn file_path(&self) -> &SmolStr {
         match self {
-            Self::Rhai(RhaiFunctionBody { file_path, .. })
+            Self::Python(PyFunctionBody { file_path, .. })
             | Self::Erb(ErbFunctionBody { file_path, .. }) => file_path,
         }
     }
 }
 
-impl From<RhaiFunctionBody> for FunctionBody {
-    fn from(body: RhaiFunctionBody) -> Self {
-        Self::Rhai(body)
+impl From<PyFunctionBody> for FunctionBody {
+    fn from(body: PyFunctionBody) -> Self {
+        Self::Python(body)
     }
 }
 
@@ -42,7 +42,7 @@ impl From<ErbFunctionBody> for FunctionBody {
 
 #[derive(Clone, Debug, Derivative)]
 #[derivative(PartialEq, Eq)]
-pub struct RhaiFunctionBody {
+pub struct PyFunctionBody {
     pub file_path: SmolStr,
     #[derivative(PartialEq = "ignore")]
     pub function: pyo3::Py<pyo3::types::PyFunction>,

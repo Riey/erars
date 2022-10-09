@@ -2,11 +2,11 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 use erars_ui::{ConsoleResult, ConsoleSender, InputRequest, InputRequestType, Timeout};
 use pyo3::exceptions::PyException;
+use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use pyo3::{prelude::*, types::PyTuple};
 
 use crate::{TerminalVm, VmContext, Workflow};
-use erars_ast::Value;
+use erars_ast::{BeginType, Value};
 
 #[repr(transparent)]
 pub struct ValueWrapper(Value);
@@ -14,6 +14,11 @@ pub struct ValueWrapper(Value);
 fn value_cast(wrapper: &[ValueWrapper]) -> &[Value] {
     // SAFETY: ValueWrapper must be repr(transparent)
     unsafe { std::mem::transmute(wrapper) }
+}
+
+pub fn value_to_wrapper_slice(slice: &[Value]) -> &[ValueWrapper] {
+    // SAFETY: ValueWrapper must be repr(transparent)
+    unsafe { std::mem::transmute(slice) }
 }
 
 pub struct InputRequestTypeWrapper(InputRequestType);
@@ -96,17 +101,60 @@ impl VmProxy {
         self.wait_internal(ty.0, is_one, None)
     }
 
-    pub fn call(&mut self, name: &str, args: Vec<ValueWrapper>) -> PyResult<Workflow> {
+    pub fn call(&mut self, name: &str, args: Vec<ValueWrapper>) -> PyResult<()> {
         self.vm
             .call(name, value_cast(&args), &mut self.tx, &mut self.ctx)
             .map_err(|err| {
                 log::error!("ERROR: {err}");
                 pyo3::exceptions::PyException::new_err("Call error")
             })
+            .and_then(check_exit(&self.quited))
     }
 
-    pub fn var(&mut self, name: &str, args: Vec<usize>) -> PyResult<Workflow> {
-        let (_, var, idx) = self.ctx.var.index_var(name, &args).map_err(|err| PyException::new_err(err.to_string()))?;
+    pub fn begin(&mut self, begin_ty: u32) -> PyResult<()> {
+        self.vm
+            .begin(
+                match begin_ty {
+                    0 => BeginType::Title,
+                    1 => BeginType::First,
+                    2 => BeginType::Shop,
+                    3 => BeginType::Train,
+                    4 => BeginType::TurnEnd,
+                    5 => BeginType::AfterTrain,
+                    _ => BeginType::AblUp,
+                },
+                &mut self.tx,
+                &mut self.ctx,
+            )
+            .map_err(|err| {
+                log::error!("ERROR: {err}");
+                pyo3::exceptions::PyException::new_err("Begin error")
+            })
+            .and_then(check_exit(&self.quited))
+    }
+
+    pub fn get_var(&mut self, name: &str, args: Vec<usize>) -> PyResult<ValueWrapper> {
+        let (_, var, idx) = self
+            .ctx
+            .var
+            .index_var(name, &args)
+            .map_err(|err| PyException::new_err(err.to_string()))?;
+        var.get(idx).map(ValueWrapper).map_err(|err| {
+            log::error!("ERROR: {err}");
+            pyo3::exceptions::PyException::new_err("Variable error")
+        })
+    }
+
+    pub fn set_var(&mut self, name: &str, value: ValueWrapper, args: Vec<usize>) -> PyResult<()> {
+        let (_, var, idx) = self
+            .ctx
+            .var
+            .index_var(name, &args)
+            .map_err(|err| PyException::new_err(err.to_string()))?;
+        var.set(idx, value.0).map_err(|err| {
+            log::error!("ERROR: {err}");
+            pyo3::exceptions::PyException::new_err("Variable error")
+        })
     }
 
     pub fn begin_type(&mut self) -> i32 {
@@ -119,6 +167,16 @@ impl VmProxy {
 pub fn module(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<VmProxy>()?;
     Ok(())
+}
+
+fn check_exit(exited: &Arc<AtomicBool>) -> impl Fn(Workflow) -> PyResult<()> + '_ {
+    |workflow| match workflow {
+        Workflow::Exit => {
+            exited.store(true, std::sync::atomic::Ordering::SeqCst);
+            Err(pyo3::exceptions::PyException::new_err("Program exited"))
+        }
+        Workflow::Return => Ok(()),
+    }
 }
 
 mod impls {
@@ -143,6 +201,15 @@ mod impls {
     impl From<Value> for ValueWrapper {
         fn from(v: Value) -> Self {
             Self(v)
+        }
+    }
+
+    impl<'a> IntoPy<PyObject> for &'a ValueWrapper {
+        fn into_py(self, py: Python<'_>) -> PyObject {
+            match &self.0 {
+                Value::Int(i) => i.into_py(py),
+                Value::String(s) => s.into_py(py),
+            }
         }
     }
 
