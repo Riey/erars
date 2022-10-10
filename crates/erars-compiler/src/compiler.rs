@@ -189,25 +189,28 @@ impl Compiler {
     }
 
     fn push_form(&mut self, form: FormText) -> CompileResult<()> {
-        let count = 1 + form.other.len() as u32 * 2;
         self.push(Instruction::LoadStr(form.first.into()));
-        for (
-            FormExpr {
-                expr,
-                align,
-                padding,
-            },
-            text,
-        ) in form.other
-        {
-            self.push_expr(expr)?;
-            if let Some(padding) = padding {
-                self.push_expr(padding)?;
-                self.push(Instruction::PadStr(align.unwrap_or_default()));
+
+        if !form.other.is_empty() {
+            let count = 1 + form.other.len() as u32 * 2;
+            for (
+                FormExpr {
+                    expr,
+                    align,
+                    padding,
+                },
+                text,
+            ) in form.other
+            {
+                self.push_expr(expr)?;
+                if let Some(padding) = padding {
+                    self.push_expr(padding)?;
+                    self.push(Instruction::PadStr(align.unwrap_or_default()));
+                }
+                self.push(Instruction::LoadStr(text.into_boxed_str()));
             }
-            self.push(Instruction::LoadStr(text.into_boxed_str()));
+            self.push(Instruction::ConcatString(count));
         }
-        self.push(Instruction::ConcatString(count));
 
         Ok(())
     }
