@@ -60,31 +60,25 @@ impl FunctionBody {
 #[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct EventCollection {
     single: Option<FunctionBody>,
-    pre: Vec<FunctionBody>,
-    empty: Vec<FunctionBody>,
-    later: Vec<FunctionBody>,
+    events: Vec<FunctionBody>,
+    empty_count: usize,
 }
 
 impl EventCollection {
-    pub fn run(&self, mut f: impl FnMut(&FunctionBody) -> Result<Workflow>) -> Result<Workflow> {
+    pub fn run(
+        &self,
+        from: usize,
+        mut f: impl FnMut(&FunctionBody, usize) -> Result<Workflow>,
+    ) -> Result<Workflow> {
         if let Some(single) = self.single.as_ref() {
-            return f(single);
+            if from == 0 {
+                return f(single, 0);
+            }
         } else {
-            for pre in self.pre.iter() {
-                if f(pre)? == Workflow::Exit {
-                    return Ok(Workflow::Exit);
-                }
-            }
-
-            for empty in self.empty.iter() {
-                if f(empty)? == Workflow::Exit {
-                    return Ok(Workflow::Exit);
-                }
-            }
-
-            for later in self.later.iter() {
-                if f(later)? == Workflow::Exit {
-                    return Ok(Workflow::Exit);
+            for (i, pre) in self.events[from..].iter().enumerate() {
+                match f(pre, i)? {
+                    Workflow::Return => {}
+                    other => return Ok(other),
                 }
             }
         }
@@ -236,10 +230,17 @@ impl FunctionDic {
     pub fn insert_event(&mut self, event: Event, body: FunctionBody) {
         let mut collection = &mut self.event[event.ty];
         match event.flags {
-            EventFlags::Later => collection.later.push(body),
-            EventFlags::Pre => collection.pre.push(body),
-            EventFlags::None => collection.empty.push(body),
             EventFlags::Single => collection.single = Some(body),
+            EventFlags::Later => {
+                collection.events.push(body);
+            }
+            EventFlags::Pre => {
+                collection.events.insert(collection.empty_count, body);
+            }
+            EventFlags::None => {
+                collection.events.insert(0, body);
+                collection.empty_count += 1;
+            }
         }
     }
 

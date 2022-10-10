@@ -1,12 +1,14 @@
 mod context;
 mod function;
 mod save_data;
+mod system_func;
 mod variable;
 
 use std::{collections::BTreeSet, io, path::PathBuf};
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
+use context::FunctionIdentifier;
 use itertools::Itertools;
 use pad::PadStr;
 use rand::Rng;
@@ -20,7 +22,7 @@ use erars_ast::{
     PrintFlags, ScriptPosition, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
-use erars_ui::{ConsoleResult, ConsoleSender, FontStyle, InputRequest, InputRequestType, Timeout};
+use erars_ui::{ConsoleSender, FontStyle, InputRequest, InputRequestType, Timeout};
 
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
@@ -37,6 +39,13 @@ macro_rules! report_error {
         $tx.print_line(format!($($t)+));
     };
 }
+
+macro_rules! ret_set_state {
+    ($ctx:expr, $state:expr) => {
+        return Ok(InstructionWorkflow::SwitchState($state));
+    };
+}
+
 macro_rules! get_arg {
     ($arg:expr) => {
         get_arg!(@opt $arg).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
@@ -69,31 +78,75 @@ macro_rules! get_arg {
     };
 }
 
-/// 해당 함수를 호출하고 존재할경우 true, 반대면 false를 반환함
-///
-/// 해당 함수에서 게임이 종료되면 그대로 종료
-macro_rules! call {
-    ($self:expr, $name:expr, $tx:expr, $ctx:expr) => {
-        match $self.try_call($name, &[], $tx, $ctx)? {
-            Some(Workflow::Exit) => return Ok(Workflow::Exit),
-            Some(Workflow::Return) => true,
-            None => false,
-        }
-    };
-}
-
-macro_rules! call_event {
-    ($self:expr, $ty:expr, $tx:expr, $ctx:expr) => {
-        if $self.call_event($ty, $tx, $ctx)? == Workflow::Exit {
-            return Ok(Workflow::Exit);
-        }
-    };
-}
-
-#[derive(Display, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Display, Debug, Clone, PartialEq, Eq)]
 pub enum Workflow {
     Return,
-    Exit,
+    SwitchState(SystemState),
+    Input { req: InputRequest },
+}
+
+#[derive(Display, Debug, Clone, PartialEq, Eq)]
+pub enum SystemState {
+    Exited,
+    LoadGame,
+    SaveGame,
+    SaveData,
+    LoadData(u32),
+    BeginTitle,
+    BeginShop,
+    BeginTrain { com_no: u32, com_able_no: u32, printc_count: u32 },
+    BeginFirst,
+    BeginTurnEnd,
+    BeginAfterTrain,
+    BeginAblUp,
+    DoTrain(u32),
+    CallTrain(Vec<u32>, Option<u32>),
+}
+
+impl From<BeginType> for SystemState {
+    fn from(ty: BeginType) -> Self {
+        match ty {
+            BeginType::AblUp => Self::BeginAblUp,
+            BeginType::AfterTrain => Self::BeginAfterTrain,
+            BeginType::Shop => Self::BeginShop,
+            BeginType::Title => Self::BeginTitle,
+            BeginType::Train => Self::BeginTrain {
+                com_no: 0,
+                com_able_no: 0,
+                printc_count: 0,
+            },
+            BeginType::First => Self::BeginFirst,
+            BeginType::TurnEnd => Self::BeginTurnEnd,
+        }
+    }
+}
+
+impl Default for SystemState {
+    fn default() -> Self {
+        Self::Exited
+    }
+}
+
+#[derive(Debug)]
+enum InstructionWorkflow {
+    Normal,
+    Goto(u32),
+    GotoLabel {
+        label: String,
+        is_try: bool,
+    },
+    Return,
+    SwitchState(SystemState),
+    CallEvent(EventType),
+    Call {
+        name: String,
+        args: Vec<Value>,
+        is_try: bool,
+        is_jump: bool,
+    },
+    Input {
+        req: InputRequest,
+    },
 }
 
 impl Default for Workflow {
@@ -120,12 +173,11 @@ impl TerminalVm {
         func_name: &str,
         goto_labels: &HashMap<SmolStr, u32>,
         inst: &Instruction,
-        cursor: &mut usize,
         tx: &mut ConsoleSender,
         ctx: &mut VmContext,
-    ) -> Result<Option<Workflow>> {
+    ) -> Result<InstructionWorkflow> {
         log::trace!(
-            "[{func_name}] `{inst:?}[{cursor}]`, stack: {stack:?}, call_stack: {call_stack:?}",
+            "[{func_name}] `{inst:?}`, stack: {stack:?}, call_stack: {call_stack:?}",
             stack = ctx.stack(),
             call_stack = ctx.call_stack(),
         );
@@ -153,18 +205,24 @@ impl TerminalVm {
                 let insts = erars_compiler::compile_expr(expr).unwrap();
 
                 for inst in insts.iter() {
-                    self.run_instruction(func_name, goto_labels, inst, &mut 0, tx, ctx)?;
+                    match self.run_instruction(func_name, goto_labels, inst, tx, ctx)? {
+                        InstructionWorkflow::Normal => {}
+                        other => bail!("EvalFromString can't do flow control"),
+                    }
                 }
             }
             Instruction::GotoLabel => {
-                *cursor = goto_labels[ctx.pop_str()?.as_str()] as usize;
+                return Ok(InstructionWorkflow::GotoLabel {
+                    label: ctx.pop_str()?,
+                    is_try: false,
+                });
             }
-            Instruction::TryGotoLabel => match goto_labels.get(ctx.pop_str()?.as_str()) {
-                Some(pos) => *cursor = *pos as usize,
-                None => {
-                    ctx.push(false);
-                }
-            },
+            Instruction::TryGotoLabel => {
+                return Ok(InstructionWorkflow::GotoLabel {
+                    label: ctx.pop_str()?,
+                    is_try: true,
+                })
+            }
             Instruction::LoadExternVarRef(c) => {
                 let func_extern = ctx.pop_str()?;
                 let name = ctx.pop_str()?;
@@ -200,51 +258,36 @@ impl TerminalVm {
                 }
                 if flags.contains(PrintFlags::WAIT) {
                     let gen = tx.input_gen();
-                    if tx.input(InputRequest::normal(gen, InputRequestType::AnyKey))
-                        == ConsoleResult::Quit
-                    {
-                        return Ok(Some(Workflow::Exit));
-                    }
+                    return Ok(InstructionWorkflow::Input {
+                        req: InputRequest {
+                            generation: gen,
+                            ty: InputRequestType::AnyKey,
+                            is_one: false,
+                            timeout: None,
+                        },
+                    });
                 }
             }
-            Instruction::TryCall(c) | Instruction::TryJump(c) => {
+            Instruction::TryCall(c)
+            | Instruction::TryJump(c)
+            | Instruction::Jump(c)
+            | Instruction::Call(c) => {
                 let func = ctx.pop_str()?;
                 let args = ctx.take_value_list(*c)?;
 
-                match self.try_call(&func, &args, tx, ctx)? {
-                    Some(Workflow::Return) => {
-                        if matches!(inst, Instruction::TryJump(_)) {
-                            return Ok(Some(Workflow::Return));
-                        }
-                        ctx.push(true);
-                    }
-                    Some(Workflow::Exit) => return Ok(Some(Workflow::Exit)),
-                    None => {
-                        ctx.push(false);
-                    }
-                }
-            }
-            Instruction::Jump(c) | Instruction::Call(c) => {
-                let func = ctx.pop_str()?;
-                let args = ctx.take_value_list(*c)?;
-
-                match self.call(&func, &args, tx, ctx)? {
-                    Workflow::Exit => return Ok(Some(Workflow::Exit)),
-                    Workflow::Return => {
-                        if matches!(inst, Instruction::Jump(_)) {
-                            return Ok(Some(Workflow::Return));
-                        }
-                    }
-                }
+                return Ok(InstructionWorkflow::Call {
+                    name: func,
+                    args,
+                    is_try: matches!(inst, Instruction::TryCall(_) | Instruction::TryJump(_)),
+                    is_jump: matches!(inst, Instruction::Jump(_) | Instruction::TryJump(_)),
+                });
             }
             Instruction::Begin(b) => {
-                ctx.begin = Some(*b);
-                return Ok(Some(Workflow::Exit));
+                ret_set_state!(ctx, (*b).into());
             }
-            Instruction::CallEvent(ty) => match self.call_event(*ty, tx, ctx)? {
-                Workflow::Return => {}
-                Workflow::Exit => return Ok(Some(Workflow::Exit)),
-            },
+            Instruction::CallEvent(ty) => {
+                return Ok(InstructionWorkflow::CallEvent(*ty));
+            }
             Instruction::ConcatString(c) => {
                 let args = ctx.take_value_list(*c)?;
                 let ret = args.into_iter().fold(String::new(), |s, l| s + l.into_str().as_str());
@@ -310,18 +353,18 @@ impl TerminalVm {
                 ctx.push(ret);
             }
             Instruction::Goto(no) => {
-                *cursor = *no as usize;
+                return Ok(InstructionWorkflow::Goto(*no));
             }
             Instruction::GotoIfNot(no) => {
                 let cond = ctx.pop_value()?.as_bool();
                 if !cond {
-                    *cursor = *no as usize;
+                    return Ok(InstructionWorkflow::Goto(*no));
                 }
             }
             Instruction::GotoIf(no) => {
                 let cond = ctx.pop_value()?.as_bool();
                 if cond {
-                    *cursor = *no as usize;
+                    return Ok(InstructionWorkflow::Goto(*no));
                 }
             }
             Instruction::SetAlignment(align) => {
@@ -940,7 +983,7 @@ impl TerminalVm {
                         ctx.var.cupcheck(tx, target, names)?;
                     }
                     BuiltinCommand::Restart => {
-                        *cursor = 0;
+                        return Ok(InstructionWorkflow::Goto(0));
                     }
                     BuiltinCommand::SetBit => {
                         let v = get_arg!(@var args);
@@ -1079,7 +1122,7 @@ impl TerminalVm {
 
                         ctx.push(ret);
 
-                        return Ok(Some(Workflow::Return));
+                        return Ok(InstructionWorkflow::Return);
                     }
                     BuiltinCommand::Return => {
                         drop(ctx.return_func()?);
@@ -1112,7 +1155,7 @@ impl TerminalVm {
                             }
                         }
 
-                        return Ok(Some(Workflow::Return));
+                        return Ok(InstructionWorkflow::Return);
                     }
                     BuiltinCommand::DrawLine => {
                         tx.draw_line(ctx.header_info.replace.drawline_str.clone());
@@ -1207,18 +1250,16 @@ impl TerminalVm {
                         tx.set_bg_color(0, 0, 0);
                     }
                     BuiltinCommand::Wait | BuiltinCommand::WaitAnykey => {
-                        let gen = tx.input_gen();
-                        match tx.input(InputRequest::normal(
-                            gen,
-                            if *com == BuiltinCommand::Wait {
-                                InputRequestType::EnterKey
-                            } else {
-                                InputRequestType::AnyKey
-                            },
-                        )) {
-                            ConsoleResult::Value(_) => {}
-                            ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
-                        }
+                        return Ok(InstructionWorkflow::Input {
+                            req: InputRequest::normal(
+                                tx.input_gen(),
+                                if *com == BuiltinCommand::Wait {
+                                    InputRequestType::EnterKey
+                                } else {
+                                    InputRequestType::AnyKey
+                                },
+                            ),
+                        });
                     }
                     BuiltinCommand::SkipDisp => {
                         let arg = ctx.pop_int()?;
@@ -1325,20 +1366,12 @@ impl TerminalVm {
                             _ => unreachable!(),
                         };
 
-                        match tx.input(req) {
-                            ConsoleResult::Quit => {
-                                return Ok(Some(Workflow::Exit));
-                            }
-                            ConsoleResult::Value(ret) => match ret {
-                                Value::Int(i) => *ctx.var.ref_int("RESULT", &[])? = i,
-                                Value::String(s) => *ctx.var.ref_str("RESULTS", &[])? = s,
-                            },
-                        }
+                        return Ok(InstructionWorkflow::Input { req });
                     }
                     BuiltinCommand::Quit => {
                         log::info!("Run QUIT");
                         tx.exit();
-                        return Ok(Some(Workflow::Exit));
+                        ret_set_state!(ctx, SystemState::Exited);
                     }
                     BuiltinCommand::SwapChara => {
                         let a = get_arg!(@usize: args, ctx);
@@ -1403,19 +1436,21 @@ impl TerminalVm {
                         tx.clear_line(get_arg!(@usize: args, ctx));
                     }
                     BuiltinCommand::DoTrain => {
-                        todo!("DOTRAIN")
+                        let arg = get_arg!(@u32: args, ctx);
+
+                        ret_set_state!(ctx, SystemState::DoTrain(arg));
                     }
                     BuiltinCommand::CallTrain => {
                         let count = get_arg!(@usize: args, ctx);
                         let commands = ctx.var.get_var("SELECTCOM")?.1.assume_normal().as_int()?
                             [..count]
                             .iter()
-                            .map(|c| usize::try_from(*c).map_err(anyhow::Error::from))
-                            .collect::<Result<Vec<usize>>>()?;
+                            // CallTrain works reverse order
+                            .rev()
+                            .map(|c| u32::try_from(*c).map_err(anyhow::Error::from))
+                            .collect::<Result<Vec<u32>>>()?;
 
-                        if self.run_call_train(tx, ctx, commands)? == Workflow::Exit {
-                            return Ok(Some(Workflow::Exit));
-                        }
+                        ret_set_state!(ctx, SystemState::CallTrain(commands, None));
                     }
                     BuiltinCommand::DelChara => {
                         let idx = get_arg!(@i64: args, ctx);
@@ -1439,18 +1474,9 @@ impl TerminalVm {
                         );
                     }
                     BuiltinCommand::LoadData => {
-                        let idx = get_arg!(@i64: args, ctx);
+                        let idx = get_arg!(@u32: args, ctx);
 
-                        if let Ok(data) =
-                            self::save_data::read_save_data(&self.sav_path, &ctx.header_info, idx)
-                        {
-                            ctx.lastload_text = data.description.clone();
-                            ctx.lastload_no = idx as _;
-                            ctx.lastload_version = data.version;
-                            ctx.var.load_serializable(data, &ctx.header_info)?;
-                        }
-
-                        return self.load_data_end(tx, ctx).map(Some);
+                        ret_set_state!(ctx, SystemState::LoadData(idx));
                     }
                     BuiltinCommand::DelData => {
                         let idx = get_arg!(@i64: args, ctx);
@@ -1490,12 +1516,10 @@ impl TerminalVm {
                         ctx.push(nos as i64);
                     }
                     BuiltinCommand::SaveGame => {
-                        if self.run_save_game(tx, ctx)? == Workflow::Exit {
-                            return Ok(Some(Workflow::Exit));
-                        }
+                        ret_set_state!(ctx, SystemState::SaveGame);
                     }
                     BuiltinCommand::LoadGame => {
-                        return self.run_load_game(tx, ctx).map(Some);
+                        ret_set_state!(ctx, SystemState::LoadGame);
                     }
                     BuiltinCommand::PutForm => {
                         let arg = get_arg!(@String: args, ctx);
@@ -1519,7 +1543,7 @@ impl TerminalVm {
             }
         }
 
-        Ok(None)
+        Ok(InstructionWorkflow::Normal)
     }
 
     fn load_savs(&self, ctx: &mut VmContext) -> HashMap<usize, SerializableVariableStorage> {
@@ -1552,122 +1576,9 @@ impl TerminalVm {
         tx.print_line("[100] Return".into());
     }
 
-    fn run_call_train(
-        &self,
-        tx: &mut ConsoleSender,
-        ctx: &mut VmContext,
-        commands: Vec<usize>,
-    ) -> Result<Workflow> {
-        for command in commands {
-            call!(self, "SHOW_STATUS", tx, ctx);
-
-            ctx.var.prepare_train_data()?;
-            ctx.var.reset_var("NOWEX")?;
-            *ctx.var.ref_int("SELECTCOM", &[])? = command as i64;
-
-            call_event!(self, EventType::Com, tx, ctx);
-            call!(self, &format!("COM{command}"), tx, ctx);
-
-            if ctx.var.get_result() == 0 {
-                continue;
-            }
-
-            call!(self, "SOURCE_CHECK", tx, ctx);
-            ctx.var.reset_var("SOURCE")?;
-            call_event!(self, EventType::ComEnd, tx, ctx);
-        }
-
-        call!(self, "CALLTRAINEND", tx, ctx);
-
-        Ok(Workflow::Return)
-    }
-
-    fn load_data_end(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
-        call!(self, "SYSTEM_LOADEND", tx, ctx);
-        call_event!(self, EventType::Load, tx, ctx);
-
-        ctx.set_begin(BeginType::Shop);
-
-        Ok(Workflow::Exit)
-    }
-
-    fn run_load_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
-        let mut savs = self.load_savs(ctx);
-
-        loop {
-            Self::print_sav_data_list(&savs, tx);
-            match tx.input_int() {
-                None => return Ok(Workflow::Exit),
-                Some(100) => return Ok(Workflow::Return),
-                Some(i) if i >= 0 && i < SAVE_COUNT as i64 => {
-                    if let Some(sav) = savs.remove(&(i as usize)) {
-                        ctx.lastload_text = sav.description.clone();
-                        ctx.lastload_no = i as _;
-                        ctx.lastload_version = sav.version;
-                        ctx.var.load_serializable(sav, &ctx.header_info)?;
-                        break;
-                    }
-                }
-                Some(_) => continue,
-            }
-        }
-
-        self.load_data_end(tx, ctx)
-    }
-
-    fn run_save_game(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<Workflow> {
-        let savs = self.load_savs(ctx);
-
-        loop {
-            Self::print_sav_data_list(&savs, tx);
-
-            match tx.input_int() {
-                None => return Ok(Workflow::Exit),
-                Some(100) => break,
-                Some(i) if i >= 0 && i < SAVE_COUNT as i64 => {
-                    let i = i as usize;
-                    let write = if savs.contains_key(&i) {
-                        tx.print_line(format!("SAVE {i} already exists. Overwrite?"));
-                        tx.print_line(format!("[0] Yes [1] No"));
-                        loop {
-                            match tx.input_int() {
-                                None => return Ok(Workflow::Exit),
-                                Some(0) => break true,
-                                Some(1) => break false,
-                                Some(_) => continue,
-                            }
-                        }
-                    } else {
-                        true
-                    };
-
-                    if write {
-                        ctx.put_form_enabled = true;
-                        if self.try_call("SAVEINFO", &[], tx, ctx)? == Some(Workflow::Exit) {
-                            return Ok(Workflow::Exit);
-                        }
-                        ctx.put_form_enabled = false;
-                        let save_text = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
-                        save_data::write_save_data(
-                            &self.sav_path,
-                            i as i64,
-                            &ctx.var,
-                            &ctx.header_info,
-                            save_text,
-                        );
-                        break;
-                    }
-                }
-                _ => continue,
-            }
-        }
-
-        Ok(Workflow::Return)
-    }
-
     fn run_body(
         &self,
-        func_name: &str,
+        func_identifier: FunctionIdentifier,
         goto_labels: &HashMap<SmolStr, u32>,
         body: &FunctionBody,
         tx: &mut ConsoleSender,
@@ -1676,13 +1587,94 @@ impl TerminalVm {
         let mut cursor = 0;
 
         let insts = body.body();
+        let func_name = func_identifier.name();
 
         while let Some(inst) = insts.get(cursor) {
             cursor += 1;
-            match self.run_instruction(func_name, goto_labels, inst, &mut cursor, tx, ctx) {
-                Ok(None) => {}
-                Ok(Some(Workflow::Return)) => return Ok(Workflow::Return),
-                Ok(Some(flow)) => return Ok(flow),
+            use InstructionWorkflow::*;
+
+            match self.run_instruction(func_name, goto_labels, inst, tx, ctx) {
+                Ok(Normal) => {}
+                Ok(Goto(pos)) => {
+                    cursor = pos as usize;
+                }
+                Ok(GotoLabel { label, is_try }) => match goto_labels.get(label.as_str()) {
+                    Some(pos) => {
+                        cursor = *pos as usize;
+                    }
+                    None => {
+                        if is_try {
+                            ctx.push(false);
+                        } else {
+                            bail!("Label {label} is not founded");
+                        }
+                    }
+                },
+                Ok(Return) => return Ok(Workflow::Return),
+                Ok(CallEvent(ty)) => {
+                    ctx.push_current_call_stack(
+                        func_identifier.clone(),
+                        body.file_path().clone(),
+                        cursor,
+                    );
+                    match self.call_event(ty, tx, ctx)? {
+                        Workflow::Return => {
+                            ctx.pop_call_stack();
+                            continue;
+                        }
+                        other => {
+                            return Ok(other);
+                        }
+                    }
+                }
+                Ok(Call {
+                    name,
+                    args,
+                    is_jump,
+                    is_try,
+                }) => {
+                    if !is_jump {
+                        ctx.push_current_call_stack(
+                            func_identifier.clone(),
+                            body.file_path().clone(),
+                            cursor,
+                        );
+                    }
+                    match self.try_call(&name, &args, tx, ctx)? {
+                        Some(Workflow::Return) => {
+                            if is_jump {
+                                return Ok(Workflow::Return);
+                            } else {
+                                ctx.pop_call_stack();
+                                if is_try {
+                                    ctx.push(true);
+                                }
+                                continue;
+                            }
+                        }
+                        Some(other) => {
+                            return Ok(other);
+                        }
+                        None => {
+                            if is_try {
+                                ctx.push(false);
+                            } else {
+                                bail!("Function {name} is not found");
+                            }
+                        }
+                    }
+                }
+                Ok(SwitchState(state)) => {
+                    ctx.push_current_call_stack(
+                        func_identifier.clone(),
+                        body.file_path().clone(),
+                        cursor,
+                    );
+                    return Ok(Workflow::SwitchState(state));
+                }
+                Ok(Input { req }) => {
+                    return Ok(Workflow::Input { req });
+                }
                 Err(err) => {
                     return Err(err);
                 }
@@ -1711,7 +1703,6 @@ impl TerminalVm {
         body: &FunctionBody,
     ) -> Result<Workflow> {
         log::trace!("CALL {label}({args:?})");
-        ctx.new_func(Ok(label.into()), body.file_path().clone());
 
         let mut args = args.iter().cloned();
 
@@ -1737,9 +1728,13 @@ impl TerminalVm {
             }
         }
 
-        let ret = self.run_body(label, body.goto_labels(), body, tx, ctx)?;
-
-        ctx.end_func();
+        let ret = self.run_body(
+            FunctionIdentifier::Normal(label.into()),
+            body.goto_labels(),
+            body,
+            tx,
+            ctx,
+        )?;
 
         Ok(ret)
     }
@@ -1775,245 +1770,54 @@ impl TerminalVm {
         tx: &mut ConsoleSender,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
-        self.dic.get_event(ty).run(|body| {
+        self.dic.get_event(ty).run(0, |body, idx| {
             let label: &str = ty.into();
-            ctx.new_func(Err(ty), body.file_path().clone());
-            let ret = self.run_body(label, body.goto_labels(), body, tx, ctx)?;
-            ctx.end_func();
+            let ret = self.run_body(
+                FunctionIdentifier::Event(ty, idx),
+                body.goto_labels(),
+                body,
+                tx,
+                ctx,
+            )?;
 
             Ok(ret)
         })
     }
 
-    fn begin(
+    pub fn run_state(
         &self,
-        ty: BeginType,
+        mut state: SystemState,
         tx: &mut ConsoleSender,
         ctx: &mut VmContext,
-    ) -> Result<Workflow> {
-        log::trace!("Begin {ty}");
+    ) -> Result<VmResult> {
+        let mut phase = 0;
 
-        match ty {
-            BeginType::Title => {
-                if !call!(self, "SYSTEM_TITLE", tx, ctx) {
-                    todo!("Default TITLE");
+        loop {
+            log::info!("Run {state:?}[{phase}]");
+            match state.run(self, tx, ctx, &mut phase)? {
+                Some(Workflow::Return) => {
+                    return Ok(VmResult::Exit);
+                }
+                Some(Workflow::Input { req }) => return Ok(VmResult::NeedInput(req)),
+                Some(Workflow::SwitchState(new_state)) => {
+                    phase = 0;
+                    state = new_state;
+                }
+                None => {
+                    continue;
                 }
             }
-            BeginType::First => {
-                call_event!(self, EventType::First, tx, ctx);
-            }
-            BeginType::Train => {
-                ctx.var.reset_train_data()?;
-                call_event!(self, EventType::Train, tx, ctx);
-
-                while ctx.begin.is_none() {
-                    let com_no = match ctx.var.read_int("NEXTCOM", &[])? {
-                        no if no >= 0 => no,
-                        _ => {
-                            call!(self, "SHOW_STATUS", tx, ctx);
-
-                            let mut printc_count = 0;
-
-                            for (no, name) in ctx.header_info.clone().var_name_var["TRAIN"].iter() {
-                                if call!(self, &format!("COM_ABLE{no}"), tx, ctx)
-                                    && ctx.var.get_result() != 0
-                                    || ctx.header_info.replace.comable_init != 0
-                                {
-                                    if ctx.config.printc_count != 0
-                                        && printc_count == ctx.config.printc_count
-                                    {
-                                        printc_count = 0;
-                                        tx.new_line();
-                                    }
-                                    tx.printrc(&format!("{name}[{no:3}]"));
-                                    printc_count += 1;
-                                }
-                            }
-
-                            tx.new_line();
-
-                            call!(self, "SHOW_USERCOM", tx, ctx);
-
-                            ctx.var.prepare_train_data()?;
-
-                            match tx.input_int() {
-                                None => return Ok(Workflow::Exit),
-                                Some(no) => {
-                                    ctx.var.set_result(no);
-
-                                    let com_exists = match no.try_into() {
-                                        Ok(no) => ctx
-                                            .header_info
-                                            .var_name_var
-                                            .get("TRAIN")
-                                            .map(|v| v.contains_key(&no))
-                                            .unwrap_or(false),
-                                        _ => false,
-                                    };
-
-                                    if com_exists {
-                                        no
-                                    } else {
-                                        call!(self, "USERCOM", tx, ctx);
-
-                                        continue;
-                                    }
-                                }
-                            }
-                        }
-                    };
-
-                    ctx.var.reset_var("NOWEX")?;
-
-                    *ctx.var.ref_int("SELECTCOM", &[])? = com_no;
-
-                    call_event!(self, EventType::Com, tx, ctx);
-                    call!(self, &format!("COM{com_no}"), tx, ctx);
-
-                    if ctx.var.get_result() == 0 {
-                        continue;
-                    }
-
-                    call!(self, "SOURCE_CHECK", tx, ctx);
-
-                    ctx.var.reset_var("SOURCE")?;
-
-                    call_event!(self, EventType::ComEnd, tx, ctx);
-                }
-            }
-            BeginType::AfterTrain => {
-                call_event!(self, EventType::End, tx, ctx);
-            }
-            BeginType::AblUp => {
-                while ctx.begin.is_none() {
-                    call!(self, "SHOW_JUEL", tx, ctx);
-                    call!(self, "SHOW_ABLUP_SELECT", tx, ctx);
-
-                    loop {
-                        match tx.input_int() {
-                            None => return Ok(Workflow::Exit),
-                            Some(i) => {
-                                ctx.var.set_result(i);
-
-                                if matches!(i, 0..=99) {
-                                    if call!(self, &format!("ABLUP{i}"), tx, ctx) {
-                                        break;
-                                    }
-                                } else {
-                                    call!(self, "USERABLUP", tx, ctx);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            BeginType::TurnEnd => {
-                call_event!(self, EventType::TurnEnd, tx, ctx);
-            }
-            BeginType::Shop => {
-                call_event!(self, EventType::Shop, tx, ctx);
-
-                while ctx.begin.is_none() {
-                    call!(self, "SHOW_SHOP", tx, ctx);
-
-                    match tx.input_int() {
-                        None => break,
-                        Some(i) => {
-                            ctx.var.set_result(i);
-
-                            if i >= 0 && i < ctx.header_info.replace.sell_item_count {
-                                let sales = ctx.var.read_int("ITEMSALES", &[i as usize])?;
-
-                                if sales != 0 {
-                                    let price = ctx
-                                        .header_info
-                                        .item_price
-                                        .get(&(i as u32))
-                                        .copied()
-                                        .unwrap_or_default()
-                                        as i64;
-                                    let money = ctx.var.ref_int("MONEY", &[])?;
-
-                                    if *money >= price {
-                                        *money -= price;
-                                        *ctx.var.ref_int("ITEM", &[i as usize])? += 1;
-                                    }
-                                }
-                            } else {
-                                call!(self, "USERSHOP", tx, ctx);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(Workflow::Return)
-    }
-
-    fn report_stack(stack: &Callstack, tx: &mut ConsoleSender, position: Option<ScriptPosition>) {
-        fn read_source(path: &str, pos: &ScriptPosition) -> io::Result<Option<String>> {
-            use io::{BufRead, BufReader};
-            BufReader::new(std::fs::File::open(path)?)
-                .lines()
-                .nth(pos.line as usize)
-                .transpose()
-        }
-
-        let position = position.unwrap_or(stack.script_position);
-
-        match &stack.func_name {
-            Ok(name) => match read_source(stack.file_path.as_str(), &position) {
-                Ok(Some(s)) => {
-                    let source = s.replace("\n", "\\n");
-                    report_error!(
-                        tx,
-                        "    at function {name}{position} `{}` [{source}]",
-                        stack.file_path,
-                    );
-                }
-                _ => {
-                    report_error!(
-                        tx,
-                        "    at function {name}@{position} `{}`",
-                        stack.file_path,
-                    );
-                }
-            },
-            Err(ty) => match read_source(stack.file_path.as_str(), &position) {
-                Ok(Some(s)) => {
-                    let source = s.replace('\n', "\\n");
-                    report_error!(tx, "    at {ty}{position} `{}` [{source}]", stack.file_path,);
-                }
-                _ => {
-                    report_error!(tx, "    at {ty}@{position} `{}`", stack.file_path,);
-                }
-            },
         }
     }
 
-    pub fn start(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<()> {
-        while let Some(begin) = ctx.take_begin() {
-            match self.begin(begin, tx, ctx) {
-                Ok(_) => {}
-                Err(err) => {
-                    tx.new_line();
-                    report_error!(tx, "VM failed with: {err}");
-
-                    ctx.update_last_call_stack();
-
-                    for stack in ctx.call_stack().iter().rev() {
-                        Self::report_stack(stack, tx, None);
-                    }
-
-                    return Err(err);
-                }
-            }
-        }
-
-        Ok(())
+    pub fn start(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<VmResult> {
+        self.run_state(BeginType::Title.into(), tx, ctx)
     }
+}
+
+pub enum VmResult {
+    Exit,
+    NeedInput(InputRequest),
 }
 
 fn make_bar_str(replace: &ReplaceInfo, var: i64, max: i64, length: i64) -> String {
