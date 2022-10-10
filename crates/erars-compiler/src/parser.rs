@@ -802,14 +802,16 @@ impl ParserContext {
                 loop {
                     match self.next_token(lex)? {
                         Some(Token::Case(case)) => {
-                            if !cases.is_empty() {
-                                cases.last_mut().unwrap().1 = mem::take(&mut body);
+                            if let Some((_, case)) = cases.last_mut() {
+                                *case = mem::take(&mut body);
                             }
                             let case = try_nom!(lex, self::expr::case_line(self)(case)).1;
                             cases.push((case, Vec::new()));
                         }
                         Some(Token::CaseElse) => {
-                            cases.last_mut().unwrap().1 = mem::take(&mut body);
+                            if let Some((_, case)) = cases.last_mut() {
+                                *case = mem::take(&mut body);
+                            }
                             has_else = true;
                         }
                         Some(Token::EndSelect) => break,
@@ -1028,18 +1030,24 @@ impl ParserContext {
                     current_func_header.infos.push(FunctionInfo::Dim(var));
                 }
                 Some(Token::LocalSize(size)) => {
-                    let var = try_nom!(lex, self::expr::expr(self)(size))
-                        .1
-                        .into_const_int()
-                        .unwrap();
-                    current_func_header.infos.push(FunctionInfo::LocalSize(var as usize));
+                    let size = self::expr::const_eval_log_error(
+                        self,
+                        try_nom!(lex, self::expr::expr(self)(size)).1,
+                    )
+                    .try_into_int()
+                    .unwrap();
+                    current_func_header.infos.push(FunctionInfo::LocalSize(size as usize));
                 }
                 Some(Token::LocalSSize(size)) => {
-                    let var = try_nom!(lex, self::expr::expr(self)(size))
-                        .1
-                        .into_const_int()
-                        .unwrap();
-                    current_func_header.infos.push(FunctionInfo::LocalSSize(var as usize));
+                    let size = self::expr::const_eval_log_error(
+                        self,
+                        try_nom!(lex, self::expr::expr(self)(size)).1,
+                    )
+                    .try_into_int()
+                    .unwrap();
+                    current_func_header
+                        .infos
+                        .push(FunctionInfo::LocalSSize(size as usize));
                 }
                 Some(other) => match self.parse_stmt(other, lex) {
                     Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {

@@ -1,6 +1,6 @@
 use erars_ui::{ConsoleChannel, ConsoleLinePart, FontStyle, InputRequestType, VirtualConsole};
 use std::{
-    io::{self, BufRead},
+    io,
     sync::{
         atomic::{AtomicBool, Ordering::SeqCst},
         Arc,
@@ -58,8 +58,8 @@ impl StdioFrontend {
 
     pub fn run(&mut self, chan: Arc<ConsoleChannel>) -> anyhow::Result<()> {
         let mut input = String::with_capacity(64);
-        let mut stdin = io::stdin().lock();
-        let mut lock = io::stdout().lock();
+        let stdin = io::stdin();
+        let lock = io::stdout();
         let end = Arc::new(AtomicBool::new(false));
 
         let end_inner = end.clone();
@@ -78,7 +78,7 @@ impl StdioFrontend {
                 self.vconsole.push_msg(msg);
             }
 
-            self.draw(&mut lock)?;
+            self.draw(lock.lock())?;
 
             if let Some(req) = self.vconsole.current_req.as_ref() {
                 let size = stdin.read_line(&mut input)?;

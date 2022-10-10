@@ -741,7 +741,10 @@ pub fn dim_line<'c, 'a>(
             )),
             opt(preceded(
                 char_sp('='),
-                separated_list0(char_sp(','), map(expr(ctx), |expr| const_eval(ctx, expr))),
+                separated_list0(
+                    char_sp(','),
+                    map(expr(ctx), |expr| const_eval_log_error(ctx, expr)),
+                ),
             )),
         ))(i)?;
 
@@ -760,11 +763,37 @@ pub fn dim_line<'c, 'a>(
     }
 }
 
-fn const_eval(_ctx: &ParserContext, expr: Expr) -> Value {
+pub fn const_eval(ctx: &ParserContext, expr: Expr) -> Result<Value, Expr> {
     match expr {
-        Expr::Int(i) => Value::Int(i),
-        Expr::String(s) => Value::String(s.into_string()),
-        _ => panic!("Can't evaulating expression"),
+        Expr::Int(i) => Ok(Value::Int(i)),
+        Expr::String(s) => Ok(Value::String(s.into_string())),
+        Expr::UnaryopExpr(expr, op) => match op {
+            UnaryOperator::Minus => {
+                let i = const_eval(ctx, *expr)?
+                    .into_int_err()
+                    .map_err(Box::<str>::from)
+                    .map_err(Expr::String)?;
+                Ok(Value::Int(-i))
+            }
+            UnaryOperator::Not => {
+                let i = const_eval(ctx, *expr)?
+                    .into_int_err()
+                    .map_err(Box::<str>::from)
+                    .map_err(Expr::String)?;
+                Ok(Value::Int(!i))
+            }
+        },
+        _ => Err(expr),
+    }
+}
+
+pub fn const_eval_log_error(ctx: &ParserContext, expr: Expr) -> Value {
+    match const_eval(ctx, expr) {
+        Ok(v) => v,
+        Err(expr) => {
+            log::error!("Const evaluation failed for expr {expr:?}");
+            Value::default()
+        }
     }
 }
 
@@ -784,7 +813,7 @@ fn function_arg_list<'c, 'a>(
                 variable(ctx),
                 opt(preceded(
                     char_sp('='),
-                    map(expr(ctx), |expr| const_eval(ctx, expr)),
+                    map(expr(ctx), |expr| const_eval_log_error(ctx, expr)),
                 )),
             )),
         )(i)

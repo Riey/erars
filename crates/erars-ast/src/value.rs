@@ -23,6 +23,20 @@ impl Value {
     pub const ZERO: Value = Value::Int(0);
     pub const ONE: Value = Value::Int(1);
 
+    pub fn into_int_err(self) -> Result<i64, String> {
+        match self {
+            Value::Int(i) => Ok(i),
+            Value::String(other) => Err(other),
+        }
+    }
+
+    pub fn into_str_err(self) -> Result<String, i64> {
+        match self {
+            Value::String(s) => Ok(s),
+            Value::Int(other) => Err(other),
+        }
+    }
+
     pub fn try_into_int(self) -> Result<i64> {
         self.try_into()
     }
