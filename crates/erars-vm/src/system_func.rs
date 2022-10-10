@@ -1,8 +1,9 @@
 use anyhow::{bail, Result};
-use erars_ast::EventType;
-use erars_ui::{ConsoleSender, InputRequest, InputRequestType};
+use erars_ast::{BeginType, EventType};
+use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
+use hashbrown::HashMap;
 
-use crate::{SystemState, TerminalVm, VmContext, Workflow};
+use crate::{variable::SerializableVariableStorage, SystemState, TerminalVm, VmContext, Workflow};
 
 macro_rules! call {
     ($vm:expr, $name:expr, $tx:expr, $ctx:expr) => {
@@ -15,14 +16,24 @@ macro_rules! call {
 
 macro_rules! call_event {
     ($vm:expr, $ty:expr, $tx:expr, $ctx:expr) => {
-        match $vm.call_event($ty, $tx, $ctx)? {
+        match $vm.call_event($ty, $tx, $ctx, 0, 0)? {
             Workflow::Return => None,
             other => Some(other),
         }
     };
 }
 
-fn input_int(tx: &ConsoleSender) -> Option<Workflow> {
+#[inline]
+const fn exit() -> Option<Workflow> {
+    Some(Workflow::Exit)
+}
+
+#[inline]
+const fn begin(ty: BeginType) -> Option<Workflow> {
+    Some(Workflow::Begin(ty))
+}
+
+fn input_int(tx: &mut VirtualConsole) -> Option<Workflow> {
     Some(Workflow::Input {
         req: InputRequest::normal(tx.input_gen(), InputRequestType::Int),
     })
@@ -32,7 +43,7 @@ impl SystemState {
     pub fn run(
         &mut self,
         vm: &TerminalVm,
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         ctx: &mut VmContext,
         phase: &mut usize,
     ) -> Result<Option<Workflow>> {
@@ -44,12 +55,32 @@ impl SystemState {
                 None => bail!("TODO: default title"),
                 Some(ret) => return Ok(Some(ret)),
             },
+            BeginFirst => call_event!(vm, EventType::First, tx, ctx),
+            BeginAfterTrain => call_event!(vm, EventType::End, tx, ctx),
+            BeginTurnEnd => call_event!(vm, EventType::TurnEnd, tx, ctx),
+            BeginAblUp => match phase {
+                0 => call!(vm, "SHOW_JUEL", tx, ctx),
+                1 => call!(vm, "SHOW_ABLUP_SELECT", tx, ctx),
+                2 => input_int(tx),
+                3 => match ctx.pop_int()? {
+                    i @ 0..=99 => {
+                        call!(vm, &format!("ABLUP{i}"), tx, ctx)
+                    }
+                    _ => {
+                        call!(vm, "USERABLUP", tx, ctx)
+                    }
+                },
+                4 => {
+                    *phase = 2;
+                    input_int(tx)
+                }
+            },
             BeginShop => match *phase {
                 0 => call_event!(vm, EventType::Shop, tx, ctx),
                 1 => call!(vm, "SHOW_SHOP", tx, ctx),
                 2 => input_int(tx),
                 3 => {
-                    let i = ctx.current_input.take().unwrap().try_into_int()?;
+                    let i = ctx.pop_int()?;
 
                     ctx.var.set_result(i);
 
@@ -78,7 +109,7 @@ impl SystemState {
                         return Ok(call!(vm, "USERSHOP", tx, ctx));
                     }
                 }
-                _ => return Ok(Some(Workflow::Return)),
+                _ => exit(),
             },
             BeginTrain {
                 com_no,
@@ -126,7 +157,9 @@ impl SystemState {
                     let no = *com_able_no;
                     let name = &ctx.header_info.var_name_var["TRAIN"][&no];
                     if ctx.var.get_result() != 0 || ctx.header_info.replace.comable_init != 0 {
-                        if ctx.config.printc_count != 0 && *printc_count == ctx.config.printc_count as u32 {
+                        if ctx.config.printc_count != 0
+                            && *printc_count == ctx.config.printc_count as u32
+                        {
                             *printc_count = 0;
                             tx.new_line();
                         }
@@ -142,7 +175,7 @@ impl SystemState {
                     input_int(tx)
                 }
                 5 => {
-                    let no = ctx.current_input.take().unwrap().try_into_int()?;
+                    let no = ctx.pop_int()?;
 
                     ctx.var.set_result(no);
                     let com_exists = match no.try_into() {
@@ -189,7 +222,7 @@ impl SystemState {
                     *phase = 2;
                     return Ok(None);
                 }
-                _ => return Ok(Some(Workflow::Return)),
+                _ => exit(),
             },
             CallTrain(commands, current_com) => {
                 let current_com = match current_com {
@@ -199,7 +232,7 @@ impl SystemState {
                             *current_com = Some(com);
                             com
                         }
-                        None => return Ok(Some(Workflow::Return)),
+                        None => return Ok(exit()),
                     },
                 };
 
@@ -232,14 +265,81 @@ impl SystemState {
                         *phase = 0;
                         return Ok(None);
                     }
-                    _ => Some(Workflow::Return),
+                    _ => exit(),
                 }
             }
-            _ => bail!("TODO: {self:?}"),
+            LoadGame(savs) => {
+                match savs {
+                    None => {
+                        let new_savs = load_savs(vm, ctx);
+                        print_sav_data_list(&new_savs, tx);
+                        *savs = Some(new_savs);
+                    }
+                    Some(savs) => match ctx.pop_int()? {
+                        100 => return Ok(exit()),
+                        i if i >= 0 && i < SAVE_COUNT as i64 => {
+                            if let Some(sav) = savs.remove(&(i as usize)) {
+                                return Ok(Some(Workflow::SwitchState(SystemState::LoadData(
+                                    i,
+                                    Some(sav),
+                                ))));
+                            }
+                        }
+                        _ => {}
+                    },
+                }
+                input_int(tx)
+            }
+            LoadData(idx, sav) => match phase {
+                0 => {
+                    let sav = sav.take().unwrap();
+                    ctx.lastload_text = sav.description.clone();
+                    ctx.lastload_no = *idx as _;
+                    ctx.lastload_version = sav.version;
+                    ctx.var.load_serializable(sav, &ctx.header_info)?;
+                    call!(vm, "SYSTEM_LOADEND", tx, ctx)
+                }
+                1 => call_event!(vm, EventType::Load, tx, ctx),
+                2 => begin(BeginType::Shop),
+                _ => exit(),
+            },
         };
 
-        *phase += 1;
+        *phase = phase.saturating_add(1);
 
         Ok(ret)
     }
+}
+
+const SAVE_COUNT: usize = 20;
+
+fn load_savs(vm: &TerminalVm, ctx: &mut VmContext) -> HashMap<usize, SerializableVariableStorage> {
+    let mut savs = HashMap::new();
+
+    for i in 0..SAVE_COUNT {
+        if let Ok(sav) = crate::save_data::read_save_data(&vm.sav_path, &ctx.header_info, i as i64)
+        {
+            savs.insert(i, sav);
+        }
+    }
+
+    savs
+}
+
+fn print_sav_data_list(
+    savs: &HashMap<usize, SerializableVariableStorage>,
+    tx: &mut VirtualConsole,
+) {
+    for i in 0..SAVE_COUNT {
+        match savs.get(&i) {
+            Some(sav) => {
+                tx.print_line(format!("[{i:02}] - {}", sav.description));
+            }
+            None => {
+                tx.print_line(format!("[{i:02}] - NO DATA"));
+            }
+        }
+    }
+
+    tx.print_line("[100] Return".into());
 }

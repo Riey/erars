@@ -10,7 +10,7 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 
-use erars_ui::ConsoleSender;
+use erars_ui::VirtualConsole;
 
 macro_rules! set_var {
     ($self:expr, $name:expr, $value:expr) => {
@@ -30,7 +30,7 @@ macro_rules! set_var {
     };
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SerializableVariableStorage {
     pub description: String,
     pub code: u32,
@@ -234,7 +234,7 @@ impl VariableStorage {
     }
 
     fn upcheck_internal(
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         palam_name: &BTreeMap<u32, SmolStr>,
         palam: &mut [i64],
         up: &mut [i64],
@@ -273,7 +273,7 @@ impl VariableStorage {
 
     pub fn upcheck(
         &mut self,
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         idx: usize,
         palam_name: &BTreeMap<u32, SmolStr>,
     ) -> Result<()> {
@@ -288,7 +288,7 @@ impl VariableStorage {
 
     pub fn cupcheck(
         &mut self,
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         idx: usize,
         palam_name: &BTreeMap<u32, SmolStr>,
     ) -> Result<()> {

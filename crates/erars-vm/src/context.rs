@@ -4,7 +4,7 @@ use smol_str::SmolStr;
 use std::fmt;
 use std::sync::Arc;
 
-use erars_ast::{EventType, ScriptPosition, Value, VariableInfo};
+use erars_ast::{EventType, ScriptPosition, Value, VariableInfo, BeginType};
 use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::{SystemState, VariableStorage, VmVariable};
@@ -17,8 +17,7 @@ pub struct VmContext {
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
 
-    pub current_input: Option<Value>,
-
+    pub state: Vec<(SystemState, usize)>,
     /// For NOSKIP/ENDNOSKIP
     pub(crate) prev_skipdisp: Option<bool>,
     /// Set `true` during SAVEGAME
@@ -38,10 +37,10 @@ impl VmContext {
         let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
             header_info,
+            state: vec![(BeginType::Title.into(), 0)],
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
             prev_skipdisp: None,
-            current_input: None,
             put_form_enabled: false,
             lastload_no: 0,
             lastload_text: "".into(),
@@ -158,11 +157,17 @@ impl VmContext {
             instruction_pos,
             script_position: std::mem::take(&mut self.current_pos),
             stack_base: self.stack.len(),
+            state_base: self.state.len(),
         });
     }
 
     pub fn pop_call_stack(&mut self) -> Option<Callstack> {
-        self.call_stack.pop()
+        let last = self.call_stack.last()?;
+        if last.state_base != self.state.len() {
+            None
+        } else {
+            self.call_stack.pop()
+        }
     }
 
     pub fn clear_call_stack(&mut self) {
@@ -299,6 +304,7 @@ pub struct Callstack {
     pub file_path: SmolStr,
     pub script_position: ScriptPosition,
     pub stack_base: usize,
+    pub state_base: usize,
     pub instruction_pos: usize,
 }
 

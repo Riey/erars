@@ -4,7 +4,7 @@ mod save_data;
 mod system_func;
 mod variable;
 
-use std::{collections::BTreeSet, io, path::PathBuf};
+use std::{collections::BTreeSet, path::PathBuf};
 
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
@@ -12,17 +12,16 @@ use context::FunctionIdentifier;
 use itertools::Itertools;
 use pad::PadStr;
 use rand::Rng;
-use smol_str::SmolStr;
 use strum::Display;
 
 use hashbrown::HashMap;
 
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
-    PrintFlags, ScriptPosition, UnaryOperator, Value,
+    PrintFlags, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
-use erars_ui::{ConsoleSender, FontStyle, InputRequest, InputRequestType, Timeout};
+use erars_ui::{FontStyle, InputRequest, InputRequestType, Timeout, VirtualConsole};
 
 pub use self::{
     context::{Callstack, LocalValue, VmContext},
@@ -30,8 +29,6 @@ pub use self::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 use crate::{function::FunctionBody, variable::SerializableVariableStorage};
-
-const SAVE_COUNT: usize = 20;
 
 macro_rules! report_error {
     ($tx:expr, $($t:tt)+) => {
@@ -82,19 +79,32 @@ macro_rules! get_arg {
 pub enum Workflow {
     Return,
     SwitchState(SystemState),
+    GotoState(SystemState),
+    Begin(BeginType),
     Input { req: InputRequest },
+    Redraw,
+    Exit,
 }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq)]
+#[derive(Display, Debug, Clone, derivative::Derivative)]
+#[derivative(PartialEq, Eq)]
 pub enum SystemState {
-    Exited,
-    LoadGame,
+    LoadGame(
+        #[derivative(PartialEq = "ignore")] Option<HashMap<usize, SerializableVariableStorage>>,
+    ),
     SaveGame,
     SaveData,
-    LoadData(u32),
+    LoadData(
+        i64,
+        #[derivative(PartialEq = "ignore")] Option<SerializableVariableStorage>,
+    ),
     BeginTitle,
     BeginShop,
-    BeginTrain { com_no: u32, com_able_no: u32, printc_count: u32 },
+    BeginTrain {
+        com_no: u32,
+        com_able_no: u32,
+        printc_count: u32,
+    },
     BeginFirst,
     BeginTurnEnd,
     BeginAfterTrain,
@@ -123,13 +133,14 @@ impl From<BeginType> for SystemState {
 
 impl Default for SystemState {
     fn default() -> Self {
-        Self::Exited
+        Self::BeginTitle
     }
 }
 
 #[derive(Debug)]
 enum InstructionWorkflow {
     Normal,
+    Exit,
     Goto(u32),
     GotoLabel {
         label: String,
@@ -147,6 +158,7 @@ enum InstructionWorkflow {
     Input {
         req: InputRequest,
     },
+    Redraw,
 }
 
 impl Default for Workflow {
@@ -171,9 +183,8 @@ impl TerminalVm {
     fn run_instruction(
         &self,
         func_name: &str,
-        goto_labels: &HashMap<SmolStr, u32>,
         inst: &Instruction,
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         ctx: &mut VmContext,
     ) -> Result<InstructionWorkflow> {
         log::trace!(
@@ -205,7 +216,7 @@ impl TerminalVm {
                 let insts = erars_compiler::compile_expr(expr).unwrap();
 
                 for inst in insts.iter() {
-                    match self.run_instruction(func_name, goto_labels, inst, tx, ctx)? {
+                    match self.run_instruction(func_name, inst, tx, ctx)? {
                         InstructionWorkflow::Normal => {}
                         other => bail!("EvalFromString can't do flow control"),
                     }
@@ -257,10 +268,9 @@ impl TerminalVm {
                     tx.new_line();
                 }
                 if flags.contains(PrintFlags::WAIT) {
-                    let gen = tx.input_gen();
                     return Ok(InstructionWorkflow::Input {
                         req: InputRequest {
-                            generation: gen,
+                            generation: tx.input_gen(),
                             ty: InputRequestType::AnyKey,
                             is_one: false,
                             timeout: None,
@@ -1370,8 +1380,7 @@ impl TerminalVm {
                     }
                     BuiltinCommand::Quit => {
                         log::info!("Run QUIT");
-                        tx.exit();
-                        ret_set_state!(ctx, SystemState::Exited);
+                        return Ok(InstructionWorkflow::Exit);
                     }
                     BuiltinCommand::SwapChara => {
                         let a = get_arg!(@usize: args, ctx);
@@ -1430,7 +1439,7 @@ impl TerminalVm {
                         }
                     }
                     BuiltinCommand::Redraw => {
-                        tx.request_redraw();
+                        return Ok(InstructionWorkflow::Redraw);
                     }
                     BuiltinCommand::ClearLine => {
                         tx.clear_line(get_arg!(@usize: args, ctx));
@@ -1474,9 +1483,13 @@ impl TerminalVm {
                         );
                     }
                     BuiltinCommand::LoadData => {
-                        let idx = get_arg!(@u32: args, ctx);
+                        let idx = get_arg!(@i64: args, ctx);
 
-                        ret_set_state!(ctx, SystemState::LoadData(idx));
+                        if let Ok(sav) =
+                            self::save_data::read_save_data(&self.sav_path, &ctx.header_info, idx)
+                        {
+                            ret_set_state!(ctx, SystemState::LoadData(idx, Some(sav)));
+                        }
                     }
                     BuiltinCommand::DelData => {
                         let idx = get_arg!(@i64: args, ctx);
@@ -1519,7 +1532,7 @@ impl TerminalVm {
                         ret_set_state!(ctx, SystemState::SaveGame);
                     }
                     BuiltinCommand::LoadGame => {
-                        ret_set_state!(ctx, SystemState::LoadGame);
+                        ret_set_state!(ctx, SystemState::LoadGame(None));
                     }
                     BuiltinCommand::PutForm => {
                         let arg = get_arg!(@String: args, ctx);
@@ -1546,46 +1559,14 @@ impl TerminalVm {
         Ok(InstructionWorkflow::Normal)
     }
 
-    fn load_savs(&self, ctx: &mut VmContext) -> HashMap<usize, SerializableVariableStorage> {
-        let mut savs = HashMap::new();
-
-        for i in 0..SAVE_COUNT {
-            if let Ok(sav) = save_data::read_save_data(&self.sav_path, &ctx.header_info, i as i64) {
-                savs.insert(i, sav);
-            }
-        }
-
-        savs
-    }
-
-    fn print_sav_data_list(
-        savs: &HashMap<usize, SerializableVariableStorage>,
-        tx: &mut ConsoleSender,
-    ) {
-        for i in 0..SAVE_COUNT {
-            match savs.get(&i) {
-                Some(sav) => {
-                    tx.print_line(format!("[{i:02}] - {}", sav.description));
-                }
-                None => {
-                    tx.print_line(format!("[{i:02}] - NO DATA"));
-                }
-            }
-        }
-
-        tx.print_line("[100] Return".into());
-    }
-
     fn run_body(
         &self,
         func_identifier: FunctionIdentifier,
-        goto_labels: &HashMap<SmolStr, u32>,
         body: &FunctionBody,
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         ctx: &mut VmContext,
+        mut cursor: usize,
     ) -> Result<Workflow> {
-        let mut cursor = 0;
-
         let insts = body.body();
         let func_name = func_identifier.name();
 
@@ -1593,12 +1574,13 @@ impl TerminalVm {
             cursor += 1;
             use InstructionWorkflow::*;
 
-            match self.run_instruction(func_name, goto_labels, inst, tx, ctx) {
+            match self.run_instruction(func_name, inst, tx, ctx) {
                 Ok(Normal) => {}
+                Ok(Exit) => return Ok(Workflow::Exit),
                 Ok(Goto(pos)) => {
                     cursor = pos as usize;
                 }
-                Ok(GotoLabel { label, is_try }) => match goto_labels.get(label.as_str()) {
+                Ok(GotoLabel { label, is_try }) => match body.goto_labels().get(label.as_str()) {
                     Some(pos) => {
                         cursor = *pos as usize;
                     }
@@ -1617,7 +1599,7 @@ impl TerminalVm {
                         body.file_path().clone(),
                         cursor,
                     );
-                    match self.call_event(ty, tx, ctx)? {
+                    match self.call_event(ty, tx, ctx, 0, 0)? {
                         Workflow::Return => {
                             ctx.pop_call_stack();
                             continue;
@@ -1664,6 +1646,14 @@ impl TerminalVm {
                         }
                     }
                 }
+                Ok(Redraw) => {
+                    ctx.push_current_call_stack(
+                        func_identifier.clone(),
+                        body.file_path().clone(),
+                        cursor,
+                    );
+                    return Ok(Workflow::Redraw);
+                }
                 Ok(SwitchState(state)) => {
                     ctx.push_current_call_stack(
                         func_identifier.clone(),
@@ -1673,6 +1663,11 @@ impl TerminalVm {
                     return Ok(Workflow::SwitchState(state));
                 }
                 Ok(Input { req }) => {
+                    ctx.push_current_call_stack(
+                        func_identifier.clone(),
+                        body.file_path().clone(),
+                        cursor,
+                    );
                     return Ok(Workflow::Input { req });
                 }
                 Err(err) => {
@@ -1698,7 +1693,7 @@ impl TerminalVm {
         &self,
         label: &str,
         args: &[Value],
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         ctx: &mut VmContext,
         body: &FunctionBody,
     ) -> Result<Workflow> {
@@ -1728,13 +1723,7 @@ impl TerminalVm {
             }
         }
 
-        let ret = self.run_body(
-            FunctionIdentifier::Normal(label.into()),
-            body.goto_labels(),
-            body,
-            tx,
-            ctx,
-        )?;
+        let ret = self.run_body(FunctionIdentifier::Normal(label.into()), body, tx, ctx, 0)?;
 
         Ok(ret)
     }
@@ -1744,7 +1733,7 @@ impl TerminalVm {
         &self,
         label: &str,
         args: &[Value],
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         self.call_internal(label, args, tx, ctx, self.dic.get_func(label)?)
@@ -1755,7 +1744,7 @@ impl TerminalVm {
         &self,
         label: &str,
         args: &[Value],
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
         match self.dic.get_func_opt(label) {
@@ -1767,57 +1756,133 @@ impl TerminalVm {
     fn call_event(
         &self,
         ty: EventType,
-        tx: &mut ConsoleSender,
+        tx: &mut VirtualConsole,
         ctx: &mut VmContext,
+        event_idx: usize,
+        event_cursor: usize,
     ) -> Result<Workflow> {
-        self.dic.get_event(ty).run(0, |body, idx| {
+        self.dic.get_event(ty).run(event_idx, |body, idx| {
             let label: &str = ty.into();
             let ret = self.run_body(
                 FunctionIdentifier::Event(ty, idx),
-                body.goto_labels(),
                 body,
                 tx,
                 ctx,
+                event_cursor,
             )?;
 
             Ok(ret)
         })
     }
 
-    pub fn run_state(
-        &self,
-        mut state: SystemState,
-        tx: &mut ConsoleSender,
-        ctx: &mut VmContext,
-    ) -> Result<VmResult> {
-        let mut phase = 0;
+    fn try_run_call_stack(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Workflow> {
+        while let Some(stack) = ctx.pop_call_stack() {
+            match stack.func_name {
+                FunctionIdentifier::Normal(name) => {
+                    let body = self.dic.get_func(&name).unwrap();
+                    match self.run_body(
+                        FunctionIdentifier::Normal(name),
+                        body,
+                        tx,
+                        ctx,
+                        stack.instruction_pos,
+                    )? {
+                        Workflow::Return => continue,
+                        other => return Ok(other),
+                    }
+                }
+                FunctionIdentifier::Event(ty, idx) => {
+                    match self.call_event(ty, tx, ctx, idx, stack.instruction_pos)? {
+                        Workflow::Return => continue,
+                        other => return Ok(other),
+                    }
+                }
+            }
+        }
+        Ok(Workflow::Return)
+    }
 
-        loop {
-            log::info!("Run {state:?}[{phase}]");
-            match state.run(self, tx, ctx, &mut phase)? {
+    pub fn run_state(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<VmResult> {
+        match self.try_run_call_stack(tx, ctx)? {
+            Workflow::Return => {}
+            Workflow::Begin(ty) => {
+                ctx.state.clear();
+                ctx.clear_call_stack();
+                ctx.state.push((ty.into(), 0));
+            }
+            Workflow::Exit => {
+                ctx.state.clear();
+                ctx.clear_call_stack();
+                return Ok(VmResult::Exit);
+            }
+            Workflow::Redraw => return Ok(VmResult::Redraw),
+            Workflow::Input { req } => return Ok(VmResult::NeedInput { req }),
+            Workflow::SwitchState(new_state) => {
+                ctx.state.push((new_state, 0));
+            }
+            Workflow::GotoState(new_state) => {
+                ctx.state.push((new_state, 0));
+            }
+        }
+
+        let mut phase = 0;
+        let (mut current_state, mut phase) = match ctx.state.pop() {
+            Some(s) => s,
+            None => return Ok(VmResult::Exit),
+        };
+
+        let ret = loop {
+            log::info!("Run {current_state:?}[{phase}]");
+            match current_state.run(self, tx, ctx, &mut phase)? {
                 Some(Workflow::Return) => {
+                    match ctx.state.pop() {
+                        Some(s) => {
+                            current_state = s.0;
+                            phase = s.1;
+                        },
+                        None => return Ok(VmResult::Exit),
+                    };
+                }
+                Some(Workflow::Exit) => {
+                    ctx.state.clear();
+                    ctx.clear_call_stack();
                     return Ok(VmResult::Exit);
                 }
-                Some(Workflow::Input { req }) => return Ok(VmResult::NeedInput(req)),
-                Some(Workflow::SwitchState(new_state)) => {
+                Some(Workflow::Redraw) => {
+                    break Ok(VmResult::Redraw);
+                }
+                Some(Workflow::Input { req }) => break Ok(VmResult::NeedInput { req }),
+                Some(Workflow::Begin(ty)) => {
+                    ctx.state.clear();
+                    ctx.clear_call_stack();
+                    current_state = ty.into();
                     phase = 0;
-                    state = new_state;
+                }
+                Some(Workflow::GotoState(new_state)) => {
+                    current_state = new_state;
+                    phase = 0;
+                }
+                Some(Workflow::SwitchState(new_state)) => {
+                    ctx.state.push((current_state, phase));
+                    current_state = new_state;
+                    phase = 0;
                 }
                 None => {
                     continue;
                 }
             }
-        }
-    }
+        };
 
-    pub fn start(&self, tx: &mut ConsoleSender, ctx: &mut VmContext) -> Result<VmResult> {
-        self.run_state(BeginType::Title.into(), tx, ctx)
+        ctx.state.push((current_state, phase));
+
+        ret
     }
 }
 
 pub enum VmResult {
     Exit,
-    NeedInput(InputRequest),
+    Redraw,
+    NeedInput { req: InputRequest },
 }
 
 fn make_bar_str(replace: &ReplaceInfo, var: i64, max: i64, length: i64) -> String {

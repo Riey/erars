@@ -677,9 +677,9 @@ dependencies = [
 name = "erars-loader"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "codespan",
  "codespan-reporting",
- "encoding_rs",
  "erars-ast",
  "erars-compiler",
  "erars-ui",
@@ -690,7 +690,6 @@ dependencies = [
  "parking_lot",
  "rayon",
  "serde_yaml",
- "unicode-bom",
 ]
 
 [[package]]
@@ -738,6 +737,7 @@ dependencies = [
  "arrayvec",
  "bitflags",
  "css-color",
+ "derivative",
  "encoding_rs",
  "enum-map",
  "erars-ast",
@@ -1953,12 +1953,6 @@ name = "unicode-bidi"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "099b7128301d285f79ddd55b9a83d5e6b9e97c92e0ea0daebee7263e932de992"
-
-[[package]]
-name = "unicode-bom"
-version = "1.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63ec69f541d875b783ca40184d655f2927c95f0bffd486faa83cd3ac3529ec32"
 
 [[package]]
 name = "unicode-ident"

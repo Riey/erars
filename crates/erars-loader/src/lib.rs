@@ -12,12 +12,15 @@ use codespan_reporting::{
 };
 use erars_ast::{Value, VariableInfo};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
-use erars_ui::{ConsoleChannel, ConsoleSender};
+use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
 #[allow(unused_assignments)]
-pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>) {
+pub fn run_script(
+    target_path: String,
+    inputs: Vec<Value>,
+) -> anyhow::Result<(TerminalVm, VmContext)> {
     let mut time = Instant::now();
 
     let config_path = format!("{target_path}/emuera.config");
@@ -37,7 +40,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
     log::trace!("Config: {config:?}");
 
     let config = Arc::new(config);
-    let mut tx = ConsoleSender::new(chan, config.printc_width);
+    let mut tx = VirtualConsole::new(config.printc_width);
 
     macro_rules! check_time {
         ($work:expr) => {
@@ -56,7 +59,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
         check_time!("Initialize");
 
         let var_infos: HashMap<_, VariableInfo> =
-            serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
+            serde_yaml::from_str(include_str!("./variable.yaml"))?;
 
         let csvs = glob::glob_with(
             &format!("{}/CSV/**/*.CSV", target_path),
@@ -65,8 +68,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
                 require_literal_leading_dot: true,
                 require_literal_separator: true,
             },
-        )
-        .unwrap();
+        )?;
 
         let erhs = glob::glob_with(
             &format!("{}/ERB/**/*.ERH", target_path),
@@ -75,8 +77,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
                 require_literal_leading_dot: true,
                 require_literal_separator: true,
             },
-        )
-        .unwrap();
+        )?;
 
         let erbs = glob::glob_with(
             &format!("{}/ERB/**/*.ERB", target_path),
@@ -85,8 +86,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
                 require_literal_leading_dot: true,
                 require_literal_separator: true,
             },
-        )
-        .unwrap();
+        )?;
 
         let mut files = Mutex::new(SimpleFiles::new());
         let mut diagnostic =
@@ -287,16 +287,11 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
             let config = Config::default();
             codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                 .unwrap();
-            tx.exit();
             log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
-            return;
         }
     }
 
     let vm = TerminalVm::new(function_dic, target_path.into());
-    let _ = vm.start(&mut tx, &mut ctx);
 
-    tx.exit();
-
-    log::info!("Program Terminated");
+    Ok((vm, ctx))
 }
