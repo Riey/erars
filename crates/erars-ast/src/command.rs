@@ -107,6 +107,7 @@ pub enum BuiltinCommand {
     Restart,
     Quit,
     Throw,
+    DoTrain,
     CallTrain,
 
     Redraw,

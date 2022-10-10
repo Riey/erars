@@ -1402,6 +1402,9 @@ impl TerminalVm {
                     BuiltinCommand::ClearLine => {
                         tx.clear_line(get_arg!(@usize: args, ctx));
                     }
+                    BuiltinCommand::DoTrain => {
+                        todo!("DOTRAIN")
+                    }
                     BuiltinCommand::CallTrain => {
                         let count = get_arg!(@usize: args, ctx);
                         let commands = ctx.var.get_var("SELECTCOM")?.1.assume_normal().as_int()?
