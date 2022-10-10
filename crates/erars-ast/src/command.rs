@@ -11,6 +11,8 @@ pub enum BuiltinMethod {
     ToStr,
     ToInt,
 
+    IsSkip,
+
     Limit,
     Min,
     Max,
@@ -93,6 +95,8 @@ pub enum BuiltinCommand {
     TOneInputS,
     Wait,
     WaitAnykey,
+    SkipDisp,
+
     Split,
 
     Return,

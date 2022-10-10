@@ -643,6 +643,9 @@ impl TerminalVm {
                         let ret = slice.iter().sum::<i64>();
                         ctx.push(ret);
                     }
+                    BuiltinMethod::IsSkip => {
+                        ctx.push(tx.skipdisp());
+                    }
                     BuiltinMethod::ToStr => {
                         check_arg_count!(1, 2);
                         let value = get_arg!(@i64: args, ctx);
@@ -1216,6 +1219,11 @@ impl TerminalVm {
                             ConsoleResult::Value(_) => {}
                             ConsoleResult::Quit => return Ok(Some(Workflow::Exit)),
                         }
+                    }
+                    BuiltinCommand::SkipDisp => {
+                        let arg = ctx.pop_int()?;
+                        tx.set_skipdisp(arg != 0);
+                        ctx.var.set_result(0);
                     }
                     BuiltinCommand::Input
                     | BuiltinCommand::InputS

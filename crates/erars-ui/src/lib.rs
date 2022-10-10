@@ -349,6 +349,7 @@ pub struct ConsoleSender {
     chan: Arc<ConsoleChannel>,
     printc_width: usize,
     line_count: usize,
+    skipdisp: bool,
     line_is_empty: bool,
     color: u32,
     hl_color: u32,
@@ -364,6 +365,7 @@ impl ConsoleSender {
         Self {
             chan,
 
+            skipdisp: false,
             line_is_empty: true,
             line_count: 1,
             printc_width,
@@ -377,6 +379,14 @@ impl ConsoleSender {
         }
     }
 
+    pub fn set_skipdisp(&mut self, skipdisp: bool) {
+        self.skipdisp = skipdisp;
+    }
+
+    pub fn skipdisp(&self) -> bool {
+        self.skipdisp
+    }
+
     pub fn push_input(&mut self, value: Value) {
         self.inputs.push_back(value);
     }
@@ -387,28 +397,12 @@ impl ConsoleSender {
     ///
     /// Return `None` if console send `Quit`
     pub fn input_int(&mut self) -> Option<i64> {
-        self.request_redraw();
-
         loop {
-            if let Some(i) = self.inputs.pop_front() {
-                match i {
-                    Value::String(_) => continue,
-                    Value::Int(i) => break Some(i),
-                }
-            } else {
-                self.chan.send_msg(ConsoleMessage::Input(InputRequest {
-                    generation: self.chan.input_gen(),
-                    ty: InputRequestType::Int,
-                    is_one: false,
-                    timeout: None,
-                }));
-                let ret = self.chan.recv_ret();
-
-                match ret {
+            let gen = self.input_gen();
+            match self.input(InputRequest { generation: gen, ty: InputRequestType::Int, is_one: false, timeout: None }) {
                     ConsoleResult::Quit => break None,
                     ConsoleResult::Value(Value::Int(i)) => break Some(i),
                     ConsoleResult::Value(Value::String(_)) => continue,
-                }
             }
         }
     }
@@ -418,6 +412,14 @@ impl ConsoleSender {
     }
 
     pub fn input(&mut self, req: InputRequest) -> ConsoleResult {
+        if self.skipdisp() {
+            log::error!("Can't INPUT while SKIPDISP is on.");
+            self.print_line("Can't INPUT while SKIPDISP is on.".into());
+            self.request_redraw();
+            self.exit();
+            return ConsoleResult::Quit;
+        }
+
         self.request_redraw();
 
         if matches!(
@@ -445,16 +447,25 @@ impl ConsoleSender {
     }
 
     pub fn reuse_last_line(&mut self, s: String) {
+        if self.skipdisp {
+            return;
+        }
         self.line_is_empty = false;
         self.chan.send_msg(ConsoleMessage::ReuseLastLine(s));
     }
 
     pub fn print(&mut self, s: String) {
+        if self.skipdisp {
+            return;
+        }
         self.line_is_empty = false;
         self.chan.send_msg(ConsoleMessage::Print(s));
     }
 
     pub fn print_line(&mut self, s: String) {
+        if self.skipdisp {
+            return;
+        }
         self.print(s);
         self.new_line();
     }
@@ -468,12 +479,18 @@ impl ConsoleSender {
     }
 
     pub fn new_line(&mut self) {
+        if self.skipdisp {
+            return;
+        }
         self.line_count += 1;
         self.line_is_empty = true;
         self.chan.send_msg(ConsoleMessage::NewLine);
     }
 
     pub fn draw_line(&mut self, s: String) {
+        if self.skipdisp {
+            return;
+        }
         self.line_count += 1;
         self.line_is_empty = true;
         self.chan.send_msg(ConsoleMessage::DrawLine(s));

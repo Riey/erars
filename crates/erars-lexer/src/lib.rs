@@ -367,6 +367,7 @@ pub enum Token<'s> {
     #[token("VARSET", |lex| normal_expr_command(lex, BuiltinCommand::Varset))]
     #[token("CVARSET", |lex| normal_expr_command(lex, BuiltinCommand::CVarset))]
     #[token("RESET_STAIN", |lex| normal_expr_command(lex, BuiltinCommand::ResetStain))]
+    #[token("SKIPDISP", |lex| normal_expr_command(lex, BuiltinCommand::SkipDisp))]
     #[token("INPUT", |lex| normal_expr_command(lex, BuiltinCommand::Input))]
     #[token("INPUTS", |lex| normal_expr_command(lex, BuiltinCommand::InputS))]
     #[token("TINPUT", |lex| normal_expr_command(lex, BuiltinCommand::TInput))]
@@ -406,6 +407,7 @@ pub enum Token<'s> {
     #[token("CUPCHECK", |lex| normal_expr_command(lex, BuiltinCommand::CUpCheck))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
+    #[token("ISSKIP", |lex| normal_expr_method(lex, BuiltinMethod::IsSkip))]
     #[token("LIMIT", |lex| normal_expr_method(lex, BuiltinMethod::Limit))]
     #[token("ESCAPE", |lex| normal_expr_method(lex, BuiltinMethod::Escape))]
     #[token("REPLACE", |lex| normal_expr_method(lex, BuiltinMethod::Replace))]
