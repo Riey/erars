@@ -1,7 +1,7 @@
 use crate::{CompileError, CompileResult, Instruction};
 use erars_ast::{
-    BinaryOperator, Expr, FormExpr, FormText, Function, FunctionHeader, SelectCaseCond, Stmt,
-    StmtWithPos, Variable,
+    BinaryOperator, BuiltinVariable, Expr, FormExpr, FormText, Function, FunctionHeader,
+    SelectCaseCond, Stmt, StmtWithPos, Variable,
 };
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
@@ -312,14 +312,10 @@ impl Compiler {
                 self.push(Instruction::Print(flags));
             }
             Stmt::PrintData(flags, cond, list) => {
-                match cond {
-                    Some(cond) => self.push_expr(cond)?,
-                    None => self.push_var(Variable {
-                        var: "RAND".into(),
-                        func_extern: None,
-                        args: vec![Expr::Int(list.len() as _)],
-                    })?,
-                }
+                let cond = cond.unwrap_or_else(|| {
+                    Expr::BuiltinVar(BuiltinVariable::Rand, vec![Expr::Int(list.len() as _)])
+                });
+                self.push_expr(cond)?;
 
                 let branch = self.current_no();
 
