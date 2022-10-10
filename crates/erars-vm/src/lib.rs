@@ -1225,6 +1225,14 @@ impl TerminalVm {
                         tx.set_skipdisp(arg != 0);
                         ctx.var.set_result(0);
                     }
+                    BuiltinCommand::NoSkip => {
+                        ctx.prev_skipdisp = Some(tx.skipdisp());
+                        tx.set_skipdisp(true);
+                    }
+                    BuiltinCommand::EndNoSkip => match ctx.prev_skipdisp.take() {
+                        Some(ret) => tx.set_skipdisp(ret),
+                        None => bail!("ENDNOSKIP without NOSKIP"),
+                    },
                     BuiltinCommand::Input
                     | BuiltinCommand::InputS
                     | BuiltinCommand::TInput

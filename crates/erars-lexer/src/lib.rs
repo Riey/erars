@@ -368,6 +368,8 @@ pub enum Token<'s> {
     #[token("CVARSET", |lex| normal_expr_command(lex, BuiltinCommand::CVarset))]
     #[token("RESET_STAIN", |lex| normal_expr_command(lex, BuiltinCommand::ResetStain))]
     #[token("SKIPDISP", |lex| normal_expr_command(lex, BuiltinCommand::SkipDisp))]
+    #[token("NOSKIP", |lex| normal_expr_command(lex, BuiltinCommand::NoSkip))]
+    #[token("ENDNOSKIP", |lex| normal_expr_command(lex, BuiltinCommand::EndNoSkip))]
     #[token("INPUT", |lex| normal_expr_command(lex, BuiltinCommand::Input))]
     #[token("INPUTS", |lex| normal_expr_command(lex, BuiltinCommand::InputS))]
     #[token("TINPUT", |lex| normal_expr_command(lex, BuiltinCommand::TInput))]

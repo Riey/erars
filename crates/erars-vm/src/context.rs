@@ -18,6 +18,8 @@ pub struct VmContext {
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
 
+    /// For NOSKIP/ENDNOSKIP
+    pub(crate) prev_skipdisp: Option<bool>,
     /// Set `true` during SAVEGAME
     pub(crate) put_form_enabled: bool,
 
@@ -38,6 +40,7 @@ impl VmContext {
             begin: Some(BeginType::Title),
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
+            prev_skipdisp: None,
             put_form_enabled: false,
             lastload_no: 0,
             lastload_text: "".into(),

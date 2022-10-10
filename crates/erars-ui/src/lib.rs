@@ -399,10 +399,15 @@ impl ConsoleSender {
     pub fn input_int(&mut self) -> Option<i64> {
         loop {
             let gen = self.input_gen();
-            match self.input(InputRequest { generation: gen, ty: InputRequestType::Int, is_one: false, timeout: None }) {
-                    ConsoleResult::Quit => break None,
-                    ConsoleResult::Value(Value::Int(i)) => break Some(i),
-                    ConsoleResult::Value(Value::String(_)) => continue,
+            match self.input(InputRequest {
+                generation: gen,
+                ty: InputRequestType::Int,
+                is_one: false,
+                timeout: None,
+            }) {
+                ConsoleResult::Quit => break None,
+                ConsoleResult::Value(Value::Int(i)) => break Some(i),
+                ConsoleResult::Value(Value::String(_)) => continue,
             }
         }
     }

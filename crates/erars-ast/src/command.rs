@@ -95,7 +95,10 @@ pub enum BuiltinCommand {
     TOneInputS,
     Wait,
     WaitAnykey,
+
     SkipDisp,
+    NoSkip,
+    EndNoSkip,
 
     Split,
 
