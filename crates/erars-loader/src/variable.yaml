@@ -152,6 +152,7 @@ ASSI:
 
 TARGET:
   size: [1000]
+  is_savedata: true
 
 PLAYER:
   size: [1000]
