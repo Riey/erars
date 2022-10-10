@@ -1096,6 +1096,42 @@ mod body {
 "#
         );
     }
+
+    #[test]
+    fn test_trailing_comma() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/trailing_comma.erb"#,
+                ParserContext::parse_body_str
+            ),
+            r#"
+[
+    StmtWithPos(
+        Call {
+            name: String(
+                "CALLFUNC",
+            ),
+            args: [
+                Int(
+                    1,
+                ),
+                Int(
+                    2,
+                ),
+            ],
+            is_jump: false,
+            is_method: false,
+            try_body: [],
+            catch_body: None,
+        },
+        ScriptPosition {
+            line: 0,
+        },
+    ),
+]
+"#
+        );
+    }
 }
 mod expr {
     use crate::test_util::do_test;
@@ -1377,6 +1413,29 @@ BinopExpr(
             r#"
 String(
     "",
+)
+"#
+        );
+    }
+
+    #[test]
+    fn test_trailing_comma() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/trailing_comma.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            r#"
+Method(
+    "METHOD",
+    [
+        Int(
+            1,
+        ),
+        Int(
+            2,
+        ),
+    ],
 )
 "#
         );
