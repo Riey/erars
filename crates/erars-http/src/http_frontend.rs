@@ -1,10 +1,10 @@
 use erars_vm::{TerminalVm, VmContext, VmResult};
 use slab::Slab;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::{Mutex as AsyncMutex, Notify, RwLock as AsyncRwLock};
+use tokio::sync::Mutex as AsyncMutex;
 
 use erars_ast::Value;
-use flume::{bounded, Receiver, Sender, TrySendError};
+use flume::{bounded, Sender};
 use parking_lot::RwLock;
 
 use axum::{
@@ -98,13 +98,13 @@ async fn start(
                 match vconsole.1.as_ref() {
                     Some(req) => match req.ty {
                         InputRequestType::AnyKey | InputRequestType::EnterKey => {
-                            input_tx.send((None, None));
+                            input_tx.send((None, None)).unwrap();
                             vconsole.1 = None;
                             StatusCode::OK
                         }
                         InputRequestType::Int => match request.trim().parse::<i64>() {
                             Ok(i) => {
-                                input_tx.send((Some(Value::Int(i)), None));
+                                input_tx.send((Some(Value::Int(i)), None)).unwrap();
                                 vconsole.1 = None;
                                 StatusCode::OK
                             }
@@ -114,7 +114,7 @@ async fn start(
                             }
                         },
                         InputRequestType::Str => {
-                            input_tx.send((Some(Value::String(request)), None));
+                            input_tx.send((Some(Value::String(request)), None)).unwrap();
                             vconsole.1 = None;
                             StatusCode::OK
                         }
@@ -195,10 +195,12 @@ impl HttpFrontend {
                                             .map_or(false, |req| req.generation == gen);
 
                                         if has_timeout {
-                                            input_tx.send((
-                                                Some(timeout.default_value),
-                                                timeout.timeout_msg,
-                                            ));
+                                            input_tx
+                                                .send((
+                                                    Some(timeout.default_value),
+                                                    timeout.timeout_msg,
+                                                ))
+                                                .unwrap();
                                             vconsole_buf.1 = None;
                                         }
                                     }

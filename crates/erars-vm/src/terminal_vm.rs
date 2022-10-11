@@ -1,17 +1,20 @@
-use std::{collections::BTreeSet, path::{PathBuf, Path}};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+};
 
+use crate::context::FunctionIdentifier;
+use crate::*;
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
-use crate::context::FunctionIdentifier;
-use itertools::Itertools;
-use rand::Rng;
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
     PrintFlags, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
 use erars_ui::{FontStyle, InputRequest, InputRequestType, Timeout, VirtualConsole};
-use crate::*;
+use itertools::Itertools;
+use rand::Rng;
 
 // macro_rules! report_error {
 //     ($tx:expr, $($t:tt)+) => {
@@ -57,7 +60,6 @@ macro_rules! get_arg {
         get_arg!(@opt @value $arg, $ctx).and_then(|v| <$t>::try_from(v).ok())
     };
 }
-
 
 pub struct TerminalVm {
     dic: FunctionDic,

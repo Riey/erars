@@ -1,6 +1,0 @@
-[
-    Print("1"), NewLine,
-    Print("2"), NewLine,
-    Print("3"), NewLine,
-    Print("4"), NewLine,
-]

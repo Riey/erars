@@ -1,4 +1,0 @@
-[
-    Print("TARGET = 3 NAME:TARGET = TEST"), NewLine,
-    Print("TARGET = 1 NAME:TARGET = TEST"), NewLine,
-]

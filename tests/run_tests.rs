@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use erars_compiler::{compile, EraConfig, ParserContext};
-use erars_ui::{ConsoleChannel, ConsoleMessage, VirtualConsole};
+use erars_ui::VirtualConsole;
 use erars_vm::*;
 use flexi_logger::*;
 
@@ -32,15 +32,15 @@ fn run_test() {
             Arc::new(EraConfig::from_text(include_str!("../emuera.config")).unwrap()),
         );
         let erb_file = erb_file.unwrap();
-        let ron_file = erb_file.parent().unwrap().join(format!(
-            "{}.ron",
+        let out_file = erb_file.parent().unwrap().join(format!(
+            "{}.out",
             erb_file.file_stem().unwrap().to_str().unwrap()
         ));
 
+        eprintln!("Run {}", erb_file.display());
         log::info!("Run {}", erb_file.display());
 
-        let ron_source = std::fs::read_to_string(ron_file).unwrap();
-        let expected_ret: Vec<ConsoleMessage> = ron::from_str(&ron_source).unwrap();
+        let expected_ret = std::fs::read_to_string(out_file).unwrap();
 
         let program =
             test_util::do_test(erb_file.to_str().unwrap(), ParserContext::parse_program_str);
@@ -62,13 +62,21 @@ fn run_test() {
     }
 }
 
-fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> Vec<ConsoleMessage> {
+fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
     let vm = TerminalVm::new(dic, ".".into());
-    let chan = ConsoleChannel::new();
-    let mut tx = VirtualConsole::new(Arc::new(chan), 30);
+    let mut tx = VirtualConsole::new(ctx.config.printc_width);
 
-    vm.start(&mut tx, &mut ctx).unwrap();
-    Arc::try_unwrap(tx.into_chan())
-        .unwrap_or_else(|_| unreachable!())
-        .take_all_msg()
+    k9::assert_equal!(vm.run_state(&mut tx, &mut ctx).unwrap(), VmResult::Exit);
+
+    let mut out = String::new();
+
+    for line in tx.lines() {
+        use std::fmt::Write;
+        writeln!(out, "{}", line).unwrap();
+    }
+
+    // Remove lastest newline
+    out.pop();
+
+    out
 }

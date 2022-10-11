@@ -5,6 +5,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
 use std::collections::VecDeque;
+use std::fmt::{Debug, Display};
 use std::time::Instant;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,7 +49,23 @@ impl ConsoleLinePart {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+impl Display for ConsoleLinePart {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text(arg0, _) => write!(f, "{arg0}"),
+            Self::Line(arg0, _) => write!(f, "{arg0}"),
+            Self::Button(arg0, _) => {
+                for (text, _) in arg0 {
+                    write!(f, "{text}")?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConsoleLine {
     #[serde(skip_serializing_if = "is_left_alignment")]
     pub align: Alignment,
@@ -56,6 +73,22 @@ pub struct ConsoleLine {
     pub button_start: Option<usize>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub parts: Vec<ConsoleLinePart>,
+}
+
+impl Debug for ConsoleLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_list().entries(self.parts.iter()).finish()
+    }
+}
+
+impl Display for ConsoleLine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for part in self.parts.iter() {
+            write!(f, "{}", part)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl ConsoleLine {
@@ -211,7 +244,12 @@ impl VirtualConsole {
     }
 
     pub fn line_count(&self) -> usize {
-        self.lines.len()
+        match self.lines.last() {
+            None => 0,
+            Some(line) => {
+                self.lines.len() - line.parts.is_empty() as usize
+            }
+        }
     }
 
     pub fn line_is_empty(&self) -> bool {

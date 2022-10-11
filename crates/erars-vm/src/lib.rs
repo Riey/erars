@@ -35,6 +35,7 @@ impl Default for Workflow {
     }
 }
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum VmResult {
     Exit,
     Redraw,

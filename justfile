@@ -26,4 +26,4 @@ run-ym-toriko:
 
 gen-test name:
     echo "@SYSTEM_TITLE" > tests/run_tests/basic/{{name}}.erb
-    echo "[]" > tests/run_tests/basic/{{name}}.ron
+    touch tests/run_tests/basic/{{name}}.out

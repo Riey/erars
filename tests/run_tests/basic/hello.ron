@@ -1,6 +1,0 @@
-[
-    Print("Hello, world!"),
-    NewLine,
-    Print("Hello, form!"),
-    NewLine,
-]

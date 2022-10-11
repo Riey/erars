@@ -1,6 +1,0 @@
-[
-    Print("5"),
-    NewLine,
-    Print("1"),
-    NewLine,
-]

@@ -1,6 +1,0 @@
-[
-    Print("Should be called"),
-    NewLine,
-    Print("Should be called"),
-    NewLine,
-]
