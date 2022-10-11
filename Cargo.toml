@@ -35,11 +35,8 @@ log = "0.4.17"
 serde_yaml = "0.9.13"
 smol_str = "0.1.23"
 
-[profile.release-no-lto]
+[profile.release-lto]
 inherits = "release"
-lto = false
-
-[profile.release]
 lto = true
 
 [[bench]]
