@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 use erars_ast::{BeginType, EventType};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
 use hashbrown::HashMap;
+use rayon::prelude::*;
 
 use crate::{variable::SerializableVariableStorage, TerminalVm, VmContext, Workflow};
 
@@ -434,17 +435,12 @@ impl SystemState {
 const SAVE_COUNT: usize = 20;
 
 fn load_savs(vm: &TerminalVm, ctx: &mut VmContext) -> HashMap<usize, SerializableVariableStorage> {
-    let mut savs = HashMap::new();
-
-    for i in 0..SAVE_COUNT {
-        if let Ok(sav) =
-            crate::save_data::read_save_data(&vm.sav_path(), &ctx.header_info, i as i64)
-        {
-            savs.insert(i, sav);
-        }
-    }
-
-    savs
+    (0..SAVE_COUNT)
+        .into_par_iter()
+        .filter_map(|i| {
+            crate::save_data::read_save_data(&vm.sav_path(), &ctx.header_info, i as i64).ok().map(|d| (i, d))
+        })
+        .collect()
 }
 
 fn print_sav_data_list(
