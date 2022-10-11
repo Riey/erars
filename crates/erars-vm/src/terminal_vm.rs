@@ -431,7 +431,7 @@ impl TerminalVm {
 
                     report_error!(tx, "At state {state:?}[{phase}]");
                 }
-                
+
                 VmResult::Exit
             }
         }

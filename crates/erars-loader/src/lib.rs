@@ -1,7 +1,7 @@
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use std::{
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader, Read, Seek, SeekFrom},
     path::Path,
     sync::Arc,
     time::Instant,
@@ -29,11 +29,13 @@ fn read_file(path: &Path) -> std::io::Result<String> {
 
     match Bom::from(&mut file) {
         Bom::Utf8 => {
+            file.seek(SeekFrom::Start(Bom::Utf8.len() as _))?;
             let mut out = String::with_capacity(file.metadata()?.len() as usize);
             file.read_to_string(&mut out)?;
             Ok(out)
         }
         other => {
+            file.seek(SeekFrom::Start(other.len() as _))?;
             let encoding = match other {
                 Bom::Null => encoding_rs::SHIFT_JIS,
                 Bom::Utf16Be => encoding_rs::UTF_16BE,
@@ -82,7 +84,7 @@ pub fn run_script(
     let config_path = format!("{target_path}/emuera.config");
 
     let config = if Path::new(&config_path).exists() {
-        match std::fs::read_to_string(&config_path) {
+        match read_file(config_path.as_ref()) {
             Ok(s) => EraConfig::from_text(&s).unwrap(),
             Err(err) => {
                 log::error!("config file load error: {err}");
@@ -298,7 +300,7 @@ pub fn run_script(
             .par_bridge()
             .flat_map(|erb| {
                 let erb = erb.unwrap();
-                let source = std::fs::read_to_string(&erb).unwrap();
+                let source = read_file(&erb).unwrap();
                 let ctx = ParserContext::new(header_info.clone(), erb.to_str().unwrap().into());
 
                 log::debug!("Parse And Compile {}", erb.display());
