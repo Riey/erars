@@ -1,70 +1,60 @@
 use erars_ui::{ConsoleLinePart, FontStyle, InputRequestType, VirtualConsole};
-use erars_vm::{SystemState, TerminalVm, VmContext, VmResult};
-use std::{
-    io,
-    sync::{
-        atomic::{AtomicBool, Ordering::SeqCst},
-        Arc,
-    },
-};
+use erars_vm::{TerminalVm, VmContext, VmResult};
+use std::io::{self, BufRead};
 
 pub struct StdioFrontend {
     vconsole: VirtualConsole,
-    need_redraw: bool,
 }
 
 impl StdioFrontend {
     pub fn new(printc_width: usize) -> Self {
         Self {
             vconsole: VirtualConsole::new(printc_width),
-            need_redraw: true,
         }
     }
 
     fn draw(&mut self, mut out: impl io::Write) -> anyhow::Result<()> {
-        if self.need_redraw {
-            for line in self.vconsole.lines.drain(..) {
-                for part in line.parts.iter() {
-                    match part {
-                        ConsoleLinePart::Text(text, style) => {
-                            write!(out, "{}", paint(style.color, style.font_style, &text))?;
-                        }
-                        ConsoleLinePart::Button(btns, _value) => {
-                            for (text, style) in btns.iter() {
-                                write!(
-                                    out,
-                                    "{}",
-                                    paint(self.vconsole.hl_color, style.font_style, text)
-                                )?;
-                            }
-                        }
-                        ConsoleLinePart::Line(text, style) => {
+        for line in self.vconsole.lines.drain(..) {
+            for part in line.parts.iter() {
+                match part {
+                    ConsoleLinePart::Text(text, style) => {
+                        write!(out, "{}", paint(style.color, style.font_style, &text))?;
+                    }
+                    ConsoleLinePart::Button(btns, _value) => {
+                        for (text, style) in btns.iter() {
                             write!(
                                 out,
                                 "{}",
-                                paint(style.color, style.font_style, &text.repeat(30))
+                                paint(self.vconsole.hl_color, style.font_style, text)
                             )?;
                         }
                     }
+                    ConsoleLinePart::Line(text, style) => {
+                        write!(
+                            out,
+                            "{}",
+                            paint(style.color, style.font_style, &text.repeat(30))
+                        )?;
+                    }
                 }
-                writeln!(out)?;
             }
-            self.need_redraw = false;
+            writeln!(out)?;
         }
+        out.flush()?;
 
         Ok(())
     }
 
     pub fn run(&mut self, vm: &TerminalVm, ctx: &mut VmContext) -> anyhow::Result<()> {
         let mut input = String::with_capacity(64);
-        let stdin = io::stdin();
-        let lock = io::stdout();
+        let mut stdin = io::stdin().lock();
+        let mut lock = io::stdout().lock();
 
         loop {
-            match vm.run_state(&mut state, &mut self.vconsole, ctx)? {
+            match vm.run_state(&mut self.vconsole, ctx)? {
                 VmResult::Exit => break Ok(()),
-                VmResult::NeedInput { req } => {
-                    self.draw(lock.lock())?;
+                VmResult::NeedInput { req, set_result } => {
+                    self.draw(&mut lock)?;
 
                     loop {
                         let size = stdin.read_line(&mut input)?;
@@ -74,7 +64,12 @@ impl StdioFrontend {
                         match req.ty {
                             InputRequestType::Int => match s.trim().parse::<i64>() {
                                 Ok(i) => {
-                                    ctx.push(i);
+                                    log::info!("[stdio] <- {i}");
+                                    if set_result {
+                                        ctx.var.set_result(i);
+                                    } else {
+                                        ctx.push(i);
+                                    }
                                     break;
                                 }
                                 Err(_) => {
@@ -82,14 +77,25 @@ impl StdioFrontend {
                                 }
                             },
                             InputRequestType::Str => {
-                                ctx.push(s);
+                                log::info!("[stdio] <- \"{s}\"");
+                                if set_result {
+                                    ctx.var.set_results(s.into());
+                                } else {
+                                    ctx.push(s);
+                                }
+                                break;
                             }
-                            InputRequestType::AnyKey | InputRequestType::EnterKey => {}
+                            InputRequestType::AnyKey | InputRequestType::EnterKey => {
+                                log::info!("[stdio] <- \"\"");
+                                break;
+                            }
                         }
                     }
+
+                    input.clear();
                 }
                 VmResult::Redraw => {
-                    self.draw(lock.lock())?;
+                    self.draw(&mut lock)?;
                 }
             }
         }

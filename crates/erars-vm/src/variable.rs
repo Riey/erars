@@ -336,10 +336,12 @@ impl VariableStorage {
     }
 
     pub fn set_result(&mut self, i: i64) {
+        log::debug!("set result {i}");
         *self.ref_int("RESULT", &[]).unwrap() = i;
     }
 
     pub fn set_results(&mut self, s: String) {
+        log::debug!("set results {s}");
         *self.ref_str("RESULTS", &[]).unwrap() = s;
     }
 

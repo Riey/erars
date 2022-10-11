@@ -3,7 +3,60 @@ use erars_ast::{BeginType, EventType};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
 use hashbrown::HashMap;
 
-use crate::{variable::SerializableVariableStorage, SystemState, TerminalVm, VmContext, Workflow};
+use crate::{variable::SerializableVariableStorage, TerminalVm, VmContext, Workflow};
+
+#[derive(strum::Display, Debug, Clone, derivative::Derivative)]
+#[derivative(PartialEq, Eq)]
+pub enum SystemState {
+    LoadGame(
+        #[derivative(PartialEq = "ignore")] Option<HashMap<usize, SerializableVariableStorage>>,
+    ),
+    SaveGame(
+        #[derivative(PartialEq = "ignore")] Option<HashMap<usize, SerializableVariableStorage>>,
+        Option<usize>,
+    ),
+    LoadData(
+        i64,
+        #[derivative(PartialEq = "ignore")] Option<SerializableVariableStorage>,
+    ),
+    BeginTitle,
+    BeginShop,
+    BeginTrain {
+        com_no: u32,
+        com_able_no: u32,
+        printc_count: u32,
+    },
+    BeginFirst,
+    BeginTurnEnd,
+    BeginAfterTrain,
+    BeginAblUp,
+    DoTrain(u32),
+    CallTrain(Vec<u32>, Option<u32>),
+}
+
+impl From<BeginType> for SystemState {
+    fn from(ty: BeginType) -> Self {
+        match ty {
+            BeginType::AblUp => Self::BeginAblUp,
+            BeginType::AfterTrain => Self::BeginAfterTrain,
+            BeginType::Shop => Self::BeginShop,
+            BeginType::Title => Self::BeginTitle,
+            BeginType::Train => Self::BeginTrain {
+                com_no: 0,
+                com_able_no: 0,
+                printc_count: 0,
+            },
+            BeginType::First => Self::BeginFirst,
+            BeginType::TurnEnd => Self::BeginTurnEnd,
+        }
+    }
+}
+
+impl Default for SystemState {
+    fn default() -> Self {
+        Self::BeginTitle
+    }
+}
 
 macro_rules! call {
     ($vm:expr, $name:expr, $tx:expr, $ctx:expr) => {
@@ -41,6 +94,7 @@ const fn begin(ty: BeginType) -> Option<Workflow> {
 fn input_int(tx: &mut VirtualConsole) -> Option<Workflow> {
     Some(Workflow::Input {
         req: InputRequest::normal(tx.input_gen(), InputRequestType::Int),
+        set_result: false,
     })
 }
 
@@ -383,7 +437,8 @@ fn load_savs(vm: &TerminalVm, ctx: &mut VmContext) -> HashMap<usize, Serializabl
     let mut savs = HashMap::new();
 
     for i in 0..SAVE_COUNT {
-        if let Ok(sav) = crate::save_data::read_save_data(&vm.sav_path, &ctx.header_info, i as i64)
+        if let Ok(sav) =
+            crate::save_data::read_save_data(&vm.sav_path(), &ctx.header_info, i as i64)
         {
             savs.insert(i, sav);
         }

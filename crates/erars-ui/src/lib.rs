@@ -166,7 +166,7 @@ pub struct VirtualConsole {
     pub printc_width: usize,
     pub skipdisp: bool,
     pub inputs: VecDeque<Value>,
-    input_gen: u32,
+    pub input_gen: u32,
 }
 
 impl VirtualConsole {

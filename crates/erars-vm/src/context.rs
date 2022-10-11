@@ -4,12 +4,19 @@ use smol_str::SmolStr;
 use std::fmt;
 use std::sync::Arc;
 
-use erars_ast::{EventType, ScriptPosition, Value, VariableInfo, BeginType};
+use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::{SystemState, VariableStorage, VmVariable};
 
 use super::UniformVariable;
+
+#[derive(Clone, Debug)]
+struct StateCallStack {
+    state: SystemState,
+    phase: usize,
+    call_stack_base: usize,
+}
 
 #[derive(Clone)]
 pub struct VmContext {
@@ -17,7 +24,7 @@ pub struct VmContext {
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
 
-    pub state: Vec<(SystemState, usize)>,
+    state: Vec<StateCallStack>,
     /// For NOSKIP/ENDNOSKIP
     pub(crate) prev_skipdisp: Option<bool>,
     /// Set `true` during SAVEGAME
@@ -37,7 +44,11 @@ impl VmContext {
         let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
             header_info,
-            state: vec![(BeginType::Title.into(), 0)],
+            state: vec![StateCallStack {
+                state: (BeginType::Title.into()),
+                phase: 0,
+                call_stack_base: 0,
+            }],
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
             prev_skipdisp: None,
@@ -107,6 +118,7 @@ impl VmContext {
 
     pub fn read_var_ref(&mut self, var_ref: &VariableRef) -> Result<Value> {
         let (_, var, idx) = self.resolve_var_ref(var_ref)?;
+        // log::info!("Read {} -> {:?}", var_ref.name, var.get(idx)?);
 
         var.get(idx)
     }
@@ -145,6 +157,39 @@ impl VmContext {
         Ok((info, var, r.idxs.clone()))
     }
 
+    pub fn last_call_stack_base(&self) -> usize {
+        self.state.last().map_or(0, |s| s.call_stack_base)
+    }
+
+    pub fn push_state(&mut self, state: SystemState, call_stack_base: usize) {
+        self.state.push(StateCallStack {
+            state,
+            phase: 0,
+            call_stack_base,
+        });
+    }
+
+    pub fn push_state_with_phase(
+        &mut self,
+        state: SystemState,
+        phase: usize,
+        call_stack_base: usize,
+    ) {
+        self.state.push(StateCallStack {
+            state,
+            phase,
+            call_stack_base,
+        });
+    }
+
+    pub fn pop_state(&mut self) -> Option<(SystemState, usize, usize)> {
+        self.state.pop().map(|s| (s.state, s.phase, s.call_stack_base))
+    }
+
+    pub fn clear_state(&mut self) {
+        self.state.clear();
+    }
+
     pub fn push_current_call_stack(
         &mut self,
         func_name: FunctionIdentifier,
@@ -157,17 +202,25 @@ impl VmContext {
             instruction_pos,
             script_position: std::mem::take(&mut self.current_pos),
             stack_base: self.stack.len(),
-            state_base: self.state.len(),
         });
     }
 
     pub fn pop_call_stack(&mut self) -> Option<Callstack> {
-        let last = self.call_stack.last()?;
-        if last.state_base != self.state.len() {
-            None
-        } else {
-            self.call_stack.pop()
+        self.call_stack.pop()
+    }
+
+    pub fn pop_call_stack_check(&mut self, call_stack_base: usize) -> Option<Callstack> {
+        log::info!(
+            "call_stack: {:?}, current_state: {:?}",
+            self.call_stack,
+            self.state
+        );
+
+        if self.call_stack.len() <= call_stack_base {
+            return None;
         }
+
+        self.call_stack.pop()
     }
 
     pub fn clear_call_stack(&mut self) {
@@ -180,8 +233,7 @@ impl VmContext {
     }
 
     pub fn current_stack_count(&self) -> usize {
-        let call_stack = self.call_stack.last().unwrap();
-        self.stack.len() - call_stack.stack_base
+        self.stack.len() - self.call_stack.last().map_or(0, |s| s.stack_base)
     }
 
     pub fn take_arg_list(
@@ -304,7 +356,6 @@ pub struct Callstack {
     pub file_path: SmolStr,
     pub script_position: ScriptPosition,
     pub stack_base: usize,
-    pub state_base: usize,
     pub instruction_pos: usize,
 }
 
