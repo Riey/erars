@@ -1,6 +1,11 @@
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::{path::Path, sync::Arc, time::Instant};
+use std::{
+    io::{BufRead, BufReader, Read, Seek, SeekFrom},
+    path::Path,
+    sync::Arc,
+    time::Instant,
+};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -16,6 +21,59 @@ use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
+/// Read string from path respect BOM
+fn read_file(path: &Path) -> std::io::Result<String> {
+    let mut file = std::fs::File::open(path)?;
+
+    use unicode_bom::Bom;
+
+    match Bom::from(&mut file) {
+        Bom::Utf8 => {
+            file.seek(SeekFrom::Start(Bom::Utf8.len() as _))?;
+            let mut out = String::with_capacity(file.metadata()?.len() as usize);
+            file.read_to_string(&mut out)?;
+            Ok(out)
+        }
+        other => {
+            file.seek(SeekFrom::Start(other.len() as _))?;
+            let encoding = match other {
+                Bom::Null => encoding_rs::SHIFT_JIS,
+                Bom::Utf16Be => encoding_rs::UTF_16BE,
+                Bom::Utf16Le => encoding_rs::UTF_16LE,
+                Bom::Utf8 => unreachable!(),
+                other => panic!("Unsupported BOM {other}"),
+            };
+
+            let mut decoder = encoding.new_decoder();
+
+            let len = decoder
+                .max_utf8_buffer_length(file.metadata()?.len() as usize)
+                .expect("File is too large");
+
+            let mut reader = BufReader::new(file);
+            let mut out = String::with_capacity(len);
+
+            loop {
+                let src = reader.fill_buf()?;
+
+                if src.is_empty() {
+                    break;
+                }
+
+                let (_ret, size, had_errors) = decoder.decode_to_string(src, &mut out, false);
+
+                if had_errors {
+                    log::error!("Invalid text detected from {}", path.display());
+                }
+
+                reader.consume(size);
+            }
+
+            Ok(out)
+        }
+    }
+}
+
 #[allow(unused_assignments)]
 pub fn run_script(
     target_path: String,
@@ -26,7 +84,7 @@ pub fn run_script(
     let config_path = format!("{target_path}/emuera.config");
 
     let config = if Path::new(&config_path).exists() {
-        match std::fs::read_to_string(&config_path) {
+        match read_file(config_path.as_ref()) {
             Ok(s) => EraConfig::from_text(&s).unwrap(),
             Err(err) => {
                 log::error!("config file load error: {err}");
@@ -102,7 +160,7 @@ pub fn run_script(
             .filter_map(|csv| match csv {
                 Ok(csv) => {
                     log::trace!("Load {}", csv.display());
-                    let s = std::fs::read_to_string(&csv).ok()?;
+                    let s = read_file(&csv).ok()?;
 
                     Some((
                         csv.file_stem().unwrap().to_str().unwrap().to_ascii_uppercase(),
@@ -216,7 +274,7 @@ pub fn run_script(
 
         for erh in erhs {
             let erh = erh.unwrap();
-            let source = std::fs::read_to_string(&erh).unwrap();
+            let source = read_file(&erh).unwrap();
             log::debug!("Parse {}", erh.display());
 
             match info.merge_header(&source) {
@@ -242,7 +300,7 @@ pub fn run_script(
             .par_bridge()
             .flat_map(|erb| {
                 let erb = erb.unwrap();
-                let source = std::fs::read_to_string(&erb).unwrap();
+                let source = read_file(&erb).unwrap();
                 let ctx = ParserContext::new(header_info.clone(), erb.to_str().unwrap().into());
 
                 log::debug!("Parse And Compile {}", erb.display());
