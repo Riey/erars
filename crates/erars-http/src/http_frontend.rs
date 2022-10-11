@@ -158,13 +158,13 @@ impl HttpFrontend {
         rt.block_on(async move {
             loop {
                 match vm.run_state(&mut vconsole, &mut ctx) {
-                    Ok(VmResult::Exit) => break,
-                    Ok(VmResult::Redraw) => {
+                    VmResult::Exit => break,
+                    VmResult::Redraw => {
                         vconsole_buf.write().0 = vconsole.clone();
                         let mut clients = clients.lock().await;
                         send_code(event_codes::REDRAW, &mut clients).await;
                     }
-                    Ok(VmResult::NeedInput { req, set_result }) => {
+                    VmResult::NeedInput { req, set_result } => {
                         let ty = req.ty;
 
                         {
@@ -245,10 +245,6 @@ impl HttpFrontend {
                             }
                         }
                         if set_result {}
-                    }
-                    Err(err) => {
-                        log::error!("VM Error occurred!: {err}");
-                        break;
                     }
                 }
             }

@@ -66,7 +66,7 @@ fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
     let vm = TerminalVm::new(dic, ".".into());
     let mut tx = VirtualConsole::new(ctx.config.printc_width);
 
-    k9::assert_equal!(vm.run_state(&mut tx, &mut ctx).unwrap(), VmResult::Exit);
+    k9::assert_equal!(vm.run_state(&mut tx, &mut ctx), VmResult::Exit);
 
     let mut out = String::new();
 

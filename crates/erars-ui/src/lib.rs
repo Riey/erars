@@ -246,9 +246,7 @@ impl VirtualConsole {
     pub fn line_count(&self) -> usize {
         match self.lines.last() {
             None => 0,
-            Some(line) => {
-                self.lines.len() - line.parts.is_empty() as usize
-            }
+            Some(line) => self.lines.len() - line.parts.is_empty() as usize,
         }
     }
 

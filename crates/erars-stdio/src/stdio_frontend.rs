@@ -51,7 +51,7 @@ impl StdioFrontend {
         let mut lock = io::stdout().lock();
 
         loop {
-            match vm.run_state(&mut self.vconsole, ctx)? {
+            match vm.run_state(&mut self.vconsole, ctx) {
                 VmResult::Exit => break Ok(()),
                 VmResult::NeedInput { req, set_result } => {
                     self.draw(&mut lock)?;
