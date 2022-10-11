@@ -29,6 +29,11 @@ const fn exit() -> Option<Workflow> {
 }
 
 #[inline]
+const fn ret() -> Option<Workflow> {
+    Some(Workflow::Return)
+}
+
+#[inline]
 const fn begin(ty: BeginType) -> Option<Workflow> {
     Some(Workflow::Begin(ty))
 }
@@ -50,7 +55,6 @@ impl SystemState {
         use SystemState::*;
 
         let ret = match self {
-            Exited => return Ok(Some(Workflow::Return)),
             BeginTitle => match vm.try_call("SYSTEM_TITLE", &[], tx, ctx)? {
                 None => bail!("TODO: default title"),
                 Some(ret) => return Ok(Some(ret)),
@@ -74,6 +78,7 @@ impl SystemState {
                     *phase = 2;
                     input_int(tx)
                 }
+                _ => ret(),
             },
             BeginShop => match *phase {
                 0 => call_event!(vm, EventType::Shop, tx, ctx),
@@ -109,7 +114,7 @@ impl SystemState {
                         return Ok(call!(vm, "USERSHOP", tx, ctx));
                     }
                 }
-                _ => exit(),
+                _ => ret(),
             },
             BeginTrain {
                 com_no,
@@ -222,7 +227,7 @@ impl SystemState {
                     *phase = 2;
                     return Ok(None);
                 }
-                _ => exit(),
+                _ => ret(),
             },
             CallTrain(commands, current_com) => {
                 let current_com = match current_com {
@@ -265,9 +270,70 @@ impl SystemState {
                         *phase = 0;
                         return Ok(None);
                     }
-                    _ => exit(),
+                    _ => ret(),
                 }
             }
+            SaveGame(savs, idx) => {
+                match phase {
+                    0 => {
+                        let new_savs = load_savs(vm, ctx);
+                        print_sav_data_list(&new_savs, tx);
+                        *savs = Some(new_savs);
+                        input_int(tx)
+                    }
+                    1 => {
+                        let savs = savs.as_mut().unwrap();
+                        match ctx.pop_int()? {
+                            100 => return Ok(ret()),
+                            i if i >= 0 && i < SAVE_COUNT as i64 => {
+                                *idx = Some(i as usize);
+                                if savs.contains_key(&(i as usize)) {
+                                    tx.print_line(format!("SAVE {i} already exists. Overwrite?"));
+                                    tx.print_line("[0] Yes [1] No".into());
+                                    input_int(tx)
+                                } else {
+                                    *phase = 2;
+                                    None
+                                }
+                            }
+                            _ => {
+                                *phase = 0;
+                                input_int(tx)
+                            }
+                        }
+                    }
+                    2 => {
+                        match ctx.pop_int()? {
+                            // YES
+                            0 => None,
+                            // NO
+                            1 => {
+                                *phase = 0;
+                                input_int(tx)
+                            }
+                            _ => {
+                                *phase = 1;
+                                input_int(tx)
+                            }
+                        }
+                    }
+                    3 => {
+                        ctx.put_form_enabled = true;
+                        call!(vm, "SAVEINFO", tx, ctx)
+                    }
+                    4 => {
+                        ctx.put_form_enabled = false;
+                        let description = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
+                        let idx = idx.unwrap();
+                        let var = ctx.var.get_serializable(&ctx.header_info, description);
+                        savs.as_mut().unwrap().insert(idx, var);
+                        *phase = 0;
+                        return Ok(None);
+                    }
+                    _ => ret(),
+                }
+            }
+            DoTrain(_) => bail!("TODO: DoTrain"),
             LoadGame(savs) => {
                 match savs {
                     None => {
