@@ -1,109 +1,102 @@
-use erars_ui::{ConsoleChannel, ConsoleLinePart, FontStyle, InputRequestType, VirtualConsole};
-use std::{
-    io,
-    sync::{
-        atomic::{AtomicBool, Ordering::SeqCst},
-        Arc,
-    },
-};
-
-use erars_ast::Value;
+use erars_ui::{ConsoleLinePart, FontStyle, InputRequestType, VirtualConsole};
+use erars_vm::{TerminalVm, VmContext, VmResult};
+use std::io::{self, BufRead};
 
 pub struct StdioFrontend {
     vconsole: VirtualConsole,
-    need_redraw: bool,
 }
 
 impl StdioFrontend {
-    pub fn new() -> Self {
+    pub fn new(printc_width: usize) -> Self {
         Self {
-            vconsole: VirtualConsole::new(),
-            need_redraw: true,
+            vconsole: VirtualConsole::new(printc_width),
         }
     }
 
     fn draw(&mut self, mut out: impl io::Write) -> anyhow::Result<()> {
-        if self.need_redraw {
-            for line in self.vconsole.lines.drain(..) {
-                for part in line.parts.iter() {
-                    match part {
-                        ConsoleLinePart::Text(text, style) => {
-                            write!(out, "{}", paint(style.color, style.font_style, &text))?;
-                        }
-                        ConsoleLinePart::Button(btns, _value) => {
-                            for (text, style) in btns.iter() {
-                                write!(
-                                    out,
-                                    "{}",
-                                    paint(self.vconsole.hl_color, style.font_style, text)
-                                )?;
-                            }
-                        }
-                        ConsoleLinePart::Line(text, style) => {
+        for line in self.vconsole.lines.drain(..) {
+            for part in line.parts.iter() {
+                match part {
+                    ConsoleLinePart::Text(text, style) => {
+                        write!(out, "{}", paint(style.color, style.font_style, &text))?;
+                    }
+                    ConsoleLinePart::Button(btns, _value) => {
+                        for (text, style) in btns.iter() {
                             write!(
                                 out,
                                 "{}",
-                                paint(style.color, style.font_style, &text.repeat(30))
+                                paint(self.vconsole.hl_color, style.font_style, text)
                             )?;
                         }
                     }
+                    ConsoleLinePart::Line(text, style) => {
+                        write!(
+                            out,
+                            "{}",
+                            paint(style.color, style.font_style, &text.repeat(30))
+                        )?;
+                    }
                 }
-                writeln!(out)?;
             }
-            self.need_redraw = false;
+            writeln!(out)?;
         }
+        out.flush()?;
 
         Ok(())
     }
 
-    pub fn run(&mut self, chan: Arc<ConsoleChannel>) -> anyhow::Result<()> {
+    pub fn run(&mut self, vm: &TerminalVm, ctx: &mut VmContext) -> anyhow::Result<()> {
         let mut input = String::with_capacity(64);
-        let stdin = io::stdin();
-        let lock = io::stdout();
-        let end = Arc::new(AtomicBool::new(false));
-
-        let end_inner = end.clone();
-        chan.set_exit_fn(move || {
-            end_inner.store(true, SeqCst);
-        });
+        let mut stdin = io::stdin().lock();
+        let mut lock = io::stdout().lock();
 
         loop {
-            if end.load(SeqCst) {
-                break Ok(());
-            }
+            match vm.run_state(&mut self.vconsole, ctx) {
+                VmResult::Exit => break Ok(()),
+                VmResult::NeedInput { req, set_result } => {
+                    self.draw(&mut lock)?;
 
-            while let Some(msg) = chan.recv_msg() {
-                self.need_redraw = true;
-                log::trace!("[UI] Recv: {msg:?}");
-                self.vconsole.push_msg(msg);
-            }
+                    loop {
+                        let size = stdin.read_line(&mut input)?;
 
-            self.draw(lock.lock())?;
+                        let s = input[..size].trim_end_matches(&['\r', '\n']);
 
-            if let Some(req) = self.vconsole.current_req.as_ref() {
-                let size = stdin.read_line(&mut input)?;
-
-                let s = input[..size].trim_end_matches(&['\r', '\n']);
-
-                match req.ty {
-                    InputRequestType::Int => match s.trim().parse() {
-                        Ok(i) => {
-                            chan.send_input(Value::Int(i), req.generation);
-                            self.vconsole.current_req = None;
+                        match req.ty {
+                            InputRequestType::Int => match s.trim().parse::<i64>() {
+                                Ok(i) => {
+                                    log::info!("[stdio] <- {i}");
+                                    if set_result {
+                                        ctx.var.set_result(i);
+                                    } else {
+                                        ctx.push(i);
+                                    }
+                                    break;
+                                }
+                                Err(_) => {
+                                    continue;
+                                }
+                            },
+                            InputRequestType::Str => {
+                                log::info!("[stdio] <- \"{s}\"");
+                                if set_result {
+                                    ctx.var.set_results(s.into());
+                                } else {
+                                    ctx.push(s);
+                                }
+                                break;
+                            }
+                            InputRequestType::AnyKey | InputRequestType::EnterKey => {
+                                log::info!("[stdio] <- \"\"");
+                                break;
+                            }
                         }
-                        Err(_) => {}
-                    },
-                    InputRequestType::Str => {
-                        chan.send_input(Value::String(s.into()), req.generation);
-                        self.vconsole.current_req = None;
                     }
-                    InputRequestType::AnyKey | InputRequestType::EnterKey => {
-                        chan.send_input(Value::Int(0), req.generation);
-                        self.vconsole.current_req = None;
-                    }
-                }
 
-                input.clear();
+                    input.clear();
+                }
+                VmResult::Redraw => {
+                    self.draw(&mut lock)?;
+                }
             }
         }
     }

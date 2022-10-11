@@ -7,17 +7,24 @@ use std::sync::Arc;
 use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
 
-use crate::{VariableStorage, VmVariable};
+use crate::{SystemState, VariableStorage, VmVariable};
 
 use super::UniformVariable;
+
+#[derive(Clone, Debug)]
+struct StateCallStack {
+    state: SystemState,
+    phase: usize,
+    call_stack_base: usize,
+}
 
 #[derive(Clone)]
 pub struct VmContext {
     pub var: VariableStorage,
-    pub begin: Option<BeginType>,
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
 
+    state: Vec<StateCallStack>,
     /// For NOSKIP/ENDNOSKIP
     pub(crate) prev_skipdisp: Option<bool>,
     /// Set `true` during SAVEGAME
@@ -37,7 +44,11 @@ impl VmContext {
         let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
             header_info,
-            begin: Some(BeginType::Title),
+            state: vec![StateCallStack {
+                state: (BeginType::Title.into()),
+                phase: 0,
+                call_stack_base: 0,
+            }],
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
             prev_skipdisp: None,
@@ -78,22 +89,8 @@ impl VmContext {
         Ok(())
     }
 
-    pub fn set_begin(&mut self, ty: BeginType) {
-        self.begin = Some(ty);
-    }
-
-    pub fn take_begin(&mut self) -> Option<BeginType> {
-        self.begin.take()
-    }
-
     pub fn var_mut(&mut self) -> &mut VariableStorage {
         &mut self.var
-    }
-
-    pub fn update_last_call_stack(&mut self) {
-        if let Some(stack) = self.call_stack.last_mut() {
-            stack.script_position = self.current_pos;
-        }
     }
 
     pub fn call_stack(&self) -> &[Callstack] {
@@ -121,6 +118,7 @@ impl VmContext {
 
     pub fn read_var_ref(&mut self, var_ref: &VariableRef) -> Result<Value> {
         let (_, var, idx) = self.resolve_var_ref(var_ref)?;
+        // log::info!("Read {} -> {:?}", var_ref.name, var.get(idx)?);
 
         var.get(idx)
     }
@@ -159,21 +157,74 @@ impl VmContext {
         Ok((info, var, r.idxs.clone()))
     }
 
-    pub fn new_func(&mut self, func_name: Result<SmolStr, EventType>, file_path: SmolStr) {
-        if let Some(last) = self.call_stack.last_mut() {
-            last.script_position = std::mem::take(&mut self.current_pos);
-        }
+    pub fn last_call_stack_base(&self) -> usize {
+        self.state.last().map_or(0, |s| s.call_stack_base)
+    }
 
+    pub fn push_state(&mut self, state: SystemState, call_stack_base: usize) {
+        self.state.push(StateCallStack {
+            state,
+            phase: 0,
+            call_stack_base,
+        });
+    }
+
+    pub fn push_state_with_phase(
+        &mut self,
+        state: SystemState,
+        phase: usize,
+        call_stack_base: usize,
+    ) {
+        self.state.push(StateCallStack {
+            state,
+            phase,
+            call_stack_base,
+        });
+    }
+
+    pub fn pop_state(&mut self) -> Option<(SystemState, usize, usize)> {
+        self.state.pop().map(|s| (s.state, s.phase, s.call_stack_base))
+    }
+
+    pub fn clear_state(&mut self) {
+        self.state.clear();
+    }
+
+    pub fn push_current_call_stack(
+        &mut self,
+        func_name: FunctionIdentifier,
+        file_path: SmolStr,
+        instruction_pos: usize,
+    ) {
         self.call_stack.push(Callstack {
             func_name,
             file_path,
-            script_position: ScriptPosition::default(),
+            instruction_pos,
+            script_position: std::mem::take(&mut self.current_pos),
             stack_base: self.stack.len(),
         });
     }
 
-    pub fn end_func(&mut self) {
-        self.call_stack.pop();
+    pub fn pop_call_stack(&mut self) -> Option<Callstack> {
+        self.call_stack.pop()
+    }
+
+    pub fn pop_call_stack_check(&mut self, call_stack_base: usize) -> Option<Callstack> {
+        log::info!(
+            "call_stack: {:?}, current_state: {:?}",
+            self.call_stack,
+            self.state
+        );
+
+        if self.call_stack.len() <= call_stack_base {
+            return None;
+        }
+
+        self.call_stack.pop()
+    }
+
+    pub fn clear_call_stack(&mut self) {
+        self.call_stack.clear();
     }
 
     pub fn return_func(&mut self) -> Result<impl Iterator<Item = Value>> {
@@ -182,8 +233,7 @@ impl VmContext {
     }
 
     pub fn current_stack_count(&self) -> usize {
-        let call_stack = self.call_stack.last().unwrap();
-        self.stack.len() - call_stack.stack_base
+        self.stack.len() - self.call_stack.last().map_or(0, |s| s.stack_base)
     }
 
     pub fn take_arg_list(
@@ -207,15 +257,16 @@ impl VmContext {
             .collect()
     }
 
-    pub fn take_value_list(&mut self, count: u32) -> Result<ArrayVec<Value, 16>> {
-        let mut ret = ArrayVec::new();
-        let list = self.take_list(count).collect::<ArrayVec<LocalValue, 16>>();
+    pub fn take_value_list(&mut self, count: u32) -> Result<Vec<Value>> {
+        let mut ret = Vec::new();
 
-        for arg in list {
+        for arg in self.stack.drain(self.stack.len() - count as usize..) {
             match arg {
                 LocalValue::Value(v) => ret.push(v),
                 LocalValue::VarRef(var) => {
-                    ret.push(self.read_var_ref(&var)?);
+                    let var =
+                        self.var.index_maybe_local_var(&var.func_name, &var.name, &var.idxs)?;
+                    ret.push(var.1.get(var.2)?);
                 }
             }
         }
@@ -285,11 +336,27 @@ impl VmContext {
 }
 
 #[derive(Debug, Clone)]
+pub enum FunctionIdentifier {
+    Normal(SmolStr),
+    Event(EventType, usize),
+}
+
+impl FunctionIdentifier {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Normal(s) => s,
+            Self::Event(ty, _) => ty.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Callstack {
-    pub func_name: Result<SmolStr, EventType>,
+    pub func_name: FunctionIdentifier,
     pub file_path: SmolStr,
     pub script_position: ScriptPosition,
     pub stack_base: usize,
+    pub instruction_pos: usize,
 }
 
 #[derive(Clone)]

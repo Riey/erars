@@ -1,4 +1,0 @@
-[
-    Print("BAR"), NewLine,
-    Print("TITLE"), NewLine,
-]

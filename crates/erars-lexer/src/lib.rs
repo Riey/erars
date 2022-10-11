@@ -381,6 +381,7 @@ pub enum Token<'s> {
     #[token("RETURN", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
     #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::ReturnF))]
     #[token("CALLTRAIN", |lex| normal_expr_command(lex, BuiltinCommand::CallTrain))]
+    #[token("DOTRAIN", |lex| normal_expr_command(lex, BuiltinCommand::DoTrain))]
     #[token("CLEARLINE", |lex| normal_expr_command(lex, BuiltinCommand::ClearLine))]
     #[token("SETCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetColor))]
     #[token("SETBGCOLOR", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColor))]

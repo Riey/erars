@@ -1,11 +1,6 @@
 use parking_lot::Mutex;
 use rayon::prelude::*;
-use std::{
-    io::{BufRead, BufReader, Read},
-    path::Path,
-    sync::Arc,
-    time::Instant,
-};
+use std::{path::Path, sync::Arc, time::Instant};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
@@ -17,63 +12,15 @@ use codespan_reporting::{
 };
 use erars_ast::{Value, VariableInfo};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
-use erars_ui::{ConsoleChannel, ConsoleSender};
+use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
-/// Read string from path respect BOM
-fn read_file(path: &Path) -> std::io::Result<String> {
-    let mut file = std::fs::File::open(path)?;
-
-    use unicode_bom::Bom;
-
-    match Bom::from(&mut file) {
-        Bom::Utf8 => {
-            let mut out = String::with_capacity(file.metadata()?.len() as usize);
-            file.read_to_string(&mut out)?;
-            Ok(out)
-        }
-        other => {
-            let encoding = match other {
-                Bom::Null => encoding_rs::SHIFT_JIS,
-                Bom::Utf16Be => encoding_rs::UTF_16BE,
-                Bom::Utf16Le => encoding_rs::UTF_16LE,
-                Bom::Utf8 => unreachable!(),
-                other => panic!("Unsupported BOM {other}"),
-            };
-
-            let mut decoder = encoding.new_decoder();
-
-            let len = decoder
-                .max_utf8_buffer_length(file.metadata()?.len() as usize)
-                .expect("File is too large");
-
-            let mut reader = BufReader::new(file);
-            let mut out = String::with_capacity(len);
-
-            loop {
-                let src = reader.fill_buf()?;
-
-                if src.is_empty() {
-                    break;
-                }
-
-                let (_ret, size, had_errors) = decoder.decode_to_string(src, &mut out, false);
-
-                if had_errors {
-                    log::error!("Invalid text detected from {}", path.display());
-                }
-
-                reader.consume(size);
-            }
-
-            Ok(out)
-        }
-    }
-}
-
 #[allow(unused_assignments)]
-pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Value>) {
+pub fn run_script(
+    target_path: String,
+    inputs: Vec<Value>,
+) -> anyhow::Result<(TerminalVm, VmContext)> {
     let mut time = Instant::now();
 
     let config_path = format!("{target_path}/emuera.config");
@@ -93,7 +40,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
     log::trace!("Config: {config:?}");
 
     let config = Arc::new(config);
-    let mut tx = ConsoleSender::new(chan, config.printc_width);
+    let mut tx = VirtualConsole::new(config.printc_width);
 
     macro_rules! check_time {
         ($work:expr) => {
@@ -112,7 +59,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
         check_time!("Initialize");
 
         let var_infos: HashMap<_, VariableInfo> =
-            serde_yaml::from_str(include_str!("./variable.yaml")).unwrap();
+            serde_yaml::from_str(include_str!("./variable.yaml"))?;
 
         let csvs = glob::glob_with(
             &format!("{}/CSV/**/*.CSV", target_path),
@@ -121,8 +68,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
                 require_literal_leading_dot: true,
                 require_literal_separator: true,
             },
-        )
-        .unwrap();
+        )?;
 
         let erhs = glob::glob_with(
             &format!("{}/ERB/**/*.ERH", target_path),
@@ -131,8 +77,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
                 require_literal_leading_dot: true,
                 require_literal_separator: true,
             },
-        )
-        .unwrap();
+        )?;
 
         let erbs = glob::glob_with(
             &format!("{}/ERB/**/*.ERB", target_path),
@@ -141,8 +86,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
                 require_literal_leading_dot: true,
                 require_literal_separator: true,
             },
-        )
-        .unwrap();
+        )?;
 
         let mut files = Mutex::new(SimpleFiles::new());
         let mut diagnostic =
@@ -158,7 +102,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
             .filter_map(|csv| match csv {
                 Ok(csv) => {
                     log::trace!("Load {}", csv.display());
-                    let s = read_file(&csv).ok()?;
+                    let s = std::fs::read_to_string(&csv).ok()?;
 
                     Some((
                         csv.file_stem().unwrap().to_str().unwrap().to_ascii_uppercase(),
@@ -272,7 +216,7 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
 
         for erh in erhs {
             let erh = erh.unwrap();
-            let source = read_file(&erh).unwrap();
+            let source = std::fs::read_to_string(&erh).unwrap();
             log::debug!("Parse {}", erh.display());
 
             match info.merge_header(&source) {
@@ -343,16 +287,11 @@ pub fn run_script(chan: Arc<ConsoleChannel>, target_path: String, inputs: Vec<Va
             let config = Config::default();
             codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
                 .unwrap();
-            tx.exit();
             log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
-            return;
         }
     }
 
     let vm = TerminalVm::new(function_dic, target_path.into());
-    let _ = vm.start(&mut tx, &mut ctx);
 
-    tx.exit();
-
-    log::info!("Program Terminated");
+    Ok((vm, ctx))
 }

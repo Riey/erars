@@ -1,10 +1,7 @@
 mod http_frontend;
 
-use std::sync::Arc;
-
 use erars_ast::Value;
 use erars_loader::run_script;
-use erars_ui::ConsoleChannel;
 
 #[derive(clap::Parser)]
 #[clap(author, version, about)]
@@ -67,11 +64,8 @@ fn main() {
         None => Vec::new(),
     };
 
-    let chan = Arc::new(ConsoleChannel::new());
-
-    let chan_ = chan.clone();
-    std::thread::spawn(move || run_script(chan_, args.target_path, inputs));
+    let (vm, ctx) = run_script(args.target_path, inputs).unwrap();
 
     let mut frontend = http_frontend::HttpFrontend::new(args.port);
-    frontend.run(chan).unwrap();
+    frontend.run(vm, ctx).unwrap();
 }

@@ -283,7 +283,10 @@ fn ident_or_method_expr<'c, 'a>(
         if let Some(i) = i.strip_prefix('(') {
             let p = ctx.ban_percent.get();
             ctx.ban_percent.set(false);
-            let (i, args) = terminated(separated_list0(char_sp(','), expr(ctx)), pair(opt(char_sp(',')), char_sp(')')))(i)?;
+            let (i, args) = terminated(
+                separated_list0(char_sp(','), expr(ctx)),
+                pair(opt(char_sp(',')), char_sp(')')),
+            )(i)?;
             ctx.ban_percent.set(p);
 
             match ident.parse() {

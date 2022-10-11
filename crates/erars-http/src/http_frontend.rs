@@ -1,8 +1,10 @@
+use erars_vm::{TerminalVm, VmContext, VmResult};
 use slab::Slab;
 use std::{net::SocketAddr, sync::Arc};
-use tokio::sync::{Mutex as AsyncMutex, Notify};
+use tokio::sync::Mutex as AsyncMutex;
 
 use erars_ast::Value;
+use flume::{bounded, Sender};
 use parking_lot::RwLock;
 
 use axum::{
@@ -37,9 +39,9 @@ struct GetRootQuery {
 
 async fn start(
     port: u16,
-    chan: Arc<super::ConsoleChannel>,
     clients: Arc<AsyncMutex<Slab<(usize, WebSocket)>>>,
-    vconsole: Arc<RwLock<VirtualConsole>>,
+    input_tx: Sender<(Option<Value>, Option<String>)>,
+    vconsole: Arc<RwLock<(VirtualConsole, Option<InputRequest>)>>,
 ) -> anyhow::Result<()> {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let vconsole_ = vconsole.clone();
@@ -73,10 +75,10 @@ async fn start(
                         StatusCode::OK,
                         [("Content-Type", "text/json")],
                         serde_json::to_string(&Ret {
-                            current_req: vconsole.current_req.as_ref(),
-                            bg_color: vconsole.bg_color,
-                            hl_color: vconsole.hl_color,
-                            lines: vconsole.lines().get(params.from..).unwrap_or(&[]),
+                            current_req: vconsole.1.as_ref(),
+                            bg_color: vconsole.0.bg_color,
+                            hl_color: vconsole.0.hl_color,
+                            lines: vconsole.0.lines().get(params.from..).unwrap_or(&[]),
                         })
                         .unwrap(),
                     )
@@ -90,27 +92,21 @@ async fn start(
 
                 log::info!(
                     "[UI] {current_req:?} <- {request}",
-                    current_req = vconsole.current_req
+                    current_req = vconsole.1
                 );
 
-                match vconsole.current_req.as_ref() {
+                match vconsole.1.as_ref() {
                     Some(req) => match req.ty {
                         InputRequestType::AnyKey | InputRequestType::EnterKey => {
-                            if chan.send_input(Value::Int(0), req.generation) {
-                                vconsole.current_req = None;
-                                StatusCode::OK
-                            } else {
-                                StatusCode::GONE
-                            }
+                            input_tx.send((None, None)).unwrap();
+                            vconsole.1 = None;
+                            StatusCode::OK
                         }
                         InputRequestType::Int => match request.trim().parse::<i64>() {
                             Ok(i) => {
-                                if chan.send_input(Value::Int(i), req.generation) {
-                                    vconsole.current_req = None;
-                                    StatusCode::OK
-                                } else {
-                                    StatusCode::GONE
-                                }
+                                input_tx.send((Some(Value::Int(i)), None)).unwrap();
+                                vconsole.1 = None;
+                                StatusCode::OK
                             }
                             _ => {
                                 log::error!("{request} is not Int");
@@ -118,12 +114,9 @@ async fn start(
                             }
                         },
                         InputRequestType::Str => {
-                            if chan.send_input(Value::String(request), req.generation) {
-                                vconsole.current_req = None;
-                                StatusCode::OK
-                            } else {
-                                StatusCode::GONE
-                            }
+                            input_tx.send((Some(Value::String(request)), None)).unwrap();
+                            vconsole.1 = None;
+                            StatusCode::OK
                         }
                     },
                     None => StatusCode::GONE,
@@ -142,73 +135,120 @@ async fn start(
 }
 
 impl HttpFrontend {
-    pub fn run(&mut self, chan: Arc<super::ConsoleChannel>) -> anyhow::Result<()> {
+    pub fn run(&mut self, vm: TerminalVm, mut ctx: VmContext) -> anyhow::Result<()> {
         let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
 
         let _guard = rt.enter();
-        let end = Arc::new(Notify::new());
-        let need_redraw = Arc::new(Notify::new());
+        let (input_tx, input_rx) = bounded(8);
 
-        let end_inner = end.clone();
-        chan.set_exit_fn(move || {
-            end_inner.notify_one();
-        });
-        let need_redraw_inner = need_redraw.clone();
-        chan.set_redraw_fn(move || {
-            need_redraw_inner.notify_one();
-        });
-
-        let vconsole = Arc::new(RwLock::new(VirtualConsole::new()));
+        let mut vconsole = VirtualConsole::new(ctx.config.printc_width);
+        let vconsole_buf = Arc::new(RwLock::new((
+            VirtualConsole::new(ctx.config.printc_width),
+            None,
+        )));
         let clients = Arc::new(AsyncMutex::new(Slab::<(usize, WebSocket)>::new()));
 
         rt.spawn(start(
             self.port,
-            chan.clone(),
             clients.clone(),
-            vconsole.clone(),
+            input_tx.clone(),
+            vconsole_buf.clone(),
         ));
 
-        rt.spawn(async move {
+        rt.block_on(async move {
             loop {
-                need_redraw.notified().await;
-                {
-                    let mut vconsole_ = vconsole.write();
-                    while let Some(msg) = chan.recv_msg() {
-                        vconsole_.push_msg(msg);
+                match vm.run_state(&mut vconsole, &mut ctx) {
+                    VmResult::Exit => break,
+                    VmResult::Redraw => {
+                        vconsole_buf.write().0 = vconsole.clone();
+                        let mut clients = clients.lock().await;
+                        send_code(event_codes::REDRAW, &mut clients).await;
                     }
-                    if let Some((timeout, gen, default_value)) = vconsole_.timeout.take() {
-                        let vconsole = vconsole.clone();
-                        let chan = chan.clone();
-                        let clients = clients.clone();
-                        tokio::spawn(async move {
-                            tokio::time::sleep_until(tokio::time::Instant::from_std(timeout)).await;
-                            if chan.send_input(default_value, gen) {
-                                // clear current_req
-                                match &mut vconsole.write().current_req {
-                                    opt_req
-                                        if opt_req
-                                            .as_ref()
-                                            .map_or(false, |req| req.generation == gen) =>
+                    VmResult::NeedInput { req, set_result } => {
+                        let ty = req.ty;
+
+                        {
+                            if let Some(timeout) = req.timeout.clone() {
+                                let gen = req.generation;
+                                let vconsole_buf = vconsole_buf.clone();
+                                let clients = clients.clone();
+                                let input_tx = input_tx.clone();
+                                tokio::spawn(async move {
+                                    let target = time::OffsetDateTime::from_unix_timestamp_nanos(
+                                        timeout.timeout,
+                                    )
+                                    .unwrap();
+                                    let diff = time::OffsetDateTime::now_utc() - target;
+                                    let instant = std::time::Instant::now() + diff;
+                                    tokio::time::sleep_until(tokio::time::Instant::from_std(
+                                        instant,
+                                    ))
+                                    .await;
+
+                                    let has_timeout: bool;
+
                                     {
-                                        *opt_req = None;
+                                        let mut vconsole_buf = vconsole_buf.write();
+                                        has_timeout = vconsole_buf
+                                            .1
+                                            .as_ref()
+                                            .map_or(false, |req| req.generation == gen);
+
+                                        if has_timeout {
+                                            input_tx
+                                                .send((
+                                                    Some(timeout.default_value),
+                                                    timeout.timeout_msg,
+                                                ))
+                                                .unwrap();
+                                            vconsole_buf.1 = None;
+                                        }
                                     }
-                                    _ => {}
-                                }
-                                log::debug!("Timeout {gen}");
-                                let mut clients = clients.lock().await;
-                                send_code(event_codes::TIMEOUT, &mut clients).await;
+                                    if has_timeout {
+                                        log::info!("Timeout {gen}");
+                                        let mut clients = clients.lock().await;
+                                        send_code(event_codes::TIMEOUT, &mut clients).await;
+                                    }
+                                });
                             }
-                        });
+
+                            let mut vconsole_buf = vconsole_buf.write();
+                            vconsole_buf.0 = vconsole.clone();
+                            vconsole_buf.1 = Some(req);
+                        }
+
+                        let mut clients = clients.lock().await;
+                        send_code(event_codes::REDRAW, &mut clients).await;
+
+                        let (input, timeout_msg) = match input_rx.recv_async().await {
+                            Ok(value) => value,
+                            Err(_) => break,
+                        };
+
+                        if let Some(timeout_msg) = timeout_msg {
+                            vconsole.print_line(timeout_msg);
+                        }
+
+                        match ty {
+                            InputRequestType::AnyKey | InputRequestType::EnterKey => {}
+                            InputRequestType::Int if set_result => {
+                                ctx.push(input.unwrap());
+                            }
+                            InputRequestType::Str if set_result => {
+                                ctx.push(input.unwrap());
+                            }
+                            InputRequestType::Int => {
+                                ctx.var.set_result(input.unwrap().try_into_int().unwrap());
+                            }
+                            InputRequestType::Str => {
+                                ctx.var.set_results(input.unwrap().try_into_str().unwrap());
+                            }
+                        }
+                        if set_result {}
                     }
                 }
-                let mut clients = clients.lock().await;
-                send_code(event_codes::REDRAW, &mut clients).await;
-                drop(clients);
-                continue;
             }
         });
-
-        rt.block_on(end.notified());
 
         rt.shutdown_background();
 
