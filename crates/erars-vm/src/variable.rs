@@ -1,16 +1,20 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc, fmt::Debug,
+};
 
 use anyhow::{anyhow, bail, Result};
-use erars_ast::{Value, VariableInfo};
+use enum_map::{EnumMap, Enum};
+use erars_ast::{Interner, StrKey, Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use smol_str::SmolStr;
 
 use erars_ui::VirtualConsole;
+use strum::{IntoStaticStr, Display};
 
 macro_rules! set_var {
     ($self:expr, $name:expr, $value:expr) => {
@@ -37,58 +41,70 @@ pub struct SerializableVariableStorage {
     pub version: u32,
     character_len: usize,
     rand_seed: [u8; 32],
-    variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
+    variables: HashMap<String, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SerializableGlobalVariableStorage {
     pub code: u32,
     pub version: u32,
-    variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
+    variables: HashMap<String, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
 }
 
 #[derive(Clone)]
 pub struct VariableStorage {
+    interner: Arc<Interner>,
     character_len: usize,
     rng: ChaCha20Rng,
-    variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<SmolStr, HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>>,
+    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
+    known_variables: EnumMap<KnownVariableNames, StrKey>,
 }
 
 impl VariableStorage {
-    pub fn new(infos: &HashMap<SmolStr, VariableInfo>) -> Self {
+    pub fn new(interner: Arc<Interner>, infos: &HashMap<StrKey, VariableInfo>) -> Self {
         let mut variables = HashMap::new();
 
         for (k, v) in infos {
-            variables.insert(k.clone(), (v.clone(), UniformVariable::new(v)));
+            variables.insert(
+                *k,
+                (v.clone(), UniformVariable::new(v)),
+            );
         }
 
         Self {
+            interner,
             character_len: 0,
             rng: ChaCha20Rng::from_entropy(),
             variables,
             local_variables: HashMap::new(),
+            known_variables: enum_map::enum_map! {
+                v => interner.get_or_intern_static(<&str>::from(v)),
+            },
         }
+    }
+
+    #[inline]
+    pub fn known_key(&self, var: KnownVariableNames) -> StrKey {
+        self.known_variables[var]
     }
 
     fn load_variables(
         &mut self,
-        variables: HashMap<SmolStr, (VariableInfo, UniformVariable)>,
-        local_variables: HashMap<
-            SmolStr,
-            HashMap<SmolStr, (VariableInfo, Option<UniformVariable>)>,
-        >,
+        variables: HashMap<String, (VariableInfo, UniformVariable)>,
+        local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
     ) {
         for (k, (info, var)) in variables {
-            let (now_info, now_var) = match self.variables.get_mut(&k) {
-                Some(v) => v,
-                _ => {
-                    log::warn!("Ignore non existing variable {k}");
-                    continue;
-                }
-            };
+            let (now_info, now_var) =
+                match self.interner.get(k).and_then(|k| self.variables.get_mut(&k)) {
+                    Some(v) => v,
+                    _ => {
+                        log::warn!("Ignore non existing variable {k}");
+                        continue;
+                    }
+                };
 
             if info != *now_info {
                 log::warn!("Info mismatched! Ignore load variable {k}");
@@ -99,7 +115,11 @@ impl VariableStorage {
         }
 
         for (func_name, vars) in local_variables {
-            let now_local_var = match self.local_variables.get_mut(&func_name) {
+            let now_local_var = match self
+                .interner
+                .get(&func_name)
+                .and_then(|k| self.local_variables.get_mut(&k))
+            {
                 Some(v) => v,
                 None => {
                     log::warn!("Ignore non existing function {func_name}");
@@ -108,13 +128,14 @@ impl VariableStorage {
             };
 
             for (k, (info, var)) in vars {
-                let (now_info, now_var) = match now_local_var.get_mut(&k) {
-                    Some(v) => v,
-                    _ => {
-                        log::warn!("Ignore non existing variable {func_name}@{k}");
-                        continue;
-                    }
-                };
+                let (now_info, now_var) =
+                    match self.interner.get(&k).and_then(|k| now_local_var.get_mut(&k)) {
+                        Some(v) => v,
+                        _ => {
+                            log::warn!("Ignore non existing variable {func_name}@{k}");
+                            continue;
+                        }
+                    };
 
                 if info != *now_info {
                     log::warn!("Info mismatched! Ignore load variable {k}");
@@ -151,35 +172,65 @@ impl VariableStorage {
         Ok(())
     }
 
-    pub fn get_serializable(
+    fn extract_var(
         &self,
-        header: &HeaderInfo,
-        description: String,
-    ) -> SerializableVariableStorage {
+        is_global: bool,
+    ) -> (
+        HashMap<String, (VariableInfo, VmVariable)>,
+        HashMap<String, HashMap<String, (VariableInfo, VmVariable)>>,
+    ) {
         let variables = self
             .variables
-            .iter()
+            .par_iter()
             .filter_map(|(name, (info, var))| {
-                if info.is_savedata && !info.is_global {
-                    Some((name.clone(), (info.clone(), var.clone())))
+                if info.is_savedata && info.is_global == is_global {
+                    Some((
+                        self.interner.resolve(name).to_string(),
+                        (info.clone(), var.clone()),
+                    ))
                 } else {
                     None
                 }
             })
             .collect();
 
-        let mut local_variables = HashMap::<_, HashMap<_, _>>::new();
+        let local_variables = self
+            .local_variables
+            .par_iter()
+            .filter_map(|(fn_name, vars)| {
+                let vars: HashMap<_, _> = vars
+                    .iter()
+                    .filter_map(|(name, (info, var))| {
+                        if info.is_savedata && info.is_global == is_global {
+                            Some((
+                                self.interner.resolve(name).to_string(),
+                                (info.clone(), var.clone()),
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
 
-        for (fn_name, vars) in self.local_variables.iter() {
-            for (name, (info, var)) in vars.iter() {
-                if info.is_savedata && !info.is_global {
-                    local_variables
-                        .entry(fn_name.clone())
-                        .or_default()
-                        .insert(name.clone(), (info.clone(), var.clone()));
+                if vars.is_empty() {
+                    None
+                } else {
+                    let fn_name: String = self.interner.resolve(fn_name).into();
+
+                    Some((fn_name, vars))
                 }
-            }
-        }
+            })
+            .collect();
+
+        (variables, local_variables)
+    }
+
+    pub fn get_serializable(
+        &self,
+        header: &HeaderInfo,
+        description: String,
+    ) -> SerializableVariableStorage {
+        let (variables, local_variables) = self.extract_var(false);
 
         SerializableVariableStorage {
             code: header.gamebase.code,
@@ -196,30 +247,7 @@ impl VariableStorage {
         &self,
         header: &HeaderInfo,
     ) -> SerializableGlobalVariableStorage {
-        let variables = self
-            .variables
-            .iter()
-            .filter_map(|(name, (info, var))| {
-                if info.is_savedata && info.is_global {
-                    Some((name.clone(), (info.clone(), var.clone())))
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        let mut local_variables = HashMap::<_, HashMap<_, _>>::new();
-
-        for (fn_name, vars) in self.local_variables.iter() {
-            for (name, (info, var)) in vars.iter() {
-                if var.is_some() && info.is_savedata && info.is_global {
-                    local_variables
-                        .entry(fn_name.clone())
-                        .or_default()
-                        .insert(name.clone(), (info.clone(), var.clone()));
-                }
-            }
-        }
+        let (variables, local_variables) = self.extract_var(true);
 
         SerializableGlobalVariableStorage {
             code: header.gamebase.code,
@@ -235,7 +263,7 @@ impl VariableStorage {
 
     fn upcheck_internal(
         tx: &mut VirtualConsole,
-        palam_name: &BTreeMap<u32, SmolStr>,
+        palam_name: &BTreeMap<u32, StrKey>,
         palam: &mut [i64],
         up: &mut [i64],
         down: &mut [i64],
@@ -275,7 +303,7 @@ impl VariableStorage {
         &mut self,
         tx: &mut VirtualConsole,
         idx: usize,
-        palam_name: &BTreeMap<u32, SmolStr>,
+        palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
         let (palam, up, down) = self.get_var3("PALAM", "UP", "DOWN")?;
 
@@ -290,7 +318,7 @@ impl VariableStorage {
         &mut self,
         tx: &mut VirtualConsole,
         idx: usize,
-        palam_name: &BTreeMap<u32, SmolStr>,
+        palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
         let (palam, up, down) = self.get_var3("PALAM", "CUP", "CDOWN")?;
 
@@ -337,34 +365,34 @@ impl VariableStorage {
 
     pub fn set_result(&mut self, i: i64) {
         log::debug!("set result {i}");
-        *self.ref_int("RESULT", &[]).unwrap() = i;
+        *self.ref_int(KnownVariableNames::Result, &[]).unwrap() = i;
     }
 
     pub fn set_results(&mut self, s: String) {
         log::debug!("set results {s}");
-        *self.ref_str("RESULTS", &[]).unwrap() = s;
+        *self.ref_str(KnownVariableNames::ResultS, &[]).unwrap() = s;
     }
 
     pub fn character_len(&self) -> usize {
         self.character_len
     }
 
-    pub fn add_local_info(&mut self, func: SmolStr, var_name: SmolStr, info: VariableInfo) {
+    pub fn add_local_info(&mut self, func: StrKey, var_name: StrKey, info: VariableInfo) {
         self.local_variables
             .entry(func)
             .or_default()
             .insert(var_name, (info, None));
     }
 
-    pub fn ref_int(&mut self, name: &str, args: &[usize]) -> Result<&mut i64> {
+    pub fn ref_int(&mut self, name: impl StrKeyLike, args: &[usize]) -> Result<&mut i64> {
         let (_, var, idx) = self.index_var(name, args)?;
         Ok(&mut var.as_int()?[idx])
     }
 
     pub fn ref_local_int(
         &mut self,
-        func_name: &str,
-        name: &str,
+        func_name: impl StrKeyLike,
+        name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<&mut i64> {
         let (_, var, idx) = self.index_local_var(func_name, name, args)?;
@@ -373,8 +401,8 @@ impl VariableStorage {
 
     pub fn ref_maybe_local_int(
         &mut self,
-        func_name: &str,
-        name: &str,
+        func_name: impl StrKeyLike,
+        name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<&mut i64> {
         if self.is_local_var(func_name, name) {
@@ -384,15 +412,15 @@ impl VariableStorage {
         }
     }
 
-    pub fn ref_str(&mut self, name: &str, args: &[usize]) -> Result<&mut String> {
+    pub fn ref_str(&mut self, name: impl StrKeyLike, args: &[usize]) -> Result<&mut String> {
         let (_, var, idx) = self.index_var(name, args)?;
         Ok(&mut var.as_str()?[idx])
     }
 
     pub fn ref_local_str(
         &mut self,
-        func_name: &str,
-        name: &str,
+        func_name: impl StrKeyLike,
+        name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<&mut String> {
         let (_, var, idx) = self.index_local_var(func_name, name, args)?;
@@ -401,8 +429,8 @@ impl VariableStorage {
 
     pub fn ref_maybe_local_str(
         &mut self,
-        func_name: &str,
-        name: &str,
+        func_name: impl StrKeyLike,
+        name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<&mut String> {
         if self.is_local_var(func_name, name) {
@@ -412,20 +440,20 @@ impl VariableStorage {
         }
     }
 
-    pub fn read_int(&mut self, name: &str, args: &[usize]) -> Result<i64> {
+    pub fn read_int(&mut self, name: impl StrKeyLike, args: &[usize]) -> Result<i64> {
         let (_, var, idx) = self.index_var(name, args)?;
         Ok(var.as_int()?[idx])
     }
 
-    pub fn read_local_int(&mut self, func_name: &str, name: &str, args: &[usize]) -> Result<i64> {
+    pub fn read_local_int(&mut self, func_name: impl StrKeyLike, name: impl StrKeyLike, args: &[usize]) -> Result<i64> {
         let (_, var, idx) = self.index_local_var(func_name, name, args)?;
         Ok(var.as_int()?[idx])
     }
 
     pub fn read_maybe_local_int(
         &mut self,
-        func_name: &str,
-        name: &str,
+        func_name: impl StrKeyLike,
+        name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<i64> {
         if self.is_local_var(func_name, name) {
@@ -435,17 +463,19 @@ impl VariableStorage {
         }
     }
 
-    pub fn read_str(&mut self, name: &str, args: &[usize]) -> Result<String> {
+    pub fn read_str(&mut self, name: impl StrKeyLike, args: &[usize]) -> Result<String> {
         let (_, var, idx) = self.index_var(name, args)?;
         Ok(var.as_str()?[idx].clone())
     }
 
     pub fn index_var(
         &mut self,
-        name: &str,
+        name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
-        let target = if name != "TARGET" {
+        let name = name.get_key(self);
+
+        let target = if name != self.known_key(KnownVariableNames::Target) {
             self.read_int("TARGET", &[])?
         } else {
             // NEED for break recursion
@@ -460,7 +490,7 @@ impl VariableStorage {
             UniformVariable::Character(cvar) => {
                 let c_idx = c_idx.unwrap_or_else(|| target as usize);
                 cvar.get_mut(c_idx)
-                    .ok_or_else(|| anyhow!("Variable {name} Character index {c_idx} not exists"))?
+                    .ok_or_else(|| anyhow!("Variable {name:?} Character index {c_idx} not exists"))?
             }
             UniformVariable::Normal(var) => var,
         };
@@ -470,8 +500,8 @@ impl VariableStorage {
 
     pub fn index_local_var(
         &mut self,
-        func_name: &str,
-        name: &str,
+        func_name: impl StrKeyLike,
+        name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
         let target = self.read_int("TARGET", &[])?;
@@ -495,8 +525,8 @@ impl VariableStorage {
 
     pub fn index_maybe_local_var(
         &mut self,
-        func_name: &str,
-        name: &str,
+        func_name: impl StrKeyLike,
+        name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
         if self.is_local_var(func_name, name) {
@@ -508,15 +538,15 @@ impl VariableStorage {
 
     pub fn get_local_var(
         &mut self,
-        func_name: &str,
-        var: &str,
+        func_name: impl StrKeyLike,
+        var: impl StrKeyLike,
     ) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
         let (info, var) = self
             .local_variables
-            .get_mut(func_name)
+            .get_mut(&func_name.get_key(self))
             .unwrap()
-            .get_mut(var)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", var))?;
+            .get_mut(&var.get_key(self))
+            .ok_or_else(|| anyhow!("Variable {:?} is not exists", var))?;
 
         if var.is_none() {
             let mut var_ = UniformVariable::new(info);
@@ -532,17 +562,17 @@ impl VariableStorage {
         Ok((info, var.as_mut().unwrap()))
     }
 
-    pub fn is_local_var(&self, func: &str, var: &str) -> bool {
-        match self.local_variables.get(func) {
-            Some(v) => v.contains_key(var),
+    pub fn is_local_var(&self, func: impl StrKeyLike, var: impl StrKeyLike) -> bool {
+        match self.local_variables.get(&func.get_key(self)) {
+            Some(v) => v.contains_key(&var.get_key(self)),
             None => false,
         }
     }
 
     pub fn get_maybe_local_var(
         &mut self,
-        func: &str,
-        var: &str,
+        func: impl StrKeyLike,
+        var: impl StrKeyLike,
     ) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
         if self.is_local_var(func, var) {
             self.get_local_var(func, var)
@@ -551,8 +581,8 @@ impl VariableStorage {
         }
     }
 
-    pub fn reset_var(&mut self, var: &str) -> Result<()> {
-        let (info, var) = self.get_var(var)?;
+    pub fn reset_var(&mut self, var: impl StrKeyLike) -> Result<()> {
+        let (info, var) = self.get_var(&var.get_key(self))?;
 
         if info.is_str {
             match var {
@@ -573,45 +603,45 @@ impl VariableStorage {
         Ok(())
     }
 
-    pub fn get_var(&mut self, var: &str) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
+    pub fn get_var(&mut self, var: impl StrKeyLike) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
         let (l, r) = self
             .variables
-            .get_mut(var)
-            .ok_or_else(|| anyhow!("Variable {} is not exists", var))?;
+            .get_mut(&var.get_key(self))
+            .ok_or_else(|| anyhow!("Variable {var:?} is not exists"))?;
 
         Ok((l, r))
     }
 
     pub fn get_var2(
         &mut self,
-        l: &str,
-        r: &str,
+        v1: impl StrKeyLike,
+        v2: impl StrKeyLike,
     ) -> Result<(
         (&mut VariableInfo, &mut UniformVariable),
         (&mut VariableInfo, &mut UniformVariable),
     )> {
-        match self.variables.get_many_mut([l, r]) {
+        match self.variables.get_many_mut([&v1.get_key(self), &v2.get_key(self)]) {
             Some([(ll, lr), (rl, rr)]) => Ok(((ll, lr), (rl, rr))),
             None => {
-                bail!("Variable {l} or {r} is not exists");
+                bail!("Variable {v1:?} or {v2:?} is not exists");
             }
         }
     }
 
     pub fn get_var3(
         &mut self,
-        v1: &str,
-        v2: &str,
-        v3: &str,
+        v1: impl StrKeyLike,
+        v2: impl StrKeyLike,
+        v3: impl StrKeyLike,
     ) -> Result<(
         (&mut VariableInfo, &mut UniformVariable),
         (&mut VariableInfo, &mut UniformVariable),
         (&mut VariableInfo, &mut UniformVariable),
     )> {
-        match self.variables.get_many_mut([v1, v2, v3]) {
+        match self.variables.get_many_mut([&v1.get_key(self), &v2.get_key(self), &v3.get_key(self)]) {
             Some([(l1, r1), (l2, r2), (l3, r3)]) => Ok(((l1, r1), (l2, r2), (l3, r3))),
             None => {
-                bail!("Variable {v1} or {v2} or {v3} is not exists");
+                bail!("Variable {v1:?} or {v2:?} or {v3:?} is not exists");
             }
         }
     }
@@ -874,3 +904,46 @@ impl UniformVariable {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, IntoStaticStr, Display)]
+#[strum(serialize_all = "UPPERCASE")]
+pub enum KnownVariableNames {
+    Count,
+    NextCom,
+    PrevCom,
+    CurrentCom,
+    Target,
+    Local,
+    LocalS,
+    Arg,
+    ArgS,
+    Result,
+    ResultS,
+    Palam,
+    PalamLv,
+    Exp,
+    ExpLv,
+    Up,
+    Down,
+    Cup,
+    Cdown,
+}
+
+trait StrKeyLike: Debug + Copy {
+    fn get_key(self, var: &VariableStorage) -> StrKey;
+}
+
+impl StrKeyLike for StrKey {
+    #[inline(always)]
+    fn get_key(self, _: &VariableStorage) -> StrKey {
+        self
+    }
+}
+
+impl StrKeyLike for KnownVariableNames {
+    #[inline(always)]
+    fn get_key(self, var: &VariableStorage) -> StrKey {
+        var.known_key(self)
+    }
+}
+

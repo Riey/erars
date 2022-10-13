@@ -1,6 +1,6 @@
 use crate::{CompileError, CompileResult, Instruction};
 use erars_ast::{
-    BinaryOperator, BuiltinVariable, Expr, FormExpr, FormText, Function, FunctionHeader, Interner,
+    BinaryOperator, BuiltinVariable, Expr, FormExpr, FormText, Function, FunctionHeader,
     SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable,
 };
 use hashbrown::HashMap;

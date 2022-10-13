@@ -26,8 +26,8 @@ macro_rules! report_error {
 }
 
 pub struct TerminalVm {
-    dic: FunctionDic,
-    sav_path: PathBuf,
+    pub dic: FunctionDic,
+    pub sav_path: PathBuf,
 }
 
 #[derive(Debug)]

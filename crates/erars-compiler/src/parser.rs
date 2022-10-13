@@ -1,6 +1,7 @@
 mod csv;
 mod expr;
 
+use enum_map::{Enum, EnumMap};
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType, Expr, Function,
     FunctionHeader, FunctionInfo, Interner, ScriptPosition, Stmt, StmtWithPos, StrKey, Variable,
@@ -18,7 +19,7 @@ use std::{
     mem,
     sync::Arc,
 };
-use strum::{Display, EnumString};
+use strum::{Display, EnumString, IntoStaticStr};
 
 pub use crate::error::{ParserError, ParserResult};
 use crate::CompiledFunction;
@@ -1020,96 +1021,103 @@ impl ParserContext {
         lex: &mut Lexer<'s, Token<'s>>,
     ) -> ParserResult<Vec<CompiledFunction>> {
         let mut out = Vec::with_capacity(1024);
-        let mut compiler = crate::compiler::Compiler::new();
-
-        let mut current_func_header = FunctionHeader::default();
 
         loop {
             match self.next_token(lex)? {
-                Some(Token::At(left)) => {
-                    let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
-                    if !current_func_header.name.is_empty() {
-                        out.push(CompiledFunction {
-                            header: mem::take(&mut current_func_header),
-                            body: compiler.out.into_boxed_slice(),
-                            goto_labels: compiler.goto_labels,
-                        });
-                        compiler = crate::compiler::Compiler::new();
-                    }
+                Some(Token::At(mut left)) => loop {
                     self.local_strs.borrow_mut().clear();
-                    current_func_header.file_path = self.file_path.clone();
-                    current_func_header.name = label.into();
-                    current_func_header.args = args;
-                }
-                Some(Token::Function) => {
-                    current_func_header.infos.push(FunctionInfo::Function);
-                }
-                Some(Token::FunctionS) => {
-                    current_func_header.infos.push(FunctionInfo::FunctionS);
-                }
-                Some(Token::Pri) => {
-                    current_func_header
-                        .infos
-                        .push(FunctionInfo::EventFlag(EventFlags::Pre));
-                }
-                Some(Token::Later) => {
-                    current_func_header
-                        .infos
-                        .push(FunctionInfo::EventFlag(EventFlags::Later));
-                }
-                Some(Token::Single) => {
-                    current_func_header
-                        .infos
-                        .push(FunctionInfo::EventFlag(EventFlags::Single));
-                }
-                Some(Token::Dim(left)) => {
-                    let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
-                    current_func_header.infos.push(FunctionInfo::Dim(var));
-                }
-                Some(Token::DimS(left)) => {
-                    let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
-                    self.local_strs.borrow_mut().insert(var.var.clone());
-                    current_func_header.infos.push(FunctionInfo::Dim(var));
-                }
-                Some(Token::LocalSize(size)) => {
-                    let size = self::expr::const_eval_log_error(
-                        self,
-                        try_nom!(lex, self::expr::expr(self)(size)).1,
-                    )
-                    .try_into_int()
-                    .unwrap();
-                    current_func_header.infos.push(FunctionInfo::LocalSize(size as usize));
-                }
-                Some(Token::LocalSSize(size)) => {
-                    let size = self::expr::const_eval_log_error(
-                        self,
-                        try_nom!(lex, self::expr::expr(self)(size)).1,
-                    )
-                    .try_into_int()
-                    .unwrap();
-                    current_func_header
-                        .infos
-                        .push(FunctionInfo::LocalSSize(size as usize));
-                }
-                Some(other) => match self.parse_stmt(other, lex) {
-                    Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
-                        Ok(_) => {}
-                        Err(err) => error!(lex, err.to_string()),
-                    },
-                    Err(err) => {
-                        return Err(err);
+                    let mut compiler = crate::compiler::Compiler::new();
+                    let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+
+                    let mut infos = Vec::new();
+
+                    match self.next_token(lex)? {
+                        Some(Token::At(new_left)) => {
+                            left = new_left;
+
+                            out.push(CompiledFunction {
+                                header: FunctionHeader {
+                                    name: self.interner.get_or_intern(label),
+                                    args,
+                                    file_path: self.file_path.clone(),
+                                    infos: Vec::new(),
+                                },
+                                goto_labels: compiler.goto_labels,
+                                body: compiler.out.into_boxed_slice(),
+                            });
+
+                            continue;
+                        }
+                        None => {
+                            out.push(CompiledFunction {
+                                header: FunctionHeader {
+                                    name: self.interner.get_or_intern(label),
+                                    args,
+                                    file_path: self.file_path.clone(),
+                                    infos: Vec::new(),
+                                },
+                                goto_labels: compiler.goto_labels,
+                                body: compiler.out.into_boxed_slice(),
+                            });
+
+                            break;
+                        }
+                        Some(Token::Function) => {
+                            infos.push(FunctionInfo::Function);
+                        }
+                        Some(Token::FunctionS) => {
+                            infos.push(FunctionInfo::FunctionS);
+                        }
+                        Some(Token::Pri) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
+                        }
+                        Some(Token::Later) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Later));
+                        }
+                        Some(Token::Single) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Single));
+                        }
+                        Some(Token::Dim(left)) => {
+                            let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
+                            infos.push(FunctionInfo::Dim(var));
+                        }
+                        Some(Token::DimS(left)) => {
+                            let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
+                            self.local_strs.borrow_mut().insert(var.var.clone());
+                            infos.push(FunctionInfo::Dim(var));
+                        }
+                        Some(Token::LocalSize(size)) => {
+                            let size = self::expr::const_eval_log_error(
+                                self,
+                                try_nom!(lex, self::expr::expr(self)(size)).1,
+                            )
+                            .try_into_int()
+                            .unwrap();
+                            infos.push(FunctionInfo::LocalSize(size as usize));
+                        }
+                        Some(Token::LocalSSize(size)) => {
+                            let size = self::expr::const_eval_log_error(
+                                self,
+                                try_nom!(lex, self::expr::expr(self)(size)).1,
+                            )
+                            .try_into_int()
+                            .unwrap();
+                            infos.push(FunctionInfo::LocalSSize(size as usize));
+                        }
+                        Some(other) => match self.parse_stmt(other, lex) {
+                            Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
+                                Ok(_) => {}
+                                Err(err) => error!(lex, err.to_string()),
+                            },
+                            Err(err) => {
+                                return Err(err);
+                            }
+                        },
                     }
                 },
+                Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
                 None => break,
             }
-        }
-
-        if !current_func_header.name.is_empty() {
-            out.push(CompiledFunction {
-                header: mem::take(&mut current_func_header),
-                body: compiler.out.into_boxed_slice(),
-                goto_labels: compiler.goto_labels,
-            });
         }
 
         Ok(out)
@@ -1117,79 +1125,98 @@ impl ParserContext {
 
     pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();
-        let mut current_func = Function::default();
 
         loop {
             match self.next_token(lex)? {
-                Some(Token::At(left)) => {
-                    let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
-                    if !current_func.header.name.is_empty() {
-                        out.push(mem::take(&mut current_func));
-                    }
+                Some(Token::At(mut left)) => loop {
                     self.local_strs.borrow_mut().clear();
-                    current_func.header.file_path = self.file_path.clone();
-                    current_func.header.name = label.into();
-                    current_func.header.args = args;
-                }
-                Some(Token::Function) => {
-                    current_func.header.infos.push(FunctionInfo::Function);
-                }
-                Some(Token::FunctionS) => {
-                    current_func.header.infos.push(FunctionInfo::FunctionS);
-                }
-                Some(Token::Pri) => {
-                    current_func
-                        .header
-                        .infos
-                        .push(FunctionInfo::EventFlag(EventFlags::Pre));
-                }
-                Some(Token::Later) => {
-                    current_func
-                        .header
-                        .infos
-                        .push(FunctionInfo::EventFlag(EventFlags::Later));
-                }
-                Some(Token::Single) => {
-                    current_func
-                        .header
-                        .infos
-                        .push(FunctionInfo::EventFlag(EventFlags::Single));
-                }
-                Some(Token::Dim(left)) => {
-                    let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
-                    current_func.header.infos.push(FunctionInfo::Dim(var));
-                }
-                Some(Token::DimS(left)) => {
-                    let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
-                    self.local_strs.borrow_mut().insert(var.var.clone());
-                    current_func.header.infos.push(FunctionInfo::Dim(var));
-                }
-                Some(Token::LocalSize(size)) => {
-                    let var = try_nom!(lex, self::expr::expr(self)(size))
-                        .1
-                        .into_const_int()
-                        .unwrap();
-                    current_func.header.infos.push(FunctionInfo::LocalSize(var as usize));
-                }
-                Some(Token::LocalSSize(size)) => {
-                    let var = try_nom!(lex, self::expr::expr(self)(size))
-                        .1
-                        .into_const_int()
-                        .unwrap();
-                    current_func.header.infos.push(FunctionInfo::LocalSSize(var as usize));
-                }
-                Some(other) => match self.parse_stmt(other, lex) {
-                    Ok(stmt) => current_func.body.push(stmt),
-                    Err(err) => {
-                        return Err(err);
+                    let mut body = Vec::new();
+                    let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+
+                    let mut infos = Vec::new();
+
+                    match self.next_token(lex)? {
+                        Some(Token::At(new_left)) => {
+                            left = new_left;
+
+                            out.push(Function {
+                                header: FunctionHeader {
+                                    name: self.interner.get_or_intern(label),
+                                    args,
+                                    file_path: self.file_path.clone(),
+                                    infos: Vec::new(),
+                                },
+                                body: std::mem::take(&mut body),
+                            });
+
+                            continue;
+                        }
+                        None => {
+                            out.push(Function {
+                                header: FunctionHeader {
+                                    name: self.interner.get_or_intern(label),
+                                    args,
+                                    file_path: self.file_path.clone(),
+                                    infos: Vec::new(),
+                                },
+                                body,
+                            });
+
+                            break;
+                        }
+                        Some(Token::Function) => {
+                            infos.push(FunctionInfo::Function);
+                        }
+                        Some(Token::FunctionS) => {
+                            infos.push(FunctionInfo::FunctionS);
+                        }
+                        Some(Token::Pri) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
+                        }
+                        Some(Token::Later) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Later));
+                        }
+                        Some(Token::Single) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Single));
+                        }
+                        Some(Token::Dim(left)) => {
+                            let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
+                            infos.push(FunctionInfo::Dim(var));
+                        }
+                        Some(Token::DimS(left)) => {
+                            let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
+                            self.local_strs.borrow_mut().insert(var.var.clone());
+                            infos.push(FunctionInfo::Dim(var));
+                        }
+                        Some(Token::LocalSize(size)) => {
+                            let size = self::expr::const_eval_log_error(
+                                self,
+                                try_nom!(lex, self::expr::expr(self)(size)).1,
+                            )
+                            .try_into_int()
+                            .unwrap();
+                            infos.push(FunctionInfo::LocalSize(size as usize));
+                        }
+                        Some(Token::LocalSSize(size)) => {
+                            let size = self::expr::const_eval_log_error(
+                                self,
+                                try_nom!(lex, self::expr::expr(self)(size)).1,
+                            )
+                            .try_into_int()
+                            .unwrap();
+                            infos.push(FunctionInfo::LocalSSize(size as usize));
+                        }
+                        Some(other) => match self.parse_stmt(other, lex) {
+                            Ok(stmt) => body.push(stmt),
+                            Err(err) => {
+                                return Err(err);
+                            }
+                        },
                     }
                 },
+                Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
                 None => break,
             }
-        }
-
-        if !current_func.header.name.is_empty() {
-            out.push(current_func);
         }
 
         Ok(out)

@@ -1,42 +1,42 @@
 use anyhow::{anyhow, Result};
 use arrayvec::ArrayVec;
 use enum_map::EnumMap;
+use erars_ast::StrKey;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
 use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, VariableInfo};
 use erars_compiler::{CompiledFunction, Instruction};
-use serde::{Deserialize, Serialize};
 
 use crate::VariableStorage;
 use crate::Workflow;
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct FunctionBody {
-    file_path: SmolStr,
-    is_function: bool,
-    is_functions: bool,
-    body: Box<[Instruction]>,
-    goto_labels: HashMap<SmolStr, u32>,
-    args: Vec<(Box<str>, Option<Value>, ArrayVec<usize, 4>)>,
+    pub file_path: SmolStr,
+    pub is_function: bool,
+    pub is_functions: bool,
+    pub goto_labels: HashMap<StrKey, u32>,
+    pub args: Vec<(StrKey, Option<Value>, ArrayVec<usize, 4>)>,
+    pub body: Box<[Instruction]>,
 }
 
 impl FunctionBody {
     pub fn push_arg(
         &mut self,
-        var: Box<str>,
+        var: StrKey,
         default_value: Option<Value>,
         indices: ArrayVec<usize, 4>,
     ) {
         self.args.push((var, default_value, indices));
     }
 
-    pub fn goto_labels(&self) -> &HashMap<SmolStr, u32> {
+    pub fn goto_labels(&self) -> &HashMap<StrKey, u32> {
         &self.goto_labels
     }
 
-    pub fn args(&self) -> &[(Box<str>, Option<Value>, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[(StrKey, Option<Value>, ArrayVec<usize, 4>)] {
         &self.args
     }
 
@@ -57,11 +57,11 @@ impl FunctionBody {
     }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct EventCollection {
-    single: Option<FunctionBody>,
-    events: Vec<FunctionBody>,
-    empty_count: usize,
+    pub single: Option<FunctionBody>,
+    pub events: Vec<FunctionBody>,
+    pub empty_count: usize,
 }
 
 impl EventCollection {
@@ -87,10 +87,10 @@ impl EventCollection {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionDic {
-    normal: HashMap<SmolStr, FunctionBody>,
-    event: EnumMap<EventType, EventCollection>,
+    pub normal: HashMap<StrKey, FunctionBody>,
+    pub event: EnumMap<EventType, EventCollection>,
 }
 
 impl FunctionDic {
@@ -158,7 +158,7 @@ impl FunctionDic {
                     assert!(!body.is_function);
                 }
                 FunctionInfo::Dim(local) => {
-                    var_dic.add_local_info(header.name.clone(), local.var, local.info);
+                    var_dic.add_local_info(header.name, local.var, local.info);
                 }
             }
         }

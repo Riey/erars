@@ -438,7 +438,9 @@ fn load_savs(vm: &TerminalVm, ctx: &mut VmContext) -> HashMap<usize, Serializabl
     (0..SAVE_COUNT)
         .into_par_iter()
         .filter_map(|i| {
-            crate::save_data::read_save_data(&vm.sav_path(), &ctx.header_info, i as i64).ok().map(|d| (i, d))
+            crate::save_data::read_save_data(&vm.sav_path(), &ctx.header_info, i as i64)
+                .ok()
+                .map(|d| (i, d))
         })
         .collect()
 }

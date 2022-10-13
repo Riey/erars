@@ -4,7 +4,7 @@ use smol_str::SmolStr;
 use std::fmt;
 use std::sync::Arc;
 
-use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo};
+use erars_ast::{BeginType, EventType, ScriptPosition, Value, VariableInfo, Interner};
 use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::{SystemState, VariableStorage, VmVariable};
@@ -40,9 +40,9 @@ pub struct VmContext {
 }
 
 impl VmContext {
-    pub fn new(header_info: Arc<HeaderInfo>, config: Arc<EraConfig>) -> Self {
+    pub fn new(interner: Arc<Interner>, header_info: Arc<HeaderInfo>, config: Arc<EraConfig>) -> Self {
         let mut ret = Self {
-            var: VariableStorage::new(&header_info.global_variables),
+            var: VariableStorage::new(interner, &header_info.global_variables),
             header_info,
             state: vec![StateCallStack {
                 state: (BeginType::Title.into()),

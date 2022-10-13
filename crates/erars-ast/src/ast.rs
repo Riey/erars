@@ -69,16 +69,16 @@ impl fmt::Display for ScriptPosition {
     }
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Function {
     pub header: FunctionHeader,
     pub body: Vec<StmtWithPos>,
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionHeader {
     pub file_path: SmolStr,
-    pub name: SmolStr,
+    pub name: StrKey,
     pub args: Vec<(Variable, Option<Value>)>,
     pub infos: Vec<FunctionInfo>,
 }
