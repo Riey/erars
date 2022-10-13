@@ -2,18 +2,18 @@ use std::fmt;
 
 use bitflags::bitflags;
 use ordered_float::NotNan;
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 use smol_str::SmolStr;
 use strum::{Display, EnumString};
 
 use crate::{
     command::BuiltinMethod, Alignment, BinaryOperator, BuiltinCommand, BuiltinVariable, EventFlags,
-    EventType, LocalVariable, UnaryOperator, Value, Variable,
+    EventType, Interner, LocalVariable, StrKey, UnaryOperator, Value, Variable,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Stmt {
-    Label(SmolStr),
+    Label(StrKey),
     SelectCase(
         Expr,
         Vec<(Vec<SelectCaseCond>, Vec<StmtWithPos>)>,
@@ -23,7 +23,7 @@ pub enum Stmt {
     PrintList(PrintFlags, Vec<Expr>),
     PrintFormS(PrintFlags, Expr),
     PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
-    ReuseLastLine(Box<str>),
+    ReuseLastLine(StrKey),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<StmtWithPos>),
     If(Vec<(Expr, Vec<StmtWithPos>)>, Vec<StmtWithPos>),
@@ -54,7 +54,7 @@ pub enum Stmt {
     Alignment(Alignment),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StmtWithPos(pub Stmt, pub ScriptPosition);
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -69,13 +69,13 @@ impl fmt::Display for ScriptPosition {
     }
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct Function {
     pub header: FunctionHeader,
     pub body: Vec<StmtWithPos>,
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct FunctionHeader {
     pub file_path: SmolStr,
     pub name: SmolStr,
@@ -83,7 +83,7 @@ pub struct FunctionHeader {
     pub infos: Vec<FunctionInfo>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum FunctionInfo {
     EventFlag(EventFlags),
     LocalSize(usize),
@@ -93,14 +93,14 @@ pub enum FunctionInfo {
     FunctionS,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Expr {
-    String(Box<str>),
+    String(StrKey),
     Int(i64),
     FormText(FormText),
     Var(Variable),
     BuiltinVar(BuiltinVariable, Vec<Self>),
-    Method(Box<str>, Vec<Self>),
+    Method(StrKey, Vec<Self>),
     BuiltinMethod(BuiltinMethod, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),
     /// ++/-- var ++/--
@@ -118,8 +118,8 @@ impl Expr {
         Self::Int(i.into())
     }
 
-    pub fn str(s: impl Into<Box<str>>) -> Self {
-        Self::String(s.into())
+    pub fn str(interner: &Interner, s: impl AsRef<str>) -> Self {
+        Self::String(interner.get_or_intern(s))
     }
 
     pub fn unary(op1: Self, op: UnaryOperator) -> Self {
@@ -149,14 +149,14 @@ impl Expr {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SelectCaseCond {
     Single(Expr),
     To(Expr, Expr),
     Is(BinaryOperator, Expr),
 }
 
-#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct FormExpr {
     pub expr: Expr,
     pub padding: Option<Expr>,
@@ -169,14 +169,14 @@ impl fmt::Debug for FormExpr {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct FormText {
-    pub first: String,
-    pub other: Vec<(FormExpr, String)>,
+    pub first: StrKey,
+    pub other: Vec<(FormExpr, StrKey)>,
 }
 
 impl FormText {
-    pub fn new(first: String) -> Self {
+    pub fn new(first: StrKey) -> Self {
         Self {
             first,
             other: Vec::new(),
@@ -188,7 +188,7 @@ impl FormText {
         expr: Expr,
         padding: Option<Expr>,
         align: Option<Alignment>,
-        text: String,
+        text: StrKey,
     ) {
         self.other.push((
             FormExpr {
@@ -203,10 +203,10 @@ impl FormText {
 
 impl fmt::Debug for FormText {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.first)?;
+        write!(f, "{:?}", self.first)?;
 
         for (expr, text) in self.other.iter() {
-            write!(f, "{{{:?}}}{}", expr, text)?;
+            write!(f, "{{{:?}}}{:?}", expr, text)?;
         }
 
         Ok(())
@@ -223,7 +223,7 @@ option_set::option_set! {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString, Display)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, EnumString, Display)]
 pub enum BeginType {
     #[strum(to_string = "TITLE")]
     Title,

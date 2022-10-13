@@ -15,6 +15,9 @@ pub use ordered_float::NotNan;
 pub use value::Value;
 pub use variable::*;
 
+pub type StrKey = lasso::Spur;
+pub type Interner = lasso::ThreadedRodeo<StrKey>;
+
 pub fn var_name_alias(var: &str) -> &str {
     match var {
         "MAXBASE" | "UPBASE" | "DOWNBASE" | "LOSEBASE" => "BASE",

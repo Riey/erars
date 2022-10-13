@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use super::ParserContext;
 use erars_ast::{
-    Alignment, BinaryOperator, Expr, FormText, LocalVariable, NotNan, SelectCaseCond, Stmt,
+    Alignment, BinaryOperator, Expr, FormText, LocalVariable, NotNan, SelectCaseCond, Stmt, StrKey,
     UnaryOperator, Value, Variable, VariableInfo,
 };
 use nom::{
@@ -180,7 +180,7 @@ fn form_str_cond_form<'c, 'a>(
             let i = i.strip_prefix("\\@").unwrap();
             Ok((i, Expr::cond(cond, if_true, or_false)))
         } else if let Some(i) = i.strip_prefix("\\@") {
-            Ok((i, Expr::cond(cond, if_true, Expr::str(""))))
+            Ok((i, Expr::cond(cond, if_true, Expr::str(&ctx.interner, ""))))
         } else {
             unreachable!()
         }
@@ -195,7 +195,7 @@ pub fn form_str<'c, 'a>(
         let normal_str = parse_form_normal_str(ty);
         let (mut i, (normal, mut ty)) = normal_str(i)?;
 
-        let mut form = FormText::new(normal);
+        let mut form = FormText::new(ctx.interner.get_or_intern(normal));
 
         loop {
             let (left, expr, padding, align) = match ty {
@@ -239,7 +239,7 @@ pub fn form_str<'c, 'a>(
             i = left;
             ty = next_ty;
 
-            form.push(expr, padding, align, normal.into());
+            form.push(expr, padding, align, ctx.interner.get_or_intern(normal));
         }
 
         Ok((i, Expr::FormText(form)))
@@ -269,8 +269,10 @@ fn paran_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<
     }
 }
 
-pub fn var_func_extern<'a>(i: &'a str) -> IResult<'a, Option<Box<str>>> {
-    opt(map(preceded(char('@'), ident), |s| s.into()))(i)
+pub fn var_func_extern<'a>(ctx: &ParserContext, i: &'a str) -> IResult<'a, Option<StrKey>> {
+    opt(map(preceded(char('@'), ident), |s| {
+        ctx.interner.get_or_intern(s)
+    }))(i)
 }
 
 fn ident_or_method_expr<'c, 'a>(
@@ -291,10 +293,10 @@ fn ident_or_method_expr<'c, 'a>(
 
             match ident.parse() {
                 Ok(meth) => Ok((i, Expr::BuiltinMethod(meth, args))),
-                _ => Ok((i, Expr::Method(ident.into(), args))),
+                _ => Ok((i, Expr::Method(ctx.interner.get_or_intern(ident), args))),
             }
         } else {
-            let (i, func_extern) = var_func_extern(i)?;
+            let (i, func_extern) = var_func_extern(ctx, i)?;
             match ident {
                 Cow::Borrowed(ident) => {
                     let var = ident;
@@ -307,7 +309,7 @@ fn ident_or_method_expr<'c, 'a>(
                             Ok((
                                 i,
                                 Expr::Var(Variable {
-                                    var: var.into(),
+                                    var: ctx.interner.get_or_intern(var),
                                     func_extern,
                                     args,
                                 }),
@@ -321,7 +323,7 @@ fn ident_or_method_expr<'c, 'a>(
                             Ok((
                                 i,
                                 Expr::Var(Variable {
-                                    var: var.into(),
+                                    var: ctx.interner.get_or_intern(var),
                                     func_extern,
                                     args: Vec::new(),
                                 }),
@@ -338,7 +340,7 @@ fn ident_or_method_expr<'c, 'a>(
                             Ok((
                                 i,
                                 Expr::Var(Variable {
-                                    var: m.into_boxed_str(),
+                                    var: ctx.interner.get_or_intern(m),
                                     func_extern,
                                     args,
                                 }),
@@ -402,7 +404,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                 delimited(tag("@\""), form_str(FormStrType::Str, ctx), tag("\"")),
                 // cond form string
                 preceded(tag("\\@"), form_str_cond_form(ctx)),
-                map(string, |s| Expr::String(s.into())),
+                map(string, |s| Expr::str(&ctx.interner, s)),
                 map(preceded(tag("0x"), hex_digit1), |s| {
                     Expr::Int(i64::from_str_radix(s, 16).unwrap())
                 }),
@@ -605,7 +607,7 @@ pub fn call_jump_line<'c, 'a>(
                 panic!("CALL/JUMP문은 식별자를 받아야합니다");
             }
 
-            (i, Expr::String(function.into_owned().into_boxed_str()))
+            (i, Expr::str(&ctx.interner, function))
         };
 
         let (i, args) = call_arg_list(ctx)(i)?;
@@ -687,11 +689,11 @@ pub fn assign_line<'c, 'a>(
 
         i = i.trim_end_matches(' ');
 
-        let (i, func_extern) = var_func_extern(i)?;
+        let (i, func_extern) = var_func_extern(ctx, i)?;
         let (i, args) = variable_arg(ctx, &var_name)(i)?;
 
         let var = Variable {
-            var: var_name.into(),
+            var: ctx.interner.get_or_intern(var_name),
             func_extern,
             args,
         };
@@ -708,7 +710,7 @@ pub fn assign_line<'c, 'a>(
                 i,
                 Stmt::Assign(var, Some(BinaryOperator::Sub), Expr::Int(1)),
             ))
-        } else if ctx.is_str_var(&var.var) {
+        } else if ctx.is_str_var(var.var) {
             let (i, op) = delimited(sp, assign_op, opt(char(' ')))(i)?;
             let (i, rhs) = if op.is_some() {
                 expr(ctx)(i)?
@@ -759,7 +761,7 @@ pub fn dim_line<'c, 'a>(
         Ok((
             i,
             LocalVariable {
-                var: var.into(),
+                var: ctx.interner.get_or_intern(var),
                 info,
             },
         ))
@@ -769,20 +771,18 @@ pub fn dim_line<'c, 'a>(
 pub fn const_eval(ctx: &ParserContext, expr: Expr) -> Result<Value, Expr> {
     match expr {
         Expr::Int(i) => Ok(Value::Int(i)),
-        Expr::String(s) => Ok(Value::String(s.into_string())),
+        Expr::String(s) => Ok(Value::String(ctx.interner.resolve(&s).into())),
         Expr::UnaryopExpr(expr, op) => match op {
             UnaryOperator::Minus => {
                 let i = const_eval(ctx, *expr)?
                     .into_int_err()
-                    .map_err(Box::<str>::from)
-                    .map_err(Expr::String)?;
+                    .map_err(|s| Expr::str(&ctx.interner, s))?;
                 Ok(Value::Int(-i))
             }
             UnaryOperator::Not => {
                 let i = const_eval(ctx, *expr)?
                     .into_int_err()
-                    .map_err(Box::<str>::from)
-                    .map_err(Expr::String)?;
+                    .map_err(|s| Expr::str(&ctx.interner, s))?;
                 Ok(Value::Int(!i))
             }
         },
@@ -850,7 +850,10 @@ fn variable_named_arg<'c, 'a>(
         let var = erars_ast::var_name_alias(var);
 
         let (i, ident) = ident(i)?;
-        if let Some(v) = ctx.header.var_names.get(var).and_then(|names| names.get(ident)) {
+
+        let var = ctx.interner.get_or_intern(var);
+        let ident = ctx.interner.get_or_intern(ident);
+        if let Some(v) = ctx.header.var_names.get(&var).and_then(|names| names.get(&ident)) {
             Ok((i, Expr::int(*v)))
         } else {
             Err(nom::Err::Error(error_position!(i, ErrorKind::Verify)))
@@ -885,13 +888,13 @@ pub fn variable<'c, 'a>(
             panic!("Variable error");
         }
 
-        let (i, func_extern) = var_func_extern(i)?;
+        let (i, func_extern) = var_func_extern(ctx, i)?;
         let (i, args) = variable_arg(ctx, name)(i)?;
 
         Ok((
             i,
             Variable {
-                var: name.into(),
+                var: ctx.interner.get_or_intern(name),
                 func_extern,
                 args,
             },

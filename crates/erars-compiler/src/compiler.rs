@@ -1,22 +1,20 @@
 use crate::{CompileError, CompileResult, Instruction};
 use erars_ast::{
-    BinaryOperator, BuiltinVariable, Expr, FormExpr, FormText, Function, FunctionHeader,
-    SelectCaseCond, Stmt, StmtWithPos, Variable,
+    BinaryOperator, BuiltinVariable, Expr, FormExpr, FormText, Function, FunctionHeader, Interner,
+    SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable,
 };
 use hashbrown::HashMap;
-use serde::{Deserialize, Serialize};
-use smol_str::SmolStr;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompiledFunction {
     pub header: FunctionHeader,
-    pub goto_labels: HashMap<SmolStr, u32>,
+    pub goto_labels: HashMap<StrKey, u32>,
     pub body: Box<[Instruction]>,
 }
 
 pub struct Compiler {
     pub out: Vec<Instruction>,
-    pub goto_labels: HashMap<SmolStr, u32>,
+    pub goto_labels: HashMap<StrKey, u32>,
     pub continue_marks: Vec<Vec<u32>>,
     pub break_marks: Vec<Vec<u32>>,
 }
@@ -175,6 +173,15 @@ impl Compiler {
         Ok(())
     }
 
+    fn push_count(&mut self) {
+        self.push(Instruction::LoadCountVarRef);
+    }
+
+    fn store_count(&mut self) {
+        self.push(Instruction::LoadCountVarRef);
+        self.push(Instruction::StoreVar);
+    }
+
     fn store_var(&mut self, var: Variable) -> CompileResult<()> {
         self.push_var_ref(var)?;
         self.push(Instruction::StoreVar);
@@ -207,7 +214,7 @@ impl Compiler {
                     self.push_expr(padding)?;
                     self.push(Instruction::PadStr(align.unwrap_or_default()));
                 }
-                self.push(Instruction::LoadStr(text.into_boxed_str()));
+                self.push(Instruction::LoadStr(text));
             }
             self.push(Instruction::ConcatString(count));
         }
@@ -217,7 +224,7 @@ impl Compiler {
 
     fn push_for(
         &mut self,
-        var: Variable,
+        var: Option<Variable>,
         init: Expr,
         end: Expr,
         step: Expr,
@@ -236,8 +243,26 @@ impl Compiler {
         //     goto LOOP;
         // }
 
+        macro_rules! push_count_var {
+            () => {
+                match var.clone() {
+                    Some(var) => self.push_var(var)?,
+                    None => self.push_count(),
+                }
+            };
+        }
+
+        macro_rules! store_count_var {
+            () => {
+                match var.clone() {
+                    Some(var) => self.store_var(var)?,
+                    None => self.store_count(),
+                }
+            };
+        }
+
         self.push_expr(init)?;
-        self.store_var(var.clone())?;
+        store_count_var!();
 
         self.push_expr(step)?;
         self.push(Instruction::ReadVar);
@@ -253,7 +278,7 @@ impl Compiler {
         // compare var with end
 
         // stack: [step, end, var]
-        self.push_var(var.clone())?;
+        push_count_var!();
         // stack: [step, end, var, end]
         self.push(Instruction::DuplicatePrev);
         // stack: [step, end, exit?]
@@ -270,9 +295,9 @@ impl Compiler {
 
         // add step to var
         self.push(Instruction::DuplicatePrev);
-        self.push_var(var.clone())?;
+        push_count_var!();
         self.push(Instruction::BinaryOperator(BinaryOperator::Add));
-        self.store_var(var)?;
+        store_count_var!();
         self.push(Instruction::Goto(start));
 
         self.insert(exit, Instruction::GotoIfNot(self.current_no()));
@@ -436,17 +461,9 @@ impl Compiler {
                     .ok_or(CompileError::BreakNotLoop)?
                     .push(mark);
             }
-            Stmt::Repeat(end, body) => self.push_for(
-                Variable {
-                    var: "COUNT".into(),
-                    func_extern: None,
-                    args: Vec::new(),
-                },
-                Expr::int(0),
-                end,
-                Expr::int(1),
-                body,
-            )?,
+            Stmt::Repeat(end, body) => {
+                self.push_for(None, Expr::int(0), end, Expr::int(1), body)?
+            }
             Stmt::Do(cond, body) => {
                 self.begin_loop_block();
                 let start = self.current_no();
@@ -471,7 +488,7 @@ impl Compiler {
                 self.insert(end, Instruction::GotoIfNot(self.current_no()));
                 self.end_loop_block(start);
             }
-            Stmt::For(var, args, body) => self.push_for(var, args.0, args.1, args.2, body)?,
+            Stmt::For(var, args, body) => self.push_for(Some(var), args.0, args.1, args.2, body)?,
             Stmt::If(else_ifs, else_part) => {
                 let mut end_stack = Vec::with_capacity(32);
 

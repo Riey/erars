@@ -16,6 +16,7 @@ serde = { version = "1.0.142", features = ["derive"] }
 smol_str = { version = "0.1.23", features = ["serde"] }
 strum = { version = "0.24.1", features = ["derive"] }
 anyhow = { version = "1" }
+lasso = { version = "0.6.0", features = ["multi-threaded", "ahasher", "serialize"] }
 
 [dev-dependencies]
 k9 = "0.11.1"

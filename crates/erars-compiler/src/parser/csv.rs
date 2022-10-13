@@ -1,6 +1,6 @@
+use erars_ast::{Interner, StrKey};
 use erars_lexer::CsvToken;
 use logos::Lexer;
-use smol_str::SmolStr;
 
 use crate::ParserResult;
 
@@ -24,8 +24,9 @@ pub fn csv2_line<'s>(
 }
 
 pub fn name_csv_line<'s>(
+    interner: &Interner,
     lex: &mut Lexer<'s, CsvToken<'s>>,
-) -> ParserResult<Option<(u32, SmolStr)>> {
+) -> ParserResult<Option<(u32, StrKey)>> {
     match lex.next() {
         Some(CsvToken::Csv2((idx, name))) => {
             let idx = match idx.parse::<u32>() {
@@ -33,7 +34,7 @@ pub fn name_csv_line<'s>(
                 Err(err) => return Err((format!("숫자가 와야합니다. :{err}"), lex.span())),
             };
 
-            Ok(Some((idx, name.into())))
+            Ok(Some((idx, interner.get_or_intern(name))))
         }
         Some(_) => Err((format!("CSV 형식이 잘못됐습니다."), lex.span())),
         None => Ok(None),
@@ -52,8 +53,9 @@ pub fn chara_line<'s>(
 }
 
 pub fn name_item_line<'s>(
+    interner: &Interner,
     lex: &mut Lexer<'s, CsvToken<'s>>,
-) -> ParserResult<Option<(u32, SmolStr, u32)>> {
+) -> ParserResult<Option<(u32, StrKey, u32)>> {
     match lex.next() {
         Some(CsvToken::Csv3((idx, name, price))) => {
             let idx = match idx.parse::<u32>() {
@@ -65,7 +67,7 @@ pub fn name_item_line<'s>(
                 Err(err) => return Err((format!("숫자가 와야합니다. :{err}"), lex.span())),
             };
 
-            Ok(Some((idx, name.into(), price)))
+            Ok(Some((idx, interner.get_or_intern(name), price)))
         }
         Some(_) => Err((format!("CSV 형식이 잘못됐습니다."), lex.span())),
         None => Ok(None),

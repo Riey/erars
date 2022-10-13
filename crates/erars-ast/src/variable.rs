@@ -1,12 +1,9 @@
-use crate::{value::Value, Expr};
+use crate::{value::Value, Expr, StrKey};
 use serde::{Deserialize, Serialize};
-use smol_str::SmolStr;
 use strum::{Display, EnumString, IntoStaticStr};
 
 /// This variables are readonly system variables
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, Serialize, Deserialize, IntoStaticStr,
-)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum BuiltinVariable {
     AblName,
@@ -64,21 +61,20 @@ pub enum BuiltinVariable {
     GamebaseInfo,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Variable {
-    pub var: Box<str>,
-    pub func_extern: Option<Box<str>>,
+    pub var: StrKey,
+    pub func_extern: Option<StrKey>,
     pub args: Vec<Expr>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalVariable {
-    pub var: SmolStr,
+    pub var: StrKey,
     pub info: VariableInfo,
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(default)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VariableInfo {
     pub is_chara: bool,
     pub is_str: bool,
