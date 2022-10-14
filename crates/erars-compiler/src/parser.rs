@@ -2,9 +2,9 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType, Expr, Function,
-    FunctionHeader, FunctionInfo, Interner, ScriptPosition, Stmt, StmtWithPos, StrKey, Variable,
-    VariableInfo, GLOBAL_INTERNER,
+    get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
+    Expr, Function, FunctionHeader, FunctionInfo, Interner, ScriptPosition, Stmt, StmtWithPos,
+    StrKey, Variable, VariableInfo,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -255,7 +255,7 @@ pub struct HeaderInfo {
 impl HeaderInfo {
     pub fn merge_chara_csv(&mut self, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
-        let interner = &*GLOBAL_INTERNER;
+        let interner = get_interner();
         let mut template = CharacterTemplate::default();
 
         macro_rules! define_keys {
@@ -417,7 +417,7 @@ impl HeaderInfo {
 
     pub fn merge_name_csv(&mut self, var: &str, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
-        let interner = &*GLOBAL_INTERNER;
+        let interner = get_interner();
         let var = interner.get_or_intern(var);
         let mut name_var = BTreeMap::new();
 
@@ -433,7 +433,7 @@ impl HeaderInfo {
 
     pub fn merge_item_csv(&mut self, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
-        let interner = &*GLOBAL_INTERNER;
+        let interner = get_interner();
         let var = interner.get_or_intern_static("ITEM");
 
         while let Some((n, s, price)) = self::csv::name_item_line(&interner, &mut lex)? {
@@ -447,7 +447,7 @@ impl HeaderInfo {
 
     pub fn merge_variable_size_csv(&mut self, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
-        let interner = &*GLOBAL_INTERNER;
+        let interner = get_interner();
 
         while let Some((name, sizes)) = self::csv::variable_size_line(&mut lex)? {
             match name.as_str() {
@@ -631,7 +631,7 @@ impl Default for ParserContext {
 
 impl ParserContext {
     pub fn new(header: Arc<HeaderInfo>, file_path: StrKey) -> Self {
-        let interner = &*GLOBAL_INTERNER;
+        let interner = get_interner();
         Self {
             interner,
             locals_key: interner.get_or_intern_static("LOCALS"),

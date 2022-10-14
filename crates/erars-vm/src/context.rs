@@ -1,5 +1,4 @@
 use anyhow::{bail, Result};
-use arrayvec::ArrayVec;
 use std::fmt;
 use std::sync::Arc;
 
@@ -7,7 +6,7 @@ use erars_ast::{BeginType, EventType, ScriptPosition, StrKey, Value, VariableInf
 use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::variable::StrKeyLike;
-use crate::{SystemState, VariableStorage, VmVariable};
+use crate::{ArgVec, SystemState, VariableStorage, VmVariable};
 
 use super::UniformVariable;
 
@@ -148,11 +147,7 @@ impl VmContext {
     pub fn resolve_var_ref_raw<'c>(
         &'c mut self,
         r: &VariableRef,
-    ) -> Result<(
-        &'c mut VariableInfo,
-        &'c mut UniformVariable,
-        ArrayVec<usize, 4>,
-    )> {
+    ) -> Result<(&'c mut VariableInfo, &'c mut UniformVariable, ArgVec)> {
         let (info, var) = self.var.get_maybe_local_var(r.func_name, r.name)?;
 
         Ok((info, var, r.idxs.clone()))
@@ -237,11 +232,7 @@ impl VmContext {
         self.stack.len() - self.call_stack.last().map_or(0, |s| s.stack_base)
     }
 
-    pub fn take_arg_list(
-        &mut self,
-        var_name: Option<StrKey>,
-        count: u32,
-    ) -> Result<ArrayVec<usize, 4>> {
+    pub fn take_arg_list(&mut self, var_name: Option<StrKey>, count: u32) -> Result<ArgVec> {
         self.take_value_list(count)?
             .into_iter()
             .map(|value| match value {
@@ -295,7 +286,7 @@ impl VmContext {
         self.stack.push(prev);
     }
 
-    pub fn push_var_ref(&mut self, name: StrKey, func_name: StrKey, idxs: ArrayVec<usize, 4>) {
+    pub fn push_var_ref(&mut self, name: StrKey, func_name: StrKey, idxs: ArgVec) {
         let var_ref = VariableRef {
             func_name,
             name,
@@ -375,11 +366,11 @@ pub struct Callstack {
     pub instruction_pos: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub struct VariableRef {
     pub name: StrKey,
     pub func_name: StrKey,
-    pub idxs: ArrayVec<usize, 4>,
+    pub idxs: ArgVec,
 }
 
 impl fmt::Debug for VariableRef {

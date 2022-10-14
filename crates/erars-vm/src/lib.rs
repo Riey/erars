@@ -10,6 +10,8 @@ use erars_ui::InputRequest;
 use pad::PadStr;
 use strum::Display;
 
+pub type ArgVec = tinyvec::ArrayVec<[usize; 4]>;
+
 pub use crate::{
     context::{Callstack, LocalValue, VmContext},
     function::{FunctionBody, FunctionDic},

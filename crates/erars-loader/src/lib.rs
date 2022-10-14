@@ -15,7 +15,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_ast::{Value, VariableInfo, StrKey};
+use erars_ast::{StrKey, Value, VariableInfo};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
 use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, TerminalVm, VmContext};
@@ -80,6 +80,10 @@ pub fn run_script(
     inputs: Vec<Value>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     let mut time = Instant::now();
+
+    unsafe {
+        erars_ast::update_interner(erars_ast::Interner::new());
+    }
 
     let config_path = format!("{target_path}/emuera.config");
 
@@ -302,7 +306,8 @@ pub fn run_script(
             .flat_map(|erb| {
                 let erb = erb.unwrap();
                 let source = read_file(&erb).unwrap();
-                let ctx = ParserContext::new(header_info.clone(), StrKey::new(erb.to_str().unwrap()));
+                let ctx =
+                    ParserContext::new(header_info.clone(), StrKey::new(erb.to_str().unwrap()));
 
                 log::debug!("Parse And Compile {}", erb.display());
 

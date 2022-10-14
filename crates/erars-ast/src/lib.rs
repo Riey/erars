@@ -15,11 +15,21 @@ pub use ordered_float::NotNan;
 pub use value::Value;
 pub use variable::*;
 
-use once_cell::sync::Lazy;
-
 pub type Interner = lasso::ThreadedRodeo<StrKey>;
 
-pub static GLOBAL_INTERNER: Lazy<Interner> = Lazy::new(|| Interner::new());
+static mut GLOBAL_INTERNER: Option<Interner> = None;
+
+pub fn get_interner() -> &'static Interner {
+    let opt: &'static Option<Interner> = unsafe { &GLOBAL_INTERNER };
+    match opt {
+        Some(ref i) => i,
+        None => panic!(),
+    }
+}
+
+pub unsafe fn update_interner(new: Interner) {
+    GLOBAL_INTERNER = Some(new);
+}
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -27,17 +37,17 @@ pub struct StrKey(lasso::Spur);
 
 impl StrKey {
     pub fn resolve(self) -> &'static str {
-        GLOBAL_INTERNER.resolve(&self)
+        get_interner().resolve(&self)
     }
 
     pub fn new(s: &str) -> Self {
-        GLOBAL_INTERNER.get_or_intern(s)
+        get_interner().get_or_intern(s)
     }
 }
 
 impl std::fmt::Debug for StrKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(GLOBAL_INTERNER.resolve(&self))
+        f.write_str(get_interner().resolve(&self))
     }
 }
 

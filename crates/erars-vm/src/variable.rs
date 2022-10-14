@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Result};
 use enum_map::{Enum, EnumMap};
-use erars_ast::{EventType, Interner, StrKey, Value, VariableInfo, GLOBAL_INTERNER};
+use erars_ast::{get_interner, EventType, Interner, StrKey, Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
@@ -74,7 +74,7 @@ impl VariableStorage {
             variables.insert(*k, (v.clone(), UniformVariable::new(v)));
         }
 
-        let interner = &*GLOBAL_INTERNER;
+        let interner = get_interner();
 
         Self {
             character_len: 0,

@@ -8,7 +8,6 @@ use std::{
 use crate::*;
 use crate::{context::FunctionIdentifier, variable::StrKeyLike};
 use anyhow::{anyhow, bail, Result};
-use arrayvec::ArrayVec;
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
     PrintFlags, StrKey, UnaryOperator, Value,

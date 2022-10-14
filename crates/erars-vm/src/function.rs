@@ -1,9 +1,8 @@
 use anyhow::{anyhow, Result};
-use arrayvec::ArrayVec;
 use enum_map::EnumMap;
+use erars_ast::get_interner;
 use erars_ast::Interner;
 use erars_ast::StrKey;
-use erars_ast::GLOBAL_INTERNER;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
 use itertools::Itertools;
@@ -12,6 +11,7 @@ use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, Variabl
 use erars_compiler::{CompiledFunction, Instruction};
 
 use crate::variable::KnownVariableNames;
+use crate::ArgVec;
 use crate::VariableStorage;
 use crate::Workflow;
 
@@ -21,7 +21,7 @@ pub struct FunctionBody {
     pub is_function: bool,
     pub is_functions: bool,
     pub goto_labels: Box<[(StrKey, u32)]>,
-    pub args: Box<[(StrKey, Option<Value>, ArrayVec<usize, 4>)]>,
+    pub args: Box<[(StrKey, Option<Value>, ArgVec)]>,
     pub body: Box<[Instruction]>,
 }
 
@@ -30,7 +30,7 @@ impl FunctionBody {
         &self.goto_labels
     }
 
-    pub fn args(&self) -> &[(StrKey, Option<Value>, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[(StrKey, Option<Value>, ArgVec)] {
         &self.args
     }
 
@@ -91,7 +91,7 @@ pub struct FunctionDic {
 impl FunctionDic {
     pub fn new() -> Self {
         Self {
-            interner: &*GLOBAL_INTERNER,
+            interner: get_interner(),
             normal: HashMap::new(),
             event: EnumMap::default(),
         }
