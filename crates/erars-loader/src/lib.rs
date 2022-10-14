@@ -81,10 +81,6 @@ pub fn run_script(
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     let mut time = Instant::now();
 
-    unsafe {
-        erars_ast::update_interner(erars_ast::Interner::new());
-    }
-
     let config_path = format!("{target_path}/emuera.config");
 
     let config = if Path::new(&config_path).exists() {

@@ -10,7 +10,7 @@ use crate::{context::FunctionIdentifier, variable::StrKeyLike};
 use anyhow::{anyhow, bail, Result};
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
-    PrintFlags, StrKey, UnaryOperator, Value,
+    InlineValue, PrintFlags, StrKey, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
 use erars_ui::{FontStyle, InputRequest, InputRequestType, Timeout, VirtualConsole};
@@ -239,7 +239,12 @@ impl TerminalVm {
             let var = var.assume_normal();
             let idx = info.calculate_single_idx(arg_indices).1;
 
-            let arg = args.next().or_else(|| default_value.clone());
+            let arg = args.next().or_else(|| {
+                default_value.clone().map(|v| match v {
+                    InlineValue::Int(i) => Value::Int(i),
+                    InlineValue::String(s) => Value::String(s.resolve().into()),
+                })
+            });
 
             if info.is_str {
                 var.as_str()?[idx] = match arg {

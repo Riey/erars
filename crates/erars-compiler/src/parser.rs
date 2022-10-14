@@ -1096,18 +1096,18 @@ impl ParserContext {
                         Some(Token::LocalSize(size)) => {
                             let size = self::expr::const_eval_log_error(
                                 self,
-                                try_nom!(lex, self::expr::expr(self)(size)).1,
+                                &try_nom!(lex, self::expr::expr(self)(size)).1,
                             )
-                            .try_into_int()
+                            .to_int()
                             .unwrap();
                             infos.push(FunctionInfo::LocalSize(size as usize));
                         }
                         Some(Token::LocalSSize(size)) => {
                             let size = self::expr::const_eval_log_error(
                                 self,
-                                try_nom!(lex, self::expr::expr(self)(size)).1,
+                                &try_nom!(lex, self::expr::expr(self)(size)).1,
                             )
-                            .try_into_int()
+                            .to_int()
                             .unwrap();
                             infos.push(FunctionInfo::LocalSSize(size as usize));
                         }
@@ -1198,18 +1198,18 @@ impl ParserContext {
                         Some(Token::LocalSize(size)) => {
                             let size = self::expr::const_eval_log_error(
                                 self,
-                                try_nom!(lex, self::expr::expr(self)(size)).1,
+                                &try_nom!(lex, self::expr::expr(self)(size)).1,
                             )
-                            .try_into_int()
+                            .to_int()
                             .unwrap();
                             infos.push(FunctionInfo::LocalSize(size as usize));
                         }
                         Some(Token::LocalSSize(size)) => {
                             let size = self::expr::const_eval_log_error(
                                 self,
-                                try_nom!(lex, self::expr::expr(self)(size)).1,
+                                &try_nom!(lex, self::expr::expr(self)(size)).1,
                             )
-                            .try_into_int()
+                            .to_int()
                             .unwrap();
                             infos.push(FunctionInfo::LocalSSize(size as usize));
                         }

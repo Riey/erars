@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use criterion::*;
+use erars_ast::StrKey;
 use erars_compiler::{compile, HeaderInfo, ParserContext};
 
 fn gen_bench(count: usize) -> String {
@@ -22,7 +23,7 @@ fn make_ctx() -> ParserContext {
             .unwrap(),
             ..Default::default()
         }),
-        "bench.ERB".into(),
+        StrKey::new("bench.ERB"),
     )
 }
 

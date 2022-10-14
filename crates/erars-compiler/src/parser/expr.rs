@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use super::ParserContext;
 use erars_ast::{
-    Alignment, BinaryOperator, Expr, FormText, LocalVariable, NotNan, SelectCaseCond, Stmt, StrKey,
-    UnaryOperator, Value, Variable, VariableInfo,
+    Alignment, BinaryOperator, Expr, FormText, InlineValue, LocalVariable, NotNan, SelectCaseCond,
+    Stmt, StrKey, UnaryOperator, Variable, VariableInfo,
 };
 use nom::{
     branch::alt,
@@ -748,7 +748,7 @@ pub fn dim_line<'c, 'a>(
                 char_sp('='),
                 separated_list0(
                     char_sp(','),
-                    map(expr(ctx), |expr| const_eval_log_error(ctx, expr)),
+                    map(expr(ctx), |expr| const_eval_log_error(ctx, &expr)),
                 ),
             )),
         ))(i)?;
@@ -768,34 +768,30 @@ pub fn dim_line<'c, 'a>(
     }
 }
 
-pub fn const_eval(ctx: &ParserContext, expr: Expr) -> Result<Value, Expr> {
+pub fn const_eval<'e>(ctx: &ParserContext, expr: &'e Expr) -> Result<InlineValue, &'e Expr> {
     match expr {
-        Expr::Int(i) => Ok(Value::Int(i)),
-        Expr::String(s) => Ok(Value::String(ctx.interner.resolve(&s).into())),
+        Expr::Int(i) => Ok(InlineValue::Int(*i)),
+        Expr::String(s) => Ok(InlineValue::String(*s)),
         Expr::UnaryopExpr(expr, op) => match op {
-            UnaryOperator::Minus => {
-                let i = const_eval(ctx, *expr)?
-                    .into_int_err()
-                    .map_err(|s| Expr::str(&ctx.interner, s))?;
-                Ok(Value::Int(-i))
-            }
-            UnaryOperator::Not => {
-                let i = const_eval(ctx, *expr)?
-                    .into_int_err()
-                    .map_err(|s| Expr::str(&ctx.interner, s))?;
-                Ok(Value::Int(!i))
-            }
+            UnaryOperator::Minus => match const_eval(ctx, expr)? {
+                InlineValue::Int(i) => Ok(InlineValue::Int(-i)),
+                InlineValue::String(_) => Err(expr),
+            },
+            UnaryOperator::Not => match const_eval(ctx, expr)? {
+                InlineValue::Int(i) => Ok(InlineValue::Int(!i)),
+                InlineValue::String(_) => Err(expr),
+            },
         },
         _ => Err(expr),
     }
 }
 
-pub fn const_eval_log_error(ctx: &ParserContext, expr: Expr) -> Value {
+pub fn const_eval_log_error(ctx: &ParserContext, expr: &Expr) -> InlineValue {
     match const_eval(ctx, expr) {
         Ok(v) => v,
         Err(expr) => {
             log::error!("Const evaluation failed for expr {expr:?}");
-            Value::default()
+            InlineValue::Int(0)
         }
     }
 }
@@ -808,7 +804,7 @@ pub fn form_arg_expr<'c, 'a>(
 
 fn function_arg_list<'c, 'a>(
     ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, Vec<(Variable, Option<Value>)>> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<(Variable, Option<InlineValue>)>> + 'c {
     move |i| {
         separated_list0(
             char(','),
@@ -816,7 +812,7 @@ fn function_arg_list<'c, 'a>(
                 variable(ctx),
                 opt(preceded(
                     char_sp('='),
-                    map(expr(ctx), |expr| const_eval_log_error(ctx, expr)),
+                    map(expr(ctx), |expr| const_eval_log_error(ctx, &expr)),
                 )),
             )),
         )(i)
@@ -825,7 +821,7 @@ fn function_arg_list<'c, 'a>(
 
 pub fn function_line<'c, 'a>(
     ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, (&'a str, Vec<(Variable, Option<Value>)>)> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, (&'a str, Vec<(Variable, Option<InlineValue>)>)> + 'c {
     move |i| {
         pair(
             ident,

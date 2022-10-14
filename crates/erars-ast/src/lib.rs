@@ -12,7 +12,7 @@ pub use command::*;
 pub use event::*;
 pub use operator::*;
 pub use ordered_float::NotNan;
-pub use value::Value;
+pub use value::{InlineValue, Value};
 pub use variable::*;
 
 pub type Interner = lasso::ThreadedRodeo<StrKey>;
@@ -36,6 +36,16 @@ pub unsafe fn update_interner(new: Interner) {
 pub struct StrKey(lasso::Spur);
 
 impl StrKey {
+    pub fn from_u32(n: u32) -> Self {
+        assert_ne!(n, 0);
+        unsafe { std::mem::transmute(n) }
+    }
+
+    #[inline]
+    pub fn to_u32(self) -> u32 {
+        unsafe { std::mem::transmute(self) }
+    }
+
     pub fn resolve(self) -> &'static str {
         get_interner().resolve(&self)
     }

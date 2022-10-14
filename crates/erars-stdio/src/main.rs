@@ -1,6 +1,8 @@
 mod stdio_frontend;
 
-use erars_ast::Value;
+use std::{fs::File, io::BufWriter};
+
+use erars_ast::{update_interner, Interner, Value};
 use erars_loader::run_script;
 
 #[derive(clap::Parser)]
@@ -25,11 +27,12 @@ struct Args {
 
     #[clap(long, help = "Don't print logs")]
     quite: bool,
-    // #[clap(long, help = "Save script file")]
-    // save: bool,
 
-    // #[clap(long, help = "Load script file")]
-    // load: bool,
+    #[clap(long, help = "Save script file")]
+    save: bool,
+
+    #[clap(long, help = "Load script file")]
+    load: bool,
 }
 
 fn main() {
@@ -66,8 +69,17 @@ fn main() {
         None => Vec::new(),
     };
 
+    unsafe {
+        update_interner(Interner::new());
+    }
+
     let (vm, mut ctx, tx) = run_script(args.target_path, inputs).unwrap();
 
-    let mut frontend = stdio_frontend::StdioFrontend::new(tx);
-    frontend.run(&vm, &mut ctx).unwrap();
+    if args.save {
+        erars_bytecode::write_to(BufWriter::new(File::create("game.era").unwrap()), &vm.dic)
+            .unwrap();
+    } else {
+        let mut frontend = stdio_frontend::StdioFrontend::new(tx);
+        frontend.run(&vm, &mut ctx).unwrap();
+    }
 }

@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Result};
 use enum_map::{Enum, EnumMap};
-use erars_ast::{get_interner, EventType, Interner, StrKey, Value, VariableInfo};
+use erars_ast::{get_interner, EventType, InlineValue, Interner, StrKey, Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
@@ -598,7 +598,10 @@ impl VariableStorage {
             if !info.init.is_empty() {
                 let var_ = var_.assume_normal();
                 for (idx, init_var) in info.init.iter().enumerate() {
-                    var_.set(idx, init_var.clone()).unwrap();
+                    match init_var {
+                        InlineValue::Int(i) => var_.set(idx, *i)?,
+                        InlineValue::String(s) => var_.set(idx, s.resolve())?,
+                    }
                 }
             }
             *var = Some(var_);

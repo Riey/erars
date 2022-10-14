@@ -7,7 +7,7 @@ use strum::{Display, EnumString};
 
 use crate::{
     command::BuiltinMethod, Alignment, BinaryOperator, BuiltinCommand, BuiltinVariable, EventFlags,
-    EventType, Interner, LocalVariable, StrKey, UnaryOperator, Value, Variable,
+    EventType, InlineValue, Interner, LocalVariable, StrKey, UnaryOperator, Variable,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,7 +78,7 @@ pub struct Function {
 pub struct FunctionHeader {
     pub file_path: StrKey,
     pub name: StrKey,
-    pub args: Vec<(Variable, Option<Value>)>,
+    pub args: Vec<(Variable, Option<InlineValue>)>,
     pub infos: Vec<FunctionInfo>,
 }
 

@@ -1,6 +1,6 @@
 mod http_frontend;
 
-use erars_ast::Value;
+use erars_ast::{update_interner, Interner, Value};
 use erars_loader::run_script;
 
 #[derive(clap::Parser)]
@@ -63,6 +63,10 @@ fn main() {
         }
         None => Vec::new(),
     };
+
+    unsafe {
+        update_interner(Interner::new());
+    }
 
     let (vm, ctx, vconsole) = run_script(args.target_path, inputs).unwrap();
 
