@@ -83,15 +83,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "98161a4e3e2184da77bb14f02184cdd111e83bbbcc9979dfee3c44b9a85f5602"
 
 [[package]]
-name = "arrayvec"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8da52d66c7071e2e3fa2a1e5c6d088fec47b593032b254f5e980de8ea54454d6"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "async-compression"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -650,12 +641,21 @@ dependencies = [
  "lasso",
  "num-derive",
  "num-traits",
- "once_cell",
  "option_set",
  "ordered-float",
  "serde",
- "smol_str",
  "strum",
+]
+
+[[package]]
+name = "erars-bytecode"
+version = "0.1.0"
+dependencies = [
+ "byteorder",
+ "enum-map",
+ "erars-ast",
+ "erars-vm",
+ "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -677,7 +677,6 @@ dependencies = [
  "num-traits",
  "option_set",
  "serde",
- "smol_str",
  "static_assertions",
  "strum",
  "thiserror",
@@ -715,7 +714,6 @@ dependencies = [
 name = "erars-lexer"
 version = "0.1.0"
 dependencies = [
- "arrayvec",
  "bitflags",
  "cow-utils",
  "erars-ast",
@@ -736,6 +734,7 @@ dependencies = [
  "codespan-reporting",
  "encoding_rs",
  "erars-ast",
+ "erars-bytecode",
  "erars-compiler",
  "erars-ui",
  "erars-vm",
@@ -744,6 +743,7 @@ dependencies = [
  "log",
  "parking_lot",
  "rayon",
+ "rmp-serde",
  "serde_yaml",
  "unicode-bom",
 ]
@@ -754,7 +754,6 @@ version = "0.1.0"
 dependencies = [
  "ansi_term",
  "anyhow",
- "bincode",
  "clap 4.0.10",
  "erars-ast",
  "erars-compiler",
@@ -764,7 +763,6 @@ dependencies = [
  "flexi_logger",
  "log",
  "log-panics",
- "rmp-serde",
  "ron",
 ]
 
@@ -792,7 +790,6 @@ name = "erars-vm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "arrayvec",
  "bincode",
  "bitflags",
  "css-color",
@@ -818,9 +815,9 @@ dependencies = [
  "ron",
  "serde",
  "serde_json",
- "smol_str",
  "strum",
  "time",
+ "tinyvec",
  "twoway",
  "unicode-width",
 ]

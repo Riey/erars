@@ -5,7 +5,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Result};
 use enum_map::{Enum, EnumMap};
-use erars_ast::{EventType, Interner, StrKey, Value, VariableInfo, GLOBAL_INTERNER};
+use erars_ast::{get_interner, EventType, InlineValue, Interner, StrKey, Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
@@ -74,7 +74,7 @@ impl VariableStorage {
             variables.insert(*k, (v.clone(), UniformVariable::new(v)));
         }
 
-        let interner = &*GLOBAL_INTERNER;
+        let interner = get_interner();
 
         Self {
             character_len: 0,
@@ -109,6 +109,17 @@ impl VariableStorage {
     #[inline]
     pub fn resolve_key(&self, key: StrKey) -> &str {
         self.interner.resolve(&key)
+    }
+
+    pub fn local_infos(
+        &self,
+    ) -> impl Iterator<Item = (StrKey, Vec<(StrKey, &'_ VariableInfo)>)> + '_ {
+        self.local_variables.iter().map(|(func_name, vars)| {
+            (
+                *func_name,
+                vars.iter().map(|(key, (info, _))| (*key, info)).collect(),
+            )
+        })
     }
 
     fn load_variables(
@@ -598,7 +609,10 @@ impl VariableStorage {
             if !info.init.is_empty() {
                 let var_ = var_.assume_normal();
                 for (idx, init_var) in info.init.iter().enumerate() {
-                    var_.set(idx, init_var.clone()).unwrap();
+                    match init_var {
+                        InlineValue::Int(i) => var_.set(idx, *i)?,
+                        InlineValue::String(s) => var_.set(idx, s.resolve())?,
+                    }
                 }
             }
             *var = Some(var_);

@@ -64,7 +64,7 @@ pub(super) fn run_instruction(
         }
         Instruction::EvalFormString => {
             let form = ctx.pop_str()?;
-            let parser_ctx = ParserContext::new(ctx.header_info.clone(), "FORMS.ERB".into());
+            let parser_ctx = ParserContext::new(ctx.header_info.clone(), StrKey::new("FORMS.ERB"));
             let expr = erars_compiler::normal_form_str(&parser_ctx)(&form).unwrap().1;
             let insts = erars_compiler::compile_expr(expr).unwrap();
 
@@ -99,7 +99,7 @@ pub(super) fn run_instruction(
             ctx.push_var_ref(name, func_name, args);
         }
         Instruction::LoadCountVarRef => {
-            ctx.push_var_ref(ctx.var.known_key(Var::Count), func_name, ArrayVec::new());
+            ctx.push_var_ref(ctx.var.known_key(Var::Count), func_name, ArgVec::new());
         }
         Instruction::StoreVar => {
             let var_ref = ctx.pop_var_ref()?;
@@ -835,7 +835,7 @@ pub(super) fn run_instruction(
             }
         }
         Instruction::BuiltinCommand(com, c) => {
-            let mut args = ctx.take_list(*c).collect::<ArrayVec<_, 8>>().into_iter();
+            let mut args = ctx.take_list(*c).collect::<Vec<_>>().into_iter();
 
             match com {
                 BuiltinCommand::UpCheck => {
@@ -909,7 +909,7 @@ pub(super) fn run_instruction(
                     let start = get_arg!(@opt @usize: args, ctx);
                     let end = get_arg!(@opt @usize: args, ctx);
 
-                    let target = ctx.var.read_int("TARGET", &[])?;
+                    let target = ctx.var.read_int(Var::Target, &[])?;
                     let (info, var, idx) = ctx.resolve_var_ref_raw(&var)?;
                     let (chara_idx, idx) = info.calculate_single_idx(&idx);
 
@@ -997,8 +997,7 @@ pub(super) fn run_instruction(
                     let mut result_idx = 0usize;
                     let mut results_idx = 0usize;
 
-                    let args: ArrayVec<_, 8> =
-                        args.map(|v| ctx.reduce_local_value(v)).try_collect()?;
+                    let args: Vec<_> = args.map(|v| ctx.reduce_local_value(v)).try_collect()?;
 
                     let ((_, result), (_, results)) =
                         ctx.var.get_var2("RESULT", "RESULTS").unwrap();

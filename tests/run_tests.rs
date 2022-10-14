@@ -23,6 +23,8 @@ fn run_test() {
         .start()
         .unwrap();
 
+    erars_ast::init_interner();
+
     let erb_files = glob::glob("tests/run_tests/**/*.erb").unwrap();
     let header = test_util::get_ctx("").header;
 

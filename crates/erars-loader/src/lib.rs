@@ -1,7 +1,8 @@
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use std::{
-    io::{BufRead, BufReader, Read, Seek, SeekFrom},
+    fs::File,
+    io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom},
     path::Path,
     sync::Arc,
     time::Instant,
@@ -15,7 +16,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_ast::{Value, VariableInfo};
+use erars_ast::{StrKey, Value, VariableInfo};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
 use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, TerminalVm, VmContext};
@@ -74,14 +75,84 @@ fn read_file(path: &Path) -> std::io::Result<String> {
     }
 }
 
+pub fn save_script(vm: TerminalVm, ctx: VmContext) -> anyhow::Result<()> {
+    let mut out = BufWriter::new(File::create("game.era")?);
+    erars_bytecode::write_to(&mut out, &vm.dic)?;
+    let local_infos: HashMap<StrKey, Vec<(StrKey, &VariableInfo)>> =
+        ctx.var.local_infos().collect();
+    rmp_serde::encode::write(&mut out, &(&*ctx.header_info, local_infos)).unwrap();
+
+    Ok(())
+}
+
+/// SAFETY: Any reference to interner is not exist
+pub unsafe fn load_script(
+    target_path: String,
+    inputs: Vec<Value>,
+) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+    let start = Instant::now();
+
+    log::info!("Load config");
+    let config_path = Path::new(target_path.as_str()).join("emuera.config");
+
+    let config = if Path::new(&config_path).exists() {
+        match read_file(config_path.as_ref()) {
+            Ok(s) => EraConfig::from_text(&s).unwrap(),
+            Err(err) => {
+                log::error!("config file load error: {err}");
+                EraConfig::default()
+            }
+        }
+    } else {
+        EraConfig::default()
+    };
+
+    log::info!("Config: {config:?}");
+
+    log::info!("Load game script");
+    let mut read = BufReader::new(File::open("game.era").unwrap());
+    let dic = erars_bytecode::read_from(&mut read)?;
+
+    log::info!("Load game data");
+    let (header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
+        rmp_serde::decode::from_read(&mut read)?;
+    let mut vconsole = VirtualConsole::new(config.printc_width);
+
+    let elapsed = start.elapsed();
+    log::info!("Load done! {}ms elapsed", elapsed.as_millis());
+
+    let mut ctx = VmContext::new(Arc::new(header), Arc::new(config));
+
+    for (key, vars) in local_infos {
+        for var in vars {
+            ctx.var.add_local_info(key, var.0, var.1);
+        }
+    }
+
+    for input in inputs {
+        vconsole.push_input(input);
+    }
+
+    Ok((
+        TerminalVm {
+            dic,
+            sav_path: Path::new(target_path.as_str()).join("sav"),
+        },
+        ctx,
+        vconsole,
+    ))
+}
+
 #[allow(unused_assignments)]
 pub fn run_script(
     target_path: String,
     inputs: Vec<Value>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+    erars_ast::init_interner();
+
     let mut time = Instant::now();
 
-    let config_path = format!("{target_path}/emuera.config");
+    let config_path = Path::new(target_path.as_str()).join("emuera.config");
 
     let config = if Path::new(&config_path).exists() {
         match read_file(config_path.as_ref()) {
@@ -302,7 +373,8 @@ pub fn run_script(
             .flat_map(|erb| {
                 let erb = erb.unwrap();
                 let source = read_file(&erb).unwrap();
-                let ctx = ParserContext::new(header_info.clone(), erb.to_str().unwrap().into());
+                let ctx =
+                    ParserContext::new(header_info.clone(), StrKey::new(erb.to_str().unwrap()));
 
                 log::debug!("Parse And Compile {}", erb.display());
 

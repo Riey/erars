@@ -1,45 +1,47 @@
 use anyhow::{anyhow, Result};
-use arrayvec::ArrayVec;
 use enum_map::EnumMap;
+use erars_ast::get_interner;
+use erars_ast::InlineValue;
 use erars_ast::Interner;
 use erars_ast::StrKey;
-use erars_ast::GLOBAL_INTERNER;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
-use smol_str::SmolStr;
 
-use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, VariableInfo};
+use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, VariableInfo};
 use erars_compiler::{CompiledFunction, Instruction};
+use itertools::Itertools;
 
 use crate::variable::KnownVariableNames;
+use crate::ArgVec;
 use crate::VariableStorage;
 use crate::Workflow;
 
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
-pub struct FunctionBody {
-    pub file_path: SmolStr,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct FunctionBodyHeader {
+    pub file_path: StrKey,
     pub is_function: bool,
     pub is_functions: bool,
-    pub goto_labels: HashMap<StrKey, u32>,
-    pub args: Vec<(StrKey, Option<Value>, ArrayVec<usize, 4>)>,
+}
+
+pub type FunctionArgDef = (StrKey, Option<InlineValue>, ArgVec);
+pub type FunctionGotoLabel = (StrKey, u32);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct FunctionBody {
+    pub header: FunctionBodyHeader,
+    pub goto_labels: Box<[FunctionGotoLabel]>,
+    pub args: Box<[FunctionArgDef]>,
     pub body: Box<[Instruction]>,
 }
 
 impl FunctionBody {
-    pub fn push_arg(
-        &mut self,
-        var: StrKey,
-        default_value: Option<Value>,
-        indices: ArrayVec<usize, 4>,
-    ) {
-        self.args.push((var, default_value, indices));
-    }
-
-    pub fn goto_labels(&self) -> &HashMap<StrKey, u32> {
+    pub fn goto_labels(&self) -> &[FunctionGotoLabel] {
         &self.goto_labels
     }
 
-    pub fn args(&self) -> &[(StrKey, Option<Value>, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[FunctionArgDef] {
         &self.args
     }
 
@@ -47,24 +49,24 @@ impl FunctionBody {
         &self.body
     }
 
-    pub fn file_path(&self) -> &SmolStr {
-        &self.file_path
+    pub fn file_path(&self) -> StrKey {
+        self.header.file_path
     }
 
     pub fn is_function(&self) -> bool {
-        self.is_function
+        self.header.is_function
     }
 
     pub fn is_functions(&self) -> bool {
-        self.is_functions
+        self.header.is_functions
     }
 }
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct EventCollection {
     pub single: Option<FunctionBody>,
-    pub events: Vec<FunctionBody>,
     pub empty_count: usize,
+    pub events: Vec<FunctionBody>,
 }
 
 impl EventCollection {
@@ -100,7 +102,7 @@ pub struct FunctionDic {
 impl FunctionDic {
     pub fn new() -> Self {
         Self {
-            interner: &*GLOBAL_INTERNER,
+            interner: get_interner(),
             normal: HashMap::new(),
             event: EnumMap::default(),
         }
@@ -114,36 +116,41 @@ impl FunctionDic {
     ) {
         let mut body = FunctionBody {
             body: func.body,
-            goto_labels: func.goto_labels,
-            ..Default::default()
+            args: func
+                .header
+                .args
+                .into_iter()
+                .map(|(var, default_value)| {
+                    (
+                        var.var,
+                        default_value,
+                        var.args
+                            .into_iter()
+                            .map(|v| {
+                                if let Expr::Int(i) = v {
+                                    i as usize
+                                } else {
+                                    panic!("Variable index must be constant")
+                                }
+                            })
+                            .collect(),
+                    )
+                })
+                .collect_vec()
+                .into_boxed_slice(),
+            goto_labels: func.goto_labels.into_iter().collect_vec().into_boxed_slice(),
+            header: FunctionBodyHeader {
+                file_path: func.header.file_path,
+                is_function: false,
+                is_functions: false,
+            },
         };
-
-        let header = func.header;
-
-        body.file_path = header.file_path;
-
-        for (var, default_value) in header.args {
-            body.push_arg(
-                var.var,
-                default_value,
-                var.args
-                    .into_iter()
-                    .map(|v| {
-                        if let Expr::Int(i) = v {
-                            i as usize
-                        } else {
-                            panic!("Variable index must be constant")
-                        }
-                    })
-                    .collect(),
-            );
-        }
 
         let mut flags = EventFlags::None;
         let mut local_size = default_var_size.default_local_size;
         let mut locals_size = default_var_size.default_locals_size;
 
-        for info in header.infos {
+        for info in func.header.infos {
             match info {
                 FunctionInfo::LocalSize(size) => {
                     local_size = Some(size);
@@ -155,15 +162,15 @@ impl FunctionDic {
                     flags = f;
                 }
                 FunctionInfo::Function => {
-                    body.is_function = true;
-                    assert!(!body.is_functions);
+                    body.header.is_function = true;
+                    assert!(!body.header.is_functions);
                 }
                 FunctionInfo::FunctionS => {
-                    body.is_functions = true;
-                    assert!(!body.is_function);
+                    body.header.is_functions = true;
+                    assert!(!body.header.is_function);
                 }
                 FunctionInfo::Dim(local) => {
-                    var_dic.add_local_info(header.name, local.var, local.info);
+                    var_dic.add_local_info(func.header.name, local.var, local.info);
                 }
             }
         }
@@ -177,7 +184,7 @@ impl FunctionDic {
 
         if let Some(local_size) = local_size {
             var_dic.add_local_info(
-                header.name.clone(),
+                func.header.name,
                 local,
                 VariableInfo {
                     size: vec![local_size],
@@ -188,7 +195,7 @@ impl FunctionDic {
 
         if let Some(locals_size) = locals_size {
             var_dic.add_local_info(
-                header.name.clone(),
+                func.header.name,
                 locals,
                 VariableInfo {
                     is_str: true,
@@ -200,7 +207,7 @@ impl FunctionDic {
 
         if let Some(arg_size) = default_var_size.default_arg_size {
             var_dic.add_local_info(
-                header.name.clone(),
+                func.header.name,
                 arg,
                 VariableInfo {
                     size: vec![arg_size],
@@ -211,7 +218,7 @@ impl FunctionDic {
 
         if let Some(args_size) = default_var_size.default_args_size {
             var_dic.add_local_info(
-                header.name.clone(),
+                func.header.name,
                 args,
                 VariableInfo {
                     is_str: true,
@@ -221,10 +228,10 @@ impl FunctionDic {
             );
         }
 
-        if let Ok(ty) = self.interner.resolve(&header.name).parse::<EventType>() {
+        if let Ok(ty) = self.interner.resolve(&func.header.name).parse::<EventType>() {
             self.insert_event(Event { ty, flags }, body);
         } else {
-            self.insert_func(header.name, body);
+            self.insert_func(func.header.name, body);
         }
     }
 

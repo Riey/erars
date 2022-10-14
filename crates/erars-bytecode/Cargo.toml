@@ -1,0 +1,12 @@
+[package]
+name = "erars-bytecode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+erars-ast = { path = "../erars-ast" }
+erars-vm = { path = "../erars-vm" }
+
+byteorder = "1.4.3"
+enum-map = "2.4.1"
+hashbrown = "0.12.3"

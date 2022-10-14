@@ -1,11 +1,22 @@
 use anyhow::{bail, Error, Result};
 use serde::{Deserialize, Serialize};
 
-// #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-// pub enum LocalValue {
-//     Value(Value),
-//     VarRef(SmolStr, ArrayVec<usize, 4>),
-// }
+use crate::StrKey;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum InlineValue {
+    Int(i64),
+    String(StrKey),
+}
+
+impl InlineValue {
+    pub fn to_int(self) -> Option<i64> {
+        match self {
+            Self::Int(i) => Some(i),
+            _ => None,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Value {

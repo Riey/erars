@@ -1,6 +1,6 @@
 use enum_map::Enum;
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString, IntoStaticStr};
+use strum::{Display, EnumString, FromRepr, IntoStaticStr};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Event {
@@ -59,6 +59,7 @@ pub enum EventFlags {
     IntoStaticStr,
     Serialize,
     Deserialize,
+    FromRepr,
 )]
 pub enum EventType {
     #[strum(to_string = "EVENTFIRST")]

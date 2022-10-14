@@ -1528,10 +1528,10 @@ mod function {
                 r#"tests/parse_tests/functions/call.erb"#,
                 ParserContext::parse_function_str
             ),
-            r#"
+            "
 Function {
     header: FunctionHeader {
-        file_path: "tests/parse_tests/functions/call.erb",
+        file_path: tests/parse_tests/functions/call.erb,
         name: FOO,
         args: [],
         infos: [],
@@ -1748,7 +1748,7 @@ Function {
         ),
     ],
 }
-"#
+"
         );
     }
 
@@ -1759,10 +1759,10 @@ Function {
                 r#"tests/parse_tests/functions/dim.erb"#,
                 ParserContext::parse_function_str
             ),
-            r#"
+            "
 Function {
     header: FunctionHeader {
-        file_path: "tests/parse_tests/functions/dim.erb",
+        file_path: tests/parse_tests/functions/dim.erb,
         name: SYSTEM_TITLE,
         args: [],
         infos: [
@@ -1806,7 +1806,7 @@ Function {
         ),
     ],
 }
-"#
+"
         );
     }
 
@@ -1817,10 +1817,10 @@ Function {
                 r#"tests/parse_tests/functions/function.erb"#,
                 ParserContext::parse_function_str
             ),
-            r#"
+            "
 Function {
     header: FunctionHeader {
-        file_path: "tests/parse_tests/functions/function.erb",
+        file_path: tests/parse_tests/functions/function.erb,
         name: FOO,
         args: [],
         infos: [
@@ -1854,7 +1854,7 @@ Function {
         ),
     ],
 }
-"#
+"
         );
     }
 
@@ -1865,10 +1865,10 @@ Function {
                 r#"tests/parse_tests/functions/juel.erb"#,
                 ParserContext::parse_function_str
             ),
-            r#"
+            "
 Function {
     header: FunctionHeader {
-        file_path: "tests/parse_tests/functions/juel.erb",
+        file_path: tests/parse_tests/functions/juel.erb,
         name: COMMON_MOVE_JUEL,
         args: [
             (
@@ -2277,7 +2277,7 @@ Function {
         ),
     ],
 }
-"#
+"
         );
     }
 }
@@ -2292,11 +2292,11 @@ mod program {
                 r#"tests/parse_tests/programs/call_form.erb"#,
                 ParserContext::parse_program_str
             ),
-            r#"
+            "
 [
     Function {
         header: FunctionHeader {
-            file_path: "tests/parse_tests/programs/call_form.erb",
+            file_path: tests/parse_tests/programs/call_form.erb,
             name: SYSTEM_TITLE,
             args: [],
             infos: [],
@@ -2325,7 +2325,7 @@ mod program {
     },
     Function {
         header: FunctionHeader {
-            file_path: "tests/parse_tests/programs/call_form.erb",
+            file_path: tests/parse_tests/programs/call_form.erb,
             name: FOO_123,
             args: [
                 (
@@ -2354,7 +2354,7 @@ mod program {
         ],
     },
 ]
-"#
+"
         );
     }
 
@@ -2365,11 +2365,11 @@ mod program {
                 r#"tests/parse_tests/programs/method_call.erb"#,
                 ParserContext::parse_program_str
             ),
-            r#"
+            "
 [
     Function {
         header: FunctionHeader {
-            file_path: "tests/parse_tests/programs/method_call.erb",
+            file_path: tests/parse_tests/programs/method_call.erb,
             name: FOO,
             args: [],
             infos: [],
@@ -2396,7 +2396,7 @@ mod program {
     },
     Function {
         header: FunctionHeader {
-            file_path: "tests/parse_tests/programs/method_call.erb",
+            file_path: tests/parse_tests/programs/method_call.erb,
             name: BAR,
             args: [],
             infos: [
@@ -2420,7 +2420,7 @@ mod program {
         ],
     },
 ]
-"#
+"
         );
     }
 
@@ -2431,11 +2431,11 @@ mod program {
                 r#"tests/parse_tests/programs/simple.erb"#,
                 ParserContext::parse_program_str
             ),
-            r#"
+            "
 [
     Function {
         header: FunctionHeader {
-            file_path: "tests/parse_tests/programs/simple.erb",
+            file_path: tests/parse_tests/programs/simple.erb,
             name: FOO,
             args: [],
             infos: [],
@@ -2456,7 +2456,7 @@ mod program {
     },
     Function {
         header: FunctionHeader {
-            file_path: "tests/parse_tests/programs/simple.erb",
+            file_path: tests/parse_tests/programs/simple.erb,
             name: FOO,
             args: [],
             infos: [],
@@ -2477,7 +2477,7 @@ mod program {
     },
     Function {
         header: FunctionHeader {
-            file_path: "tests/parse_tests/programs/simple.erb",
+            file_path: tests/parse_tests/programs/simple.erb,
             name: BAR,
             args: [],
             infos: [],
@@ -2497,7 +2497,7 @@ mod program {
         ],
     },
 ]
-"#
+"
         );
     }
 }
