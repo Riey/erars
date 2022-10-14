@@ -3,6 +3,8 @@ use erars_ast::{
     EventType, NotNan, PrintFlags, ScriptPosition, StrKey, UnaryOperator,
 };
 
+static_assertions::assert_eq_size!(Instruction, (i64, i64));
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Instruction {
     Nop,
