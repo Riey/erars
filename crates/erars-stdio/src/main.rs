@@ -26,10 +26,10 @@ struct Args {
     #[clap(long, help = "Don't print logs")]
     quite: bool,
 
-    #[clap(long, help = "Save script file")]
+    #[clap(long, help = "Save bytecode")]
     save: bool,
 
-    #[clap(long, help = "Load script file")]
+    #[clap(long, help = "Load bytecode")]
     load: bool,
 }
 
@@ -68,13 +68,13 @@ fn main() {
     };
 
     let (vm, mut ctx, tx) = if args.load {
-        load_script(args.target_path, inputs).unwrap()
+        unsafe { load_script(args.target_path, inputs).unwrap() }
     } else {
         run_script(args.target_path, inputs).unwrap()
     };
 
     if args.save {
-        save_script(vm, ctx);
+        save_script(vm, ctx).unwrap();
     } else {
         let mut frontend = stdio_frontend::StdioFrontend::new(tx);
         frontend.run(&vm, &mut ctx).unwrap();
