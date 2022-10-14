@@ -226,9 +226,7 @@ impl SystemState {
                             *printc_count = 0;
                             tx.new_line();
                         }
-                        tx.printrc(&format!(
-                            "{name}[{no:3}]",
-                        ));
+                        tx.printrc(&format!("{name}[{no:3}]",));
                         *printc_count += 1;
                     }
 
