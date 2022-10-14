@@ -439,8 +439,8 @@ impl HeaderInfo {
 
         while let Some((n, s, price)) = self::csv::name_item_line(&interner, &mut lex)? {
             self.item_price.insert(n, price);
-            self.var_names.entry(var.clone()).or_default().insert(s.clone(), n);
-            self.var_name_var.entry(var.clone()).or_default().insert(n, s);
+            self.var_names.entry(var).or_default().insert(s, n);
+            self.var_name_var.entry(var).or_default().insert(n, s);
         }
 
         Ok(())
@@ -614,6 +614,8 @@ impl HeaderInfo {
 #[derive(Debug)]
 pub struct ParserContext {
     pub interner: &'static Interner,
+    pub locals_key: StrKey,
+    pub args_key: StrKey,
     pub header: Arc<HeaderInfo>,
     pub local_strs: RefCell<HashSet<StrKey>>,
     pub is_arg: Cell<bool>,
@@ -630,8 +632,11 @@ impl Default for ParserContext {
 
 impl ParserContext {
     pub fn new(header: Arc<HeaderInfo>, file_path: SmolStr) -> Self {
+        let interner = &*GLOBAL_INTERNER;
         Self {
-            interner: &*GLOBAL_INTERNER,
+            interner,
+            locals_key: interner.get_or_intern_static("LOCALS"),
+            args_key: interner.get_or_intern_static("ARGS"),
             header,
             file_path,
             local_strs: RefCell::default(),
@@ -671,8 +676,7 @@ impl ParserContext {
     }
 
     pub fn is_str_var(&self, key: StrKey) -> bool {
-        if matches!(self.interner.resolve(&key), "LOCALS" | "ARGS")
-            || self.local_strs.borrow().contains(&key)
+        if key == self.locals_key || key == self.args_key || self.local_strs.borrow().contains(&key)
         {
             true
         } else if let Some(v) = self.header.global_variables.get(&key) {
@@ -1026,15 +1030,15 @@ impl ParserContext {
     ) -> ParserResult<Vec<CompiledFunction>> {
         let mut out = Vec::with_capacity(1024);
 
-        loop {
-            match self.next_token(lex)? {
-                Some(Token::At(mut left)) => loop {
-                    self.local_strs.borrow_mut().clear();
-                    let mut compiler = crate::compiler::Compiler::new();
-                    let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+        match self.next_token(lex)? {
+            Some(Token::At(mut left)) => 'outer: loop {
+                self.local_strs.borrow_mut().clear();
+                let mut compiler = crate::compiler::Compiler::new();
+                let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
 
-                    let mut infos = Vec::new();
+                let mut infos = Vec::new();
 
+                'inner: loop {
                     match self.next_token(lex)? {
                         Some(Token::At(new_left)) => {
                             left = new_left;
@@ -1044,13 +1048,13 @@ impl ParserContext {
                                     name: self.interner.get_or_intern(label),
                                     args,
                                     file_path: self.file_path.clone(),
-                                    infos: Vec::new(),
+                                    infos,
                                 },
                                 goto_labels: compiler.goto_labels,
                                 body: compiler.out.into_boxed_slice(),
                             });
 
-                            continue;
+                            break 'inner;
                         }
                         None => {
                             out.push(CompiledFunction {
@@ -1058,13 +1062,13 @@ impl ParserContext {
                                     name: self.interner.get_or_intern(label),
                                     args,
                                     file_path: self.file_path.clone(),
-                                    infos: Vec::new(),
+                                    infos,
                                 },
                                 goto_labels: compiler.goto_labels,
                                 body: compiler.out.into_boxed_slice(),
                             });
 
-                            break;
+                            break 'outer;
                         }
                         Some(Token::Function) => {
                             infos.push(FunctionInfo::Function);
@@ -1087,7 +1091,7 @@ impl ParserContext {
                         }
                         Some(Token::DimS(left)) => {
                             let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
-                            self.local_strs.borrow_mut().insert(var.var.clone());
+                            self.local_strs.borrow_mut().insert(var.var);
                             infos.push(FunctionInfo::Dim(var));
                         }
                         Some(Token::LocalSize(size)) => {
@@ -1118,10 +1122,10 @@ impl ParserContext {
                             }
                         },
                     }
-                },
-                Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
-                None => break,
-            }
+                }
+            },
+            Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
+            None => {}
         }
 
         Ok(out)
@@ -1130,15 +1134,15 @@ impl ParserContext {
     pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();
 
-        loop {
-            match self.next_token(lex)? {
-                Some(Token::At(mut left)) => loop {
-                    self.local_strs.borrow_mut().clear();
-                    let mut body = Vec::new();
-                    let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+        match self.next_token(lex)? {
+            Some(Token::At(mut left)) => 'outer: loop {
+                self.local_strs.borrow_mut().clear();
+                let mut body = Vec::new();
+                let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
 
-                    let mut infos = Vec::new();
+                let mut infos = Vec::new();
 
+                'inner: loop {
                     match self.next_token(lex)? {
                         Some(Token::At(new_left)) => {
                             left = new_left;
@@ -1148,12 +1152,12 @@ impl ParserContext {
                                     name: self.interner.get_or_intern(label),
                                     args,
                                     file_path: self.file_path.clone(),
-                                    infos: Vec::new(),
+                                    infos,
                                 },
-                                body: std::mem::take(&mut body),
+                                body,
                             });
 
-                            continue;
+                            break 'inner;
                         }
                         None => {
                             out.push(Function {
@@ -1161,12 +1165,12 @@ impl ParserContext {
                                     name: self.interner.get_or_intern(label),
                                     args,
                                     file_path: self.file_path.clone(),
-                                    infos: Vec::new(),
+                                    infos,
                                 },
                                 body,
                             });
 
-                            break;
+                            break 'outer;
                         }
                         Some(Token::Function) => {
                             infos.push(FunctionInfo::Function);
@@ -1189,7 +1193,7 @@ impl ParserContext {
                         }
                         Some(Token::DimS(left)) => {
                             let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
-                            self.local_strs.borrow_mut().insert(var.var.clone());
+                            self.local_strs.borrow_mut().insert(var.var);
                             infos.push(FunctionInfo::Dim(var));
                         }
                         Some(Token::LocalSize(size)) => {
@@ -1217,10 +1221,10 @@ impl ParserContext {
                             }
                         },
                     }
-                },
-                Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
-                None => break,
-            }
+                }
+            },
+            Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
+            None => {}
         }
 
         Ok(out)

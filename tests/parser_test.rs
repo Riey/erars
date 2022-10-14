@@ -10,7 +10,7 @@ mod body {
                 r#"tests/parse_tests/bodys/alignment.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Alignment(
@@ -40,7 +40,7 @@ mod body {
         Print(
             NEWLINE,
             FormText(
-                {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
             ),
         ),
         ScriptPosition {
@@ -51,7 +51,7 @@ mod body {
         Print(
             NEWLINE,
             FormText(
-                {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
             ),
         ),
         ScriptPosition {
@@ -59,7 +59,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -70,12 +70,12 @@ mod body {
                 r#"tests/parse_tests/bodys/assign.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Assign(
             Variable {
-                var: "COUNT",
+                var: COUNT,
                 func_extern: None,
                 args: [
                     BinopExpr(
@@ -105,7 +105,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -116,12 +116,12 @@ mod body {
                 r#"tests/parse_tests/bodys/assign_add.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Assign(
             Variable {
-                var: "FLAG",
+                var: FLAG,
                 func_extern: None,
                 args: [
                     Int(
@@ -141,7 +141,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -152,12 +152,12 @@ mod body {
                 r#"tests/parse_tests/bodys/assign_str.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCALS",
+                var: LOCALS,
                 func_extern: None,
                 args: [],
             },
@@ -173,13 +173,13 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCALS",
+                var: LOCALS,
                 func_extern: None,
                 args: [],
             },
             None,
             FormText(
-                {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}.{BuiltinMethod(ToStr, [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), String("00")])},
+                {Var(Variable { var: LOCAL, func_extern: None, args: [Int(0)] })}.{BuiltinMethod(ToStr, [Var(Variable { var: LOCAL, func_extern: None, args: [Int(1)] }), String(00)])},
             ),
         ),
         ScriptPosition {
@@ -189,7 +189,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCALS",
+                var: LOCALS,
                 func_extern: None,
                 args: [],
             },
@@ -205,12 +205,12 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "NICKNAME",
+                var: NICKNAME,
                 func_extern: None,
                 args: [
                     Var(
                         Variable {
-                            var: "MASTER",
+                            var: MASTER,
                             func_extern: None,
                             args: [],
                         },
@@ -219,7 +219,7 @@ mod body {
             },
             None,
             FormText(
-                {CondExpr(Var(Variable { var: "TALENT", func_extern: None, args: [Var(Variable { var: "MASTER", func_extern: None, args: [] }), Int(120)] }), FormText(신사), FormText(숙녀))},
+                {CondExpr(Var(Variable { var: TALENT, func_extern: None, args: [Var(Variable { var: MASTER, func_extern: None, args: [] }), Int(120)] }), FormText(신사), FormText(숙녀))},
             ),
         ),
         ScriptPosition {
@@ -229,7 +229,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCALS",
+                var: LOCALS,
                 func_extern: None,
                 args: [],
             },
@@ -243,7 +243,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -254,12 +254,12 @@ mod body {
                 r#"tests/parse_tests/bodys/call.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Call {
             name: String(
-                "FOO",
+                FOO,
             ),
             args: [
                 Int(
@@ -267,7 +267,7 @@ mod body {
                 ),
                 Var(
                     Variable {
-                        var: "A",
+                        var: A,
                         func_extern: None,
                         args: [
                             Int(
@@ -277,7 +277,7 @@ mod body {
                     },
                 ),
                 String(
-                    "123",
+                    123,
                 ),
             ],
             is_jump: false,
@@ -290,7 +290,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -301,14 +301,14 @@ mod body {
                 r#"tests/parse_tests/bodys/command.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Command(
             CustomDrawLine,
             [
                 String(
-                    "=",
+                    =,
                 ),
             ],
         ),
@@ -317,7 +317,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -328,12 +328,12 @@ mod body {
                 r#"tests/parse_tests/bodys/for.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         For(
             Variable {
-                var: "COUNT",
+                var: COUNT,
                 func_extern: None,
                 args: [],
             },
@@ -355,7 +355,7 @@ mod body {
                         [
                             Var(
                                 Variable {
-                                    var: "COUNT",
+                                    var: COUNT,
                                     func_extern: None,
                                     args: [],
                                 },
@@ -373,7 +373,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -384,13 +384,13 @@ mod body {
                 r#"tests/parse_tests/bodys/hello.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Print(
             NEWLINE,
             String(
-                "Hello, world!",
+                Hello, world!,
             ),
         ),
         ScriptPosition {
@@ -398,7 +398,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -409,7 +409,7 @@ mod body {
                 r#"tests/parse_tests/bodys/if.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         If(
@@ -418,7 +418,7 @@ mod body {
                     BinopExpr(
                         Var(
                             Variable {
-                                var: "A",
+                                var: A,
                                 func_extern: None,
                                 args: [],
                             },
@@ -433,7 +433,7 @@ mod body {
                             Print(
                                 (empty),
                                 String(
-                                    "A > 1",
+                                    A > 1,
                                 ),
                             ),
                             ScriptPosition {
@@ -446,7 +446,7 @@ mod body {
                     BinopExpr(
                         Var(
                             Variable {
-                                var: "A",
+                                var: A,
                                 func_extern: None,
                                 args: [],
                             },
@@ -461,7 +461,7 @@ mod body {
                             Print(
                                 (empty),
                                 String(
-                                    "A == 1",
+                                    A == 1,
                                 ),
                             ),
                             ScriptPosition {
@@ -476,7 +476,7 @@ mod body {
                     Print(
                         (empty),
                         String(
-                            "A < 1",
+                            A < 1,
                         ),
                     ),
                     ScriptPosition {
@@ -490,7 +490,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -501,12 +501,12 @@ mod body {
                 r#"tests/parse_tests/bodys/number.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -522,7 +522,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -538,7 +538,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -554,7 +554,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -570,7 +570,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -586,7 +586,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -605,7 +605,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -624,7 +624,7 @@ mod body {
     StmtWithPos(
         Assign(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -641,7 +641,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -652,7 +652,7 @@ mod body {
                 r#"tests/parse_tests/bodys/print_data.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         PrintData(
@@ -661,20 +661,20 @@ mod body {
             [
                 [
                     String(
-                        "data",
+                        data,
                     ),
                 ],
                 [
                     FormText(
-                        LOCAL={Var(Variable { var: "LOCAL", func_extern: None, args: [] })},
+                        LOCAL={Var(Variable { var: LOCAL, func_extern: None, args: [] })},
                     ),
                 ],
                 [
                     String(
-                        "list",
+                        list,
                     ),
                     String(
-                        "form",
+                        form,
                     ),
                 ],
             ],
@@ -684,7 +684,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -695,7 +695,7 @@ mod body {
                 r#"tests/parse_tests/bodys/print_simple.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Print(
@@ -712,7 +712,7 @@ mod body {
         Print(
             NEWLINE | WAIT,
             FormText(
-                {Method("조사처리", [Var(Variable { var: "CALLNAME", func_extern: None, args: [Method("GET_CHARA_M", [])] }), String("와")])} 같이 온 걸 보니, 단단히 각오하고 온 것 같다,
+                {Method(조사처리, [Var(Variable { var: CALLNAME, func_extern: None, args: [Method(GET_CHARA_M, [])] }), String(와)])} 같이 온 걸 보니, 단단히 각오하고 온 것 같다,
             ),
         ),
         ScriptPosition {
@@ -723,7 +723,7 @@ mod body {
         Print(
             NEWLINE,
             FormText(
-                {Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })}의 교습 관찰 결과 완료  결과：임시 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(0)] })}에 의한 실제 성과치 {Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })} 증가⇒{CondExpr(BinopExpr(Var(Variable { var: "LOCAL", func_extern: None, args: [Int(1)] }), Equal, Int(1)), FormText(성공), FormText(실패))}({Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(693)] })}％) 작업 내용：{Var(Variable { var: "CFLAG", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] }), Int(690)] })},
+                {Var(Variable { var: CALLNAME, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] })] })}의 교습 관찰 결과 완료  결과：임시 성과치 {Var(Variable { var: LOCAL, func_extern: None, args: [Int(0)] })}에 의한 실제 성과치 {Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] })} 증가⇒{CondExpr(BinopExpr(Var(Variable { var: LOCAL, func_extern: None, args: [Int(1)] }), Equal, Int(1)), FormText(성공), FormText(실패))}({Var(Variable { var: CFLAG, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] }), Int(693)] })}％) 작업 내용：{Var(Variable { var: CFLAG, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] }), Int(690)] })},
             ),
         ),
         ScriptPosition {
@@ -734,7 +734,7 @@ mod body {
         Print(
             NEWLINE | WAIT,
             FormText(
-                보지에서 애액을 흘렸{CondExpr(BinopExpr(Var(Variable { var: "TEQUIP", func_extern: None, args: [Int(42)] }), Equal, Int(0)), FormText(고, 작은 한숨을 토해냈), String(""))}다.,
+                보지에서 애액을 흘렸{CondExpr(BinopExpr(Var(Variable { var: TEQUIP, func_extern: None, args: [Int(42)] }), Equal, Int(0)), FormText(고, 작은 한숨을 토해냈), String())}다.,
             ),
         ),
         ScriptPosition {
@@ -742,7 +742,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -753,13 +753,13 @@ mod body {
                 r#"tests/parse_tests/bodys/printc.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Print(
             LEFT_ALIGN,
             String(
-                "LC",
+                LC,
             ),
         ),
         ScriptPosition {
@@ -770,7 +770,7 @@ mod body {
         Print(
             RIGHT_ALIGN,
             String(
-                "C",
+                C,
             ),
         ),
         ScriptPosition {
@@ -778,7 +778,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -789,7 +789,7 @@ mod body {
                 r#"tests/parse_tests/bodys/repeat.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Repeat(
@@ -801,12 +801,12 @@ mod body {
                 StmtWithPos(
                     Assign(
                         Variable {
-                            var: "MARK",
+                            var: MARK,
                             func_extern: None,
                             args: [
                                 Var(
                                     Variable {
-                                        var: "COUNT",
+                                        var: COUNT,
                                         func_extern: None,
                                         args: [],
                                     },
@@ -830,7 +830,7 @@ mod body {
                         BinopExpr(
                             Var(
                                 Variable {
-                                    var: "COUNT",
+                                    var: COUNT,
                                     func_extern: None,
                                     args: [],
                                 },
@@ -838,7 +838,7 @@ mod body {
                             Equal,
                             Var(
                                 Variable {
-                                    var: "MASTER",
+                                    var: MASTER,
                                     func_extern: None,
                                     args: [],
                                 },
@@ -860,12 +860,12 @@ mod body {
                         BinopExpr(
                             Var(
                                 Variable {
-                                    var: "CFLAG",
+                                    var: CFLAG,
                                     func_extern: None,
                                     args: [
                                         Var(
                                             Variable {
-                                                var: "COUNT",
+                                                var: COUNT,
                                                 func_extern: None,
                                                 args: [],
                                             },
@@ -899,7 +899,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -910,7 +910,7 @@ mod body {
                 r#"tests/parse_tests/bodys/selectcase.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         SelectCase(
@@ -931,7 +931,7 @@ mod body {
                             Print(
                                 (empty),
                                 String(
-                                    "FOO",
+                                    FOO,
                                 ),
                             ),
                             ScriptPosition {
@@ -956,7 +956,7 @@ mod body {
                             Print(
                                 (empty),
                                 String(
-                                    "BAR",
+                                    BAR,
                                 ),
                             ),
                             ScriptPosition {
@@ -972,7 +972,7 @@ mod body {
                         Print(
                             (empty),
                             String(
-                                "BAZ",
+                                BAZ,
                             ),
                         ),
                         ScriptPosition {
@@ -987,7 +987,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -998,7 +998,7 @@ mod body {
                 r#"tests/parse_tests/bodys/sif.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Sif(
@@ -1009,7 +1009,7 @@ mod body {
                 Print(
                     (empty),
                     String(
-                        "45",
+                        45,
                     ),
                 ),
                 ScriptPosition {
@@ -1026,21 +1026,21 @@ mod body {
             BinopExpr(
                 Var(
                     Variable {
-                        var: "LOCALS",
+                        var: LOCALS,
                         func_extern: None,
                         args: [],
                     },
                 ),
                 NotEqual,
                 String(
-                    "",
+                    ,
                 ),
             ),
             StmtWithPos(
                 Print(
                     NEWLINE,
                     FormText(
-                        {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                        {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
                     ),
                 ),
                 ScriptPosition {
@@ -1056,7 +1056,7 @@ mod body {
         Print(
             (empty),
             String(
-                "32",
+                32,
             ),
         ),
         ScriptPosition {
@@ -1064,7 +1064,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -1075,12 +1075,12 @@ mod body {
                 r#"tests/parse_tests/bodys/times.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Times(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [],
             },
@@ -1093,7 +1093,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 
@@ -1104,12 +1104,12 @@ mod body {
                 r#"tests/parse_tests/bodys/trailing_comma.erb"#,
                 ParserContext::parse_body_str
             ),
-            r#"
+            "
 [
     StmtWithPos(
         Call {
             name: String(
-                "CALLFUNC",
+                CALLFUNC,
             ),
             args: [
                 Int(
@@ -1129,7 +1129,7 @@ mod body {
         },
     ),
 ]
-"#
+"
         );
     }
 }
@@ -1144,12 +1144,12 @@ mod expr {
                 r#"tests/parse_tests/exprs/boolean.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 BinopExpr(
     BinopExpr(
         Var(
             Variable {
-                var: "RESULT",
+                var: RESULT,
                 func_extern: None,
                 args: [],
             },
@@ -1163,12 +1163,12 @@ BinopExpr(
     BinopExpr(
         Var(
             Variable {
-                var: "TALENT",
+                var: TALENT,
                 func_extern: None,
                 args: [
                     Var(
                         Variable {
-                            var: "MASTER",
+                            var: MASTER,
                             func_extern: None,
                             args: [],
                         },
@@ -1185,7 +1185,7 @@ BinopExpr(
         ),
     ),
 )
-"#
+"
         );
     }
 
@@ -1196,7 +1196,7 @@ BinopExpr(
                 r#"tests/parse_tests/exprs/complex_op.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 BinopExpr(
     BinopExpr(
         Int(
@@ -1210,12 +1210,12 @@ BinopExpr(
             Sub,
             Var(
                 Variable {
-                    var: "ABL",
+                    var: ABL,
                     func_extern: None,
                     args: [
                         Var(
                             Variable {
-                                var: "ARG",
+                                var: ARG,
                                 func_extern: None,
                                 args: [],
                             },
@@ -1244,7 +1244,7 @@ BinopExpr(
         ),
     ),
 )
-"#
+"
         );
     }
 
@@ -1278,10 +1278,10 @@ CondExpr(
                 r#"tests/parse_tests/exprs/csv.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 Var(
     Variable {
-        var: "FLAG",
+        var: FLAG,
         func_extern: None,
         args: [
             Int(
@@ -1290,7 +1290,7 @@ Var(
         ],
     },
 )
-"#
+"
         );
     }
 
@@ -1301,19 +1301,19 @@ Var(
                 r#"tests/parse_tests/exprs/method.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 Method(
-    "FOO",
+    FOO,
     [
         Int(
             123,
         ),
         String(
-            "BAR",
+            BAR,
         ),
         Var(
             Variable {
-                var: "LOCAL",
+                var: LOCAL,
                 func_extern: None,
                 args: [
                     Int(
@@ -1324,7 +1324,7 @@ Method(
         ),
     ],
 )
-"#
+"
         );
     }
 
@@ -1410,11 +1410,11 @@ BinopExpr(
                 r#"tests/parse_tests/exprs/str_literal.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 String(
-    "",
+    ,
 )
-"#
+"
         );
     }
 
@@ -1425,9 +1425,9 @@ String(
                 r#"tests/parse_tests/exprs/trailing_comma.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 Method(
-    "METHOD",
+    METHOD,
     [
         Int(
             1,
@@ -1437,7 +1437,7 @@ Method(
         ),
     ],
 )
-"#
+"
         );
     }
 
@@ -1448,10 +1448,10 @@ Method(
                 r#"tests/parse_tests/exprs/var_arg.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 Var(
     Variable {
-        var: "COUNT",
+        var: COUNT,
         func_extern: None,
         args: [
             Int(
@@ -1460,7 +1460,7 @@ Var(
         ],
     },
 )
-"#
+"
         );
     }
 
@@ -1471,15 +1471,15 @@ Var(
                 r#"tests/parse_tests/exprs/var_complex.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 Var(
     Variable {
-        var: "COUNT",
+        var: COUNT,
         func_extern: None,
         args: [
             Var(
                 Variable {
-                    var: "A",
+                    var: A,
                     func_extern: None,
                     args: [
                         Int(
@@ -1494,7 +1494,7 @@ Var(
         ],
     },
 )
-"#
+"
         );
     }
 
@@ -1505,15 +1505,15 @@ Var(
                 r#"tests/parse_tests/exprs/var_empty.erb"#,
                 ParserContext::parse_expr_str
             ),
-            r#"
+            "
 Var(
     Variable {
-        var: "COUNT",
+        var: COUNT,
         func_extern: None,
         args: [],
     },
 )
-"#
+"
         );
     }
 }
@@ -1532,7 +1532,7 @@ mod function {
 Function {
     header: FunctionHeader {
         file_path: "tests/parse_tests/functions/call.erb",
-        name: "FOO",
+        name: FOO,
         args: [],
         infos: [],
     },
@@ -1540,7 +1540,7 @@ Function {
         StmtWithPos(
             Assign(
                 Variable {
-                    var: "LOCALS",
+                    var: LOCALS,
                     func_extern: None,
                     args: [],
                 },
@@ -1556,7 +1556,7 @@ Function {
         StmtWithPos(
             Goto {
                 label: String(
-                    "LABEL",
+                    LABEL,
                 ),
                 catch_body: None,
             },
@@ -1567,7 +1567,7 @@ Function {
         StmtWithPos(
             Goto {
                 label: FormText(
-                    {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                    {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
                 ),
                 catch_body: None,
             },
@@ -1578,7 +1578,7 @@ Function {
         StmtWithPos(
             Goto {
                 label: FormText(
-                    {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                    {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
                 ),
                 catch_body: Some(
                     [],
@@ -1591,7 +1591,7 @@ Function {
         StmtWithPos(
             Goto {
                 label: FormText(
-                    {Var(Variable { var: "LOCALS", func_extern: None, args: [] })},
+                    {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
                 ),
                 catch_body: Some(
                     [
@@ -1599,7 +1599,7 @@ Function {
                             Print(
                                 NEWLINE,
                                 String(
-                                    "CATCH",
+                                    CATCH,
                                 ),
                             ),
                             ScriptPosition {
@@ -1616,7 +1616,7 @@ Function {
         StmtWithPos(
             Call {
                 name: String(
-                    "BAR",
+                    BAR,
                 ),
                 args: [],
                 is_jump: false,
@@ -1631,7 +1631,7 @@ Function {
         StmtWithPos(
             Call {
                 name: String(
-                    "BAR",
+                    BAR,
                 ),
                 args: [],
                 is_jump: false,
@@ -1648,7 +1648,7 @@ Function {
         StmtWithPos(
             Call {
                 name: String(
-                    "BAR",
+                    BAR,
                 ),
                 args: [],
                 is_jump: false,
@@ -1665,7 +1665,7 @@ Function {
         StmtWithPos(
             Call {
                 name: String(
-                    "BAR",
+                    BAR,
                 ),
                 args: [],
                 is_jump: true,
@@ -1680,7 +1680,7 @@ Function {
         StmtWithPos(
             Call {
                 name: String(
-                    "BAR",
+                    BAR,
                 ),
                 args: [],
                 is_jump: true,
@@ -1714,7 +1714,7 @@ Function {
         StmtWithPos(
             Call {
                 name: String(
-                    "BAZ",
+                    BAZ,
                 ),
                 args: [
                     CondExpr(
@@ -1740,7 +1740,7 @@ Function {
         ),
         StmtWithPos(
             Label(
-                "LABEL",
+                LABEL,
             ),
             ScriptPosition {
                 line: 25,
@@ -1763,12 +1763,12 @@ Function {
 Function {
     header: FunctionHeader {
         file_path: "tests/parse_tests/functions/dim.erb",
-        name: "SYSTEM_TITLE",
+        name: SYSTEM_TITLE,
         args: [],
         infos: [
             Dim(
                 LocalVariable {
-                    var: "FOO",
+                    var: FOO,
                     info: VariableInfo {
                         is_chara: false,
                         is_str: false,
@@ -1793,7 +1793,7 @@ Function {
                 [
                     Var(
                         Variable {
-                            var: "FOO",
+                            var: FOO,
                             func_extern: None,
                             args: [],
                         },
@@ -1821,7 +1821,7 @@ Function {
 Function {
     header: FunctionHeader {
         file_path: "tests/parse_tests/functions/function.erb",
-        name: "FOO",
+        name: FOO,
         args: [],
         infos: [
             EventFlag(
@@ -1834,7 +1834,7 @@ Function {
             Print(
                 NEWLINE,
                 String(
-                    "Hello",
+                    Hello,
                 ),
             ),
             ScriptPosition {
@@ -1869,11 +1869,11 @@ Function {
 Function {
     header: FunctionHeader {
         file_path: "tests/parse_tests/functions/juel.erb",
-        name: "COMMON_MOVE_JUEL",
+        name: COMMON_MOVE_JUEL,
         args: [
             (
                 Variable {
-                    var: "ARG",
+                    var: ARG,
                     func_extern: None,
                     args: [],
                 },
@@ -1881,7 +1881,7 @@ Function {
             ),
             (
                 Variable {
-                    var: "ARG",
+                    var: ARG,
                     func_extern: None,
                     args: [
                         Int(
@@ -1893,7 +1893,7 @@ Function {
             ),
             (
                 Variable {
-                    var: "ARG",
+                    var: ARG,
                     func_extern: None,
                     args: [
                         Int(
@@ -1905,7 +1905,7 @@ Function {
             ),
             (
                 Variable {
-                    var: "ARG",
+                    var: ARG,
                     func_extern: None,
                     args: [
                         Int(
@@ -1917,7 +1917,7 @@ Function {
             ),
             (
                 Variable {
-                    var: "ARG",
+                    var: ARG,
                     func_extern: None,
                     args: [
                         Int(
@@ -1934,7 +1934,7 @@ Function {
         StmtWithPos(
             Assign(
                 Variable {
-                    var: "LOCAL",
+                    var: LOCAL,
                     func_extern: None,
                     args: [
                         Int(
@@ -1949,19 +1949,19 @@ Function {
                         BinopExpr(
                             Var(
                                 Variable {
-                                    var: "JUEL",
+                                    var: JUEL,
                                     func_extern: None,
                                     args: [
                                         Var(
                                             Variable {
-                                                var: "ARG",
+                                                var: ARG,
                                                 func_extern: None,
                                                 args: [],
                                             },
                                         ),
                                         Var(
                                             Variable {
-                                                var: "ARG",
+                                                var: ARG,
                                                 func_extern: None,
                                                 args: [
                                                     Int(
@@ -1976,7 +1976,7 @@ Function {
                             Add,
                             Var(
                                 Variable {
-                                    var: "ARG",
+                                    var: ARG,
                                     func_extern: None,
                                     args: [
                                         Int(
@@ -2011,7 +2011,7 @@ Function {
         StmtWithPos(
             Assign(
                 Variable {
-                    var: "LOCAL",
+                    var: LOCAL,
                     func_extern: None,
                     args: [
                         Int(
@@ -2023,7 +2023,7 @@ Function {
                 BinopExpr(
                     Var(
                         Variable {
-                            var: "LOCAL",
+                            var: LOCAL,
                             func_extern: None,
                             args: [
                                 Int(
@@ -2035,19 +2035,19 @@ Function {
                     Sub,
                     Var(
                         Variable {
-                            var: "JUEL",
+                            var: JUEL,
                             func_extern: None,
                             args: [
                                 Var(
                                     Variable {
-                                        var: "ARG",
+                                        var: ARG,
                                         func_extern: None,
                                         args: [],
                                     },
                                 ),
                                 Var(
                                     Variable {
-                                        var: "ARG",
+                                        var: ARG,
                                         func_extern: None,
                                         args: [
                                             Int(
@@ -2068,13 +2068,13 @@ Function {
         StmtWithPos(
             Assign(
                 Variable {
-                    var: "LOCALS",
+                    var: LOCALS,
                     func_extern: None,
                     args: [],
                 },
                 None,
                 FormText(
-                    {BuiltinVar(PalamName, [Var(Variable { var: "ARG", func_extern: None, args: [Int(1)] })])}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: "ARG", func_extern: None, args: [] }), NotEqual, Var(Variable { var: "TARGET", func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: "CALLNAME", func_extern: None, args: [Var(Variable { var: "ARG", func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(BuiltinMethod(Sign, [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {BuiltinMethod(Abs, [Var(Variable { var: "LOCAL", func_extern: None, args: [Int(2)] })])},
+                    {BuiltinVar(PalamName, [Var(Variable { var: ARG, func_extern: None, args: [Int(1)] })])}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [] }), NotEqual, Var(Variable { var: TARGET, func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: CALLNAME, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(BuiltinMethod(Sign, [Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {BuiltinMethod(Abs, [Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] })])},
                 ),
             ),
             ScriptPosition {
@@ -2084,19 +2084,19 @@ Function {
         StmtWithPos(
             Assign(
                 Variable {
-                    var: "JUEL",
+                    var: JUEL,
                     func_extern: None,
                     args: [
                         Var(
                             Variable {
-                                var: "ARG",
+                                var: ARG,
                                 func_extern: None,
                                 args: [],
                             },
                         ),
                         Var(
                             Variable {
-                                var: "ARG",
+                                var: ARG,
                                 func_extern: None,
                                 args: [
                                     Int(
@@ -2110,7 +2110,7 @@ Function {
                 None,
                 Var(
                     Variable {
-                        var: "LOCAL",
+                        var: LOCAL,
                         func_extern: None,
                         args: [
                             Int(
@@ -2134,7 +2134,7 @@ Function {
                                 [
                                     Var(
                                         Variable {
-                                            var: "LOCAL",
+                                            var: LOCAL,
                                             func_extern: None,
                                             args: [
                                                 Int(
@@ -2155,7 +2155,7 @@ Function {
                                 SelectCase(
                                     Var(
                                         Variable {
-                                            var: "ARG",
+                                            var: ARG,
                                             func_extern: None,
                                             args: [
                                                 Int(
@@ -2179,7 +2179,7 @@ Function {
                                                         NEWLINE,
                                                         Var(
                                                             Variable {
-                                                                var: "LOCALS",
+                                                                var: LOCALS,
                                                                 func_extern: None,
                                                                 args: [],
                                                             },
@@ -2218,7 +2218,7 @@ Function {
                                                         NEWLINE | WAIT,
                                                         Var(
                                                             Variable {
-                                                                var: "LOCALS",
+                                                                var: LOCALS,
                                                                 func_extern: None,
                                                                 args: [],
                                                             },
@@ -2297,7 +2297,7 @@ mod program {
     Function {
         header: FunctionHeader {
             file_path: "tests/parse_tests/programs/call_form.erb",
-            name: "SYSTEM_TITLE",
+            name: SYSTEM_TITLE,
             args: [],
             infos: [],
         },
@@ -2326,11 +2326,11 @@ mod program {
     Function {
         header: FunctionHeader {
             file_path: "tests/parse_tests/programs/call_form.erb",
-            name: "FOO_123",
+            name: FOO_123,
             args: [
                 (
                     Variable {
-                        var: "ARG",
+                        var: ARG,
                         func_extern: None,
                         args: [],
                     },
@@ -2344,7 +2344,7 @@ mod program {
                 Print(
                     (empty),
                     FormText(
-                        FOO_{Var(Variable { var: "ARG", func_extern: None, args: [] })},
+                        FOO_{Var(Variable { var: ARG, func_extern: None, args: [] })},
                     ),
                 ),
                 ScriptPosition {
@@ -2370,7 +2370,7 @@ mod program {
     Function {
         header: FunctionHeader {
             file_path: "tests/parse_tests/programs/method_call.erb",
-            name: "FOO",
+            name: FOO,
             args: [],
             infos: [],
         },
@@ -2378,13 +2378,13 @@ mod program {
             StmtWithPos(
                 Assign(
                     Variable {
-                        var: "A",
+                        var: A,
                         func_extern: None,
                         args: [],
                     },
                     None,
                     Method(
-                        "BAR",
+                        BAR,
                         [],
                     ),
                 ),
@@ -2397,7 +2397,7 @@ mod program {
     Function {
         header: FunctionHeader {
             file_path: "tests/parse_tests/programs/method_call.erb",
-            name: "BAR",
+            name: BAR,
             args: [],
             infos: [
                 Function,
@@ -2436,7 +2436,7 @@ mod program {
     Function {
         header: FunctionHeader {
             file_path: "tests/parse_tests/programs/simple.erb",
-            name: "FOO",
+            name: FOO,
             args: [],
             infos: [],
         },
@@ -2445,7 +2445,7 @@ mod program {
                 Print(
                     (empty),
                     String(
-                        "foo",
+                        foo,
                     ),
                 ),
                 ScriptPosition {
@@ -2457,7 +2457,7 @@ mod program {
     Function {
         header: FunctionHeader {
             file_path: "tests/parse_tests/programs/simple.erb",
-            name: "FOO",
+            name: FOO,
             args: [],
             infos: [],
         },
@@ -2466,7 +2466,7 @@ mod program {
                 Print(
                     (empty),
                     String(
-                        "foo",
+                        foo,
                     ),
                 ),
                 ScriptPosition {
@@ -2478,7 +2478,7 @@ mod program {
     Function {
         header: FunctionHeader {
             file_path: "tests/parse_tests/programs/simple.erb",
-            name: "BAR",
+            name: BAR,
             args: [],
             infos: [],
         },
@@ -2487,7 +2487,7 @@ mod program {
                 Print(
                     (empty),
                     String(
-                        "bar",
+                        bar,
                     ),
                 ),
                 ScriptPosition {
