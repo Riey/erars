@@ -1,7 +1,7 @@
 mod http_frontend;
 
 use erars_ast::Value;
-use erars_loader::run_script;
+use erars_loader::{load_script, run_script, save_script};
 
 #[derive(clap::Parser)]
 #[clap(author, version, about)]
@@ -28,6 +28,12 @@ struct Args {
 
     #[clap(long, help = "HTTP port number", default_value = "8000")]
     port: u16,
+
+    #[clap(long, help = "Save bytecode")]
+    save: bool,
+
+    #[clap(long, help = "Load bytecode")]
+    load: bool,
 }
 
 fn main() {
@@ -64,8 +70,16 @@ fn main() {
         None => Vec::new(),
     };
 
-    let (vm, ctx, vconsole) = run_script(args.target_path, inputs).unwrap();
+    let (vm, ctx, vconsole) = if args.load {
+        unsafe { load_script(args.target_path, inputs).unwrap() }
+    } else {
+        run_script(args.target_path, inputs).unwrap()
+    };
 
-    let mut frontend = http_frontend::HttpFrontend::new(args.port);
-    frontend.run(vm, ctx, vconsole).unwrap();
+    if args.save {
+        save_script(vm, ctx).unwrap();
+    } else {
+        let mut frontend = http_frontend::HttpFrontend::new(args.port);
+        frontend.run(vm, ctx, vconsole).unwrap();
+    }
 }
