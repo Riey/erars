@@ -64,8 +64,8 @@ fn main() {
         None => Vec::new(),
     };
 
-    let (vm, ctx) = run_script(args.target_path, inputs).unwrap();
+    let (vm, ctx, vconsole) = run_script(args.target_path, inputs).unwrap();
 
     let mut frontend = http_frontend::HttpFrontend::new(args.port);
-    frontend.run(vm, ctx).unwrap();
+    frontend.run(vm, ctx, vconsole).unwrap();
 }

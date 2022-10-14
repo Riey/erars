@@ -1,10 +1,11 @@
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable,
-    EventType, NotNan, PrintFlags, ScriptPosition, UnaryOperator,
+    EventType, NotNan, PrintFlags, ScriptPosition, StrKey, UnaryOperator,
 };
-use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+static_assertions::assert_eq_size!(Instruction, (i64, i64));
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Instruction {
     Nop,
     Pop,
@@ -15,7 +16,7 @@ pub enum Instruction {
     /// Duplicate second value in stack
     DuplicatePrev,
     LoadInt(i64),
-    LoadStr(Box<str>),
+    LoadStr(StrKey),
     EvalFormString,
     /// Padding first value
     ///
@@ -23,6 +24,8 @@ pub enum Instruction {
     PadStr(Alignment),
     LoadVarRef(u32),
     LoadExternVarRef(u32),
+    /// Load COUNT
+    LoadCountVarRef,
     /// Read VarRef into Value
     ///
     /// If value is not VarRef, This is noop

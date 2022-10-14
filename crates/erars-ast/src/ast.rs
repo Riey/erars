@@ -8,12 +8,12 @@ use strum::{Display, EnumString};
 
 use crate::{
     command::BuiltinMethod, Alignment, BinaryOperator, BuiltinCommand, BuiltinVariable, EventFlags,
-    EventType, LocalVariable, UnaryOperator, Value, Variable,
+    EventType, Interner, LocalVariable, StrKey, UnaryOperator, Value, Variable,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Stmt {
-    Label(SmolStr),
+    Label(StrKey),
     SelectCase(
         Expr,
         Vec<(Vec<SelectCaseCond>, Vec<StmtWithPos>)>,
@@ -23,7 +23,7 @@ pub enum Stmt {
     PrintList(PrintFlags, Vec<Expr>),
     PrintFormS(PrintFlags, Expr),
     PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
-    ReuseLastLine(Box<str>),
+    ReuseLastLine(StrKey),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<StmtWithPos>),
     If(Vec<(Expr, Vec<StmtWithPos>)>, Vec<StmtWithPos>),
@@ -69,16 +69,16 @@ impl fmt::Display for ScriptPosition {
     }
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Function {
     pub header: FunctionHeader,
     pub body: Vec<StmtWithPos>,
 }
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
     pub file_path: SmolStr,
-    pub name: SmolStr,
+    pub name: StrKey,
     pub args: Vec<(Variable, Option<Value>)>,
     pub infos: Vec<FunctionInfo>,
 }
@@ -95,12 +95,12 @@ pub enum FunctionInfo {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Expr {
-    String(Box<str>),
+    String(StrKey),
     Int(i64),
     FormText(FormText),
     Var(Variable),
     BuiltinVar(BuiltinVariable, Vec<Self>),
-    Method(Box<str>, Vec<Self>),
+    Method(StrKey, Vec<Self>),
     BuiltinMethod(BuiltinMethod, Vec<Self>),
     UnaryopExpr(Box<Self>, UnaryOperator),
     /// ++/-- var ++/--
@@ -118,8 +118,8 @@ impl Expr {
         Self::Int(i.into())
     }
 
-    pub fn str(s: impl Into<Box<str>>) -> Self {
-        Self::String(s.into())
+    pub fn str(interner: &Interner, s: impl AsRef<str>) -> Self {
+        Self::String(interner.get_or_intern(s))
     }
 
     pub fn unary(op1: Self, op: UnaryOperator) -> Self {
@@ -171,12 +171,12 @@ impl fmt::Debug for FormExpr {
 
 #[derive(Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct FormText {
-    pub first: String,
-    pub other: Vec<(FormExpr, String)>,
+    pub first: StrKey,
+    pub other: Vec<(FormExpr, StrKey)>,
 }
 
 impl FormText {
-    pub fn new(first: String) -> Self {
+    pub fn new(first: StrKey) -> Self {
         Self {
             first,
             other: Vec::new(),
@@ -188,7 +188,7 @@ impl FormText {
         expr: Expr,
         padding: Option<Expr>,
         align: Option<Alignment>,
-        text: String,
+        text: StrKey,
     ) {
         self.other.push((
             FormExpr {
@@ -203,10 +203,10 @@ impl FormText {
 
 impl fmt::Debug for FormText {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.first)?;
+        write!(f, "{:?}", self.first)?;
 
         for (expr, text) in self.other.iter() {
-            write!(f, "{{{:?}}}{}", expr, text)?;
+            write!(f, "{{{:?}}}{:?}", expr, text)?;
         }
 
         Ok(())
@@ -223,7 +223,7 @@ option_set::option_set! {
     }
 }
 
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize, EnumString, Display)]
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, EnumString, Display, Serialize, Deserialize)]
 pub enum BeginType {
     #[strum(to_string = "TITLE")]
     Title,

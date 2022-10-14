@@ -1,42 +1,45 @@
 use anyhow::{anyhow, Result};
 use arrayvec::ArrayVec;
 use enum_map::EnumMap;
+use erars_ast::Interner;
+use erars_ast::StrKey;
+use erars_ast::GLOBAL_INTERNER;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
 use smol_str::SmolStr;
 
 use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, VariableInfo};
 use erars_compiler::{CompiledFunction, Instruction};
-use serde::{Deserialize, Serialize};
 
+use crate::variable::KnownVariableNames;
 use crate::VariableStorage;
 use crate::Workflow;
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct FunctionBody {
-    file_path: SmolStr,
-    is_function: bool,
-    is_functions: bool,
-    body: Box<[Instruction]>,
-    goto_labels: HashMap<SmolStr, u32>,
-    args: Vec<(Box<str>, Option<Value>, ArrayVec<usize, 4>)>,
+    pub file_path: SmolStr,
+    pub is_function: bool,
+    pub is_functions: bool,
+    pub goto_labels: HashMap<StrKey, u32>,
+    pub args: Vec<(StrKey, Option<Value>, ArrayVec<usize, 4>)>,
+    pub body: Box<[Instruction]>,
 }
 
 impl FunctionBody {
     pub fn push_arg(
         &mut self,
-        var: Box<str>,
+        var: StrKey,
         default_value: Option<Value>,
         indices: ArrayVec<usize, 4>,
     ) {
         self.args.push((var, default_value, indices));
     }
 
-    pub fn goto_labels(&self) -> &HashMap<SmolStr, u32> {
+    pub fn goto_labels(&self) -> &HashMap<StrKey, u32> {
         &self.goto_labels
     }
 
-    pub fn args(&self) -> &[(Box<str>, Option<Value>, ArrayVec<usize, 4>)] {
+    pub fn args(&self) -> &[(StrKey, Option<Value>, ArrayVec<usize, 4>)] {
         &self.args
     }
 
@@ -57,11 +60,11 @@ impl FunctionBody {
     }
 }
 
-#[derive(Clone, Default, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct EventCollection {
-    single: Option<FunctionBody>,
-    events: Vec<FunctionBody>,
-    empty_count: usize,
+    pub single: Option<FunctionBody>,
+    pub events: Vec<FunctionBody>,
+    pub empty_count: usize,
 }
 
 impl EventCollection {
@@ -87,15 +90,17 @@ impl EventCollection {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionDic {
-    normal: HashMap<SmolStr, FunctionBody>,
-    event: EnumMap<EventType, EventCollection>,
+    pub interner: &'static Interner,
+    pub normal: HashMap<StrKey, FunctionBody>,
+    pub event: EnumMap<EventType, EventCollection>,
 }
 
 impl FunctionDic {
     pub fn new() -> Self {
         Self {
+            interner: &*GLOBAL_INTERNER,
             normal: HashMap::new(),
             event: EnumMap::default(),
         }
@@ -158,22 +163,22 @@ impl FunctionDic {
                     assert!(!body.is_function);
                 }
                 FunctionInfo::Dim(local) => {
-                    var_dic.add_local_info(header.name.clone(), local.var, local.info);
+                    var_dic.add_local_info(header.name, local.var, local.info);
                 }
             }
         }
 
         // builtin locals
 
-        static LOCAL: SmolStr = SmolStr::new_inline("LOCAL");
-        static LOCALS: SmolStr = SmolStr::new_inline("LOCALS");
-        static ARG: SmolStr = SmolStr::new_inline("ARG");
-        static ARGS: SmolStr = SmolStr::new_inline("ARGS");
+        let local = var_dic.known_key(KnownVariableNames::Local);
+        let locals = var_dic.known_key(KnownVariableNames::LocalS);
+        let arg = var_dic.known_key(KnownVariableNames::Arg);
+        let args = var_dic.known_key(KnownVariableNames::ArgS);
 
         if let Some(local_size) = local_size {
             var_dic.add_local_info(
                 header.name.clone(),
-                LOCAL.clone(),
+                local,
                 VariableInfo {
                     size: vec![local_size],
                     ..Default::default()
@@ -184,7 +189,7 @@ impl FunctionDic {
         if let Some(locals_size) = locals_size {
             var_dic.add_local_info(
                 header.name.clone(),
-                LOCALS.clone(),
+                locals,
                 VariableInfo {
                     is_str: true,
                     size: vec![locals_size],
@@ -196,7 +201,7 @@ impl FunctionDic {
         if let Some(arg_size) = default_var_size.default_arg_size {
             var_dic.add_local_info(
                 header.name.clone(),
-                ARG.clone(),
+                arg,
                 VariableInfo {
                     size: vec![arg_size],
                     ..Default::default()
@@ -207,7 +212,7 @@ impl FunctionDic {
         if let Some(args_size) = default_var_size.default_args_size {
             var_dic.add_local_info(
                 header.name.clone(),
-                ARGS.clone(),
+                args,
                 VariableInfo {
                     is_str: true,
                     size: vec![args_size],
@@ -216,14 +221,14 @@ impl FunctionDic {
             );
         }
 
-        if let Ok(ty) = header.name.parse::<EventType>() {
+        if let Ok(ty) = self.interner.resolve(&header.name).parse::<EventType>() {
             self.insert_event(Event { ty, flags }, body);
         } else {
             self.insert_func(header.name, body);
         }
     }
 
-    pub fn insert_func(&mut self, name: SmolStr, body: FunctionBody) {
+    pub fn insert_func(&mut self, name: StrKey, body: FunctionBody) {
         self.normal.insert(name, body);
     }
 
@@ -248,12 +253,12 @@ impl FunctionDic {
         &self.event[ty]
     }
 
-    pub fn get_func_opt(&self, name: &str) -> Option<&FunctionBody> {
-        self.normal.get(name)
+    pub fn get_func_opt(&self, name: StrKey) -> Option<&FunctionBody> {
+        self.normal.get(&name)
     }
 
-    pub fn get_func(&self, name: &str) -> Result<&FunctionBody> {
+    pub fn get_func(&self, name: StrKey) -> Result<&FunctionBody> {
         self.get_func_opt(name)
-            .ok_or_else(|| anyhow!("Function {} is not exists", name))
+            .ok_or_else(|| anyhow!("Function {} is not exists", self.interner.resolve(&name)))
     }
 }

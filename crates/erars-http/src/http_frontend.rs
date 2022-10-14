@@ -135,13 +135,17 @@ async fn start(
 }
 
 impl HttpFrontend {
-    pub fn run(&mut self, vm: TerminalVm, mut ctx: VmContext) -> anyhow::Result<()> {
+    pub fn run(
+        &mut self,
+        vm: TerminalVm,
+        mut ctx: VmContext,
+        mut vconsole: VirtualConsole,
+    ) -> anyhow::Result<()> {
         let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build()?;
 
         let _guard = rt.enter();
         let (input_tx, input_rx) = bounded(8);
 
-        let mut vconsole = VirtualConsole::new(ctx.config.printc_width);
         let vconsole_buf = Arc::new(RwLock::new((
             VirtualConsole::new(ctx.config.printc_width),
             None,

@@ -7,10 +7,8 @@ pub struct StdioFrontend {
 }
 
 impl StdioFrontend {
-    pub fn new(printc_width: usize) -> Self {
-        Self {
-            vconsole: VirtualConsole::new(printc_width),
-        }
+    pub fn new(vconsole: VirtualConsole) -> Self {
+        Self { vconsole }
     }
 
     fn draw(&mut self, mut out: impl io::Write) -> anyhow::Result<()> {

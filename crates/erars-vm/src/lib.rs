@@ -18,6 +18,8 @@ pub use crate::{
     variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
+pub use erars_compiler::{EraConfig, HeaderInfo, Instruction, Language};
+
 #[derive(Display, Debug, Clone, PartialEq, Eq)]
 pub enum Workflow {
     Return,

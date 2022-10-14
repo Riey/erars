@@ -25,6 +25,11 @@ struct Args {
 
     #[clap(long, help = "Don't print logs")]
     quite: bool,
+    // #[clap(long, help = "Save script file")]
+    // save: bool,
+
+    // #[clap(long, help = "Load script file")]
+    // load: bool,
 }
 
 fn main() {
@@ -61,7 +66,8 @@ fn main() {
         None => Vec::new(),
     };
 
-    let (vm, mut ctx) = run_script(args.target_path, inputs).unwrap();
-    let mut frontend = stdio_frontend::StdioFrontend::new(ctx.config.printc_width);
+    let (vm, mut ctx, tx) = run_script(args.target_path, inputs).unwrap();
+
+    let mut frontend = stdio_frontend::StdioFrontend::new(tx);
     frontend.run(&vm, &mut ctx).unwrap();
 }

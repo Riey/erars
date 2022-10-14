@@ -34,12 +34,6 @@ pub fn parse_print_flags(mut s: &str) -> (&str, PrintFlags) {
     (s, flags)
 }
 
-unsafe fn parse_reuse(s: &str) -> Stmt {
-    let s = s.get_unchecked("REUSELASTLINE".len()..);
-
-    Stmt::ReuseLastLine(s.strip_prefix(' ').unwrap_or(s).into())
-}
-
 unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
     // skip PRINT
     let mut s = s.get_unchecked("PRINT".len()..);
@@ -353,6 +347,8 @@ pub enum Token<'s> {
     Throw(&'s str),
     #[token("CUSTOMDRAWLINE", lex_line_left)]
     CustomDrawLine(&'s str),
+    #[regex("REUSELASTLINE", lex_line_left)]
+    ReuseLastLine(&'s str),
 
     #[token("RETURNFORM", |lex| normal_expr_command(lex, BuiltinCommand::Return))]
     #[token("PUTFORM", |lex| normal_expr_command(lex, BuiltinCommand::PutForm))]
@@ -452,7 +448,6 @@ pub enum Token<'s> {
     #[token("CSVCFLAG", |lex| normal_expr_method(lex, BuiltinMethod::CsvCflag))]
     NormalExprMethod((BuiltinMethod, &'s str)),
 
-    #[regex(r"REUSELASTLINE( [^\r\n]*)?", |lex| unsafe { parse_reuse(lex.slice()) })]
     #[token("GETTIME", |_| single_method(BuiltinMethod::GetTime))]
     #[token("GETFONT", |_| single_method(BuiltinMethod::GetFont))]
     #[token("GETCOLOR", |_| single_method(BuiltinMethod::GetColor))]

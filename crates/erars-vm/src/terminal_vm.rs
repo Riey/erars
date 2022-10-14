@@ -5,13 +5,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::context::FunctionIdentifier;
 use crate::*;
+use crate::{context::FunctionIdentifier, variable::StrKeyLike};
 use anyhow::{anyhow, bail, Result};
 use arrayvec::ArrayVec;
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
-    PrintFlags, UnaryOperator, Value,
+    PrintFlags, StrKey, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
 use erars_ui::{FontStyle, InputRequest, InputRequestType, Timeout, VirtualConsole};
@@ -26,8 +26,8 @@ macro_rules! report_error {
 }
 
 pub struct TerminalVm {
-    dic: FunctionDic,
-    sav_path: PathBuf,
+    pub dic: FunctionDic,
+    pub sav_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -36,7 +36,7 @@ enum InstructionWorkflow {
     Exit,
     Goto(u32),
     GotoLabel {
-        label: String,
+        label: StrKey,
         is_try: bool,
     },
     Return,
@@ -77,7 +77,7 @@ impl TerminalVm {
         mut cursor: usize,
     ) -> Result<Workflow> {
         let insts = body.body();
-        let func_name = func_identifier.name();
+        let func_name = func_identifier.get_key(&ctx.var);
 
         while let Some(inst) = insts.get(cursor) {
             cursor += 1;
@@ -85,6 +85,7 @@ impl TerminalVm {
 
             log::trace!(
                 "[{func_name}] `{inst:?}[{cursor}]`, stack: {stack:?}, call_stack: {call_stack:?}",
+                func_name = ctx.var.resolve_key(func_name),
                 stack = ctx.stack(),
                 call_stack = ctx.call_stack(),
             );
@@ -95,7 +96,7 @@ impl TerminalVm {
                 Ok(Goto(pos)) => {
                     cursor = pos as usize;
                 }
-                Ok(GotoLabel { label, is_try }) => match body.goto_labels().get(label.as_str()) {
+                Ok(GotoLabel { label, is_try }) => match body.goto_labels().get(&label) {
                     Some(pos) => {
                         cursor = *pos as usize;
                     }
@@ -103,7 +104,10 @@ impl TerminalVm {
                         if is_try {
                             ctx.push(false);
                         } else {
-                            bail!("Label {label} is not founded");
+                            bail!(
+                                "Label {label} is not founded",
+                                label = ctx.var.resolve_key(label)
+                            );
                         }
                     }
                 },
@@ -210,18 +214,21 @@ impl TerminalVm {
 
     fn call_internal(
         &self,
-        label: &str,
+        label: StrKey,
         args: &[Value],
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
         body: &FunctionBody,
     ) -> Result<Workflow> {
-        log::trace!("CALL {label}({args:?})");
+        log::trace!(
+            "CALL {label}({args:?})",
+            label = ctx.var.interner().resolve(&label)
+        );
 
         let mut args = args.iter().cloned();
 
         for (var_idx, default_value, arg_indices) in body.args().iter() {
-            let (info, var) = ctx.var.get_maybe_local_var(label, var_idx)?;
+            let (info, var) = ctx.var.get_maybe_local_var(label, *var_idx)?;
             let var = var.assume_normal();
             let idx = info.calculate_single_idx(arg_indices).1;
 
@@ -242,7 +249,7 @@ impl TerminalVm {
             }
         }
 
-        let ret = self.run_body(FunctionIdentifier::Normal(label.into()), body, tx, ctx, 0)?;
+        let ret = self.run_body(FunctionIdentifier::Normal(label), body, tx, ctx, 0)?;
 
         Ok(ret)
     }
@@ -266,8 +273,11 @@ impl TerminalVm {
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        match self.dic.get_func_opt(label) {
-            Some(body) => self.call_internal(label, args, tx, ctx, body).map(Some),
+        match ctx.var.interner().get(label) {
+            Some(label) => match self.dic.get_func_opt(label) {
+                Some(body) => self.call_internal(label, args, tx, ctx, body).map(Some),
+                None => Ok(None),
+            },
             None => Ok(None),
         }
     }
@@ -300,7 +310,7 @@ impl TerminalVm {
             log::info!("{stack:?}");
             match stack.func_name {
                 FunctionIdentifier::Normal(name) => {
-                    let body = self.dic.get_func(&name).unwrap();
+                    let body = self.dic.get_func(name)?;
                     match self.run_body(
                         FunctionIdentifier::Normal(name),
                         body,
@@ -423,7 +433,7 @@ impl TerminalVm {
                         report_error!(
                             tx,
                             "At function {func} {file}@{line}",
-                            func = call_stack.func_name.name(),
+                            func = call_stack.func_name.resolve_key(&ctx.var),
                             file = call_stack.file_path,
                             line = call_stack.script_position.line
                         );
