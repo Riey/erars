@@ -10,7 +10,6 @@ use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
 use logos::{internal::LexerInternal, Lexer};
 use serde::{Deserialize, Serialize};
-use smol_str::SmolStr;
 use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
@@ -620,18 +619,18 @@ pub struct ParserContext {
     pub local_strs: RefCell<HashSet<StrKey>>,
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
-    pub file_path: SmolStr,
+    pub file_path: StrKey,
     pub line: Cell<u32>,
 }
 
 impl Default for ParserContext {
     fn default() -> Self {
-        Self::new(Arc::default(), "".into())
+        Self::new(Arc::default(), StrKey::new("DEFAULT.ERB"))
     }
 }
 
 impl ParserContext {
-    pub fn new(header: Arc<HeaderInfo>, file_path: SmolStr) -> Self {
+    pub fn new(header: Arc<HeaderInfo>, file_path: StrKey) -> Self {
         let interner = &*GLOBAL_INTERNER;
         Self {
             interner,

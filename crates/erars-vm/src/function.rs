@@ -6,7 +6,7 @@ use erars_ast::StrKey;
 use erars_ast::GLOBAL_INTERNER;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
-use smol_str::SmolStr;
+use itertools::Itertools;
 
 use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, VariableInfo};
 use erars_compiler::{CompiledFunction, Instruction};
@@ -17,25 +17,16 @@ use crate::Workflow;
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct FunctionBody {
-    pub file_path: SmolStr,
+    pub file_path: StrKey,
     pub is_function: bool,
     pub is_functions: bool,
-    pub goto_labels: HashMap<StrKey, u32>,
-    pub args: Vec<(StrKey, Option<Value>, ArrayVec<usize, 4>)>,
+    pub goto_labels: Box<[(StrKey, u32)]>,
+    pub args: Box<[(StrKey, Option<Value>, ArrayVec<usize, 4>)]>,
     pub body: Box<[Instruction]>,
 }
 
 impl FunctionBody {
-    pub fn push_arg(
-        &mut self,
-        var: StrKey,
-        default_value: Option<Value>,
-        indices: ArrayVec<usize, 4>,
-    ) {
-        self.args.push((var, default_value, indices));
-    }
-
-    pub fn goto_labels(&self) -> &HashMap<StrKey, u32> {
+    pub fn goto_labels(&self) -> &[(StrKey, u32)] {
         &self.goto_labels
     }
 
@@ -47,8 +38,8 @@ impl FunctionBody {
         &self.body
     }
 
-    pub fn file_path(&self) -> &SmolStr {
-        &self.file_path
+    pub fn file_path(&self) -> StrKey {
+        self.file_path
     }
 
     pub fn is_function(&self) -> bool {
@@ -114,7 +105,7 @@ impl FunctionDic {
     ) {
         let mut body = FunctionBody {
             body: func.body,
-            goto_labels: func.goto_labels,
+            goto_labels: func.goto_labels.into_iter().collect_vec().into_boxed_slice(),
             ..Default::default()
         };
 
@@ -122,22 +113,27 @@ impl FunctionDic {
 
         body.file_path = header.file_path;
 
-        for (var, default_value) in header.args {
-            body.push_arg(
-                var.var,
-                default_value,
-                var.args
-                    .into_iter()
-                    .map(|v| {
-                        if let Expr::Int(i) = v {
-                            i as usize
-                        } else {
-                            panic!("Variable index must be constant")
-                        }
-                    })
-                    .collect(),
-            );
-        }
+        body.args = header
+            .args
+            .into_iter()
+            .map(|(var, default_value)| {
+                (
+                    var.var,
+                    default_value,
+                    var.args
+                        .into_iter()
+                        .map(|v| {
+                            if let Expr::Int(i) = v {
+                                i as usize
+                            } else {
+                                panic!("Variable index must be constant")
+                            }
+                        })
+                        .collect(),
+                )
+            })
+            .collect_vec()
+            .into_boxed_slice();
 
         let mut flags = EventFlags::None;
         let mut local_size = default_var_size.default_local_size;

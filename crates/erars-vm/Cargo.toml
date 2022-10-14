@@ -19,7 +19,6 @@ itertools = "0.10.3"
 log = "0.4.14"
 serde = { version = "1.0.132", features = ["derive"] }
 strum = { version = "0.24.1", features = ["derive"] }
-smol_str = { version = "0.1.23", features = ["serde"] }
 rayon = "1.5.3"
 parking_lot = "0.12.1"
 unicode-width = "0.1.9"

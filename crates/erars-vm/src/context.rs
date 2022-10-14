@@ -1,6 +1,5 @@
 use anyhow::{bail, Result};
 use arrayvec::ArrayVec;
-use smol_str::SmolStr;
 use std::fmt;
 use std::sync::Arc;
 
@@ -195,7 +194,7 @@ impl VmContext {
     pub fn push_current_call_stack(
         &mut self,
         func_name: FunctionIdentifier,
-        file_path: SmolStr,
+        file_path: StrKey,
         instruction_pos: usize,
     ) {
         self.call_stack.push(Callstack {
@@ -370,7 +369,7 @@ pub enum FunctionIdentifier {
 #[derive(Debug, Clone)]
 pub struct Callstack {
     pub func_name: FunctionIdentifier,
-    pub file_path: SmolStr,
+    pub file_path: StrKey,
     pub script_position: ScriptPosition,
     pub stack_base: usize,
     pub instruction_pos: usize,

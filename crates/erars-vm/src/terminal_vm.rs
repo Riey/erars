@@ -96,21 +96,29 @@ impl TerminalVm {
                 Ok(Goto(pos)) => {
                     cursor = pos as usize;
                 }
-                Ok(GotoLabel { label, is_try }) => match body.goto_labels().get(&label) {
-                    Some(pos) => {
-                        cursor = *pos as usize;
-                    }
-                    None => {
-                        if is_try {
-                            ctx.push(false);
+                Ok(GotoLabel { label, is_try }) => {
+                    match body.goto_labels().iter().find_map(|(cur_label, pos)| {
+                        if *cur_label == label {
+                            Some(*pos)
                         } else {
-                            bail!(
-                                "Label {label} is not founded",
-                                label = ctx.var.resolve_key(label)
-                            );
+                            None
+                        }
+                    }) {
+                        Some(pos) => {
+                            cursor = pos as usize;
+                        }
+                        None => {
+                            if is_try {
+                                ctx.push(false);
+                            } else {
+                                bail!(
+                                    "Label {label} is not founded",
+                                    label = ctx.var.resolve_key(label)
+                                );
+                            }
                         }
                     }
-                },
+                }
                 Ok(Begin(ty)) => return Ok(Workflow::Begin(ty)),
                 Ok(Return) => return Ok(Workflow::Return),
                 Ok(CallEvent(ty)) => {

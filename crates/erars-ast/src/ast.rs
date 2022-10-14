@@ -3,7 +3,6 @@ use std::fmt;
 use bitflags::bitflags;
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
-use smol_str::SmolStr;
 use strum::{Display, EnumString};
 
 use crate::{
@@ -77,7 +76,7 @@ pub struct Function {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FunctionHeader {
-    pub file_path: SmolStr,
+    pub file_path: StrKey,
     pub name: StrKey,
     pub args: Vec<(Variable, Option<Value>)>,
     pub infos: Vec<FunctionInfo>,

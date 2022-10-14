@@ -1,0 +1,8 @@
+[package]
+name = "erars-bytecode"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+erars-vm = { path = "../erars-vm" }
+rkyv = "0.7.39"

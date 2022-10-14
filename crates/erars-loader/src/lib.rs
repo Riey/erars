@@ -15,7 +15,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_ast::{Value, VariableInfo};
+use erars_ast::{Value, VariableInfo, StrKey};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
 use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, TerminalVm, VmContext};
@@ -302,7 +302,7 @@ pub fn run_script(
             .flat_map(|erb| {
                 let erb = erb.unwrap();
                 let source = read_file(&erb).unwrap();
-                let ctx = ParserContext::new(header_info.clone(), erb.to_str().unwrap().into());
+                let ctx = ParserContext::new(header_info.clone(), StrKey::new(erb.to_str().unwrap()));
 
                 log::debug!("Parse And Compile {}", erb.display());
 

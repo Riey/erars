@@ -21,7 +21,6 @@ utf8-decode = "1.0.1"
 nom = "7.1.1"
 logos = "0.12.1"
 unicode-xid = "0.2.3"
-smol_str = { version = "0.1.23", features = ["serde"] }
 log = "0.4.17"
 derivative = "2.2.0"
 static_assertions = "1.1.0"
