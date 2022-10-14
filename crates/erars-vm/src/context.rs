@@ -206,12 +206,6 @@ impl VmContext {
     }
 
     pub fn pop_call_stack_check(&mut self, call_stack_base: usize) -> Option<Callstack> {
-        log::info!(
-            "call_stack: {:?}, current_state: {:?}",
-            self.call_stack,
-            self.state
-        );
-
         if self.call_stack.len() <= call_stack_base {
             return None;
         }

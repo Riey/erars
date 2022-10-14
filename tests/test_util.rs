@@ -40,6 +40,7 @@ pub fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
     path: &str,
     f: fn(&ParserContext, &str) -> ParserResult<T>,
 ) -> T {
+    erars_ast::init_interner();
     let source = std::fs::read_to_string(path).unwrap();
 
     let ctx = get_ctx(path);

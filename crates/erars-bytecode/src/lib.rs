@@ -24,6 +24,7 @@ fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody
         macro_rules! write_arr {
             ($field:ident, $ty:ty) => {
                 let len = body.$field.len();
+                out.write_u32::<LE>(len as u32)?;
                 let arr =
                     std::slice::from_raw_parts(body.$field.as_ptr().cast(), len * size_of::<$ty>());
                 out.write_all(arr)?;
@@ -50,7 +51,8 @@ fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBod
         macro_rules! read_arr {
             ($ty:ty) => {{
                 let len = read.read_u32::<LE>()? as usize;
-                let mut args = vec![MaybeUninit::<$ty>::uninit(); len].into_boxed_slice();
+                let mut args: Box<[MaybeUninit<$ty>]> =
+                    vec![MaybeUninit::<$ty>::uninit(); len].into_boxed_slice();
 
                 for arg in args.iter_mut() {
                     let arg = std::slice::from_raw_parts_mut(
@@ -66,8 +68,8 @@ fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBod
             }};
         }
 
-        let args = read_arr!(FunctionArgDef);
         let goto_labels = read_arr!(FunctionGotoLabel);
+        let args = read_arr!(FunctionArgDef);
         let insts = read_arr!(Instruction);
 
         Ok(FunctionBody {
@@ -88,7 +90,9 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
 
     for _ in 0..strings_len {
         let str_len = read.read_u32::<LE>()? as usize;
-        buf.reserve(str_len);
+        if buf.len() < str_len {
+            buf.resize(str_len, 0);
+        }
         read.read_exact(&mut buf[..str_len])?;
         interner.get_or_intern(std::str::from_utf8(&buf[..str_len]).unwrap());
     }
@@ -107,6 +111,9 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
 
     let mut event: EnumMap<EventType, EventCollection> = EnumMap::default();
 
+    if read.read_u32::<LE>()? != u32::from_le_bytes([2, 2, 2, 2]) {
+        panic!("Event magic failed");
+    }
     let event_len = read.read_u32::<LE>()?;
 
     for _ in 0..event_len {
@@ -128,7 +135,7 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
         let events_len = read.read_u32::<LE>()? as usize;
         collection.events.reserve(events_len);
 
-        for _ in 0..event_len {
+        for _ in 0..events_len {
             collection.events.push(read_function_body(&mut read)?);
         }
     }
@@ -161,6 +168,7 @@ pub fn write_to<W: Write + WriteBytesExt>(mut out: W, dic: &FunctionDic) -> Resu
         write_function_body(&mut out, body)?;
     }
 
+    out.write_all(&[2, 2, 2, 2])?;
     out.write_u32::<LE>(dic.event.len() as _)?;
 
     for (ev, collection) in dic.event.iter() {

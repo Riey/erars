@@ -734,6 +734,7 @@ dependencies = [
  "codespan-reporting",
  "encoding_rs",
  "erars-ast",
+ "erars-bytecode",
  "erars-compiler",
  "erars-ui",
  "erars-vm",
@@ -742,6 +743,7 @@ dependencies = [
  "log",
  "parking_lot",
  "rayon",
+ "rmp-serde",
  "serde_yaml",
  "unicode-bom",
 ]
@@ -752,10 +754,8 @@ version = "0.1.0"
 dependencies = [
  "ansi_term",
  "anyhow",
- "bincode",
  "clap 4.0.10",
  "erars-ast",
- "erars-bytecode",
  "erars-compiler",
  "erars-loader",
  "erars-ui",
@@ -763,7 +763,6 @@ dependencies = [
  "flexi_logger",
  "log",
  "log-panics",
- "rmp-serde",
  "ron",
 ]
 

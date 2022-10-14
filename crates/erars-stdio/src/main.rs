@@ -1,9 +1,7 @@
 mod stdio_frontend;
 
-use std::{fs::File, io::BufWriter};
-
-use erars_ast::{update_interner, Interner, Value};
-use erars_loader::run_script;
+use erars_ast::Value;
+use erars_loader::{load_script, run_script, save_script};
 
 #[derive(clap::Parser)]
 #[clap(author, version, about)]
@@ -69,15 +67,14 @@ fn main() {
         None => Vec::new(),
     };
 
-    unsafe {
-        update_interner(Interner::new());
-    }
-
-    let (vm, mut ctx, tx) = run_script(args.target_path, inputs).unwrap();
+    let (vm, mut ctx, tx) = if args.load {
+        load_script(args.target_path, inputs).unwrap()
+    } else {
+        run_script(args.target_path, inputs).unwrap()
+    };
 
     if args.save {
-        erars_bytecode::write_to(BufWriter::new(File::create("game.era").unwrap()), &vm.dic)
-            .unwrap();
+        save_script(vm, ctx);
     } else {
         let mut frontend = stdio_frontend::StdioFrontend::new(tx);
         frontend.run(&vm, &mut ctx).unwrap();

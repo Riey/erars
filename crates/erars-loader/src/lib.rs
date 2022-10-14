@@ -1,7 +1,8 @@
 use parking_lot::Mutex;
 use rayon::prelude::*;
 use std::{
-    io::{BufRead, BufReader, Read, Seek, SeekFrom},
+    fs::File,
+    io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom},
     path::Path,
     sync::Arc,
     time::Instant,
@@ -74,11 +75,76 @@ fn read_file(path: &Path) -> std::io::Result<String> {
     }
 }
 
+pub fn save_script(vm: TerminalVm, ctx: VmContext) {
+    let game = std::thread::spawn(move || {
+        erars_bytecode::write_to(BufWriter::new(File::create("game.era").unwrap()), &vm.dic)
+            .unwrap();
+    });
+    let data = std::thread::spawn(move || {
+        let local_infos: HashMap<StrKey, Vec<(StrKey, &VariableInfo)>> =
+            ctx.var.local_infos().collect();
+        rmp_serde::encode::write(
+            &mut BufWriter::new(File::create("data.era").unwrap()),
+            &(&*ctx.header_info, &*ctx.config, local_infos),
+        )
+        .unwrap();
+    });
+
+    game.join().ok();
+    data.join().ok();
+}
+
+pub fn load_script(
+    target_path: String,
+    inputs: Vec<Value>,
+) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+    let start = Instant::now();
+    log::info!("Load game script");
+    let dic =
+        unsafe { erars_bytecode::read_from(BufReader::new(File::open("game.era").unwrap())) }?;
+
+    log::info!("Load game data");
+    let (header, config, local_infos): (
+        HeaderInfo,
+        EraConfig,
+        HashMap<StrKey, Vec<(StrKey, VariableInfo)>>,
+    ) = rmp_serde::decode::from_read(&mut BufReader::new(File::open("data.era")?))?;
+    let mut vconsole = VirtualConsole::new(config.printc_width);
+
+    let elapsed = start.elapsed();
+    log::info!("Load done! {}ms elapsed", elapsed.as_millis());
+
+    let mut ctx = VmContext::new(Arc::new(header), Arc::new(config));
+
+    for (key, vars) in local_infos {
+        for var in vars {
+            ctx.var.add_local_info(key, var.0, var.1);
+        }
+    }
+
+    for input in inputs {
+        vconsole.push_input(input);
+    }
+
+    Ok((
+        TerminalVm {
+            dic,
+            sav_path: Path::new(target_path.as_str()).join("sav"),
+        },
+        ctx,
+        vconsole,
+    ))
+}
+
 #[allow(unused_assignments)]
 pub fn run_script(
     target_path: String,
     inputs: Vec<Value>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+    unsafe {
+        erars_ast::init_interner();
+    }
+
     let mut time = Instant::now();
 
     let config_path = format!("{target_path}/emuera.config");

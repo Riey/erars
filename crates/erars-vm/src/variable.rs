@@ -111,6 +111,17 @@ impl VariableStorage {
         self.interner.resolve(&key)
     }
 
+    pub fn local_infos(
+        &self,
+    ) -> impl Iterator<Item = (StrKey, Vec<(StrKey, &'_ VariableInfo)>)> + '_ {
+        self.local_variables.iter().map(|(func_name, vars)| {
+            (
+                *func_name,
+                vars.iter().map(|(key, (info, _))| (*key, info)).collect(),
+            )
+        })
+    }
+
     fn load_variables(
         &mut self,
         variables: HashMap<String, (VariableInfo, UniformVariable)>,

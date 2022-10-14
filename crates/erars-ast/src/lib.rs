@@ -18,17 +18,26 @@ pub use variable::*;
 pub type Interner = lasso::ThreadedRodeo<StrKey>;
 
 static mut GLOBAL_INTERNER: Option<Interner> = None;
+static INIT_ONCE: std::sync::Once = std::sync::Once::new();
 
 pub fn get_interner() -> &'static Interner {
     let opt: &'static Option<Interner> = unsafe { &GLOBAL_INTERNER };
     match opt {
         Some(ref i) => i,
-        None => panic!(),
+        None => panic!("Call init_interner or update_interner first!"),
+    }
+}
+
+pub fn init_interner() {
+    unsafe {
+        update_interner(Interner::new());
     }
 }
 
 pub unsafe fn update_interner(new: Interner) {
-    GLOBAL_INTERNER = Some(new);
+    INIT_ONCE.call_once(|| {
+        GLOBAL_INTERNER = Some(new);
+    });
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
