@@ -1,6 +1,9 @@
+use std::sync::Arc;
+
 use anyhow::{anyhow, Result};
 use arrayvec::ArrayVec;
 use enum_map::EnumMap;
+use erars_ast::Interner;
 use erars_ast::StrKey;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
@@ -9,6 +12,7 @@ use smol_str::SmolStr;
 use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, Value, VariableInfo};
 use erars_compiler::{CompiledFunction, Instruction};
 
+use crate::variable::KnownVariableNames;
 use crate::VariableStorage;
 use crate::Workflow;
 
@@ -89,13 +93,15 @@ impl EventCollection {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionDic {
+    pub interner: Arc<Interner>,
     pub normal: HashMap<StrKey, FunctionBody>,
     pub event: EnumMap<EventType, EventCollection>,
 }
 
 impl FunctionDic {
-    pub fn new() -> Self {
+    pub fn new(interner: Arc<Interner>) -> Self {
         Self {
+            interner,
             normal: HashMap::new(),
             event: EnumMap::default(),
         }
@@ -165,15 +171,15 @@ impl FunctionDic {
 
         // builtin locals
 
-        static LOCAL: SmolStr = SmolStr::new_inline("LOCAL");
-        static LOCALS: SmolStr = SmolStr::new_inline("LOCALS");
-        static ARG: SmolStr = SmolStr::new_inline("ARG");
-        static ARGS: SmolStr = SmolStr::new_inline("ARGS");
+        let local = var_dic.known_key(KnownVariableNames::Local);
+        let locals = var_dic.known_key(KnownVariableNames::LocalS);
+        let arg = var_dic.known_key(KnownVariableNames::Arg);
+        let args = var_dic.known_key(KnownVariableNames::ArgS);
 
         if let Some(local_size) = local_size {
             var_dic.add_local_info(
                 header.name.clone(),
-                LOCAL.clone(),
+                local,
                 VariableInfo {
                     size: vec![local_size],
                     ..Default::default()
@@ -184,7 +190,7 @@ impl FunctionDic {
         if let Some(locals_size) = locals_size {
             var_dic.add_local_info(
                 header.name.clone(),
-                LOCALS.clone(),
+                locals,
                 VariableInfo {
                     is_str: true,
                     size: vec![locals_size],
@@ -196,7 +202,7 @@ impl FunctionDic {
         if let Some(arg_size) = default_var_size.default_arg_size {
             var_dic.add_local_info(
                 header.name.clone(),
-                ARG.clone(),
+                arg,
                 VariableInfo {
                     size: vec![arg_size],
                     ..Default::default()
@@ -207,7 +213,7 @@ impl FunctionDic {
         if let Some(args_size) = default_var_size.default_args_size {
             var_dic.add_local_info(
                 header.name.clone(),
-                ARGS.clone(),
+                args,
                 VariableInfo {
                     is_str: true,
                     size: vec![args_size],
@@ -216,14 +222,14 @@ impl FunctionDic {
             );
         }
 
-        if let Ok(ty) = header.name.parse::<EventType>() {
+        if let Ok(ty) = self.interner.resolve(&header.name).parse::<EventType>() {
             self.insert_event(Event { ty, flags }, body);
         } else {
             self.insert_func(header.name, body);
         }
     }
 
-    pub fn insert_func(&mut self, name: SmolStr, body: FunctionBody) {
+    pub fn insert_func(&mut self, name: StrKey, body: FunctionBody) {
         self.normal.insert(name, body);
     }
 
@@ -248,12 +254,12 @@ impl FunctionDic {
         &self.event[ty]
     }
 
-    pub fn get_func_opt(&self, name: &str) -> Option<&FunctionBody> {
-        self.normal.get(name)
+    pub fn get_func_opt(&self, name: StrKey) -> Option<&FunctionBody> {
+        self.normal.get(&name)
     }
 
-    pub fn get_func(&self, name: &str) -> Result<&FunctionBody> {
+    pub fn get_func(&self, name: StrKey) -> Result<&FunctionBody> {
         self.get_func_opt(name)
-            .ok_or_else(|| anyhow!("Function {} is not exists", name))
+            .ok_or_else(|| anyhow!("Function {} is not exists", self.interner.resolve(&name)))
     }
 }

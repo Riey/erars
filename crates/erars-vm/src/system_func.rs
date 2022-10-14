@@ -1,3 +1,4 @@
+use crate::variable::KnownVariableNames::*;
 use anyhow::{bail, Result};
 use erars_ast::{BeginType, EventType};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
@@ -180,7 +181,7 @@ impl SystemState {
                     ctx.var.reset_train_data()?;
                     call_event!(vm, EventType::Train, tx, ctx)
                 }
-                1 => match ctx.var.read_int("NEXTCOM", &[])? {
+                1 => match ctx.var.read_int(NextCom, &[])? {
                     no if no >= 0 => {
                         *com_no = no as u32;
                         *phase = 10;
@@ -191,8 +192,9 @@ impl SystemState {
                     }
                 },
                 2 => {
+                    let train = ctx.var.interner().get_or_intern("TRAIN");
                     for (no, _) in
-                        ctx.header_info.clone().var_name_var["TRAIN"].range(*com_able_no..)
+                        ctx.header_info.clone().var_name_var[&train].range(*com_able_no..)
                     {
                         *com_able_no = *no;
                         match vm.try_call(&format!("COM_ABLE{no}"), &[], tx, ctx)? {
@@ -214,8 +216,9 @@ impl SystemState {
                     return Ok(call!(vm, "SHOW_USERCOM", tx, ctx));
                 }
                 3 => {
+                    let train = ctx.var.interner().get_or_intern("TRAIN");
                     let no = *com_able_no;
-                    let name = &ctx.header_info.var_name_var["TRAIN"][&no];
+                    let name = &ctx.header_info.var_name_var[&train][&no];
                     if ctx.var.get_result() != 0 || ctx.header_info.replace.comable_init != 0 {
                         if ctx.config.printc_count != 0
                             && *printc_count == ctx.config.printc_count as u32
@@ -223,7 +226,10 @@ impl SystemState {
                             *printc_count = 0;
                             tx.new_line();
                         }
-                        tx.printrc(&format!("{name}[{no:3}]"));
+                        tx.printrc(&format!(
+                            "{name}[{no:3}]",
+                            name = ctx.var.resolve_key(train)
+                        ));
                         *printc_count += 1;
                     }
 
@@ -235,6 +241,7 @@ impl SystemState {
                     input_int(tx)
                 }
                 5 => {
+                    let train = ctx.var.interner().get_or_intern("TRAIN");
                     let no = ctx.pop_int()?;
 
                     ctx.var.set_result(no);
@@ -242,7 +249,7 @@ impl SystemState {
                         Ok(no) => ctx
                             .header_info
                             .var_name_var
-                            .get("TRAIN")
+                            .get(&train)
                             .map(|v| v.contains_key(&no))
                             .unwrap_or(false),
                         _ => false,

@@ -1,11 +1,12 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::Arc, fmt::Debug,
+    fmt::Debug,
+    sync::Arc,
 };
 
 use anyhow::{anyhow, bail, Result};
-use enum_map::{EnumMap, Enum};
-use erars_ast::{Interner, StrKey, Value, VariableInfo};
+use enum_map::{Enum, EnumMap};
+use erars_ast::{EventType, Interner, StrKey, Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
@@ -14,14 +15,16 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use erars_ui::VirtualConsole;
-use strum::{IntoStaticStr, Display};
+use strum::{Display, IntoStaticStr};
+
+use crate::context::FunctionIdentifier;
 
 macro_rules! set_var {
-    ($self:expr, $name:expr, $value:expr) => {
-        *$self.ref_int($name, &[])? = $value;
+    ($self:expr, $name:ident, $value:expr) => {
+        *$self.ref_int(KnownVariableNames::$name, &[])? = $value;
     };
-    (@all $self:expr, $name:expr, $value:expr) => {
-        match $self.get_var($name)?.1 {
+    (@all $self:expr, $name:ident, $value:expr) => {
+        match $self.get_var(KnownVariableNames::$name)?.1 {
             UniformVariable::Character(ref mut cvar) => {
                 for var in cvar {
                     var.as_int()?.fill($value);
@@ -61,6 +64,7 @@ pub struct VariableStorage {
     variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
     local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
     known_variables: EnumMap<KnownVariableNames, StrKey>,
+    event_keys: EnumMap<EventType, StrKey>,
 }
 
 impl VariableStorage {
@@ -68,14 +72,10 @@ impl VariableStorage {
         let mut variables = HashMap::new();
 
         for (k, v) in infos {
-            variables.insert(
-                *k,
-                (v.clone(), UniformVariable::new(v)),
-            );
+            variables.insert(*k, (v.clone(), UniformVariable::new(v)));
         }
 
         Self {
-            interner,
             character_len: 0,
             rng: ChaCha20Rng::from_entropy(),
             variables,
@@ -83,12 +83,35 @@ impl VariableStorage {
             known_variables: enum_map::enum_map! {
                 v => interner.get_or_intern_static(<&str>::from(v)),
             },
+            event_keys: enum_map::enum_map! {
+                v => interner.get_or_intern_static(<&str>::from(v)),
+            },
+            interner,
         }
+    }
+
+    pub fn clone_interner(&self) -> Arc<Interner> {
+        self.interner.clone()
+    }
+
+    #[inline]
+    pub fn interner(&self) -> &Interner {
+        &self.interner
+    }
+
+    #[inline]
+    pub fn event_key(&self, ty: EventType) -> StrKey {
+        self.event_keys[ty]
     }
 
     #[inline]
     pub fn known_key(&self, var: KnownVariableNames) -> StrKey {
         self.known_variables[var]
+    }
+
+    #[inline]
+    pub fn resolve_key(&self, key: StrKey) -> &str {
+        self.interner.resolve(&key)
     }
 
     fn load_variables(
@@ -98,7 +121,7 @@ impl VariableStorage {
     ) {
         for (k, (info, var)) in variables {
             let (now_info, now_var) =
-                match self.interner.get(k).and_then(|k| self.variables.get_mut(&k)) {
+                match self.interner.get(&k).and_then(|k| self.variables.get_mut(&k)) {
                     Some(v) => v,
                     _ => {
                         log::warn!("Ignore non existing variable {k}");
@@ -176,8 +199,8 @@ impl VariableStorage {
         &self,
         is_global: bool,
     ) -> (
-        HashMap<String, (VariableInfo, VmVariable)>,
-        HashMap<String, HashMap<String, (VariableInfo, VmVariable)>>,
+        HashMap<String, (VariableInfo, UniformVariable)>,
+        HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
     ) {
         let variables = self
             .variables
@@ -267,6 +290,7 @@ impl VariableStorage {
         palam: &mut [i64],
         up: &mut [i64],
         down: &mut [i64],
+        interner: &Interner,
     ) -> Result<()> {
         itertools::multizip((palam.iter_mut(), up.iter_mut(), down.iter_mut()))
             .enumerate()
@@ -275,7 +299,10 @@ impl VariableStorage {
                     return;
                 }
 
-                let name = palam_name.get(&(no as u32)).map(|s| s.as_str()).unwrap_or("");
+                let name = palam_name
+                    .get(&(no as u32))
+                    .map(|s| interner.resolve(s))
+                    .unwrap_or("");
 
                 tx.print(format!("{name} {p}"));
 
@@ -305,13 +332,18 @@ impl VariableStorage {
         idx: usize,
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
-        let (palam, up, down) = self.get_var3("PALAM", "UP", "DOWN")?;
+        let interner = self.interner.clone();
+        let (palam, up, down) = self.get_var3(
+            KnownVariableNames::Palam,
+            KnownVariableNames::Up,
+            KnownVariableNames::Down,
+        )?;
 
         let palam = palam.1.assume_chara(idx).as_int()?;
         let up = up.1.assume_normal().as_int()?;
         let down = down.1.assume_normal().as_int()?;
 
-        Self::upcheck_internal(tx, palam_name, palam, up, down)
+        Self::upcheck_internal(tx, palam_name, palam, up, down, &interner)
     }
 
     pub fn cupcheck(
@@ -320,37 +352,42 @@ impl VariableStorage {
         idx: usize,
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
-        let (palam, up, down) = self.get_var3("PALAM", "CUP", "CDOWN")?;
+        let interner = self.interner.clone();
+        let (palam, up, down) = self.get_var3(
+            KnownVariableNames::Palam,
+            KnownVariableNames::Cup,
+            KnownVariableNames::Cdown,
+        )?;
 
         let palam = palam.1.assume_chara(idx).as_int()?;
         let up = up.1.assume_chara(idx).as_int()?;
         let down = down.1.assume_chara(idx).as_int()?;
 
-        Self::upcheck_internal(tx, palam_name, palam, up, down)
+        Self::upcheck_internal(tx, palam_name, palam, up, down, &interner)
     }
 
     pub fn prepare_train_data(&mut self) -> Result<()> {
-        self.reset_var("UP")?;
-        self.reset_var("DOWN")?;
-        self.reset_var("LOSEBASE")?;
-        self.reset_var("CUP")?;
-        self.reset_var("CDOWN")?;
-        self.reset_var("DOWNBASE")?;
+        self.reset_var(KnownVariableNames::Up)?;
+        self.reset_var(KnownVariableNames::Down)?;
+        self.reset_var(KnownVariableNames::LoseBase)?;
+        self.reset_var(KnownVariableNames::Cup)?;
+        self.reset_var(KnownVariableNames::Cdown)?;
+        self.reset_var(KnownVariableNames::DownBase)?;
 
         Ok(())
     }
 
     pub fn reset_train_data(&mut self) -> Result<()> {
-        set_var!(self, "ASSIPLAY", 0);
-        set_var!(self, "PREVCOM", -1);
-        set_var!(self, "NEXTCOM", -1);
+        set_var!(self, AssiPlay, 0);
+        set_var!(self, PrevCom, -1);
+        set_var!(self, NextCom, -1);
 
-        set_var!(@all self, "TFLAG", 0);
-        set_var!(@all self, "TEQUIP", 0);
-        set_var!(@all self, "PALAM", 0);
-        set_var!(@all self, "STAIN", 0);
-        set_var!(@all self, "SOURCE", 0);
-        set_var!(@all self, "GOTJUEL", 0);
+        set_var!(@all self, Tflag, 0);
+        set_var!(@all self, Tequip, 0);
+        set_var!(@all self, Palam, 0);
+        set_var!(@all self, Stain, 0);
+        set_var!(@all self, Source, 0);
+        set_var!(@all self, GotJuel, 0);
 
         Ok(())
     }
@@ -445,7 +482,12 @@ impl VariableStorage {
         Ok(var.as_int()?[idx])
     }
 
-    pub fn read_local_int(&mut self, func_name: impl StrKeyLike, name: impl StrKeyLike, args: &[usize]) -> Result<i64> {
+    pub fn read_local_int(
+        &mut self,
+        func_name: impl StrKeyLike,
+        name: impl StrKeyLike,
+        args: &[usize],
+    ) -> Result<i64> {
         let (_, var, idx) = self.index_local_var(func_name, name, args)?;
         Ok(var.as_int()?[idx])
     }
@@ -489,8 +531,9 @@ impl VariableStorage {
         let vm_var = match var {
             UniformVariable::Character(cvar) => {
                 let c_idx = c_idx.unwrap_or_else(|| target as usize);
-                cvar.get_mut(c_idx)
-                    .ok_or_else(|| anyhow!("Variable {name:?} Character index {c_idx} not exists"))?
+                cvar.get_mut(c_idx).ok_or_else(|| {
+                    anyhow!("Variable {name:?} Character index {c_idx} not exists")
+                })?
             }
             UniformVariable::Normal(var) => var,
         };
@@ -504,6 +547,9 @@ impl VariableStorage {
         name: impl StrKeyLike,
         args: &[usize],
     ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
+        let func_name = func_name.get_key(self);
+        let name = name.get_key(self);
+
         let target = self.read_int("TARGET", &[])?;
 
         let (info, var) = self.get_local_var(func_name, name)?;
@@ -514,7 +560,7 @@ impl VariableStorage {
             UniformVariable::Character(cvar) => {
                 let c_idx = c_idx.unwrap_or(target as usize);
                 cvar.get_mut(c_idx).ok_or_else(|| {
-                    anyhow!("Variable {name}@{func_name} Character index {c_idx} not exists")
+                    anyhow!("Variable {name:?}@{func_name:?} Character index {c_idx} not exists",)
                 })?
             }
             UniformVariable::Normal(var) => var,
@@ -541,11 +587,13 @@ impl VariableStorage {
         func_name: impl StrKeyLike,
         var: impl StrKeyLike,
     ) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
+        let func_name = func_name.get_key(self);
+        let var = var.get_key(self);
         let (info, var) = self
             .local_variables
-            .get_mut(&func_name.get_key(self))
+            .get_mut(&func_name)
             .unwrap()
-            .get_mut(&var.get_key(self))
+            .get_mut(&var)
             .ok_or_else(|| anyhow!("Variable {:?} is not exists", var))?;
 
         if var.is_none() {
@@ -582,7 +630,7 @@ impl VariableStorage {
     }
 
     pub fn reset_var(&mut self, var: impl StrKeyLike) -> Result<()> {
-        let (info, var) = self.get_var(&var.get_key(self))?;
+        let (info, var) = self.get_var(var)?;
 
         if info.is_str {
             match var {
@@ -603,10 +651,14 @@ impl VariableStorage {
         Ok(())
     }
 
-    pub fn get_var(&mut self, var: impl StrKeyLike) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
+    pub fn get_var(
+        &mut self,
+        var: impl StrKeyLike,
+    ) -> Result<(&mut VariableInfo, &mut UniformVariable)> {
+        let var = var.get_key(self);
         let (l, r) = self
             .variables
-            .get_mut(&var.get_key(self))
+            .get_mut(&var)
             .ok_or_else(|| anyhow!("Variable {var:?} is not exists"))?;
 
         Ok((l, r))
@@ -638,7 +690,10 @@ impl VariableStorage {
         (&mut VariableInfo, &mut UniformVariable),
         (&mut VariableInfo, &mut UniformVariable),
     )> {
-        match self.variables.get_many_mut([&v1.get_key(self), &v2.get_key(self), &v3.get_key(self)]) {
+        match self
+            .variables
+            .get_many_mut([&v1.get_key(self), &v2.get_key(self), &v3.get_key(self)])
+        {
             Some([(l1, r1), (l2, r2), (l3, r3)]) => Ok(((l1, r1), (l2, r2), (l3, r3))),
             None => {
                 bail!("Variable {v1:?} or {v2:?} or {v3:?} is not exists");
@@ -684,7 +739,7 @@ impl VariableStorage {
     }
 
     pub fn get_chara(&mut self, target: i64) -> Result<Option<usize>> {
-        let (_, no_var) = self.variables.get_mut("NO").unwrap();
+        let (_, no_var) = self.get_var(KnownVariableNames::No)?;
         match no_var {
             UniformVariable::Character(c) => {
                 for (idx, var) in c.iter_mut().enumerate() {
@@ -908,11 +963,15 @@ impl UniformVariable {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, IntoStaticStr, Display)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum KnownVariableNames {
+    No,
     Count,
     NextCom,
     PrevCom,
-    CurrentCom,
+    SelectCom,
+    Master,
     Target,
+    Assi,
+    AssiPlay,
     Local,
     LocalS,
     Arg,
@@ -927,16 +986,39 @@ pub enum KnownVariableNames {
     Down,
     Cup,
     Cdown,
+    Stain,
+    #[allow(non_camel_case_types)]
+    SaveData_Text,
+
+    Base,
+    DownBase,
+    LoseBase,
+
+    Tflag,
+    Tequip,
+    Source,
+    Juel,
+    GotJuel,
 }
 
-trait StrKeyLike: Debug + Copy {
+pub trait StrKeyLike: Debug + Copy {
     fn get_key(self, var: &VariableStorage) -> StrKey;
+
+    fn resolve_key(self, var: &VariableStorage) -> &str {
+        var.resolve_key(self.get_key(var))
+    }
 }
 
 impl StrKeyLike for StrKey {
     #[inline(always)]
     fn get_key(self, _: &VariableStorage) -> StrKey {
         self
+    }
+}
+
+impl<'a> StrKeyLike for &'a str {
+    fn get_key(self, var: &VariableStorage) -> StrKey {
+        var.interner().get_or_intern(self)
     }
 }
 
@@ -947,3 +1029,18 @@ impl StrKeyLike for KnownVariableNames {
     }
 }
 
+impl StrKeyLike for EventType {
+    #[inline(always)]
+    fn get_key(self, var: &VariableStorage) -> StrKey {
+        var.event_key(self)
+    }
+}
+
+impl StrKeyLike for FunctionIdentifier {
+    fn get_key(self, var: &VariableStorage) -> StrKey {
+        match self {
+            FunctionIdentifier::Normal(key) => key,
+            FunctionIdentifier::Event(ty, _) => ty.get_key(var),
+        }
+    }
+}

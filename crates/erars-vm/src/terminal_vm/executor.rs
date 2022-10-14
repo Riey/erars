@@ -1,3 +1,5 @@
+use crate::variable::KnownVariableNames as Var;
+
 use super::*;
 
 macro_rules! ret_set_state {
@@ -16,7 +18,7 @@ macro_rules! get_arg {
     (@var $arg:expr) => {
         match $arg.next() {
             Some(LocalValue::VarRef(r)) => r,
-            Some(LocalValue::Value(_)) => bail!("매개변수가 VarRef가 아닙니다"),
+            Some(_) => bail!("매개변수가 VarRef가 아닙니다"),
             None => bail!("매개변수가 부족합니다"),
         }
     };
@@ -25,8 +27,7 @@ macro_rules! get_arg {
     };
     (@opt @value $arg:expr, $ctx:expr) => {
         match $arg.next() {
-            Some(LocalValue::VarRef(r)) => Some($ctx.read_var_ref(&r)?),
-            Some(LocalValue::Value(v)) => Some(v),
+            Some(v) => Some($ctx.reduce_local_value(v)?),
             None => None,
         }
     };
@@ -40,16 +41,16 @@ macro_rules! get_arg {
 
 pub(super) fn run_instruction(
     vm: &TerminalVm,
-    func_name: &str,
+    func_name: StrKey,
     inst: &Instruction,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
 ) -> Result<InstructionWorkflow> {
     match inst {
+        Instruction::Nop => {}
         Instruction::ReportPosition(pos) => ctx.update_position(pos.clone()),
         Instruction::LoadInt(n) => ctx.push(*n),
-        Instruction::LoadStr(s) => ctx.push(s.to_string()),
-        Instruction::Nop => {}
+        Instruction::LoadStr(s) => ctx.push_strkey(*s),
         Instruction::Pop => drop(ctx.pop()?),
         Instruction::Duplicate => ctx.dup(),
         Instruction::DuplicatePrev => ctx.dup_prev(),
@@ -63,7 +64,11 @@ pub(super) fn run_instruction(
         }
         Instruction::EvalFormString => {
             let form = ctx.pop_str()?;
-            let parser_ctx = ParserContext::new(ctx.header_info.clone(), "FORMS.ERB".into());
+            let parser_ctx = ParserContext::new(
+                ctx.var.clone_interner(),
+                ctx.header_info.clone(),
+                "FORMS.ERB".into(),
+            );
             let expr = erars_compiler::normal_form_str(&parser_ctx)(&form).unwrap().1;
             let insts = erars_compiler::compile_expr(expr).unwrap();
 
@@ -76,26 +81,29 @@ pub(super) fn run_instruction(
         }
         Instruction::GotoLabel => {
             return Ok(InstructionWorkflow::GotoLabel {
-                label: ctx.pop_str()?,
+                label: ctx.pop_strkey()?,
                 is_try: false,
             });
         }
         Instruction::TryGotoLabel => {
             return Ok(InstructionWorkflow::GotoLabel {
-                label: ctx.pop_str()?,
+                label: ctx.pop_strkey()?,
                 is_try: true,
             })
         }
         Instruction::LoadExternVarRef(c) => {
-            let func_extern = ctx.pop_str()?;
-            let name = ctx.pop_str()?;
+            let func_extern = ctx.pop_strkey()?;
+            let name = ctx.pop_strkey()?;
             let args = ctx.take_arg_list(None, *c)?;
             ctx.push_var_ref(name, func_extern, args);
         }
         Instruction::LoadVarRef(c) => {
-            let name = ctx.pop_str()?;
-            let args = ctx.take_arg_list(Some(&name), *c)?;
-            ctx.push_var_ref(name, func_name.to_string(), args);
+            let name = ctx.pop_strkey()?;
+            let args = ctx.take_arg_list(Some(name), *c)?;
+            ctx.push_var_ref(name, func_name, args);
+        }
+        Instruction::LoadCountVarRef => {
+            ctx.push_var_ref(ctx.var.known_key(Var::Count), func_name, ArrayVec::new());
         }
         Instruction::StoreVar => {
             let var_ref = ctx.pop_var_ref()?;
@@ -282,13 +290,17 @@ pub(super) fn run_instruction(
                 | PalamName | SourceName | StainName | TcvarName | GlobalName | GlobalsName
                 | SaveStrName => {
                     let name = <&str>::from(var).strip_suffix("NAME").unwrap();
+                    let name = ctx.var.interner().get_or_intern(name);
                     let arg = args[0] as u32;
-                    ctx.header_info
-                        .var_name_var
-                        .get(name)
-                        .and_then(|d| Some(d.get(&arg)?.as_str()))
-                        .unwrap_or("")
-                        .into()
+                    Value::String(
+                        ctx.header_info
+                            .var_name_var
+                            .get(&name)
+                            .and_then(|d| {
+                                Some(ctx.var.interner().resolve(d.get(&arg)?).to_string())
+                            })
+                            .unwrap_or_default(),
+                    )
                 }
                 Rand => {
                     let max = args[0];
@@ -528,8 +540,8 @@ pub(super) fn run_instruction(
                     let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
                     let end = get_arg!(@opt @usize: args, ctx);
 
-                    let target = ctx.var.read_int("TARGET", &[])?;
-                    let var = ctx.var.get_maybe_local_var(func_name, &var_ref.name)?.1;
+                    let target = ctx.var.read_int(Var::Target, &[])?;
+                    let var = ctx.var.get_maybe_local_var(func_name, var_ref.name)?.1;
 
                     let var = match var {
                         UniformVariable::Character(cvar) => {
@@ -831,13 +843,15 @@ pub(super) fn run_instruction(
 
             match com {
                 BuiltinCommand::UpCheck => {
-                    let names = ctx.header_info.var_name_var.get("PALAM").unwrap();
-                    let target = ctx.var.read_int("TARGET", &[])?.try_into()?;
+                    let palam = ctx.var.known_key(Var::Palam);
+                    let names = ctx.header_info.var_name_var.get(&palam).unwrap();
+                    let target = ctx.var.read_int(Var::Target, &[])?.try_into()?;
                     ctx.var.upcheck(tx, target, names)?;
                 }
                 BuiltinCommand::CUpCheck => {
+                    let palam = ctx.var.known_key(Var::Palam);
                     let target = get_arg!(@usize: args, ctx);
-                    let names = ctx.header_info.var_name_var.get("PALAM").unwrap();
+                    let names = ctx.header_info.var_name_var.get(&palam).unwrap();
                     ctx.var.cupcheck(tx, target, names)?;
                 }
                 BuiltinCommand::Restart => {
@@ -870,9 +884,9 @@ pub(super) fn run_instruction(
                     let target = if let Some(idx) = v.idxs.first().copied() {
                         idx
                     } else {
-                        ctx.var.read_int("TARGET", &[])?.try_into()?
+                        ctx.var.read_int(Var::Target, &[])?.try_into()?
                     };
-                    let (info, var) = ctx.var.get_maybe_local_var(&v.func_name, &v.name)?;
+                    let (info, var) = ctx.var.get_maybe_local_var(v.func_name, v.name)?;
                     let var = var.as_vm_var(target);
 
                     if info.is_str {
@@ -930,7 +944,7 @@ pub(super) fn run_instruction(
                     let value = get_arg!(@opt @value args, ctx);
                     let start = get_arg!(@opt @usize: args, ctx);
 
-                    let (info, var) = ctx.var.get_var(&var.name)?;
+                    let (info, var) = ctx.var.get_var(var.name)?;
 
                     let value = value.unwrap_or_else(|| {
                         if info.is_str {
@@ -987,12 +1001,8 @@ pub(super) fn run_instruction(
                     let mut result_idx = 0usize;
                     let mut results_idx = 0usize;
 
-                    let args: ArrayVec<_, 8> = args
-                        .map(|v| match v {
-                            LocalValue::Value(v) => Ok(v),
-                            LocalValue::VarRef(v) => ctx.read_var_ref(&v),
-                        })
-                        .try_collect()?;
+                    let args: ArrayVec<_, 8> =
+                        args.map(|v| ctx.reduce_local_value(v)).try_collect()?;
 
                     let ((_, result), (_, results)) =
                         ctx.var.get_var2("RESULT", "RESULTS").unwrap();
