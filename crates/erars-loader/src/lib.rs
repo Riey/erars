@@ -78,7 +78,7 @@ fn read_file(path: &Path) -> std::io::Result<String> {
 pub fn run_script(
     target_path: String,
     inputs: Vec<Value>,
-) -> anyhow::Result<(TerminalVm, VmContext)> {
+) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     let mut time = Instant::now();
 
     let config_path = format!("{target_path}/emuera.config");
@@ -106,6 +106,7 @@ pub fn run_script(
             time = Instant::now();
 
             tx.print_line(format!("[{}]: {}ms", $work, m));
+            log::info!("[{}]: {}ms", $work, m);
         };
     }
 
@@ -351,5 +352,5 @@ pub fn run_script(
 
     let vm = TerminalVm::new(function_dic, target_path.into());
 
-    Ok((vm, ctx))
+    Ok((vm, ctx, tx))
 }

@@ -66,8 +66,8 @@ fn main() {
         None => Vec::new(),
     };
 
-    let (vm, mut ctx) = run_script(args.target_path, inputs).unwrap();
+    let (vm, mut ctx, tx) = run_script(args.target_path, inputs).unwrap();
 
-    let mut frontend = stdio_frontend::StdioFrontend::new(ctx.config.printc_width);
+    let mut frontend = stdio_frontend::StdioFrontend::new(tx);
     frontend.run(&vm, &mut ctx).unwrap();
 }
