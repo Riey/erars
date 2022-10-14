@@ -64,11 +64,7 @@ pub(super) fn run_instruction(
         }
         Instruction::EvalFormString => {
             let form = ctx.pop_str()?;
-            let parser_ctx = ParserContext::new(
-                ctx.var.clone_interner(),
-                ctx.header_info.clone(),
-                "FORMS.ERB".into(),
-            );
+            let parser_ctx = ParserContext::new(ctx.header_info.clone(), "FORMS.ERB".into());
             let expr = erars_compiler::normal_form_str(&parser_ctx)(&form).unwrap().1;
             let insts = erars_compiler::compile_expr(expr).unwrap();
 

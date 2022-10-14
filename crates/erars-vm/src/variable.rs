@@ -1,12 +1,11 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Debug,
-    sync::Arc,
 };
 
 use anyhow::{anyhow, bail, Result};
 use enum_map::{Enum, EnumMap};
-use erars_ast::{EventType, Interner, StrKey, Value, VariableInfo};
+use erars_ast::{EventType, Interner, StrKey, Value, VariableInfo, GLOBAL_INTERNER};
 use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
@@ -58,7 +57,7 @@ pub struct SerializableGlobalVariableStorage {
 
 #[derive(Clone)]
 pub struct VariableStorage {
-    interner: Arc<Interner>,
+    interner: &'static Interner,
     character_len: usize,
     rng: ChaCha20Rng,
     variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
@@ -68,12 +67,14 @@ pub struct VariableStorage {
 }
 
 impl VariableStorage {
-    pub fn new(interner: Arc<Interner>, infos: &HashMap<StrKey, VariableInfo>) -> Self {
+    pub fn new(infos: &HashMap<StrKey, VariableInfo>) -> Self {
         let mut variables = HashMap::new();
 
         for (k, v) in infos {
             variables.insert(*k, (v.clone(), UniformVariable::new(v)));
         }
+
+        let interner = &*GLOBAL_INTERNER;
 
         Self {
             character_len: 0,
@@ -90,12 +91,8 @@ impl VariableStorage {
         }
     }
 
-    pub fn clone_interner(&self) -> Arc<Interner> {
-        self.interner.clone()
-    }
-
     #[inline]
-    pub fn interner(&self) -> &Interner {
+    pub fn interner(&self) -> &'static Interner {
         &self.interner
     }
 
@@ -332,7 +329,7 @@ impl VariableStorage {
         idx: usize,
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
-        let interner = self.interner.clone();
+        let interner = self.interner();
         let (palam, up, down) = self.get_var3(
             KnownVariableNames::Palam,
             KnownVariableNames::Up,
@@ -352,7 +349,7 @@ impl VariableStorage {
         idx: usize,
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
-        let interner = self.interner.clone();
+        let interner = self.interner();
         let (palam, up, down) = self.get_var3(
             KnownVariableNames::Palam,
             KnownVariableNames::Cup,
@@ -393,11 +390,11 @@ impl VariableStorage {
     }
 
     pub fn get_result(&mut self) -> i64 {
-        self.read_int("RESULT", &[]).unwrap()
+        self.read_int(KnownVariableNames::Result, &[]).unwrap()
     }
 
     pub fn get_results(&mut self) -> String {
-        self.read_str("RESULTS", &[]).unwrap()
+        self.read_str(KnownVariableNames::ResultS, &[]).unwrap()
     }
 
     pub fn set_result(&mut self, i: i64) {

@@ -1,11 +1,10 @@
 mod csv;
 mod expr;
 
-use enum_map::{Enum, EnumMap};
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType, Expr, Function,
     FunctionHeader, FunctionInfo, Interner, ScriptPosition, Stmt, StmtWithPos, StrKey, Variable,
-    VariableInfo,
+    VariableInfo, GLOBAL_INTERNER,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -19,7 +18,7 @@ use std::{
     mem,
     sync::Arc,
 };
-use strum::{Display, EnumString, IntoStaticStr};
+use strum::{Display, EnumString};
 
 pub use crate::error::{ParserError, ParserResult};
 use crate::CompiledFunction;
@@ -255,8 +254,9 @@ pub struct HeaderInfo {
 }
 
 impl HeaderInfo {
-    pub fn merge_chara_csv(&mut self, interner: &Interner, s: &str) -> ParserResult<()> {
+    pub fn merge_chara_csv(&mut self, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
+        let interner = &*GLOBAL_INTERNER;
         let mut template = CharacterTemplate::default();
 
         macro_rules! define_keys {
@@ -416,8 +416,9 @@ impl HeaderInfo {
         Ok(())
     }
 
-    pub fn merge_name_csv(&mut self, interner: &Interner, var: &str, s: &str) -> ParserResult<()> {
+    pub fn merge_name_csv(&mut self, var: &str, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
+        let interner = &*GLOBAL_INTERNER;
         let var = interner.get_or_intern(var);
         let mut name_var = BTreeMap::new();
 
@@ -431,8 +432,9 @@ impl HeaderInfo {
         Ok(())
     }
 
-    pub fn merge_item_csv(&mut self, interner: &Interner, s: &str) -> ParserResult<()> {
+    pub fn merge_item_csv(&mut self, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
+        let interner = &*GLOBAL_INTERNER;
         let var = interner.get_or_intern_static("ITEM");
 
         while let Some((n, s, price)) = self::csv::name_item_line(&interner, &mut lex)? {
@@ -444,8 +446,9 @@ impl HeaderInfo {
         Ok(())
     }
 
-    pub fn merge_variable_size_csv(&mut self, interner: &Interner, s: &str) -> ParserResult<()> {
+    pub fn merge_variable_size_csv(&mut self, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
+        let interner = &*GLOBAL_INTERNER;
 
         while let Some((name, sizes)) = self::csv::variable_size_line(&mut lex)? {
             match name.as_str() {
@@ -610,7 +613,7 @@ impl HeaderInfo {
 
 #[derive(Debug)]
 pub struct ParserContext {
-    pub interner: Arc<Interner>,
+    pub interner: &'static Interner,
     pub header: Arc<HeaderInfo>,
     pub local_strs: RefCell<HashSet<StrKey>>,
     pub is_arg: Cell<bool>,
@@ -621,14 +624,14 @@ pub struct ParserContext {
 
 impl Default for ParserContext {
     fn default() -> Self {
-        Self::new(Arc::default(), Arc::default(), "".into())
+        Self::new(Arc::default(), "".into())
     }
 }
 
 impl ParserContext {
-    pub fn new(interner: Arc<Interner>, header: Arc<HeaderInfo>, file_path: SmolStr) -> Self {
+    pub fn new(header: Arc<HeaderInfo>, file_path: SmolStr) -> Self {
         Self {
-            interner,
+            interner: &*GLOBAL_INTERNER,
             header,
             file_path,
             local_strs: RefCell::default(),

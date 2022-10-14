@@ -228,7 +228,6 @@ impl SystemState {
                         }
                         tx.printrc(&format!(
                             "{name}[{no:3}]",
-                            name = ctx.var.resolve_key(train)
                         ));
                         *printc_count += 1;
                     }

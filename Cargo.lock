@@ -650,6 +650,7 @@ dependencies = [
  "lasso",
  "num-derive",
  "num-traits",
+ "once_cell",
  "option_set",
  "ordered-float",
  "serde",

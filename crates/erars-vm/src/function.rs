@@ -1,10 +1,9 @@
-use std::sync::Arc;
-
 use anyhow::{anyhow, Result};
 use arrayvec::ArrayVec;
 use enum_map::EnumMap;
 use erars_ast::Interner;
 use erars_ast::StrKey;
+use erars_ast::GLOBAL_INTERNER;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
 use smol_str::SmolStr;
@@ -93,15 +92,15 @@ impl EventCollection {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FunctionDic {
-    pub interner: Arc<Interner>,
+    pub interner: &'static Interner,
     pub normal: HashMap<StrKey, FunctionBody>,
     pub event: EnumMap<EventType, EventCollection>,
 }
 
 impl FunctionDic {
-    pub fn new(interner: Arc<Interner>) -> Self {
+    pub fn new() -> Self {
         Self {
-            interner,
+            interner: &*GLOBAL_INTERNER,
             normal: HashMap::new(),
             event: EnumMap::default(),
         }
