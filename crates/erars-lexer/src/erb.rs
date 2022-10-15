@@ -127,7 +127,7 @@ pub struct ErbLexer<'s> {
 impl<'s> ErbLexer<'s> {
     pub fn new(s: &'s str) -> Self {
         Self {
-            lines: static_regex!(r"^\s*([^\n;]*?)\s*(?:;[^\n]*)?\r?$").captures_iter(s),
+            lines: static_regex!(r"\s*(.*)").captures_iter(s),
             line_count: 0,
             prev_span: 0..0,
         }
@@ -156,13 +156,16 @@ impl<'s> ErbLexer<'s> {
         self.prev_span.clone()
     }
 
-    pub fn next_token(&mut self) -> Result<Option<Token<'s>>, (LexerError, Range<usize>)> {
+    pub fn next_token(
+        &mut self,
+        check_str_var: impl FnMut(&'s str) -> bool,
+    ) -> Result<Option<Token<'s>>, (LexerError, Range<usize>)> {
         let (line_str, span) = match self.next_line() {
             Some(v) => v,
             None => return Ok(None),
         };
 
-        let tok = lex(line_str).map_err(|err| (err, span.clone()))?;
+        let tok = lex(line_str, check_str_var).map_err(|err| (err, span.clone()))?;
 
         match tok {
             Some(tok) => {
@@ -174,25 +177,38 @@ impl<'s> ErbLexer<'s> {
     }
 }
 
-fn lex(s: &str) -> Result<Option<Token<'_>>, LexerError> {
+fn trim_normal_line<'s>(s: &'s str) -> &'s str {
+    let s = if let Some(pos) = s.find(';') {
+        s.split_at(pos).0
+    } else {
+        s
+    };
+
+    s.trim()
+}
+
+fn lex<'s>(
+    s: &'s str,
+    _check_str_var: impl FnMut(&'s str) -> bool,
+) -> Result<Option<Token<'s>>, LexerError> {
     let tok = if let Some(func) = s.strip_prefix('@') {
-        Token::FunctionLine(func)
+        Token::FunctionLine(trim_normal_line(func))
     } else if let Some(label) = s.strip_prefix('$') {
-        Token::LabelLine(label)
+        Token::LabelLine(trim_normal_line(label))
     } else if let Some(header) = s.strip_prefix('#') {
-        if let Some(dim) = static_regex!(r"^DIM(S)?(.*)$").captures(header) {
+        if let Some(dim) = static_regex!(r"^(?i)DIM(S)?(.*)$").captures(header) {
             let body = dim.get(2).unwrap().as_str();
             if dim.get(1).is_some() {
-                Token::DimS(body)
+                Token::DimS(trim_normal_line(body))
             } else {
-                Token::Dim(body)
+                Token::Dim(trim_normal_line(body))
             }
-        } else if let Some(localsize) = static_regex!(r"^LOCAL(S)?SIZE(.*)$").captures(header) {
+        } else if let Some(localsize) = static_regex!(r"^(?i)LOCAL(S)?SIZE(.*)$").captures(header) {
             let body = localsize.get(2).unwrap().as_str();
             if localsize.get(1).is_some() {
-                Token::LocalsSize(body)
+                Token::LocalsSize(trim_normal_line(body))
             } else {
-                Token::LocalSize(body)
+                Token::LocalSize(trim_normal_line(body))
             }
         } else if header.eq_ignore_ascii_case("PRI") {
             Token::Pri
@@ -213,6 +229,14 @@ fn lex(s: &str) -> Result<Option<Token<'_>>, LexerError> {
         } else {
             return Err(LexerError::UnclosedPreprocess);
         }
+    } else if let Some(times) = static_regex!(r"^(?i)TIMES(.*)$").captures(s) {
+        Token::Times(trim_normal_line(times.get(1).unwrap().as_str()))
+    } else if let Some(align) = static_regex!(r"^(?i)ALIGNMENT(.*)$").captures(s) {
+        Token::Alignment(align[1].trim().parse().map_err(|_| LexerError::UnknownCode)?)
+    } else if let Some(ty) = static_regex!(r"^(?i)BEGIN(.*)$").captures(s) {
+        Token::Begin(ty[1].trim().parse().map_err(|_| LexerError::UnknownCode)?)
+    } else if let Some(ty) = static_regex!(r"^(?i)CALLEVENT(.*)$").captures(s) {
+        Token::CallEvent(ty[1].trim().parse().map_err(|_| LexerError::UnknownCode)?)
     } else if let Some(reuse) = static_regex!(r"^(?i:REUSELASTLINE)(?: (.*))?$").captures(s) {
         Token::ReuseLastLine(reuse.get(1).map_or("", |m| m.as_str()))
     } else if let Some(print) =
@@ -237,7 +261,7 @@ fn lex(s: &str) -> Result<Option<Token<'_>>, LexerError> {
                 is_form: call.get(4).is_some(),
                 is_method: call.get(5).is_some(),
             },
-            call.get(6).map_or("", |m| m.as_str()),
+            call.get(6).map_or("", |m| trim_normal_line(m.as_str())),
         )
     } else {
         return Err(LexerError::UnknownCode);

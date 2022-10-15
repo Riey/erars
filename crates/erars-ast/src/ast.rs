@@ -58,13 +58,13 @@ pub struct StmtWithPos(pub Stmt, pub ScriptPosition);
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScriptPosition {
-    /// 0 based line index
+    /// 1 based line index
     pub line: u32,
 }
 
 impl fmt::Display for ScriptPosition {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "@{}", self.line + 1)
+        write!(f, "@{}", self.line)
     }
 }
 

@@ -444,10 +444,10 @@ impl TerminalVm {
                     while let Some(call_stack) = ctx.pop_call_stack_check(call_stack_base) {
                         report_error!(
                             tx,
-                            "At function {func} {file}@{line}",
+                            "At function {func} {file}{line}",
                             func = call_stack.func_name.resolve_key(&ctx.var),
                             file = call_stack.file_path,
-                            line = call_stack.script_position.line
+                            line = call_stack.script_position
                         );
                     }
 

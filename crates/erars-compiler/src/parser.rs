@@ -2,9 +2,9 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
-    Expr, Function, FunctionHeader, FunctionInfo, Interner, ScriptPosition, Stmt, StmtWithPos,
-    StrKey, Variable, VariableInfo,
+    get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags,
+    EventType, Expr, Function, FunctionHeader, FunctionInfo, Interner, ScriptPosition, Stmt,
+    StmtWithPos, StrKey, Variable, VariableInfo,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -634,9 +634,16 @@ impl ParserContext {
 
     fn next_token<'s>(&self, lex: &mut ErbLexer<'s>) -> ParserResult<Option<Token<'s>>> {
         loop {
-            match lex.next_token().map_err(|err| (err.0.to_string(), err.1))? {
+            let check_str_var = |name| self.is_str_var(self.interner.get_or_intern(name));
+            match lex
+                .next_token(check_str_var)
+                .map_err(|err| (err.0.to_string(), err.1))?
+            {
                 Some(Token::PreprocessLine("[SKIPSTART]")) => loop {
-                    match lex.next_token().map_err(|err| (err.0.to_string(), err.1))? {
+                    match lex
+                        .next_token(check_str_var)
+                        .map_err(|err| (err.0.to_string(), err.1))?
+                    {
                         Some(Token::PreprocessLine("[SKIPEND]")) => break,
                         None => error!(lex, "[SKIPSTART]가 [SKIPEND]없이 끝났습니다."),
                         _ => {}
@@ -646,7 +653,7 @@ impl ParserContext {
                     log::warn!("Unknown PreprocessLine {pp}");
                 }
                 Some(tok) => break Ok(Some(tok)),
-                None => break Ok(None),
+                None => break Ok(dbg!(None)),
             }
         }
     }
