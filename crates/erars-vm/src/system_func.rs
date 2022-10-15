@@ -3,6 +3,7 @@ use anyhow::{bail, Result};
 use erars_ast::{BeginType, EventType};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
 use hashbrown::HashMap;
+#[cfg(feature = "multithread")]
 use rayon::prelude::*;
 
 use crate::{variable::SerializableVariableStorage, TerminalVm, VmContext, Workflow};
@@ -439,8 +440,12 @@ impl SystemState {
 const SAVE_COUNT: usize = 20;
 
 fn load_savs(vm: &TerminalVm, ctx: &mut VmContext) -> HashMap<usize, SerializableVariableStorage> {
-    (0..SAVE_COUNT)
-        .into_par_iter()
+    #[cfg(feature = "multithread")]
+    let iter = (0..SAVE_COUNT).into_par_iter();
+    #[cfg(not(feature = "multithread"))]
+    let iter = (0..SAVE_COUNT).into_iter();
+
+    iter
         .filter_map(|i| {
             crate::save_data::read_save_data(&vm.sav_path(), &ctx.header_info, i as i64)
                 .ok()

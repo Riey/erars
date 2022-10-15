@@ -1,4 +1,5 @@
 use parking_lot::Mutex;
+#[cfg(feature = "multithread")]
 use rayon::prelude::*;
 use std::{
     fs::File,
@@ -218,6 +219,12 @@ pub fn run_script(
             },
         )?;
 
+        #[cfg(feature = "multithread")]
+        let csvs = csvs.par_bridge();
+
+        #[cfg(feature = "multithread")]
+        let erbs = erbs.par_bridge();
+
         let mut files = Mutex::new(SimpleFiles::new());
         let mut diagnostic =
             Mutex::new(Diagnostic::error().with_code("E0001").with_message("Compile ERROR"));
@@ -228,7 +235,6 @@ pub fn run_script(
         };
 
         let mut csv_dic = csvs
-            .par_bridge()
             .filter_map(|csv| match csv {
                 Ok(csv) => {
                     log::trace!("Load {}", csv.display());
@@ -369,7 +375,6 @@ pub fn run_script(
 
         let funcs = erbs
             // .into_iter()
-            .par_bridge()
             .flat_map(|erb| {
                 let erb = erb.unwrap();
                 let source = read_file(&erb).unwrap();

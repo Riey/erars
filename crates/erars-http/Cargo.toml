@@ -9,7 +9,7 @@ erars-ast = { path = "../erars-ast" }
 erars-compiler = { path = "../erars-compiler" }
 erars-ui = { path = "../erars-ui" }
 erars-vm = { path = "../erars-vm" }
-erars-loader = { path = "../erars-loader" }
+erars-loader = { path = "../erars-loader", features = ["multithread"] }
 
 tokio = { version = "1.21.1", features = ["bytes", "rt", "net", "time", "sync", "rt-multi-thread", "parking_lot"] }
 axum = { version = "0.5.16", features = ["ws"] }

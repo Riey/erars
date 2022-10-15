@@ -18,7 +18,7 @@ itertools = "0.10.3"
 log = "0.4.14"
 serde = { version = "1.0.132", features = ["derive"] }
 strum = { version = "0.24.1", features = ["derive"] }
-rayon = "1.5.3"
+rayon = { version = "1.5.3", optional = true }
 parking_lot = "0.12.1"
 unicode-width = "0.1.9"
 encoding_rs = "0.8.31"
@@ -41,3 +41,4 @@ tinyvec = "1.6.0"
 k9 = "0.11.5"
 
 [features]
+multithread = ["rayon"]

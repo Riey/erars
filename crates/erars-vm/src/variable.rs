@@ -10,6 +10,7 @@ use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+#[cfg(feature = "multithread")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -210,9 +211,16 @@ impl VariableStorage {
         HashMap<String, (VariableInfo, UniformVariable)>,
         HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
     ) {
-        let variables = self
-            .variables
-            .par_iter()
+        #[cfg(feature = "multithread")]
+        let this_vars = self.variables.par_iter();
+        #[cfg(not(feature = "multithread"))]
+        let this_vars = self.variables.iter();
+        #[cfg(feature = "multithread")]
+        let this_local_vars = self.local_variables.par_iter();
+        #[cfg(not(feature = "multithread"))]
+        let this_local_vars = self.local_variables.iter();
+
+        let variables = this_vars
             .filter_map(|(name, (info, var))| {
                 if info.is_savedata && info.is_global == is_global {
                     Some((
@@ -225,9 +233,7 @@ impl VariableStorage {
             })
             .collect();
 
-        let local_variables = self
-            .local_variables
-            .par_iter()
+        let local_variables = this_local_vars
             .filter_map(|(fn_name, vars)| {
                 let vars: HashMap<_, _> = vars
                     .iter()
@@ -646,15 +652,15 @@ impl VariableStorage {
         if info.is_str {
             match var {
                 UniformVariable::Character(c) => {
-                    c.par_iter_mut().for_each(|v| v.as_str().unwrap().fill(String::new()))
+                    c.iter_mut().for_each(|v| v.as_str().unwrap().fill(String::new()))
                 }
                 UniformVariable::Normal(v) => v.as_str().unwrap().fill(String::new()),
             }
         } else {
             match var {
-                UniformVariable::Character(c) => c
-                    .par_iter_mut()
-                    .for_each(|v| v.as_int().unwrap().fill(info.default_int)),
+                UniformVariable::Character(c) => {
+                    c.iter_mut().for_each(|v| v.as_int().unwrap().fill(info.default_int))
+                }
                 UniformVariable::Normal(v) => v.as_int().unwrap().fill(info.default_int),
             }
         }
