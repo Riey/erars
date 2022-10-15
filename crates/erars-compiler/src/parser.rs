@@ -653,7 +653,7 @@ impl ParserContext {
                     log::warn!("Unknown PreprocessLine {pp}");
                 }
                 Some(tok) => break Ok(Some(tok)),
-                None => break Ok(dbg!(None)),
+                None => break Ok(None),
             }
         }
     }

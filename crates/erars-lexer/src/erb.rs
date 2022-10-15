@@ -239,6 +239,17 @@ fn lex<'s>(
         Token::CallEvent(ty[1].trim().parse().map_err(|_| LexerError::UnknownCode)?)
     } else if let Some(reuse) = static_regex!(r"^(?i:REUSELASTLINE)(?: (.*))?$").captures(s) {
         Token::ReuseLastLine(reuse.get(1).map_or("", |m| m.as_str()))
+    } else if let Some(if_) = static_regex!(r"^(?i)(ELSE)?IF(.*)$").captures(s) {
+        let body = trim_normal_line(if_.get(2).unwrap().as_str());
+        if if_.get(1).is_some() {
+            Token::ElseIf(body)
+        } else {
+            Token::IfLine(body)
+        }
+    } else if static_regex!(r"^(?i)ELSE\s*$").is_match(s) {
+        Token::Else
+    } else if static_regex!(r"^(?i)ENDIF\s*$").is_match(s) {
+        Token::EndIf
     } else if let Some(print) =
         static_regex!(r"^(?i:PRINT((?:SINGLE)?(?:DATA|V|S|FORMS?)?[LW]?(?:L?C)?))(?: (.*))?$")
             .captures(s)
