@@ -680,27 +680,11 @@ impl ParserContext {
         let first_pos = self.current_pos(lex);
 
         let stmt = match first {
-            // Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
-            // Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
-            // Token::CallEvent => Stmt::CallEvent(take_ident!(EventType, lex)),
+            Token::Alignment(align) => Stmt::Alignment(align),
+            Token::Begin(ty) => Stmt::Begin(ty),
+            Token::CallEvent(ty) => Stmt::CallEvent(ty),
             Token::LabelLine(label) => Stmt::Label(self.interner.get_or_intern(label)),
-            // Token::StrFormMethod((method, left)) => {
-            //     let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-            //     Stmt::Method(method, vec![form])
-            // }
-            // Token::StrFormCommand((com, left)) => {
-            //     let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-            //     Stmt::Command(com, vec![form])
-            // }
-            // Token::CustomDrawLine(custom) => Stmt::Command(
-            //     BuiltinCommand::CustomDrawLine,
-            //     vec![Expr::str(&self.interner, custom)],
-            // ),
-            // Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
-            // Token::Throw(left) => Stmt::Command(
-            //     BuiltinCommand::Throw,
-            //     vec![try_nom!(lex, self::expr::normal_form_str(self)(left)).1],
-            // ),
+            Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::ReuseLastLine(left) => Stmt::ReuseLastLine(self.interner.get_or_intern(left)),
             Token::PrintLine(flags, PrintType::Plain, form) => {
                 Stmt::Print(flags, Expr::str(&self.interner, form))
@@ -813,154 +797,154 @@ impl ParserContext {
                     },
                 }
             }
-            // Token::Sif(cond) => {
-            //     let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
-            //     let first = match self.next_token(lex)? {
-            //         Some(first) => first,
-            //         None => error!(lex, "Unexpected EOF after SIF"),
-            //     };
-            //     let body = self.parse_stmt(first, lex)?;
+            Token::SifLine(cond) => {
+                let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
+                let first = match self.next_token(lex)? {
+                    Some(first) => first,
+                    None => error!(lex, "Unexpected EOF after SIF"),
+                };
+                let body = self.parse_stmt(first, lex)?;
 
-            //     Stmt::Sif(cond, Box::new(body))
-            // }
-            // Token::SelectCase(cond) => {
-            //     let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
-            //     let mut has_else = false;
-            //     let mut body = Vec::new();
-            //     let mut cases: Vec<(_, Vec<StmtWithPos>)> = Vec::new();
+                Stmt::Sif(cond, Box::new(body))
+            }
+            Token::SelectCaseLine(cond) => {
+                let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
+                let mut has_else = false;
+                let mut body = Vec::new();
+                let mut cases: Vec<(_, Vec<StmtWithPos>)> = Vec::new();
 
-            //     loop {
-            //         match self.next_token(lex)? {
-            //             Some(Token::Case(case)) => {
-            //                 if let Some((_, case)) = cases.last_mut() {
-            //                     *case = mem::take(&mut body);
-            //                 }
-            //                 let case = try_nom!(lex, self::expr::case_line(self)(case)).1;
-            //                 cases.push((case, Vec::new()));
-            //             }
-            //             Some(Token::CaseElse) => {
-            //                 if let Some((_, case)) = cases.last_mut() {
-            //                     *case = mem::take(&mut body);
-            //                 }
-            //                 has_else = true;
-            //             }
-            //             Some(Token::EndSelect) => break,
-            //             Some(tok) => {
-            //                 body.push(self.parse_stmt(tok, lex)?);
-            //             }
-            //             None => error!(lex, "Unexpected EOF after SELECTCASE"),
-            //         }
-            //     }
+                loop {
+                    match self.next_token(lex)? {
+                        Some(Token::Case(case)) => {
+                            if let Some((_, case)) = cases.last_mut() {
+                                *case = mem::take(&mut body);
+                            }
+                            let case = try_nom!(lex, self::expr::case_line(self)(case)).1;
+                            cases.push((case, Vec::new()));
+                        }
+                        Some(Token::CaseElse) => {
+                            if let Some((_, case)) = cases.last_mut() {
+                                *case = mem::take(&mut body);
+                            }
+                            has_else = true;
+                        }
+                        Some(Token::EndSelect) => break,
+                        Some(tok) => {
+                            body.push(self.parse_stmt(tok, lex)?);
+                        }
+                        None => error!(lex, "Unexpected EOF after SELECTCASE"),
+                    }
+                }
 
-            //     if has_else {
-            //         Stmt::SelectCase(cond, cases, Some(body))
-            //     } else {
-            //         if let Some(last) = cases.last_mut() {
-            //             last.1 = body;
-            //         }
-            //         Stmt::SelectCase(cond, cases, None)
-            //     }
-            // }
-            // Token::For(left) => {
-            //     let (var, init, end, step) = try_nom!(lex, self::expr::for_line(self)(left)).1;
-            //     let mut body = Vec::new();
+                if has_else {
+                    Stmt::SelectCase(cond, cases, Some(body))
+                } else {
+                    if let Some(last) = cases.last_mut() {
+                        last.1 = body;
+                    }
+                    Stmt::SelectCase(cond, cases, None)
+                }
+            }
+            Token::ForLine(left) => {
+                let (var, init, end, step) = try_nom!(lex, self::expr::for_line(self)(left)).1;
+                let mut body = Vec::new();
 
-            //     loop {
-            //         match self.next_token(lex)? {
-            //             Some(Token::Next) => {
-            //                 break Stmt::For(var, Box::new((init, end, step)), body)
-            //             }
-            //             Some(other) => {
-            //                 body.push(self.parse_stmt(other, lex)?);
-            //             }
-            //             None => error!(lex, "Unexpected EOF after FOR"),
-            //         }
-            //     }
-            // }
-            // Token::While(left) => {
-            //     let cond = try_nom!(lex, self::expr::expr(self)(left)).1;
-            //     let mut body = Vec::new();
-            //     loop {
-            //         match self.next_token(lex)? {
-            //             Some(Token::Wend) => {
-            //                 break Stmt::While(cond, body);
-            //             }
-            //             Some(tok) => {
-            //                 body.push(self.parse_stmt(tok, lex)?);
-            //             }
-            //             None => error!(lex, "Unexpected EOF after DO"),
-            //         }
-            //     }
-            // }
-            // Token::Do => {
-            //     let mut body = Vec::new();
-            //     loop {
-            //         match self.next_token(lex)? {
-            //             Some(Token::Loop(left)) => {
-            //                 break Stmt::Do(try_nom!(lex, self::expr::expr(self)(left)).1, body);
-            //             }
-            //             Some(tok) => {
-            //                 body.push(self.parse_stmt(tok, lex)?);
-            //             }
-            //             None => error!(lex, "Unexpected EOF after DO"),
-            //         }
-            //     }
-            // }
-            // Token::Repeat(left) => {
-            //     let arg = try_nom!(lex, self::expr::expr(self)(left)).1;
-            //     let mut body = Vec::new();
+                loop {
+                    match self.next_token(lex)? {
+                        Some(Token::Next) => {
+                            break Stmt::For(var, Box::new((init, end, step)), body)
+                        }
+                        Some(other) => {
+                            body.push(self.parse_stmt(other, lex)?);
+                        }
+                        None => error!(lex, "Unexpected EOF after FOR"),
+                    }
+                }
+            }
+            Token::WhileLine(left) => {
+                let cond = try_nom!(lex, self::expr::expr(self)(left)).1;
+                let mut body = Vec::new();
+                loop {
+                    match self.next_token(lex)? {
+                        Some(Token::Wend) => {
+                            break Stmt::While(cond, body);
+                        }
+                        Some(tok) => {
+                            body.push(self.parse_stmt(tok, lex)?);
+                        }
+                        None => error!(lex, "Unexpected EOF after WHILE"),
+                    }
+                }
+            }
+            Token::DoLine => {
+                let mut body = Vec::new();
+                loop {
+                    match self.next_token(lex)? {
+                        Some(Token::Loop(left)) => {
+                            break Stmt::Do(try_nom!(lex, self::expr::expr(self)(left)).1, body);
+                        }
+                        Some(tok) => {
+                            body.push(self.parse_stmt(tok, lex)?);
+                        }
+                        None => error!(lex, "Unexpected EOF after DO"),
+                    }
+                }
+            }
+            Token::RepeatLine(left) => {
+                let arg = try_nom!(lex, self::expr::expr(self)(left)).1;
+                let mut body = Vec::new();
 
-            //     loop {
-            //         match self.next_token(lex)? {
-            //             Some(Token::Rend) => break Stmt::Repeat(arg, body),
-            //             Some(other) => {
-            //                 body.push(self.parse_stmt(other, lex)?);
-            //             }
-            //             None => error!(lex, "Unexpected EOF after FOR"),
-            //         }
-            //     }
-            // }
-            // Token::If(left) => {
-            //     let mut is_else = false;
-            //     let mut cond = try_nom!(lex, self::expr::expr(self)(left)).1;
-            //     let mut block = Vec::new();
-            //     let mut if_elses = Vec::new();
+                loop {
+                    match self.next_token(lex)? {
+                        Some(Token::Rend) => break Stmt::Repeat(arg, body),
+                        Some(other) => {
+                            body.push(self.parse_stmt(other, lex)?);
+                        }
+                        None => error!(lex, "Unexpected EOF after FOR"),
+                    }
+                }
+            }
+            Token::IfLine(left) => {
+                let mut is_else = false;
+                let mut cond = try_nom!(lex, self::expr::expr(self)(left)).1;
+                let mut block = Vec::new();
+                let mut if_elses = Vec::new();
 
-            //     loop {
-            //         match self.next_token(lex)? {
-            //             Some(Token::ElseIf(left)) => {
-            //                 let left = left.trim_start_matches(' ');
+                loop {
+                    match self.next_token(lex)? {
+                        Some(Token::ElseIf(left)) => {
+                            let left = left.trim_start_matches(' ');
 
-            //                 if_elses.push((cond, block));
-            //                 block = Vec::new();
-            //                 cond = if left.is_empty() {
-            //                     Expr::Int(1)
-            //                 } else {
-            //                     try_nom!(lex, self::expr::expr(self)(left)).1
-            //                 };
-            //             }
-            //             Some(Token::Else) => {
-            //                 is_else = true;
-            //                 if_elses.push((cond, block));
-            //                 cond = Expr::Int(1);
-            //                 block = Vec::new();
-            //             }
-            //             Some(Token::EndIf) => {
-            //                 if !is_else {
-            //                     if_elses.push((cond, block));
-            //                     block = Vec::new();
-            //                 }
-            //                 break;
-            //             }
-            //             Some(token) => {
-            //                 block.push(self.parse_stmt(token, lex)?);
-            //             }
-            //             None => break,
-            //         }
-            //     }
+                            if_elses.push((cond, block));
+                            block = Vec::new();
+                            cond = if left.is_empty() {
+                                Expr::Int(1)
+                            } else {
+                                try_nom!(lex, self::expr::expr(self)(left)).1
+                            };
+                        }
+                        Some(Token::Else) => {
+                            is_else = true;
+                            if_elses.push((cond, block));
+                            cond = Expr::Int(1);
+                            block = Vec::new();
+                        }
+                        Some(Token::EndIf) => {
+                            if !is_else {
+                                if_elses.push((cond, block));
+                                block = Vec::new();
+                            }
+                            break;
+                        }
+                        Some(token) => {
+                            block.push(self.parse_stmt(token, lex)?);
+                        }
+                        None => break,
+                    }
+                }
 
-            //     Stmt::If(if_elses, block)
-            // }
+                Stmt::If(if_elses, block)
+            }
             // tok @ (Token::Inc | Token::Dec) => {
             //     let ident = self.replace(take_ident!(lex));
             //     let left = cut_line(lex);
@@ -985,14 +969,20 @@ impl ParserContext {
             //     let i = cut_line(lex);
             //     try_nom!(lex, self::expr::assign_line(self, var)(i)).1
             // }
-            // Token::NormalExprCommand((com, args)) => {
-            //     let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
-            //     Stmt::Command(com, args)
-            // }
-            // Token::NormalExprMethod((meth, args)) => {
-            //     let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
-            //     Stmt::Method(meth, args)
-            // }
+
+            // plain text
+            Token::CommandLine(
+                com @ (BuiltinCommand::Throw | BuiltinCommand::CustomDrawLine),
+                raw,
+            ) => Stmt::Command(com, vec![Expr::str(self.interner, raw)]),
+            Token::CommandLine(com, args) => {
+                let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
+                Stmt::Command(com, args)
+            }
+            Token::MethodLine(meth, args) => {
+                let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
+                Stmt::Method(meth, args)
+            }
             other => error!(lex, format!("[Stmt] Invalid token: {:?}", other)),
         };
 

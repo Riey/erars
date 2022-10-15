@@ -17,7 +17,7 @@ use codespan_reporting::{
     },
 };
 use erars_ast::{StrKey, Value, VariableInfo};
-use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, ErbLexer, ParserContext};
+use erars_compiler::{CompiledFunction, EraConfig, ErbLexer, HeaderInfo, ParserContext};
 use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, TerminalVm, VmContext};
 use hashbrown::HashMap;

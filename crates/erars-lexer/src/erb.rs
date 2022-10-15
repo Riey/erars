@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use erars_ast::{BuiltinCommand, BuiltinMethod, PrintFlags};
+use erars_ast::{Alignment, BeginType, BuiltinCommand, BuiltinMethod, EventType, PrintFlags};
 use once_cell::sync::Lazy;
 use regex::Regex;
 
@@ -67,6 +67,11 @@ pub enum Token<'s> {
     Later,
     PreprocessLine(&'s str),
 
+    Begin(BeginType),
+    Alignment(Alignment),
+    CallEvent(EventType),
+    Times(&'s str),
+
     PrintLine(PrintFlags, PrintType, &'s str),
     Data(&'s str),
     DataForm(&'s str),
@@ -79,6 +84,33 @@ pub enum Token<'s> {
     CallLine(CallJumpInfo, &'s str),
     Catch,
     EndCatch,
+
+    SifLine(&'s str),
+
+    IfLine(&'s str),
+    ElseIf(&'s str),
+    Else,
+    EndIf,
+
+    RepeatLine(&'s str),
+    Rend,
+
+    DoLine,
+    Loop(&'s str),
+
+    WhileLine(&'s str),
+    Wend,
+
+    ForLine(&'s str),
+    Next,
+
+    SelectCaseLine(&'s str),
+    Case(&'s str),
+    CaseElse,
+    EndSelect,
+
+    Continue,
+    Break,
 
     CommandLine(BuiltinCommand, &'s str),
     MethodLine(BuiltinMethod, &'s str),
