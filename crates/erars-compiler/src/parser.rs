@@ -999,112 +999,112 @@ impl ParserContext {
         Ok(StmtWithPos(stmt, first_pos))
     }
 
-    // pub fn parse_and_compile<'s>(
-    //     &self,
-    //     lex: &mut ErbLexer<'s>,
-    // ) -> ParserResult<Vec<CompiledFunction>> {
-    //     let mut out = Vec::with_capacity(1024);
+    pub fn parse_and_compile<'s>(
+        &self,
+        lex: &mut ErbLexer<'s>,
+    ) -> ParserResult<Vec<CompiledFunction>> {
+        let mut out = Vec::with_capacity(1024);
 
-    //     match self.next_token(lex)? {
-    //         Some(Token::At(mut left)) => 'outer: loop {
-    //             self.local_strs.borrow_mut().clear();
-    //             let mut compiler = crate::compiler::Compiler::new();
-    //             let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+        match self.next_token(lex)? {
+            Some(Token::FunctionLine(mut left)) => 'outer: loop {
+                self.local_strs.borrow_mut().clear();
+                let mut compiler = crate::compiler::Compiler::new();
+                let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
 
-    //             let mut infos = Vec::new();
+                let mut infos = Vec::new();
 
-    //             'inner: loop {
-    //                 match self.next_token(lex)? {
-    //                     Some(Token::At(new_left)) => {
-    //                         left = new_left;
+                'inner: loop {
+                    match self.next_token(lex)? {
+                        Some(Token::FunctionLine(new_left)) => {
+                            left = new_left;
 
-    //                         out.push(CompiledFunction {
-    //                             header: FunctionHeader {
-    //                                 name: self.interner.get_or_intern(label),
-    //                                 args,
-    //                                 file_path: self.file_path.clone(),
-    //                                 infos,
-    //                             },
-    //                             goto_labels: compiler.goto_labels,
-    //                             body: compiler.out.into_boxed_slice(),
-    //                         });
+                            out.push(CompiledFunction {
+                                header: FunctionHeader {
+                                    name: self.interner.get_or_intern(label),
+                                    args,
+                                    file_path: self.file_path.clone(),
+                                    infos,
+                                },
+                                goto_labels: compiler.goto_labels,
+                                body: compiler.out.into_boxed_slice(),
+                            });
 
-    //                         break 'inner;
-    //                     }
-    //                     None => {
-    //                         out.push(CompiledFunction {
-    //                             header: FunctionHeader {
-    //                                 name: self.interner.get_or_intern(label),
-    //                                 args,
-    //                                 file_path: self.file_path.clone(),
-    //                                 infos,
-    //                             },
-    //                             goto_labels: compiler.goto_labels,
-    //                             body: compiler.out.into_boxed_slice(),
-    //                         });
+                            break 'inner;
+                        }
+                        None => {
+                            out.push(CompiledFunction {
+                                header: FunctionHeader {
+                                    name: self.interner.get_or_intern(label),
+                                    args,
+                                    file_path: self.file_path.clone(),
+                                    infos,
+                                },
+                                goto_labels: compiler.goto_labels,
+                                body: compiler.out.into_boxed_slice(),
+                            });
 
-    //                         break 'outer;
-    //                     }
-    //                     Some(Token::Function) => {
-    //                         infos.push(FunctionInfo::Function);
-    //                     }
-    //                     Some(Token::FunctionS) => {
-    //                         infos.push(FunctionInfo::FunctionS);
-    //                     }
-    //                     Some(Token::Pri) => {
-    //                         infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
-    //                     }
-    //                     Some(Token::Later) => {
-    //                         infos.push(FunctionInfo::EventFlag(EventFlags::Later));
-    //                     }
-    //                     Some(Token::Single) => {
-    //                         infos.push(FunctionInfo::EventFlag(EventFlags::Single));
-    //                     }
-    //                     Some(Token::Dim(left)) => {
-    //                         let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
-    //                         infos.push(FunctionInfo::Dim(var));
-    //                     }
-    //                     Some(Token::DimS(left)) => {
-    //                         let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
-    //                         self.local_strs.borrow_mut().insert(var.var);
-    //                         infos.push(FunctionInfo::Dim(var));
-    //                     }
-    //                     Some(Token::LocalSize(size)) => {
-    //                         let size = self::expr::const_eval_log_error(
-    //                             self,
-    //                             &try_nom!(lex, self::expr::expr(self)(size)).1,
-    //                         )
-    //                         .to_int()
-    //                         .unwrap();
-    //                         infos.push(FunctionInfo::LocalSize(size as usize));
-    //                     }
-    //                     Some(Token::LocalSSize(size)) => {
-    //                         let size = self::expr::const_eval_log_error(
-    //                             self,
-    //                             &try_nom!(lex, self::expr::expr(self)(size)).1,
-    //                         )
-    //                         .to_int()
-    //                         .unwrap();
-    //                         infos.push(FunctionInfo::LocalSSize(size as usize));
-    //                     }
-    //                     Some(other) => match self.parse_stmt(other, lex) {
-    //                         Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
-    //                             Ok(_) => {}
-    //                             Err(err) => error!(lex, err.to_string()),
-    //                         },
-    //                         Err(err) => {
-    //                             return Err(err);
-    //                         }
-    //                     },
-    //                 }
-    //             }
-    //         },
-    //         Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
-    //         None => {}
-    //     }
+                            break 'outer;
+                        }
+                        Some(Token::Function) => {
+                            infos.push(FunctionInfo::Function);
+                        }
+                        Some(Token::FunctionS) => {
+                            infos.push(FunctionInfo::FunctionS);
+                        }
+                        Some(Token::Pri) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
+                        }
+                        Some(Token::Later) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Later));
+                        }
+                        Some(Token::Single) => {
+                            infos.push(FunctionInfo::EventFlag(EventFlags::Single));
+                        }
+                        Some(Token::Dim(left)) => {
+                            let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
+                            infos.push(FunctionInfo::Dim(var));
+                        }
+                        Some(Token::DimS(left)) => {
+                            let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
+                            self.local_strs.borrow_mut().insert(var.var);
+                            infos.push(FunctionInfo::Dim(var));
+                        }
+                        Some(Token::LocalSize(size)) => {
+                            let size = self::expr::const_eval_log_error(
+                                self,
+                                &try_nom!(lex, self::expr::expr(self)(size)).1,
+                            )
+                            .to_int()
+                            .unwrap();
+                            infos.push(FunctionInfo::LocalSize(size as usize));
+                        }
+                        Some(Token::LocalsSize(size)) => {
+                            let size = self::expr::const_eval_log_error(
+                                self,
+                                &try_nom!(lex, self::expr::expr(self)(size)).1,
+                            )
+                            .to_int()
+                            .unwrap();
+                            infos.push(FunctionInfo::LocalSSize(size as usize));
+                        }
+                        Some(other) => match self.parse_stmt(other, lex) {
+                            Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
+                                Ok(_) => {}
+                                Err(err) => error!(lex, err.to_string()),
+                            },
+                            Err(err) => {
+                                return Err(err);
+                            }
+                        },
+                    }
+                }
+            },
+            Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
+            None => {}
+        }
 
-    //     Ok(out)
-    // }
+        Ok(out)
+    }
 
     pub fn parse<'s>(&self, lex: &mut ErbLexer<'s>) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();

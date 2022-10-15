@@ -148,7 +148,33 @@ fn lex(s: &str) -> Result<Option<Token<'_>>, LexerError> {
     } else if let Some(label) = s.strip_prefix('$') {
         Token::LabelLine(label)
     } else if let Some(header) = s.strip_prefix('#') {
-        todo!()
+        if let Some(dim) = static_regex!(r"^DIM(S)?(.*)$").captures(header) {
+            let body = dim.get(2).unwrap().as_str();
+            if dim.get(1).is_some() {
+                Token::DimS(body)
+            } else {
+                Token::Dim(body)
+            }
+        } else if let Some(localsize) = static_regex!(r"^LOCAL(S)?SIZE(.*)$").captures(header) {
+            let body = localsize.get(2).unwrap().as_str();
+            if localsize.get(1).is_some() {
+                Token::LocalsSize(body)
+            } else {
+                Token::LocalSize(body)
+            }
+        } else if header.eq_ignore_ascii_case("PRI") {
+            Token::Pri
+        } else if header.eq_ignore_ascii_case("LATER") {
+            Token::Later
+        } else if header.eq_ignore_ascii_case("SINGLE") {
+            Token::Single
+        } else if header.eq_ignore_ascii_case("FUNCTION") {
+            Token::Function
+        } else if header.eq_ignore_ascii_case("FUNCTIONS") {
+            Token::FunctionS
+        } else {
+            return Err(LexerError::UnknownCode);
+        }
     } else if let Some(pp) = s.strip_prefix("[[") {
         if let Some(pp) = pp.strip_suffix("]]") {
             Token::PreprocessLine(pp.trim())
