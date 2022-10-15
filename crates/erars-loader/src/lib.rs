@@ -17,7 +17,7 @@ use codespan_reporting::{
     },
 };
 use erars_ast::{StrKey, Value, VariableInfo};
-use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
+use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, ErbLexer, ParserContext};
 use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, TerminalVm, VmContext};
 use hashbrown::HashMap;
@@ -378,7 +378,7 @@ pub fn run_script(
 
                 log::debug!("Parse And Compile {}", erb.display());
 
-                let program = ctx.parse_and_compile(&mut Lexer::new(source.as_str()));
+                let program = ctx.parse_and_compile(&mut ErbLexer::new(source.as_str()));
 
                 match program {
                     Ok(p) => p,
