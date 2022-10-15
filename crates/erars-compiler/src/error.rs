@@ -1,11 +1,9 @@
-use std::fmt;
-
 pub type ParserResult<T> = Result<T, ParserError>;
 pub type CompileResult<T> = Result<T, CompileError>;
 
 pub type ParserError = (String, std::ops::Range<usize>);
 
-#[derive(thiserror::Error)]
+#[derive(thiserror::Error, Debug)]
 pub enum CompileError {
     #[error("중복된 GOTO 라벨입니다.")]
     DuplicatedGotoLabel,
@@ -15,10 +13,4 @@ pub enum CompileError {
     BreakNotLoop,
     #[error("FOR문의 형식이 잘못됐습니다.")]
     InvalidFor,
-}
-
-impl fmt::Debug for CompileError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self)
-    }
 }

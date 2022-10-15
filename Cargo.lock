@@ -616,6 +616,7 @@ dependencies = [
  "criterion",
  "erars-ast",
  "erars-compiler",
+ "erars-lexer",
  "erars-ui",
  "erars-vm",
  "flexi_logger",
@@ -675,7 +676,9 @@ dependencies = [
  "nom",
  "num-derive",
  "num-traits",
+ "once_cell",
  "option_set",
+ "regex",
  "serde",
  "static_assertions",
  "strum",
@@ -719,10 +722,13 @@ dependencies = [
  "erars-ast",
  "hashbrown 0.12.3",
  "logos",
+ "once_cell",
  "option_set",
+ "regex",
  "serde",
  "smol_str",
  "strum",
+ "thiserror",
 ]
 
 [[package]]

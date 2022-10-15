@@ -5,6 +5,7 @@ use strum::{Display, EnumString, IntoStaticStr};
     Display, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr, EnumString,
 )]
 #[strum(serialize_all = "UPPERCASE")]
+#[strum(ascii_case_insensitive)]
 #[serde(rename_all = "UPPERCASE")]
 #[allow(non_camel_case_types)]
 pub enum BuiltinMethod {
@@ -79,6 +80,7 @@ pub enum BuiltinMethod {
 
 #[derive(Display, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr)]
 #[strum(serialize_all = "UPPERCASE")]
+#[strum(ascii_case_insensitive)]
 #[serde(rename_all = "UPPERCASE")]
 #[allow(non_camel_case_types)]
 pub enum BuiltinCommand {

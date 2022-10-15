@@ -8,7 +8,7 @@ use erars_ast::{
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
-use logos::{internal::LexerInternal, Lexer};
+use logos::Lexer;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -21,30 +21,13 @@ use strum::{Display, EnumString};
 
 pub use crate::error::{ParserError, ParserResult};
 use crate::CompiledFunction;
+pub use erars_lexer::ErbLexer;
 pub use expr::normal_form_str;
 
 macro_rules! error {
     ($lex:expr, $msg:expr) => {{
         return Err((String::from($msg), $lex.span()));
     }};
-}
-
-macro_rules! take_ident {
-    ($ty:ty, $lex:expr) => {
-        match $lex.next() {
-            Some(Token::Ident(ident)) => match ident.parse::<$ty>() {
-                Ok(ret) => ret,
-                Err(_) => error!($lex, format!("Unknown ident: {}", ident)),
-            },
-            other => error!($lex, format!("Expect ident, found: {:?}", other)),
-        }
-    };
-    ($lex:expr) => {
-        match $lex.next() {
-            Some(Token::Ident(ident)) => ident,
-            other => error!($lex, format!("Expect ident, found: {:?}", other)),
-        }
-    };
 }
 
 macro_rules! try_nom {
@@ -620,7 +603,6 @@ pub struct ParserContext {
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
     pub file_path: StrKey,
-    pub line: Cell<u32>,
 }
 
 impl Default for ParserContext {
@@ -641,32 +623,27 @@ impl ParserContext {
             local_strs: RefCell::default(),
             is_arg: Cell::new(false),
             ban_percent: Cell::new(false),
-            line: Cell::new(0),
         }
     }
 
-    fn current_pos(&self) -> ScriptPosition {
+    fn current_pos(&self, lex: &mut ErbLexer) -> ScriptPosition {
         ScriptPosition {
-            line: self.line.get(),
+            line: lex.current_line(),
         }
     }
 
-    fn next_token<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Option<Token<'s>>> {
+    fn next_token<'s>(&self, lex: &mut ErbLexer<'s>) -> ParserResult<Option<Token<'s>>> {
         loop {
-            match lex.next() {
-                Some(Token::Preprocess("[SKIPSTART]")) => loop {
-                    match lex.next() {
-                        Some(Token::Preprocess("[SKIPEND]")) => break,
-                        Some(Token::Newline) => {
-                            self.line.set(self.line.get() + 1);
-                        }
+            match lex.next_token().map_err(|err| (err.0.to_string(), err.1))? {
+                Some(Token::PreprocessLine("[SKIPSTART]")) => loop {
+                    match lex.next_token().map_err(|err| (err.0.to_string(), err.1))? {
+                        Some(Token::PreprocessLine("[SKIPEND]")) => break,
                         None => error!(lex, "[SKIPSTART]가 [SKIPEND]없이 끝났습니다."),
                         _ => {}
                     }
                 },
-                Some(Token::Preprocess(_)) => {}
-                Some(Token::Newline) => {
-                    self.line.set(self.line.get() + 1);
+                Some(Token::PreprocessLine(pp)) => {
+                    log::warn!("Unknown PreprocessLine {pp}");
                 }
                 Some(tok) => break Ok(Some(tok)),
                 None => break Ok(None),
@@ -698,38 +675,37 @@ impl ParserContext {
     pub fn parse_stmt<'s>(
         &self,
         first: Token<'s>,
-        lex: &mut Lexer<'s, Token<'s>>,
+        lex: &mut ErbLexer<'s>,
     ) -> ParserResult<StmtWithPos> {
-        let first_pos = self.current_pos();
+        let first_pos = self.current_pos(lex);
 
         let stmt = match first {
-            Token::DirectStmt(stmt) => stmt,
-            Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
-            Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
-            Token::CallEvent => Stmt::CallEvent(take_ident!(EventType, lex)),
+            // Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
+            // Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
+            // Token::CallEvent => Stmt::CallEvent(take_ident!(EventType, lex)),
             Token::LabelLine(label) => Stmt::Label(self.interner.get_or_intern(label)),
-            Token::StrFormMethod((method, left)) => {
-                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Method(method, vec![form])
-            }
-            Token::StrFormCommand((com, left)) => {
-                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Command(com, vec![form])
-            }
-            Token::CustomDrawLine(custom) => Stmt::Command(
-                BuiltinCommand::CustomDrawLine,
-                vec![Expr::str(&self.interner, custom)],
-            ),
-            Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
-            Token::Throw(left) => Stmt::Command(
-                BuiltinCommand::Throw,
-                vec![try_nom!(lex, self::expr::normal_form_str(self)(left)).1],
-            ),
+            // Token::StrFormMethod((method, left)) => {
+            //     let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
+            //     Stmt::Method(method, vec![form])
+            // }
+            // Token::StrFormCommand((com, left)) => {
+            //     let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
+            //     Stmt::Command(com, vec![form])
+            // }
+            // Token::CustomDrawLine(custom) => Stmt::Command(
+            //     BuiltinCommand::CustomDrawLine,
+            //     vec![Expr::str(&self.interner, custom)],
+            // ),
+            // Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
+            // Token::Throw(left) => Stmt::Command(
+            //     BuiltinCommand::Throw,
+            //     vec![try_nom!(lex, self::expr::normal_form_str(self)(left)).1],
+            // ),
             Token::ReuseLastLine(left) => Stmt::ReuseLastLine(self.interner.get_or_intern(left)),
-            Token::Print((flags, PrintType::Plain, form)) => {
+            Token::PrintLine(flags, PrintType::Plain, form) => {
                 Stmt::Print(flags, Expr::str(&self.interner, form))
             }
-            Token::Print((flags, PrintType::Data, form)) => {
+            Token::PrintLine(flags, PrintType::Data, form) => {
                 let form = form.trim();
                 let cond = if form.is_empty() {
                     None
@@ -771,23 +747,23 @@ impl ParserContext {
 
                 Stmt::PrintData(flags, cond, list)
             }
-            Token::Print((flags, PrintType::Form, form)) => {
+            Token::PrintLine(flags, PrintType::Form, form) => {
                 let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(form));
                 Stmt::Print(flags, form)
             }
-            Token::Print((flags, PrintType::S, form)) => {
+            Token::PrintLine(flags, PrintType::S, form) => {
                 let (_, s) = try_nom!(lex, self::expr::expr(self)(form));
                 Stmt::Print(flags, s)
             }
-            Token::Print((flags, PrintType::FormS, form)) => {
+            Token::PrintLine(flags, PrintType::FormS, form) => {
                 let (_, s) = try_nom!(lex, self::expr::expr(self)(form));
                 Stmt::PrintFormS(flags, s)
             }
-            Token::Print((flags, PrintType::V, form)) => {
+            Token::PrintLine(flags, PrintType::V, form) => {
                 let (_, s) = try_nom!(lex, self::expr::expr_list(self)(form));
                 Stmt::PrintList(flags, s)
             }
-            Token::CallJump((info, args)) => {
+            Token::CallLine(info, args) => {
                 let (name, args) =
                     try_nom!(lex, self::expr::call_jump_line(self, info.is_form)(args)).1;
                 let mut try_body = Vec::new();
@@ -837,304 +813,304 @@ impl ParserContext {
                     },
                 }
             }
-            Token::Sif(cond) => {
-                let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
-                let first = match self.next_token(lex)? {
-                    Some(first) => first,
-                    None => error!(lex, "Unexpected EOF after SIF"),
-                };
-                let body = self.parse_stmt(first, lex)?;
+            // Token::Sif(cond) => {
+            //     let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
+            //     let first = match self.next_token(lex)? {
+            //         Some(first) => first,
+            //         None => error!(lex, "Unexpected EOF after SIF"),
+            //     };
+            //     let body = self.parse_stmt(first, lex)?;
 
-                Stmt::Sif(cond, Box::new(body))
-            }
-            Token::SelectCase(cond) => {
-                let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
-                let mut has_else = false;
-                let mut body = Vec::new();
-                let mut cases: Vec<(_, Vec<StmtWithPos>)> = Vec::new();
+            //     Stmt::Sif(cond, Box::new(body))
+            // }
+            // Token::SelectCase(cond) => {
+            //     let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
+            //     let mut has_else = false;
+            //     let mut body = Vec::new();
+            //     let mut cases: Vec<(_, Vec<StmtWithPos>)> = Vec::new();
 
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Case(case)) => {
-                            if let Some((_, case)) = cases.last_mut() {
-                                *case = mem::take(&mut body);
-                            }
-                            let case = try_nom!(lex, self::expr::case_line(self)(case)).1;
-                            cases.push((case, Vec::new()));
-                        }
-                        Some(Token::CaseElse) => {
-                            if let Some((_, case)) = cases.last_mut() {
-                                *case = mem::take(&mut body);
-                            }
-                            has_else = true;
-                        }
-                        Some(Token::EndSelect) => break,
-                        Some(tok) => {
-                            body.push(self.parse_stmt(tok, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after SELECTCASE"),
-                    }
-                }
+            //     loop {
+            //         match self.next_token(lex)? {
+            //             Some(Token::Case(case)) => {
+            //                 if let Some((_, case)) = cases.last_mut() {
+            //                     *case = mem::take(&mut body);
+            //                 }
+            //                 let case = try_nom!(lex, self::expr::case_line(self)(case)).1;
+            //                 cases.push((case, Vec::new()));
+            //             }
+            //             Some(Token::CaseElse) => {
+            //                 if let Some((_, case)) = cases.last_mut() {
+            //                     *case = mem::take(&mut body);
+            //                 }
+            //                 has_else = true;
+            //             }
+            //             Some(Token::EndSelect) => break,
+            //             Some(tok) => {
+            //                 body.push(self.parse_stmt(tok, lex)?);
+            //             }
+            //             None => error!(lex, "Unexpected EOF after SELECTCASE"),
+            //         }
+            //     }
 
-                if has_else {
-                    Stmt::SelectCase(cond, cases, Some(body))
-                } else {
-                    if let Some(last) = cases.last_mut() {
-                        last.1 = body;
-                    }
-                    Stmt::SelectCase(cond, cases, None)
-                }
-            }
-            Token::For(left) => {
-                let (var, init, end, step) = try_nom!(lex, self::expr::for_line(self)(left)).1;
-                let mut body = Vec::new();
+            //     if has_else {
+            //         Stmt::SelectCase(cond, cases, Some(body))
+            //     } else {
+            //         if let Some(last) = cases.last_mut() {
+            //             last.1 = body;
+            //         }
+            //         Stmt::SelectCase(cond, cases, None)
+            //     }
+            // }
+            // Token::For(left) => {
+            //     let (var, init, end, step) = try_nom!(lex, self::expr::for_line(self)(left)).1;
+            //     let mut body = Vec::new();
 
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Next) => {
-                            break Stmt::For(var, Box::new((init, end, step)), body)
-                        }
-                        Some(other) => {
-                            body.push(self.parse_stmt(other, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after FOR"),
-                    }
-                }
-            }
-            Token::While(left) => {
-                let cond = try_nom!(lex, self::expr::expr(self)(left)).1;
-                let mut body = Vec::new();
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Wend) => {
-                            break Stmt::While(cond, body);
-                        }
-                        Some(tok) => {
-                            body.push(self.parse_stmt(tok, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after DO"),
-                    }
-                }
-            }
-            Token::Do => {
-                let mut body = Vec::new();
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Loop(left)) => {
-                            break Stmt::Do(try_nom!(lex, self::expr::expr(self)(left)).1, body);
-                        }
-                        Some(tok) => {
-                            body.push(self.parse_stmt(tok, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after DO"),
-                    }
-                }
-            }
-            Token::Repeat(left) => {
-                let arg = try_nom!(lex, self::expr::expr(self)(left)).1;
-                let mut body = Vec::new();
+            //     loop {
+            //         match self.next_token(lex)? {
+            //             Some(Token::Next) => {
+            //                 break Stmt::For(var, Box::new((init, end, step)), body)
+            //             }
+            //             Some(other) => {
+            //                 body.push(self.parse_stmt(other, lex)?);
+            //             }
+            //             None => error!(lex, "Unexpected EOF after FOR"),
+            //         }
+            //     }
+            // }
+            // Token::While(left) => {
+            //     let cond = try_nom!(lex, self::expr::expr(self)(left)).1;
+            //     let mut body = Vec::new();
+            //     loop {
+            //         match self.next_token(lex)? {
+            //             Some(Token::Wend) => {
+            //                 break Stmt::While(cond, body);
+            //             }
+            //             Some(tok) => {
+            //                 body.push(self.parse_stmt(tok, lex)?);
+            //             }
+            //             None => error!(lex, "Unexpected EOF after DO"),
+            //         }
+            //     }
+            // }
+            // Token::Do => {
+            //     let mut body = Vec::new();
+            //     loop {
+            //         match self.next_token(lex)? {
+            //             Some(Token::Loop(left)) => {
+            //                 break Stmt::Do(try_nom!(lex, self::expr::expr(self)(left)).1, body);
+            //             }
+            //             Some(tok) => {
+            //                 body.push(self.parse_stmt(tok, lex)?);
+            //             }
+            //             None => error!(lex, "Unexpected EOF after DO"),
+            //         }
+            //     }
+            // }
+            // Token::Repeat(left) => {
+            //     let arg = try_nom!(lex, self::expr::expr(self)(left)).1;
+            //     let mut body = Vec::new();
 
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Rend) => break Stmt::Repeat(arg, body),
-                        Some(other) => {
-                            body.push(self.parse_stmt(other, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after FOR"),
-                    }
-                }
-            }
-            Token::If(left) => {
-                let mut is_else = false;
-                let mut cond = try_nom!(lex, self::expr::expr(self)(left)).1;
-                let mut block = Vec::new();
-                let mut if_elses = Vec::new();
+            //     loop {
+            //         match self.next_token(lex)? {
+            //             Some(Token::Rend) => break Stmt::Repeat(arg, body),
+            //             Some(other) => {
+            //                 body.push(self.parse_stmt(other, lex)?);
+            //             }
+            //             None => error!(lex, "Unexpected EOF after FOR"),
+            //         }
+            //     }
+            // }
+            // Token::If(left) => {
+            //     let mut is_else = false;
+            //     let mut cond = try_nom!(lex, self::expr::expr(self)(left)).1;
+            //     let mut block = Vec::new();
+            //     let mut if_elses = Vec::new();
 
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::ElseIf(left)) => {
-                            let left = left.trim_start_matches(' ');
+            //     loop {
+            //         match self.next_token(lex)? {
+            //             Some(Token::ElseIf(left)) => {
+            //                 let left = left.trim_start_matches(' ');
 
-                            if_elses.push((cond, block));
-                            block = Vec::new();
-                            cond = if left.is_empty() {
-                                Expr::Int(1)
-                            } else {
-                                try_nom!(lex, self::expr::expr(self)(left)).1
-                            };
-                        }
-                        Some(Token::Else) => {
-                            is_else = true;
-                            if_elses.push((cond, block));
-                            cond = Expr::Int(1);
-                            block = Vec::new();
-                        }
-                        Some(Token::EndIf) => {
-                            if !is_else {
-                                if_elses.push((cond, block));
-                                block = Vec::new();
-                            }
-                            break;
-                        }
-                        Some(token) => {
-                            block.push(self.parse_stmt(token, lex)?);
-                        }
-                        None => break,
-                    }
-                }
+            //                 if_elses.push((cond, block));
+            //                 block = Vec::new();
+            //                 cond = if left.is_empty() {
+            //                     Expr::Int(1)
+            //                 } else {
+            //                     try_nom!(lex, self::expr::expr(self)(left)).1
+            //                 };
+            //             }
+            //             Some(Token::Else) => {
+            //                 is_else = true;
+            //                 if_elses.push((cond, block));
+            //                 cond = Expr::Int(1);
+            //                 block = Vec::new();
+            //             }
+            //             Some(Token::EndIf) => {
+            //                 if !is_else {
+            //                     if_elses.push((cond, block));
+            //                     block = Vec::new();
+            //                 }
+            //                 break;
+            //             }
+            //             Some(token) => {
+            //                 block.push(self.parse_stmt(token, lex)?);
+            //             }
+            //             None => break,
+            //         }
+            //     }
 
-                Stmt::If(if_elses, block)
-            }
-            tok @ (Token::Inc | Token::Dec) => {
-                let ident = self.replace(take_ident!(lex));
-                let left = cut_line(lex);
-                let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(self, left));
-                let args = try_nom!(lex, self::expr::variable_arg(self, &ident)(left)).1;
-                let var = Variable {
-                    var: self.interner.get_or_intern(ident),
-                    func_extern,
-                    args,
-                };
-                Stmt::Assign(
-                    var,
-                    Some(if tok == Token::Inc {
-                        BinaryOperator::Add
-                    } else {
-                        BinaryOperator::Sub
-                    }),
-                    Expr::Int(1),
-                )
-            }
-            Token::Ident(var) => {
-                let i = cut_line(lex);
-                try_nom!(lex, self::expr::assign_line(self, var)(i)).1
-            }
-            Token::NormalExprCommand((com, args)) => {
-                let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
-                Stmt::Command(com, args)
-            }
-            Token::NormalExprMethod((meth, args)) => {
-                let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
-                Stmt::Method(meth, args)
-            }
+            //     Stmt::If(if_elses, block)
+            // }
+            // tok @ (Token::Inc | Token::Dec) => {
+            //     let ident = self.replace(take_ident!(lex));
+            //     let left = cut_line(lex);
+            //     let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(self, left));
+            //     let args = try_nom!(lex, self::expr::variable_arg(self, &ident)(left)).1;
+            //     let var = Variable {
+            //         var: self.interner.get_or_intern(ident),
+            //         func_extern,
+            //         args,
+            //     };
+            //     Stmt::Assign(
+            //         var,
+            //         Some(if tok == Token::Inc {
+            //             BinaryOperator::Add
+            //         } else {
+            //             BinaryOperator::Sub
+            //         }),
+            //         Expr::Int(1),
+            //     )
+            // }
+            // Token::Ident(var) => {
+            //     let i = cut_line(lex);
+            //     try_nom!(lex, self::expr::assign_line(self, var)(i)).1
+            // }
+            // Token::NormalExprCommand((com, args)) => {
+            //     let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
+            //     Stmt::Command(com, args)
+            // }
+            // Token::NormalExprMethod((meth, args)) => {
+            //     let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
+            //     Stmt::Method(meth, args)
+            // }
             other => error!(lex, format!("[Stmt] Invalid token: {:?}", other)),
         };
 
         Ok(StmtWithPos(stmt, first_pos))
     }
 
-    pub fn parse_and_compile<'s>(
-        &self,
-        lex: &mut Lexer<'s, Token<'s>>,
-    ) -> ParserResult<Vec<CompiledFunction>> {
-        let mut out = Vec::with_capacity(1024);
+    // pub fn parse_and_compile<'s>(
+    //     &self,
+    //     lex: &mut ErbLexer<'s>,
+    // ) -> ParserResult<Vec<CompiledFunction>> {
+    //     let mut out = Vec::with_capacity(1024);
 
-        match self.next_token(lex)? {
-            Some(Token::At(mut left)) => 'outer: loop {
-                self.local_strs.borrow_mut().clear();
-                let mut compiler = crate::compiler::Compiler::new();
-                let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+    //     match self.next_token(lex)? {
+    //         Some(Token::At(mut left)) => 'outer: loop {
+    //             self.local_strs.borrow_mut().clear();
+    //             let mut compiler = crate::compiler::Compiler::new();
+    //             let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
 
-                let mut infos = Vec::new();
+    //             let mut infos = Vec::new();
 
-                'inner: loop {
-                    match self.next_token(lex)? {
-                        Some(Token::At(new_left)) => {
-                            left = new_left;
+    //             'inner: loop {
+    //                 match self.next_token(lex)? {
+    //                     Some(Token::At(new_left)) => {
+    //                         left = new_left;
 
-                            out.push(CompiledFunction {
-                                header: FunctionHeader {
-                                    name: self.interner.get_or_intern(label),
-                                    args,
-                                    file_path: self.file_path.clone(),
-                                    infos,
-                                },
-                                goto_labels: compiler.goto_labels,
-                                body: compiler.out.into_boxed_slice(),
-                            });
+    //                         out.push(CompiledFunction {
+    //                             header: FunctionHeader {
+    //                                 name: self.interner.get_or_intern(label),
+    //                                 args,
+    //                                 file_path: self.file_path.clone(),
+    //                                 infos,
+    //                             },
+    //                             goto_labels: compiler.goto_labels,
+    //                             body: compiler.out.into_boxed_slice(),
+    //                         });
 
-                            break 'inner;
-                        }
-                        None => {
-                            out.push(CompiledFunction {
-                                header: FunctionHeader {
-                                    name: self.interner.get_or_intern(label),
-                                    args,
-                                    file_path: self.file_path.clone(),
-                                    infos,
-                                },
-                                goto_labels: compiler.goto_labels,
-                                body: compiler.out.into_boxed_slice(),
-                            });
+    //                         break 'inner;
+    //                     }
+    //                     None => {
+    //                         out.push(CompiledFunction {
+    //                             header: FunctionHeader {
+    //                                 name: self.interner.get_or_intern(label),
+    //                                 args,
+    //                                 file_path: self.file_path.clone(),
+    //                                 infos,
+    //                             },
+    //                             goto_labels: compiler.goto_labels,
+    //                             body: compiler.out.into_boxed_slice(),
+    //                         });
 
-                            break 'outer;
-                        }
-                        Some(Token::Function) => {
-                            infos.push(FunctionInfo::Function);
-                        }
-                        Some(Token::FunctionS) => {
-                            infos.push(FunctionInfo::FunctionS);
-                        }
-                        Some(Token::Pri) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
-                        }
-                        Some(Token::Later) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Later));
-                        }
-                        Some(Token::Single) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Single));
-                        }
-                        Some(Token::Dim(left)) => {
-                            let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
-                            infos.push(FunctionInfo::Dim(var));
-                        }
-                        Some(Token::DimS(left)) => {
-                            let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
-                            self.local_strs.borrow_mut().insert(var.var);
-                            infos.push(FunctionInfo::Dim(var));
-                        }
-                        Some(Token::LocalSize(size)) => {
-                            let size = self::expr::const_eval_log_error(
-                                self,
-                                &try_nom!(lex, self::expr::expr(self)(size)).1,
-                            )
-                            .to_int()
-                            .unwrap();
-                            infos.push(FunctionInfo::LocalSize(size as usize));
-                        }
-                        Some(Token::LocalSSize(size)) => {
-                            let size = self::expr::const_eval_log_error(
-                                self,
-                                &try_nom!(lex, self::expr::expr(self)(size)).1,
-                            )
-                            .to_int()
-                            .unwrap();
-                            infos.push(FunctionInfo::LocalSSize(size as usize));
-                        }
-                        Some(other) => match self.parse_stmt(other, lex) {
-                            Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
-                                Ok(_) => {}
-                                Err(err) => error!(lex, err.to_string()),
-                            },
-                            Err(err) => {
-                                return Err(err);
-                            }
-                        },
-                    }
-                }
-            },
-            Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
-            None => {}
-        }
+    //                         break 'outer;
+    //                     }
+    //                     Some(Token::Function) => {
+    //                         infos.push(FunctionInfo::Function);
+    //                     }
+    //                     Some(Token::FunctionS) => {
+    //                         infos.push(FunctionInfo::FunctionS);
+    //                     }
+    //                     Some(Token::Pri) => {
+    //                         infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
+    //                     }
+    //                     Some(Token::Later) => {
+    //                         infos.push(FunctionInfo::EventFlag(EventFlags::Later));
+    //                     }
+    //                     Some(Token::Single) => {
+    //                         infos.push(FunctionInfo::EventFlag(EventFlags::Single));
+    //                     }
+    //                     Some(Token::Dim(left)) => {
+    //                         let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
+    //                         infos.push(FunctionInfo::Dim(var));
+    //                     }
+    //                     Some(Token::DimS(left)) => {
+    //                         let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
+    //                         self.local_strs.borrow_mut().insert(var.var);
+    //                         infos.push(FunctionInfo::Dim(var));
+    //                     }
+    //                     Some(Token::LocalSize(size)) => {
+    //                         let size = self::expr::const_eval_log_error(
+    //                             self,
+    //                             &try_nom!(lex, self::expr::expr(self)(size)).1,
+    //                         )
+    //                         .to_int()
+    //                         .unwrap();
+    //                         infos.push(FunctionInfo::LocalSize(size as usize));
+    //                     }
+    //                     Some(Token::LocalSSize(size)) => {
+    //                         let size = self::expr::const_eval_log_error(
+    //                             self,
+    //                             &try_nom!(lex, self::expr::expr(self)(size)).1,
+    //                         )
+    //                         .to_int()
+    //                         .unwrap();
+    //                         infos.push(FunctionInfo::LocalSSize(size as usize));
+    //                     }
+    //                     Some(other) => match self.parse_stmt(other, lex) {
+    //                         Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
+    //                             Ok(_) => {}
+    //                             Err(err) => error!(lex, err.to_string()),
+    //                         },
+    //                         Err(err) => {
+    //                             return Err(err);
+    //                         }
+    //                     },
+    //                 }
+    //             }
+    //         },
+    //         Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
+    //         None => {}
+    //     }
 
-        Ok(out)
-    }
+    //     Ok(out)
+    // }
 
-    pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Vec<Function>> {
+    pub fn parse<'s>(&self, lex: &mut ErbLexer<'s>) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();
 
         match self.next_token(lex)? {
-            Some(Token::At(mut left)) => 'outer: loop {
+            Some(Token::FunctionLine(mut left)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
                 let mut body = Vec::new();
                 let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
@@ -1143,7 +1119,7 @@ impl ParserContext {
 
                 'inner: loop {
                     match self.next_token(lex)? {
-                        Some(Token::At(new_left)) => {
+                        Some(Token::FunctionLine(new_left)) => {
                             left = new_left;
 
                             out.push(Function {
@@ -1204,7 +1180,7 @@ impl ParserContext {
                             .unwrap();
                             infos.push(FunctionInfo::LocalSize(size as usize));
                         }
-                        Some(Token::LocalSSize(size)) => {
+                        Some(Token::LocalsSize(size)) => {
                             let size = self::expr::const_eval_log_error(
                                 self,
                                 &try_nom!(lex, self::expr::expr(self)(size)).1,
@@ -1232,7 +1208,7 @@ impl ParserContext {
 
 impl ParserContext {
     pub fn parse_program_str<'s>(&self, s: &'s str) -> ParserResult<Vec<Function>> {
-        self.parse(&mut Lexer::new(s))
+        self.parse(&mut ErbLexer::new(s))
     }
 
     pub fn parse_function_str<'s>(&self, s: &'s str) -> ParserResult<Function> {
@@ -1240,12 +1216,12 @@ impl ParserContext {
     }
 
     pub fn parse_expr_str<'s>(&self, s: &'s str) -> ParserResult<Expr> {
-        let lex = Lexer::<Token<'s>>::new(s);
+        let lex = ErbLexer::new(s);
         Ok(try_nom!(lex, self::expr::expr(self)(s)).1)
     }
 
     pub fn parse_body_str<'s>(&self, s: &'s str) -> ParserResult<Vec<StmtWithPos>> {
-        let mut lex = Lexer::<Token<'s>>::new(s);
+        let mut lex = ErbLexer::new(s);
         let mut body = Vec::new();
 
         loop {
@@ -1259,15 +1235,8 @@ impl ParserContext {
     }
 
     pub fn parse_stmt_str<'s>(&self, s: &'s str) -> ParserResult<StmtWithPos> {
-        let mut lex = Lexer::new(s);
+        let mut lex = ErbLexer::new(s);
         let first = self.next_token(&mut lex)?.unwrap();
         self.parse_stmt(first, &mut lex)
     }
-}
-
-fn cut_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
-    let i = lex.remainder();
-    let l = i.split_once('\n').map(|(l, _)| l).unwrap_or(i);
-    lex.bump_unchecked(l.len());
-    l
 }

@@ -6,6 +6,7 @@ use strum::{Display, EnumString, IntoStaticStr};
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, IntoStaticStr, Serialize, Deserialize,
 )]
+#[strum(ascii_case_insensitive)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum BuiltinVariable {
     AblName,
