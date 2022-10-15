@@ -48,7 +48,7 @@ pub struct SerializableVariableStorage {
     local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SerializableGlobalVariableStorage {
     pub code: u32,
     pub version: u32,

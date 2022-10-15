@@ -6,7 +6,7 @@ use erars_ast::{BeginType, EventType, ScriptPosition, StrKey, Value, VariableInf
 use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::variable::StrKeyLike;
-use crate::{ArgVec, SystemState, VariableStorage, VmVariable};
+use crate::{ArgVec, SaveLoadManager, SystemState, VariableStorage, VmVariable};
 
 use super::UniformVariable;
 
@@ -22,6 +22,7 @@ pub struct VmContext {
     pub var: VariableStorage,
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
+    pub save_manager: Box<dyn SaveLoadManager>,
 
     state: Vec<StateCallStack>,
     /// For NOSKIP/ENDNOSKIP
@@ -39,9 +40,14 @@ pub struct VmContext {
 }
 
 impl VmContext {
-    pub fn new(header_info: Arc<HeaderInfo>, config: Arc<EraConfig>) -> Self {
+    pub fn new(
+        header_info: Arc<HeaderInfo>,
+        config: Arc<EraConfig>,
+        save_manager: Box<dyn SaveLoadManager>,
+    ) -> Self {
         let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
+            save_manager,
             header_info,
             state: vec![StateCallStack {
                 state: (BeginType::Title.into()),

@@ -736,6 +736,7 @@ dependencies = [
  "erars-ast",
  "erars-bytecode",
  "erars-compiler",
+ "erars-saveload-fs",
  "erars-ui",
  "erars-vm",
  "glob",
@@ -746,6 +747,17 @@ dependencies = [
  "rmp-serde",
  "serde_yaml",
  "unicode-bom",
+]
+
+[[package]]
+name = "erars-saveload-fs"
+version = "0.1.0"
+dependencies = [
+ "erars-vm",
+ "flate2",
+ "log",
+ "rayon",
+ "rmp-serde",
 ]
 
 [[package]]
@@ -820,6 +832,18 @@ dependencies = [
  "tinyvec",
  "twoway",
  "unicode-width",
+]
+
+[[package]]
+name = "erars-wasm"
+version = "0.1.0"
+dependencies = [
+ "erars-ast",
+ "erars-compiler",
+ "erars-loader",
+ "erars-ui",
+ "erars-vm",
+ "serde_json",
 ]
 
 [[package]]
@@ -1706,9 +1730,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.85"
+version = "1.0.86"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e55a28e3aaef9d5ce0506d0a14dbba8054ddc7e499ef522dd8b26859ec9d4a44"
+checksum = "41feea4228a6f1cd09ec7a3593a682276702cd67b5273544757dae23c096f074"
 dependencies = [
  "itoa",
  "ryu",

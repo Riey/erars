@@ -1,23 +1,15 @@
-use crate::variable::KnownVariableNames::*;
+use crate::{variable::KnownVariableNames::*, SaveList};
 use anyhow::{bail, Result};
 use erars_ast::{BeginType, EventType};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
-use hashbrown::HashMap;
-#[cfg(feature = "multithread")]
-use rayon::prelude::*;
 
 use crate::{variable::SerializableVariableStorage, TerminalVm, VmContext, Workflow};
 
 #[derive(strum::Display, Debug, Clone, derivative::Derivative)]
 #[derivative(PartialEq, Eq)]
 pub enum SystemState {
-    LoadGame(
-        #[derivative(PartialEq = "ignore")] Option<HashMap<usize, SerializableVariableStorage>>,
-    ),
-    SaveGame(
-        #[derivative(PartialEq = "ignore")] Option<HashMap<usize, SerializableVariableStorage>>,
-        Option<usize>,
-    ),
+    LoadGame(#[derivative(PartialEq = "ignore")] SaveList),
+    SaveGame(i64, #[derivative(PartialEq = "ignore")] SaveList),
     LoadData(
         i64,
         #[derivative(PartialEq = "ignore")] Option<SerializableVariableStorage>,
@@ -333,35 +325,28 @@ impl SystemState {
                     _ => ret(),
                 }
             }
-            SaveGame(savs, idx) => {
+            SaveGame(idx, savs) => {
                 match phase {
                     0 => {
-                        let new_savs = load_savs(vm, ctx);
-                        print_sav_data_list(&new_savs, tx);
-                        *savs = Some(new_savs);
+                        print_sav_data_list(&savs, tx);
                         input_int(tx)
                     }
-                    1 => {
-                        let savs = savs.as_mut().unwrap();
-                        match ctx.pop_int()? {
-                            100 => return Ok(ret()),
-                            i if i >= 0 && i < SAVE_COUNT as i64 => {
-                                *idx = Some(i as usize);
-                                if savs.contains_key(&(i as usize)) {
-                                    tx.print_line(format!("SAVE {i} already exists. Overwrite?"));
-                                    tx.print_line("[0] Yes [1] No".into());
-                                    input_int(tx)
-                                } else {
-                                    *phase = 2;
-                                    None
-                                }
-                            }
-                            _ => {
-                                *phase = 0;
+                    1 => match ctx.pop_int()? {
+                        100 => return Ok(ret()),
+                        i if i >= 0 && i < SAVE_COUNT as i64 => {
+                            *idx = i;
+                            if savs.contains_key(&(i as u32)) {
+                                tx.print_line(format!("SAVE {i} already exists. Overwrite?"));
+                                tx.print_line("[0] Yes [1] No".into());
                                 input_int(tx)
+                            } else {
+                                return Ok(None);
                             }
                         }
-                    }
+                        _ => {
+                            return Ok(input_int(tx));
+                        }
+                    },
                     2 => {
                         match ctx.pop_int()? {
                             // YES
@@ -384,38 +369,37 @@ impl SystemState {
                     4 => {
                         ctx.put_form_enabled = false;
                         let description = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
-                        let idx = idx.unwrap();
                         let var = ctx.var.get_serializable(&ctx.header_info, description);
-                        savs.as_mut().unwrap().insert(idx, var);
-                        *phase = 0;
+                        ctx.save_manager.save_local(*idx as u32, &var);
+                        savs.insert(*idx as u32, var);
+                        *phase = 1;
                         return Ok(None);
                     }
                     _ => ret(),
                 }
             }
             DoTrain(_) => bail!("TODO: DoTrain"),
-            LoadGame(savs) => {
-                match savs {
-                    None => {
-                        let new_savs = load_savs(vm, ctx);
-                        print_sav_data_list(&new_savs, tx);
-                        *savs = Some(new_savs);
-                    }
-                    Some(savs) => match ctx.pop_int()? {
-                        100 => return Ok(exit()),
-                        i if i >= 0 && i < SAVE_COUNT as i64 => {
-                            if let Some(sav) = savs.remove(&(i as usize)) {
-                                return Ok(Some(Workflow::SwitchState(SystemState::LoadData(
-                                    i,
-                                    Some(sav),
-                                ))));
-                            }
-                        }
-                        _ => {}
-                    },
+            LoadGame(savs) => match *phase {
+                0 => {
+                    print_sav_data_list(&savs, tx);
+                    input_int(tx)
                 }
-                input_int(tx)
-            }
+                _ => match ctx.pop_int()? {
+                    100 => return Ok(exit()),
+                    i if i >= 0 && i < SAVE_COUNT as i64 => {
+                        if let Some(sav) = savs.remove(&(i as u32)) {
+                            ctx.save_manager.remove_local(i as u32);
+                            return Ok(Some(Workflow::SwitchState(SystemState::LoadData(
+                                i,
+                                Some(sav),
+                            ))));
+                        } else {
+                            None
+                        }
+                    }
+                    _ => None,
+                },
+            },
             LoadData(idx, sav) => match phase {
                 0 => {
                     let sav = sav.take().unwrap();
@@ -437,27 +421,9 @@ impl SystemState {
     }
 }
 
-const SAVE_COUNT: usize = 20;
+const SAVE_COUNT: u32 = 20;
 
-fn load_savs(vm: &TerminalVm, ctx: &mut VmContext) -> HashMap<usize, SerializableVariableStorage> {
-    #[cfg(feature = "multithread")]
-    let iter = (0..SAVE_COUNT).into_par_iter();
-    #[cfg(not(feature = "multithread"))]
-    let iter = (0..SAVE_COUNT).into_iter();
-
-    iter
-        .filter_map(|i| {
-            crate::save_data::read_save_data(&vm.sav_path(), &ctx.header_info, i as i64)
-                .ok()
-                .map(|d| (i, d))
-        })
-        .collect()
-}
-
-fn print_sav_data_list(
-    savs: &HashMap<usize, SerializableVariableStorage>,
-    tx: &mut VirtualConsole,
-) {
+fn print_sav_data_list(savs: &SaveList, tx: &mut VirtualConsole) {
     for i in 0..SAVE_COUNT {
         match savs.get(&i) {
             Some(sav) => {

@@ -820,17 +820,26 @@ pub(super) fn run_instruction(
 
                 BuiltinMethod::ChkData => {
                     check_arg_count!(1);
-                    let idx = get_arg!(@i64: args, ctx);
+                    let idx = get_arg!(@u32: args, ctx);
 
-                    let (ret, rets) =
-                        match crate::save_data::read_save_data(&vm.sav_path, &ctx.header_info, idx)
-                        {
-                            Ok(data) => (0, data.description),
-                            Err(err) => (err, "セーブデータのバーションが異なります".into()),
-                        };
+                    let (ret, rets) = match ctx.save_manager.load_local(idx) {
+                        Some(sav) => {
+                            if sav.code != ctx.header_info.gamebase.code {
+                                (2, None)
+                            } else if sav.version < ctx.header_info.gamebase.allow_version {
+                                (3, None)
+                            } else {
+                                ctx.var.load_serializable(sav.clone(), &ctx.header_info)?;
+                                (0, Some(sav.description.clone()))
+                            }
+                        }
+                        None => (1, None),
+                    };
 
-                    ctx.var.set_results(rets);
-                    ctx.push(ret);
+                    ctx.var.set_results(
+                        rets.unwrap_or_else(|| "セーブデータのバーションが異なります".into()),
+                    );
+                    ctx.push(ret as i64);
                 }
             }
         }
@@ -1317,45 +1326,33 @@ pub(super) fn run_instruction(
                     ctx.var.reset_data(&ctx.header_info.replace)?;
                 }
                 BuiltinCommand::SaveData => {
-                    let idx = get_arg!(@i64: args, ctx);
+                    let idx = get_arg!(@u32: args, ctx);
                     let description = get_arg!(@String: args, ctx);
 
                     log::info!("Save {idx}: {description}");
 
-                    crate::save_data::write_save_data(
-                        &vm.sav_path,
-                        idx,
-                        &ctx.var,
-                        &ctx.header_info,
-                        description,
-                    );
+                    let var = ctx.var.get_serializable(&ctx.header_info, description);
+                    ctx.save_manager.save_local(idx, &var);
                 }
                 BuiltinCommand::LoadData => {
-                    let idx = get_arg!(@i64: args, ctx);
+                    let idx = get_arg!(@u32: args, ctx);
 
-                    if let Ok(sav) =
-                        crate::save_data::read_save_data(&vm.sav_path, &ctx.header_info, idx)
-                    {
-                        ret_set_state!(ctx, SystemState::LoadData(idx, Some(sav)));
+                    if let Some(sav) = ctx.save_manager.load_local(idx) {
+                        ret_set_state!(ctx, SystemState::LoadData(idx as i64, Some(sav.clone())));
                     }
                 }
                 BuiltinCommand::DelData => {
-                    let idx = get_arg!(@i64: args, ctx);
+                    let idx = get_arg!(@u32: args, ctx);
 
-                    let _ = crate::save_data::delete_save_data(&vm.sav_path, idx);
+                    ctx.save_manager.remove_local(idx);
                 }
                 BuiltinCommand::SaveGlobal => {
-                    self::save_data::write_global_data(&vm.sav_path, &ctx.var, &ctx.header_info);
+                    ctx.save_manager
+                        .save_global(&ctx.var.get_global_serializable(&ctx.header_info));
                 }
                 BuiltinCommand::LoadGlobal => {
-                    match crate::save_data::read_global_data(&vm.sav_path, &ctx.header_info) {
-                        Ok(data) => {
-                            ctx.var.load_global_serializable(data, &ctx.header_info)?;
-                            ctx.var.set_result(1);
-                        }
-                        _ => {
-                            ctx.var.set_result(0);
-                        }
+                    if let Some(global_sav) = ctx.save_manager.load_global() {
+                        ctx.var.load_global_serializable(global_sav, &ctx.header_info)?;
                     }
                 }
                 BuiltinCommand::Swap => {
@@ -1373,10 +1370,16 @@ pub(super) fn run_instruction(
                     ctx.push(nos as i64);
                 }
                 BuiltinCommand::SaveGame => {
-                    ret_set_state!(ctx, SystemState::SaveGame(None, None));
+                    ret_set_state!(
+                        ctx,
+                        SystemState::SaveGame(0, ctx.save_manager.load_local_list())
+                    );
                 }
                 BuiltinCommand::LoadGame => {
-                    ret_set_state!(ctx, SystemState::LoadGame(None));
+                    ret_set_state!(
+                        ctx,
+                        SystemState::LoadGame(ctx.save_manager.load_local_list())
+                    );
                 }
                 BuiltinCommand::PutForm => {
                     let arg = get_arg!(@String: args, ctx);
