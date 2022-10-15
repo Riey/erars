@@ -15,6 +15,8 @@ fn gen_bench(count: usize) -> String {
 }
 
 fn make_ctx() -> ParserContext {
+    erars_ast::init_interner();
+
     ParserContext::new(
         Arc::new(HeaderInfo {
             global_variables: serde_yaml::from_str(include_str!(
