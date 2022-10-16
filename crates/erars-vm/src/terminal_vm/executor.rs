@@ -124,7 +124,7 @@ pub(super) fn run_instruction(
                 tx.new_line();
             }
             if flags.contains(PrintFlags::WAIT) {
-                return Ok(InstructionWorkflow::Input {
+                return Ok(InstructionWorkflow::Upstream(VmResult::Input {
                     req: InputRequest {
                         generation: tx.input_gen(),
                         ty: InputRequestType::AnyKey,
@@ -132,7 +132,7 @@ pub(super) fn run_instruction(
                         timeout: None,
                     },
                     set_result: false,
-                });
+                }));
             }
         }
         Instruction::TryCall(c)
@@ -1121,7 +1121,7 @@ pub(super) fn run_instruction(
                     tx.set_bg_color(0, 0, 0);
                 }
                 BuiltinCommand::Wait | BuiltinCommand::WaitAnykey => {
-                    return Ok(InstructionWorkflow::Input {
+                    return Ok(InstructionWorkflow::Upstream(VmResult::Input {
                         req: InputRequest::normal(
                             tx.input_gen(),
                             if *com == BuiltinCommand::Wait {
@@ -1131,7 +1131,7 @@ pub(super) fn run_instruction(
                             },
                         ),
                         set_result: false,
-                    });
+                    }));
                 }
                 BuiltinCommand::SkipDisp => {
                     let arg = ctx.pop_int()?;
@@ -1230,14 +1230,14 @@ pub(super) fn run_instruction(
                         _ => unreachable!(),
                     };
 
-                    return Ok(InstructionWorkflow::Input {
+                    return Ok(InstructionWorkflow::Upstream(VmResult::Input {
                         req,
                         set_result: true,
-                    });
+                    }));
                 }
                 BuiltinCommand::Quit => {
                     log::info!("Run QUIT");
-                    return Ok(InstructionWorkflow::Exit);
+                    return Ok(InstructionWorkflow::Upstream(VmResult::Exit));
                 }
                 BuiltinCommand::SwapChara => {
                     let a = get_arg!(@u32: args, ctx);
@@ -1296,7 +1296,7 @@ pub(super) fn run_instruction(
                     }
                 }
                 BuiltinCommand::Redraw => {
-                    return Ok(InstructionWorkflow::Redraw);
+                    return Ok(InstructionWorkflow::Upstream(VmResult::Redraw));
                 }
                 BuiltinCommand::ClearLine => {
                     tx.clear_line(get_arg!(@usize: args, ctx));

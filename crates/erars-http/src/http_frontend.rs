@@ -168,7 +168,7 @@ impl HttpFrontend {
                         let mut clients = clients.lock().await;
                         send_code(event_codes::REDRAW, &mut clients).await;
                     }
-                    VmResult::NeedInput { req, set_result } => {
+                    VmResult::Input { req, set_result } => {
                         let ty = req.ty;
 
                         {

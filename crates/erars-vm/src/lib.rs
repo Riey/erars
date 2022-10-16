@@ -78,9 +78,7 @@ pub enum Workflow {
     SwitchState(SystemState),
     GotoState(SystemState),
     Begin(BeginType),
-    Input { req: InputRequest, set_result: bool },
-    Redraw,
-    Exit,
+    Upstream(VmResult),
 }
 
 impl Default for Workflow {
@@ -89,9 +87,9 @@ impl Default for Workflow {
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Display, Debug, Clone, PartialEq, Eq)]
 pub enum VmResult {
     Exit,
     Redraw,
-    NeedInput { req: InputRequest, set_result: bool },
+    Input { req: InputRequest, set_result: bool },
 }

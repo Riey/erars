@@ -1,4 +1,4 @@
-use crate::{variable::KnownVariableNames::*, SaveList};
+use crate::{variable::KnownVariableNames::*, SaveList, VmResult};
 use anyhow::{bail, Result};
 use erars_ast::{BeginType, EventType};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
@@ -73,7 +73,7 @@ macro_rules! call_event {
 
 #[inline]
 const fn exit() -> Option<Workflow> {
-    Some(Workflow::Exit)
+    Some(Workflow::Upstream(VmResult::Exit))
 }
 
 #[inline]
@@ -87,10 +87,12 @@ const fn begin(ty: BeginType) -> Option<Workflow> {
 }
 
 fn input_int(tx: &mut VirtualConsole) -> Option<Workflow> {
-    Some(Workflow::Input {
-        req: InputRequest::normal(tx.input_gen(), InputRequestType::Int),
-        set_result: false,
-    })
+    Some(Workflow::Upstream(
+        (VmResult::Input {
+            req: InputRequest::normal(tx.input_gen(), InputRequestType::Int),
+            set_result: false,
+        }),
+    ))
 }
 
 impl SystemState {

@@ -51,7 +51,7 @@ impl StdioFrontend {
         loop {
             match vm.run_state(&mut self.vconsole, ctx) {
                 VmResult::Exit => break Ok(()),
-                VmResult::NeedInput { req, set_result } => {
+                VmResult::Input { req, set_result } => {
                     self.draw(&mut lock)?;
 
                     loop {

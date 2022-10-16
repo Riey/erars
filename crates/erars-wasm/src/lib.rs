@@ -53,24 +53,22 @@ impl ErarsContext {
 
     pub fn set_input(&mut self, s: String) -> bool {
         match self.input_req.as_ref() {
-            Some((req, set_result)) if req.ty == InputRequestType::Int => {
-                match s.parse::<i64>() {
-                    Ok(i) => {
-                        let set_result = *set_result;
-                        self.input_req = None;
-                        if set_result {
-                            self.ctx.var.set_result(i);
-                        } else {
-                            self.ctx.push(i);
-                        }
-                        true
+            Some((req, set_result)) if req.ty == InputRequestType::Int => match s.parse::<i64>() {
+                Ok(i) => {
+                    let set_result = *set_result;
+                    self.input_req = None;
+                    if set_result {
+                        self.ctx.var.set_result(i);
+                    } else {
+                        self.ctx.push(i);
                     }
-                    Err(err) => {
-                        log::error!("Invalid input: {err}");
-                        false
-                    }
+                    true
                 }
-            }
+                Err(err) => {
+                    log::error!("Invalid input: {err}");
+                    false
+                }
+            },
             Some((req, set_result)) if req.ty == InputRequestType::Str => {
                 let set_result = *set_result;
                 self.input_req = None;
@@ -87,7 +85,7 @@ impl ErarsContext {
 
     pub fn run(&mut self, from: usize) -> JsValue {
         let exited = match self.vm.run_state(&mut self.vconsole, &mut self.ctx) {
-            VmResult::NeedInput { req, set_result } => {
+            VmResult::Input { req, set_result } => {
                 if req.timeout.is_some() {
                     log::error!("TODO: timeout input");
                 }
@@ -107,13 +105,16 @@ impl ErarsContext {
             lines: &'a [ConsoleLine],
         }
 
-        serde_wasm_bindgen::to_value(&Ret {
-            exited,
-            current_req: self.input_req.as_ref().map(|(r, _)| r),
-            bg_color: self.vconsole.bg_color,
-            hl_color: self.vconsole.hl_color,
-            lines: self.vconsole.lines().get(from..).unwrap_or(&[]),
-        })
+        serde::Serialize::serialize(
+            &Ret {
+                exited,
+                current_req: self.input_req.as_ref().map(|(r, _)| r),
+                bg_color: self.vconsole.bg_color,
+                hl_color: self.vconsole.hl_color,
+                lines: self.vconsole.lines().get(from..).unwrap_or(&[]),
+            },
+            &serde_wasm_bindgen::Serializer::json_compatible(),
+        )
         .expect("Serialize failed")
     }
 }

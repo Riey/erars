@@ -27,8 +27,8 @@ pub struct TerminalVm {
 
 #[derive(Debug)]
 enum InstructionWorkflow {
+    Upstream(VmResult),
     Normal,
-    Exit,
     Goto(u32),
     GotoLabel {
         label: StrKey,
@@ -44,11 +44,6 @@ enum InstructionWorkflow {
         is_try: bool,
         is_jump: bool,
     },
-    Input {
-        req: InputRequest,
-        set_result: bool,
-    },
-    Redraw,
 }
 
 impl TerminalVm {
@@ -80,7 +75,6 @@ impl TerminalVm {
 
             match executor::run_instruction(self, func_name, inst, tx, ctx) {
                 Ok(Normal) => {}
-                Ok(Exit) => return Ok(Workflow::Exit),
                 Ok(Goto(pos)) => {
                     cursor = pos as usize;
                 }
@@ -168,14 +162,6 @@ impl TerminalVm {
                         }
                     }
                 }
-                Ok(Redraw) => {
-                    ctx.push_current_call_stack(
-                        func_identifier.clone(),
-                        body.file_path().clone(),
-                        cursor,
-                    );
-                    return Ok(Workflow::Redraw);
-                }
                 Ok(SwitchState(state)) => {
                     ctx.push_current_call_stack(
                         func_identifier.clone(),
@@ -184,13 +170,13 @@ impl TerminalVm {
                     );
                     return Ok(Workflow::SwitchState(state));
                 }
-                Ok(Input { req, set_result }) => {
+                Ok(Upstream(upstream)) => {
                     ctx.push_current_call_stack(
                         func_identifier.clone(),
                         body.file_path().clone(),
                         cursor,
                     );
-                    return Ok(Workflow::Input { req, set_result });
+                    return Ok(Workflow::Upstream(upstream));
                 }
                 Err(err) => {
                     return Err(err);
@@ -347,12 +333,8 @@ impl TerminalVm {
                 ctx.clear_call_stack();
                 ctx.push_state(ty.into(), 0);
             }
-            Workflow::Exit => {
-                return Ok(VmResult::Exit);
-            }
-            Workflow::Redraw => return Ok(VmResult::Redraw),
-            Workflow::Input { req, set_result } => {
-                return Ok(VmResult::NeedInput { req, set_result })
+            Workflow::Upstream(ret) => {
+                return Ok(ret);
             }
             Workflow::SwitchState(new_state) => {
                 ctx.push_state(new_state, ctx.stack().len());
@@ -388,16 +370,13 @@ impl TerminalVm {
                         None => return Ok(VmResult::Exit),
                     };
                 }
-                Some(Workflow::Exit) => {
+                Some(Workflow::Upstream(VmResult::Exit)) => {
                     ctx.clear_state();
                     ctx.clear_call_stack();
                     return Ok(VmResult::Exit);
                 }
-                Some(Workflow::Redraw) => {
-                    break Ok(VmResult::Redraw);
-                }
-                Some(Workflow::Input { req, set_result }) => {
-                    break Ok(VmResult::NeedInput { req, set_result })
+                Some(Workflow::Upstream(ret)) => {
+                    break Ok(ret);
                 }
                 Some(Workflow::Begin(ty)) => {
                     ctx.clear_state();
