@@ -1,3 +1,7 @@
+/js-example/dist
+/js-example/node_modules
+/js-example/pkg
+
 /target
 /result
 /.direnv

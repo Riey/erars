@@ -10,6 +10,7 @@ use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
+#[cfg(feature = "multithread")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -41,13 +42,13 @@ pub struct SerializableVariableStorage {
     pub description: String,
     pub code: u32,
     pub version: u32,
-    character_len: usize,
+    character_len: u32,
     rand_seed: [u8; 32],
     variables: HashMap<String, (VariableInfo, UniformVariable)>,
     local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SerializableGlobalVariableStorage {
     pub code: u32,
     pub version: u32,
@@ -58,7 +59,7 @@ pub struct SerializableGlobalVariableStorage {
 #[derive(Clone)]
 pub struct VariableStorage {
     interner: &'static Interner,
-    character_len: usize,
+    character_len: u32,
     rng: ChaCha20Rng,
     variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
     local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
@@ -210,9 +211,16 @@ impl VariableStorage {
         HashMap<String, (VariableInfo, UniformVariable)>,
         HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
     ) {
-        let variables = self
-            .variables
-            .par_iter()
+        #[cfg(feature = "multithread")]
+        let this_vars = self.variables.par_iter();
+        #[cfg(not(feature = "multithread"))]
+        let this_vars = self.variables.iter();
+        #[cfg(feature = "multithread")]
+        let this_local_vars = self.local_variables.par_iter();
+        #[cfg(not(feature = "multithread"))]
+        let this_local_vars = self.local_variables.iter();
+
+        let variables = this_vars
             .filter_map(|(name, (info, var))| {
                 if info.is_savedata && info.is_global == is_global {
                     Some((
@@ -225,9 +233,7 @@ impl VariableStorage {
             })
             .collect();
 
-        let local_variables = self
-            .local_variables
-            .par_iter()
+        let local_variables = this_local_vars
             .filter_map(|(fn_name, vars)| {
                 let vars: HashMap<_, _> = vars
                     .iter()
@@ -337,7 +343,7 @@ impl VariableStorage {
     pub fn upcheck(
         &mut self,
         tx: &mut VirtualConsole,
-        idx: usize,
+        idx: u32,
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
         let interner = self.interner();
@@ -357,7 +363,7 @@ impl VariableStorage {
     pub fn cupcheck(
         &mut self,
         tx: &mut VirtualConsole,
-        idx: usize,
+        idx: u32,
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
         let interner = self.interner();
@@ -418,7 +424,7 @@ impl VariableStorage {
         *self.ref_str(KnownVariableNames::ResultS, &[]).unwrap() = s;
     }
 
-    pub fn character_len(&self) -> usize {
+    pub fn character_len(&self) -> u32 {
         self.character_len
     }
 
@@ -429,26 +435,26 @@ impl VariableStorage {
             .insert(var_name, (info, None));
     }
 
-    pub fn ref_int(&mut self, name: impl StrKeyLike, args: &[usize]) -> Result<&mut i64> {
+    pub fn ref_int(&mut self, name: impl StrKeyLike, args: &[u32]) -> Result<&mut i64> {
         let (_, var, idx) = self.index_var(name, args)?;
-        Ok(&mut var.as_int()?[idx])
+        Ok(&mut var.as_int()?[idx as usize])
     }
 
     pub fn ref_local_int(
         &mut self,
         func_name: impl StrKeyLike,
         name: impl StrKeyLike,
-        args: &[usize],
+        args: &[u32],
     ) -> Result<&mut i64> {
         let (_, var, idx) = self.index_local_var(func_name, name, args)?;
-        Ok(&mut var.as_int()?[idx])
+        Ok(&mut var.as_int()?[idx as usize])
     }
 
     pub fn ref_maybe_local_int(
         &mut self,
         func_name: impl StrKeyLike,
         name: impl StrKeyLike,
-        args: &[usize],
+        args: &[u32],
     ) -> Result<&mut i64> {
         if self.is_local_var(func_name, name) {
             self.ref_local_int(func_name, name, args)
@@ -457,26 +463,26 @@ impl VariableStorage {
         }
     }
 
-    pub fn ref_str(&mut self, name: impl StrKeyLike, args: &[usize]) -> Result<&mut String> {
+    pub fn ref_str(&mut self, name: impl StrKeyLike, args: &[u32]) -> Result<&mut String> {
         let (_, var, idx) = self.index_var(name, args)?;
-        Ok(&mut var.as_str()?[idx])
+        Ok(&mut var.as_str()?[idx as usize])
     }
 
     pub fn ref_local_str(
         &mut self,
         func_name: impl StrKeyLike,
         name: impl StrKeyLike,
-        args: &[usize],
+        args: &[u32],
     ) -> Result<&mut String> {
         let (_, var, idx) = self.index_local_var(func_name, name, args)?;
-        Ok(&mut var.as_str()?[idx])
+        Ok(&mut var.as_str()?[idx as usize])
     }
 
     pub fn ref_maybe_local_str(
         &mut self,
         func_name: impl StrKeyLike,
         name: impl StrKeyLike,
-        args: &[usize],
+        args: &[u32],
     ) -> Result<&mut String> {
         if self.is_local_var(func_name, name) {
             self.ref_local_str(func_name, name, args)
@@ -485,26 +491,26 @@ impl VariableStorage {
         }
     }
 
-    pub fn read_int(&mut self, name: impl StrKeyLike, args: &[usize]) -> Result<i64> {
+    pub fn read_int(&mut self, name: impl StrKeyLike, args: &[u32]) -> Result<i64> {
         let (_, var, idx) = self.index_var(name, args)?;
-        Ok(var.as_int()?[idx])
+        Ok(var.as_int()?[idx as usize])
     }
 
     pub fn read_local_int(
         &mut self,
         func_name: impl StrKeyLike,
         name: impl StrKeyLike,
-        args: &[usize],
+        args: &[u32],
     ) -> Result<i64> {
         let (_, var, idx) = self.index_local_var(func_name, name, args)?;
-        Ok(var.as_int()?[idx])
+        Ok(var.as_int()?[idx as usize])
     }
 
     pub fn read_maybe_local_int(
         &mut self,
         func_name: impl StrKeyLike,
         name: impl StrKeyLike,
-        args: &[usize],
+        args: &[u32],
     ) -> Result<i64> {
         if self.is_local_var(func_name, name) {
             self.read_local_int(func_name, name, args)
@@ -513,16 +519,16 @@ impl VariableStorage {
         }
     }
 
-    pub fn read_str(&mut self, name: impl StrKeyLike, args: &[usize]) -> Result<String> {
+    pub fn read_str(&mut self, name: impl StrKeyLike, args: &[u32]) -> Result<String> {
         let (_, var, idx) = self.index_var(name, args)?;
-        Ok(var.as_str()?[idx].clone())
+        Ok(var.as_str()?[idx as usize].clone())
     }
 
     pub fn index_var(
         &mut self,
         name: impl StrKeyLike,
-        args: &[usize],
-    ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
+        args: &[u32],
+    ) -> Result<(&mut VariableInfo, &mut VmVariable, u32)> {
         let name = name.get_key(self);
 
         let target = if name != self.known_key(KnownVariableNames::Target) {
@@ -538,8 +544,8 @@ impl VariableStorage {
 
         let vm_var = match var {
             UniformVariable::Character(cvar) => {
-                let c_idx = c_idx.unwrap_or_else(|| target as usize);
-                cvar.get_mut(c_idx).ok_or_else(|| {
+                let c_idx = c_idx.unwrap_or_else(|| target as u32);
+                cvar.get_mut(c_idx as usize).ok_or_else(|| {
                     anyhow!("Variable {name:?} Character index {c_idx} not exists")
                 })?
             }
@@ -553,8 +559,8 @@ impl VariableStorage {
         &mut self,
         func_name: impl StrKeyLike,
         name: impl StrKeyLike,
-        args: &[usize],
-    ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
+        args: &[u32],
+    ) -> Result<(&mut VariableInfo, &mut VmVariable, u32)> {
         let func_name = func_name.get_key(self);
         let name = name.get_key(self);
 
@@ -566,8 +572,8 @@ impl VariableStorage {
 
         let vm_var = match var {
             UniformVariable::Character(cvar) => {
-                let c_idx = c_idx.unwrap_or(target as usize);
-                cvar.get_mut(c_idx).ok_or_else(|| {
+                let c_idx = c_idx.unwrap_or(target as u32);
+                cvar.get_mut(c_idx as usize).ok_or_else(|| {
                     anyhow!("Variable {name:?}@{func_name:?} Character index {c_idx} not exists",)
                 })?
             }
@@ -581,8 +587,8 @@ impl VariableStorage {
         &mut self,
         func_name: impl StrKeyLike,
         name: impl StrKeyLike,
-        args: &[usize],
-    ) -> Result<(&mut VariableInfo, &mut VmVariable, usize)> {
+        args: &[u32],
+    ) -> Result<(&mut VariableInfo, &mut VmVariable, u32)> {
         if self.is_local_var(func_name, name) {
             self.index_local_var(func_name, name, args)
         } else {
@@ -610,8 +616,8 @@ impl VariableStorage {
                 let var_ = var_.assume_normal();
                 for (idx, init_var) in info.init.iter().enumerate() {
                     match init_var {
-                        InlineValue::Int(i) => var_.set(idx, *i)?,
-                        InlineValue::String(s) => var_.set(idx, s.resolve())?,
+                        InlineValue::Int(i) => var_.set(idx as u32, *i)?,
+                        InlineValue::String(s) => var_.set(idx as u32, s.resolve())?,
                     }
                 }
             }
@@ -646,15 +652,15 @@ impl VariableStorage {
         if info.is_str {
             match var {
                 UniformVariable::Character(c) => {
-                    c.par_iter_mut().for_each(|v| v.as_str().unwrap().fill(String::new()))
+                    c.iter_mut().for_each(|v| v.as_str().unwrap().fill(String::new()))
                 }
                 UniformVariable::Normal(v) => v.as_str().unwrap().fill(String::new()),
             }
         } else {
             match var {
-                UniformVariable::Character(c) => c
-                    .par_iter_mut()
-                    .for_each(|v| v.as_int().unwrap().fill(info.default_int)),
+                UniformVariable::Character(c) => {
+                    c.iter_mut().for_each(|v| v.as_int().unwrap().fill(info.default_int))
+                }
                 UniformVariable::Normal(v) => v.as_int().unwrap().fill(info.default_int),
             }
         }
@@ -722,7 +728,7 @@ impl VariableStorage {
         Ok(())
     }
 
-    pub fn swap_chara(&mut self, a: usize, b: usize) {
+    pub fn swap_chara(&mut self, a: u32, b: u32) {
         self.variables.values_mut().for_each(|(_, var)| {
             var.swap_chara(a, b);
         });
@@ -735,15 +741,15 @@ impl VariableStorage {
         });
     }
 
-    pub fn del_chara(&mut self, idx: usize) {
+    pub fn del_chara(&mut self, idx: u32) {
         self.character_len -= 1;
         self.variables.values_mut().for_each(|(_, var)| {
             var.del_chara(idx);
         });
     }
 
-    pub fn del_chara_list(&mut self, list: &BTreeSet<usize>) {
-        self.character_len -= list.len();
+    pub fn del_chara_list(&mut self, list: &BTreeSet<u32>) {
+        self.character_len -= list.len() as u32;
         self.variables.values_mut().for_each(|(_, var)| {
             var.del_chara_list(list);
         });
@@ -784,11 +790,7 @@ impl VariableStorage {
         Ok(())
     }
 
-    pub fn set_character_template(
-        &mut self,
-        idx: usize,
-        template: &CharacterTemplate,
-    ) -> Result<()> {
+    pub fn set_character_template(&mut self, idx: u32, template: &CharacterTemplate) -> Result<()> {
         macro_rules! set {
             (@int $name:expr, $field:ident) => {
                 self.get_var($name)?.1.assume_chara(idx).as_int()?[0] = template.$field as i64;
@@ -851,29 +853,29 @@ impl VmVariable {
         }
     }
 
-    pub fn get(&self, idx: usize) -> Result<Value> {
+    pub fn get(&self, idx: u32) -> Result<Value> {
         match self {
             Self::Int(i) => i
-                .get(idx)
+                .get(idx as usize)
                 .ok_or_else(|| anyhow!("Variable out of range {} over {}", idx, i.len()))
                 .copied()
                 .map(Value::Int),
             Self::Str(i) => i
-                .get(idx)
+                .get(idx as usize)
                 .ok_or_else(|| anyhow!("Variable out of range {} over {}", idx, i.len()))
                 .cloned()
                 .map(Value::String),
         }
     }
 
-    pub fn set(&mut self, idx: usize, value: impl Into<Value>) -> Result<()> {
+    pub fn set(&mut self, idx: u32, value: impl Into<Value>) -> Result<()> {
         match (self, value.into()) {
             (Self::Int(i), Value::Int(n)) => {
-                *i.get_mut(idx)
+                *i.get_mut(idx as usize)
                     .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = n;
             }
             (Self::Str(i), Value::String(s)) => {
-                *i.get_mut(idx)
+                *i.get_mut(idx as usize)
                     .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = s;
             }
             _ => bail!("Variable type mismatched"),
@@ -911,9 +913,9 @@ impl UniformVariable {
         }
     }
 
-    pub fn as_vm_var(&mut self, chara_no: usize) -> &mut VmVariable {
+    pub fn as_vm_var(&mut self, chara_no: u32) -> &mut VmVariable {
         match self {
-            UniformVariable::Character(c) => &mut c[chara_no],
+            UniformVariable::Character(c) => &mut c[chara_no as usize],
             UniformVariable::Normal(v) => v,
         }
     }
@@ -934,17 +936,17 @@ impl UniformVariable {
         }
     }
 
-    pub fn assume_chara(&mut self, idx: usize) -> &mut VmVariable {
+    pub fn assume_chara(&mut self, idx: u32) -> &mut VmVariable {
         if let Self::Character(c) = self {
-            &mut c[idx]
+            &mut c[idx as usize]
         } else {
             panic!("Variable is not character variable")
         }
     }
 
-    pub fn swap_chara(&mut self, a: usize, b: usize) {
+    pub fn swap_chara(&mut self, a: u32, b: u32) {
         if let Self::Character(c) = self {
-            c.swap(a, b);
+            c.swap(a as usize, b as usize);
         }
     }
 
@@ -954,16 +956,16 @@ impl UniformVariable {
         }
     }
 
-    pub fn del_chara(&mut self, idx: usize) {
+    pub fn del_chara(&mut self, idx: u32) {
         if let Self::Character(c) = self {
-            c.remove(idx);
+            c.remove(idx as usize);
         }
     }
 
-    pub fn del_chara_list(&mut self, list: &BTreeSet<usize>) {
+    pub fn del_chara_list(&mut self, list: &BTreeSet<u32>) {
         if let Self::Character(c) = self {
             for i in (0..c.len()).rev() {
-                if !list.contains(&i) {
+                if !list.contains(&(i as u32)) {
                     c.remove(i);
                 }
             }

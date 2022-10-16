@@ -1,9 +1,6 @@
 mod executor;
 
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeSet;
 
 use crate::*;
 use crate::{context::FunctionIdentifier, variable::StrKeyLike};
@@ -26,7 +23,6 @@ macro_rules! report_error {
 
 pub struct TerminalVm {
     pub dic: FunctionDic,
-    pub sav_path: PathBuf,
 }
 
 #[derive(Debug)]
@@ -56,15 +52,8 @@ enum InstructionWorkflow {
 }
 
 impl TerminalVm {
-    pub fn new(function_dic: FunctionDic, game_path: PathBuf) -> Self {
-        Self {
-            dic: function_dic,
-            sav_path: game_path.join("sav"),
-        }
-    }
-
-    pub fn sav_path(&self) -> &Path {
-        &self.sav_path
+    pub fn new(function_dic: FunctionDic) -> Self {
+        Self { dic: function_dic }
     }
 
     fn run_body(
@@ -96,13 +85,16 @@ impl TerminalVm {
                     cursor = pos as usize;
                 }
                 Ok(GotoLabel { label, is_try }) => {
-                    match body.goto_labels().iter().find_map(|(cur_label, pos)| {
-                        if *cur_label == label {
-                            Some(*pos)
-                        } else {
-                            None
-                        }
-                    }) {
+                    match body
+                        .goto_labels()
+                        .iter()
+                        .find_map(|FunctionGotoLabel(cur_label, pos)| {
+                            if *cur_label == label {
+                                Some(*pos)
+                            } else {
+                                None
+                            }
+                        }) {
                         Some(pos) => {
                             cursor = pos as usize;
                         }
@@ -234,10 +226,10 @@ impl TerminalVm {
 
         let mut args = args.iter().cloned();
 
-        for (var_idx, default_value, arg_indices) in body.args().iter() {
+        for FunctionArgDef(var_idx, arg_indices, default_value) in body.args().iter() {
             let (info, var) = ctx.var.get_maybe_local_var(label, *var_idx)?;
             let var = var.assume_normal();
-            let idx = info.calculate_single_idx(arg_indices).1;
+            let idx = info.calculate_single_idx(arg_indices).1 as usize;
 
             let arg = args.next().or_else(|| {
                 default_value.clone().map(|v| match v {

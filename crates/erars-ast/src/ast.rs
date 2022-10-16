@@ -85,8 +85,8 @@ pub struct FunctionHeader {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FunctionInfo {
     EventFlag(EventFlags),
-    LocalSize(usize),
-    LocalSSize(usize),
+    LocalSize(u32),
+    LocalSSize(u32),
     Dim(LocalVariable),
     Function,
     FunctionS,

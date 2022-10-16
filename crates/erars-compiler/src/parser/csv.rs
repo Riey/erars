@@ -76,10 +76,10 @@ pub fn name_item_line<'s>(
 
 pub fn variable_size_line<'s>(
     lex: &mut Lexer<'s, CsvToken<'s>>,
-) -> ParserResult<Option<(String, Option<Vec<usize>>)>> {
+) -> ParserResult<Option<(String, Option<Vec<u32>>)>> {
     macro_rules! parse_size {
         ($size:expr) => {
-            match $size.parse::<i64>().map(usize::try_from) {
+            match $size.parse::<i64>().map(u32::try_from) {
                 Ok(Err(_)) => None,
                 Ok(Ok(size)) => Some(size),
                 Err(err) => return Err((format!("숫자가 와야합니다. :{err}"), lex.span())),

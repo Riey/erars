@@ -32,6 +32,7 @@ fn run_test() {
         let mut ctx = VmContext::new(
             header.clone(),
             Arc::new(EraConfig::from_text(include_str!("../emuera.config")).unwrap()),
+            Box::new(NullSaveLoadManager),
         );
         let erb_file = erb_file.unwrap();
         let out_file = erb_file.parent().unwrap().join(format!(
@@ -65,7 +66,7 @@ fn run_test() {
 }
 
 fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
-    let vm = TerminalVm::new(dic, ".".into());
+    let vm = TerminalVm::new(dic);
     let mut tx = VirtualConsole::new(ctx.config.printc_width);
 
     k9::assert_equal!(vm.run_state(&mut tx, &mut ctx), VmResult::Exit);

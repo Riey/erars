@@ -1,4 +1,5 @@
 use parking_lot::Mutex;
+#[cfg(feature = "multithread")]
 use rayon::prelude::*;
 use std::{
     fs::File,
@@ -85,6 +86,12 @@ pub fn save_script(vm: TerminalVm, ctx: VmContext) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn make_fs_manager(target_path: &str) -> Box<dyn erars_vm::SaveLoadManager> {
+    Box::new(erars_saveload_fs::FsSaveManager::new(
+        Path::new(&target_path).join("sav"),
+    ))
+}
+
 /// SAFETY: Any reference to interner is not exist
 pub unsafe fn load_script(
     target_path: String,
@@ -121,7 +128,11 @@ pub unsafe fn load_script(
     let elapsed = start.elapsed();
     log::info!("Load done! {}ms elapsed", elapsed.as_millis());
 
-    let mut ctx = VmContext::new(Arc::new(header), Arc::new(config));
+    let mut ctx = VmContext::new(
+        Arc::new(header),
+        Arc::new(config),
+        make_fs_manager(&target_path),
+    );
 
     for (key, vars) in local_infos {
         for var in vars {
@@ -133,14 +144,7 @@ pub unsafe fn load_script(
         vconsole.push_input(input);
     }
 
-    Ok((
-        TerminalVm {
-            dic,
-            sav_path: Path::new(target_path.as_str()).join("sav"),
-        },
-        ctx,
-        vconsole,
-    ))
+    Ok((TerminalVm { dic }, ctx, vconsole))
 }
 
 #[allow(unused_assignments)]
@@ -218,6 +222,12 @@ pub fn run_script(
             },
         )?;
 
+        #[cfg(feature = "multithread")]
+        let csvs = csvs.par_bridge();
+
+        #[cfg(feature = "multithread")]
+        let erbs = erbs.par_bridge();
+
         let mut files = Mutex::new(SimpleFiles::new());
         let mut diagnostic =
             Mutex::new(Diagnostic::error().with_code("E0001").with_message("Compile ERROR"));
@@ -228,7 +238,6 @@ pub fn run_script(
         };
 
         let mut csv_dic = csvs
-            .par_bridge()
             .filter_map(|csv| match csv {
                 Ok(csv) => {
                     log::trace!("Load {}", csv.display());
@@ -369,7 +378,6 @@ pub fn run_script(
 
         let funcs = erbs
             // .into_iter()
-            .par_bridge()
             .flat_map(|erb| {
                 let erb = erb.unwrap();
                 let source = read_file(&erb).unwrap();
@@ -394,7 +402,7 @@ pub fn run_script(
             })
             .collect::<Vec<CompiledFunction>>();
 
-        ctx = VmContext::new(header_info.clone(), config);
+        ctx = VmContext::new(header_info.clone(), config, make_fs_manager(&target_path));
 
         for input in inputs {
             tx.push_input(input);
@@ -422,7 +430,7 @@ pub fn run_script(
         }
     }
 
-    let vm = TerminalVm::new(function_dic, target_path.into());
+    let vm = TerminalVm::new(function_dic);
 
     Ok((vm, ctx, tx))
 }

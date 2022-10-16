@@ -222,10 +222,10 @@ impl Default for Language {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DefaultLocalVarSize {
-    pub default_local_size: Option<usize>,
-    pub default_locals_size: Option<usize>,
-    pub default_arg_size: Option<usize>,
-    pub default_args_size: Option<usize>,
+    pub default_local_size: Option<u32>,
+    pub default_locals_size: Option<u32>,
+    pub default_arg_size: Option<u32>,
+    pub default_args_size: Option<u32>,
 }
 
 impl Default for DefaultLocalVarSize {
@@ -1099,8 +1099,10 @@ impl ParserContext {
                                 &try_nom!(lex, self::expr::expr(self)(size)).1,
                             )
                             .to_int()
-                            .unwrap();
-                            infos.push(FunctionInfo::LocalSize(size as usize));
+                            .unwrap_or_default()
+                            .try_into()
+                            .unwrap_or_default();
+                            infos.push(FunctionInfo::LocalSize(size));
                         }
                         Some(Token::LocalSSize(size)) => {
                             let size = self::expr::const_eval_log_error(
@@ -1108,8 +1110,10 @@ impl ParserContext {
                                 &try_nom!(lex, self::expr::expr(self)(size)).1,
                             )
                             .to_int()
-                            .unwrap();
-                            infos.push(FunctionInfo::LocalSSize(size as usize));
+                            .unwrap_or_default()
+                            .try_into()
+                            .unwrap_or_default();
+                            infos.push(FunctionInfo::LocalSSize(size));
                         }
                         Some(other) => match self.parse_stmt(other, lex) {
                             Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
@@ -1201,8 +1205,10 @@ impl ParserContext {
                                 &try_nom!(lex, self::expr::expr(self)(size)).1,
                             )
                             .to_int()
-                            .unwrap();
-                            infos.push(FunctionInfo::LocalSize(size as usize));
+                            .unwrap_or_default()
+                            .try_into()
+                            .unwrap_or_default();
+                            infos.push(FunctionInfo::LocalSize(size));
                         }
                         Some(Token::LocalSSize(size)) => {
                             let size = self::expr::const_eval_log_error(
@@ -1210,8 +1216,10 @@ impl ParserContext {
                                 &try_nom!(lex, self::expr::expr(self)(size)).1,
                             )
                             .to_int()
-                            .unwrap();
-                            infos.push(FunctionInfo::LocalSSize(size as usize));
+                            .unwrap_or_default()
+                            .try_into()
+                            .unwrap_or_default();
+                            infos.push(FunctionInfo::LocalSSize(size));
                         }
                         Some(other) => match self.parse_stmt(other, lex) {
                             Ok(stmt) => body.push(stmt),
