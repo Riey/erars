@@ -13,6 +13,7 @@ members = [
     "./crates/erars-http",
     "./crates/erars-loader",
     "./crates/erars-saveload-fs",
+    "./crates/erars-saveload-web",
     "./crates/erars-stdio",
     "./crates/erars-ui",
     "./crates/erars-vm",

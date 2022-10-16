@@ -7,6 +7,7 @@ use strum::{Display, EnumString, IntoStaticStr};
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, IntoStaticStr, Serialize, Deserialize,
 )]
 #[strum(serialize_all = "UPPERCASE")]
+#[repr(u32)]
 pub enum BuiltinVariable {
     AblName,
     TalentName,
@@ -84,7 +85,7 @@ pub struct VariableInfo {
     pub is_global: bool,
     pub is_savedata: bool,
     pub default_int: i64,
-    pub size: Vec<usize>,
+    pub size: Vec<u32>,
     pub init: Vec<InlineValue>,
 }
 
@@ -94,10 +95,10 @@ impl VariableInfo {
     }
 
     pub fn full_size(&self) -> usize {
-        self.size.iter().copied().product()
+        self.size.iter().copied().product::<u32>() as usize
     }
 
-    pub fn calculate_single_idx(&self, idxs: &[usize]) -> (Option<usize>, usize) {
+    pub fn calculate_single_idx(&self, idxs: &[u32]) -> (Option<u32>, u32) {
         match (self.is_chara, self.size.as_slice(), idxs) {
             (true, [..], []) => (None, 0),
             (false, [..], []) => (None, 0),

@@ -85,13 +85,16 @@ impl TerminalVm {
                     cursor = pos as usize;
                 }
                 Ok(GotoLabel { label, is_try }) => {
-                    match body.goto_labels().iter().find_map(|(cur_label, pos)| {
-                        if *cur_label == label {
-                            Some(*pos)
-                        } else {
-                            None
-                        }
-                    }) {
+                    match body
+                        .goto_labels()
+                        .iter()
+                        .find_map(|FunctionGotoLabel(cur_label, pos)| {
+                            if *cur_label == label {
+                                Some(*pos)
+                            } else {
+                                None
+                            }
+                        }) {
                         Some(pos) => {
                             cursor = pos as usize;
                         }
@@ -223,10 +226,10 @@ impl TerminalVm {
 
         let mut args = args.iter().cloned();
 
-        for (var_idx, default_value, arg_indices) in body.args().iter() {
+        for FunctionArgDef(var_idx, arg_indices, default_value) in body.args().iter() {
             let (info, var) = ctx.var.get_maybe_local_var(label, *var_idx)?;
             let var = var.assume_normal();
-            let idx = info.calculate_single_idx(arg_indices).1;
+            let idx = info.calculate_single_idx(arg_indices).1 as usize;
 
             let arg = args.next().or_else(|| {
                 default_value.clone().map(|v| match v {

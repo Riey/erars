@@ -12,7 +12,7 @@ use strum::Display;
 
 pub type SaveList = HashMap<u32, SerializableVariableStorage>;
 
-pub trait SaveLoadManager: Send + Sync {
+pub trait SaveLoadManager {
     fn load_local_list(&self) -> SaveList;
     fn load_local(&self, idx: u32) -> Option<SerializableVariableStorage>;
     fn load_global(&self) -> Option<SerializableGlobalVariableStorage>;
@@ -54,7 +54,7 @@ impl SaveLoadManager for NullSaveLoadManager {
     }
 }
 
-pub type ArgVec = tinyvec::ArrayVec<[usize; 4]>;
+pub type ArgVec = tinyvec::ArrayVec<[u32; 4]>;
 
 pub use crate::{
     context::{Callstack, LocalValue, VmContext},

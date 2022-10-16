@@ -4,6 +4,7 @@ use strum::{Display, EnumString, IntoStaticStr};
 #[derive(
     Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, Display, EnumString,
 )]
+#[repr(u32)]
 pub enum UnaryOperator {
     /// !
     #[strum(to_string = "!")]
@@ -16,6 +17,7 @@ pub enum UnaryOperator {
 #[derive(
     Copy, Clone, Debug, Eq, PartialEq, Serialize, Deserialize, IntoStaticStr, Display, EnumString,
 )]
+#[repr(u32)]
 pub enum BinaryOperator {
     /// +
     #[strum(to_string = "+")]

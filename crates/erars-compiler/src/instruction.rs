@@ -6,6 +6,7 @@ use erars_ast::{
 static_assertions::assert_eq_size!(Instruction, (i64, i64));
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(C)]
 pub enum Instruction {
     Nop,
     Pop,

@@ -419,9 +419,9 @@ pub(super) fn run_instruction(
                     let mut key = get_arg!(@var args);
                     let value = get_arg!(@value args, ctx);
 
-                    let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                    let start = get_arg!(@opt @u32: args, ctx).unwrap_or(0);
                     let end =
-                        get_arg!(@opt @usize: args, ctx).unwrap_or_else(|| ctx.var.character_len());
+                        get_arg!(@opt @u32: args, ctx).unwrap_or_else(|| ctx.var.character_len());
 
                     key.idxs.insert(0, start);
 
@@ -542,7 +542,7 @@ pub(super) fn run_instruction(
                     let var = match var {
                         UniformVariable::Character(cvar) => {
                             let c_idx = var_ref.idxs.first().copied().unwrap_or(target.try_into()?);
-                            &mut cvar[c_idx]
+                            &mut cvar[c_idx as usize]
                         }
                         UniformVariable::Normal(var) => var,
                     }
@@ -855,7 +855,7 @@ pub(super) fn run_instruction(
                 }
                 BuiltinCommand::CUpCheck => {
                     let palam = ctx.var.known_key(Var::Palam);
-                    let target = get_arg!(@usize: args, ctx);
+                    let target = get_arg!(@u32: args, ctx);
                     let names = ctx.header_info.var_name_var.get(&palam).unwrap();
                     ctx.var.cupcheck(tx, target, names)?;
                 }
@@ -883,8 +883,8 @@ pub(super) fn run_instruction(
                 BuiltinCommand::ArrayShift => {
                     let v = get_arg!(@var args);
                     let empty_value = get_arg!(@value args, ctx);
-                    let start = get_arg!(@usize: args, ctx);
-                    let count = get_arg!(@usize: args, ctx);
+                    let start = get_arg!(@u32: args, ctx);
+                    let count = get_arg!(@u32: args, ctx);
 
                     let target = if let Some(idx) = v.idxs.first().copied() {
                         idx
@@ -897,11 +897,11 @@ pub(super) fn run_instruction(
                     if info.is_str {
                         let var = var.as_str()?;
                         let empty_value = empty_value.try_into()?;
-                        array_shift(var, empty_value, start, count)?;
+                        array_shift(var, empty_value, start as usize, count as usize)?;
                     } else {
                         let var = var.as_int()?;
                         let empty_value = empty_value.try_into()?;
-                        array_shift(var, empty_value, start, count)?;
+                        array_shift(var, empty_value, start as usize, count as usize)?;
                     }
                 }
                 BuiltinCommand::Throw => {
@@ -915,8 +915,8 @@ pub(super) fn run_instruction(
                 BuiltinCommand::Varset => {
                     let var = get_arg!(@var args);
                     let value = get_arg!(@opt @value args, ctx);
-                    let start = get_arg!(@opt @usize: args, ctx);
-                    let end = get_arg!(@opt @usize: args, ctx);
+                    let start = get_arg!(@opt @u32: args, ctx);
+                    let end = get_arg!(@opt @u32: args, ctx);
 
                     let target = ctx.var.read_int(Var::Target, &[])?;
                     let (info, var, idx) = ctx.resolve_var_ref_raw(&var)?;
@@ -929,7 +929,7 @@ pub(super) fn run_instruction(
                         (Some(value), start, end) => {
                             let var = match var {
                                 UniformVariable::Character(cvar) => {
-                                    &mut cvar[chara_idx.unwrap_or(target as usize)]
+                                    &mut cvar[chara_idx.unwrap_or(target as u32) as usize]
                                 }
                                 UniformVariable::Normal(var) => var,
                             };
@@ -945,7 +945,7 @@ pub(super) fn run_instruction(
                 }
                 BuiltinCommand::CVarset => {
                     let var = get_arg!(@var args);
-                    let index = get_arg!(@usize: args, ctx);
+                    let index = get_arg!(@u32: args, ctx);
                     let value = get_arg!(@opt @value args, ctx);
                     let start = get_arg!(@opt @usize: args, ctx);
 
@@ -973,7 +973,7 @@ pub(super) fn run_instruction(
                     let mut var = get_arg!(@var args);
 
                     for (idx, part) in s.split(delimiter.as_str()).enumerate() {
-                        var.idxs.push(idx);
+                        var.idxs.push(idx as u32);
 
                         ctx.set_var_ref(&var, part.into())?;
 
@@ -1240,22 +1240,22 @@ pub(super) fn run_instruction(
                     return Ok(InstructionWorkflow::Exit);
                 }
                 BuiltinCommand::SwapChara => {
-                    let a = get_arg!(@usize: args, ctx);
-                    let b = get_arg!(@usize: args, ctx);
+                    let a = get_arg!(@u32: args, ctx);
+                    let b = get_arg!(@u32: args, ctx);
 
                     ctx.var.swap_chara(a, b);
                 }
                 BuiltinCommand::SortChara => bail!("SORTCHARA"),
                 BuiltinCommand::PickupChara => {
                     let list = args
-                        .map(|v| ctx.reduce_local_value(v).and_then(usize::try_from))
+                        .map(|v| ctx.reduce_local_value(v).and_then(u32::try_from))
                         .collect::<Result<BTreeSet<_>>>()?;
 
                     let target = ctx.var.read_int("TARGET", &[])?;
                     let master = ctx.var.read_int("MASTER", &[])?;
                     let assi = ctx.var.read_int("ASSI", &[])?;
 
-                    let recalculate_idx = |chara_idx: i64| match usize::try_from(chara_idx) {
+                    let recalculate_idx = |chara_idx: i64| match u32::try_from(chara_idx) {
                         Ok(idx) => list
                             .iter()
                             .find_position(|i| **i == idx)
@@ -1392,7 +1392,7 @@ pub(super) fn run_instruction(
                     ctx.var.ref_str("SAVEDATA_TEXT", &[])?.push_str(&arg);
                 }
                 BuiltinCommand::ResetStain => {
-                    let chara = get_arg!(@usize: args, ctx);
+                    let chara = get_arg!(@u32: args, ctx);
                     let stain = ctx.var.get_var("STAIN")?.1.assume_chara(chara);
                     let stain_init = &ctx.header_info.replace.stain_init;
                     stain.as_int()?[..stain_init.len()].copy_from_slice(&stain_init);

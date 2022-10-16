@@ -133,7 +133,7 @@ impl VmContext {
         let (_, var, idx) = self.resolve_var_ref(var_ref)?;
 
         var.as_int()?
-            .get_mut(idx)
+            .get_mut(idx as usize)
             .ok_or_else(|| anyhow::anyhow!("Variable {:?} out of index", var_ref.name))
     }
 
@@ -146,7 +146,7 @@ impl VmContext {
     pub fn resolve_var_ref<'c>(
         &'c mut self,
         r: &VariableRef,
-    ) -> Result<(&'c mut VariableInfo, &'c mut VmVariable, usize)> {
+    ) -> Result<(&'c mut VariableInfo, &'c mut VmVariable, u32)> {
         self.var.index_maybe_local_var(r.func_name, r.name, &r.idxs)
     }
 
@@ -236,7 +236,7 @@ impl VmContext {
         self.take_value_list(count)?
             .into_iter()
             .map(|value| match value {
-                Value::Int(i) => usize::try_from(i).map_err(anyhow::Error::from),
+                Value::Int(i) => u32::try_from(i).map_err(anyhow::Error::from),
                 Value::String(str) => match var_name
                     .map(|s| self.var.resolve_key(s))
                     .map(erars_ast::var_name_alias)
@@ -246,7 +246,7 @@ impl VmContext {
                     })
                     .and_then(|names| names.get(&str.get_key(&self.var)))
                 {
-                    Some(value) => Ok(*value as usize),
+                    Some(value) => Ok(*value),
                     None => anyhow::bail!("Can't index variable with String"),
                 },
             })

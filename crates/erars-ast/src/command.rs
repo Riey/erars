@@ -80,6 +80,7 @@ pub enum BuiltinMethod {
 #[derive(Display, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr)]
 #[strum(serialize_all = "UPPERCASE")]
 #[serde(rename_all = "UPPERCASE")]
+#[repr(u32)]
 #[allow(non_camel_case_types)]
 pub enum BuiltinCommand {
     UpCheck,

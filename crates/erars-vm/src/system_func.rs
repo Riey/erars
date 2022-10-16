@@ -139,7 +139,7 @@ impl SystemState {
                     ctx.var.set_result(i);
 
                     if i >= 0 && i < ctx.header_info.replace.sell_item_count {
-                        let sales = ctx.var.read_int("ITEMSALES", &[i as usize])?;
+                        let sales = ctx.var.read_int("ITEMSALES", &[i as u32])?;
 
                         if sales != 0 {
                             let price = ctx
@@ -152,7 +152,7 @@ impl SystemState {
 
                             if *money >= price {
                                 *money -= price;
-                                *ctx.var.ref_int("ITEM", &[i as usize])? += 1;
+                                *ctx.var.ref_int("ITEM", &[i as u32])? += 1;
                             }
                         }
 

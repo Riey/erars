@@ -1,8 +1,12 @@
-use erars_loader::{load_script, run_script};
+use std::{collections::HashMap, sync::Arc};
 
+use erars_ast::{StrKey, VariableInfo};
+use erars_compiler::{EraConfig, HeaderInfo};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
 use erars_vm::{TerminalVm, VmContext, VmResult};
+use wasm_bindgen::prelude::*;
 
+#[wasm_bindgen]
 #[repr(u32)]
 pub enum ErarsReturn {
     Exit = 0,
@@ -11,139 +15,104 @@ pub enum ErarsReturn {
     InputTimeout = 2,
 
     Redraw = 10,
-
-    Error = 100,
 }
 
+#[wasm_bindgen]
+pub fn init_logger() {
+    log_panics::init();
+    wasm_logger::init(wasm_logger::Config::default());
+}
+
+#[wasm_bindgen]
 pub struct ErarsContext {
     vm: TerminalVm,
     ctx: VmContext,
     vconsole: VirtualConsole,
-    display_str: String,
-    input_buf: Vec<u8>,
     input_req: Option<(InputRequest, bool)>,
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn era_prepare_input_buf(ctx: &mut ErarsContext, size: usize) {
-    ctx.input_buf.resize(size, 0);
-}
+#[wasm_bindgen]
+impl ErarsContext {
+    #[wasm_bindgen(constructor)]
+    pub fn new(mut era_file: &[u8], config_text: &str) -> Self {
+        log::info!("File length: {}", era_file.len());
+        let config = EraConfig::from_text(config_text).expect("Parse config file");
+        log::info!("Config: {config:?}");
+        let dic = unsafe { erars_bytecode::read_from(&mut era_file).expect("Read era file") };
+        let (header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
+            rmp_serde::decode::from_slice(&mut era_file).expect("Read game data");
 
-#[no_mangle]
-pub unsafe extern "C" fn era_input_buf(ctx: &mut ErarsContext) -> *mut u8 {
-    ctx.input_buf.as_mut_ptr()
-}
+        let mut ctx = VmContext::new(
+            Arc::new(header),
+            Arc::new(config),
+            Box::new(erars_saveload_web::LocalStorageManager::new().expect("Get LocalStorage")),
+        );
 
-#[no_mangle]
-pub unsafe extern "C" fn era_drop(ctx: Option<Box<ErarsContext>>) {
-    drop(ctx);
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn era_display_ptr(ctx: &ErarsContext) -> *const u8 {
-    ctx.display_str.as_ptr()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn era_display_len(ctx: &ErarsContext) -> usize {
-    ctx.display_str.len()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn era_new(
-    target_path: *const u8,
-    target_len: usize,
-    is_load: i32,
-) -> Option<Box<ErarsContext>> {
-    let slice = std::slice::from_raw_parts(target_path, target_len);
-    let target_path = std::str::from_utf8(slice).ok()?;
-
-    let (vm, ctx, vconsole) = if is_load != 0 {
-        load_script(target_path.into(), Vec::new()).ok()?
-    } else {
-        run_script(target_path.into(), Vec::new()).ok()?
-    };
-
-    Some(Box::new(ErarsContext {
-        vm,
-        ctx,
-        vconsole,
-        display_str: String::new(),
-        input_buf: Vec::new(),
-        input_req: None,
-    }))
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn era_push_input_int(ctx: &mut ErarsContext, int: i64) -> i32 {
-    match ctx.input_req {
-        Some((
-            InputRequest {
-                ty: InputRequestType::Int,
-                ..
-            },
-            set_result,
-        )) => {
-            if set_result {
-                ctx.ctx.var.set_result(int);
-            } else {
-                ctx.ctx.push(int);
+        for (key, vars) in local_infos {
+            for var in vars {
+                ctx.var.add_local_info(key, var.0, var.1);
             }
-            ctx.input_req = None;
-            0
         }
-        _ => -1,
+
+        Self {
+            vm: TerminalVm { dic },
+            vconsole: VirtualConsole::new(ctx.config.printc_width),
+            ctx,
+            input_req: None,
+        }
     }
-}
 
-#[no_mangle]
-pub unsafe extern "C" fn era_push_input_str(ctx: &mut ErarsContext, len: usize) -> i32 {
-    match ctx.input_req {
-        Some((
-            InputRequest {
-                ty: InputRequestType::Str,
-                ..
-            },
-            set_result,
-        )) => {
-            if ctx.input_buf.len() < len {
-                return -2;
-            }
-            let s = match std::str::from_utf8(&ctx.input_buf[..len]) {
-                Ok(s) => s,
-                Err(_) => return -3,
-            }
-            .to_string();
-
-            if set_result {
-                ctx.ctx.var.set_results(s);
-            } else {
-                ctx.ctx.push(s);
-            }
-
-            ctx.input_req = None;
-            0
-        }
-        _ => -1,
+    pub fn display(&self, from: usize) -> JsValue {
+        JsValue::from_str(&serde_json::to_string(&(
+            self.vconsole.bg_color,
+            self.vconsole.hl_color,
+            self.vconsole.lines.get(from..).unwrap_or(&[]),
+        )).expect("Serialize failed"))
     }
-}
 
-#[no_mangle]
-pub unsafe extern "C" fn era_run(ctx: &mut ErarsContext) -> ErarsReturn {
-    match ctx.vm.run_state(&mut ctx.vconsole, &mut ctx.ctx) {
-        VmResult::Redraw => {
-            ctx.display_str = serde_json::to_string(ctx.vconsole.lines()).unwrap();
-            ErarsReturn::Redraw
+    pub fn set_input_int(&mut self, i: i64) -> bool {
+        match self.input_req.as_ref() {
+            Some((req, set_result)) if req.ty == InputRequestType::Int => {
+                let set_result = *set_result;
+                self.input_req = None;
+                if set_result {
+                    self.ctx.var.set_result(i);
+                } else {
+                    self.ctx.push(i);
+                }
+                true
+            }
+            _ => false,
         }
-        VmResult::NeedInput { req, set_result } => {
-            let ret = if req.timeout.is_some() {
-                ErarsReturn::InputTimeout
-            } else {
+    }
+
+    pub fn set_input_str(&mut self, s: String) -> bool {
+        match self.input_req.as_ref() {
+            Some((req, set_result)) if req.ty == InputRequestType::Str => {
+                let set_result = *set_result;
+                self.input_req = None;
+                if set_result {
+                    self.ctx.var.set_results(s);
+                } else {
+                    self.ctx.push(s);
+                }
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn run(&mut self) -> ErarsReturn {
+        match self.vm.run_state(&mut self.vconsole, &mut self.ctx) {
+            VmResult::NeedInput { req, set_result } => {
+                if req.timeout.is_some() {
+                    log::error!("TODO: timeout input");
+                }
+                self.input_req = Some((req, set_result));
                 ErarsReturn::Input
-            };
-            ctx.input_req = Some((req, set_result));
-            ret
+            }
+            VmResult::Redraw => ErarsReturn::Redraw,
+            VmResult::Exit => ErarsReturn::Exit,
         }
-        VmResult::Exit => ErarsReturn::Exit,
     }
 }

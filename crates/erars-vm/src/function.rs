@@ -16,6 +16,8 @@ use crate::ArgVec;
 use crate::VariableStorage;
 use crate::Workflow;
 
+static_assertions::assert_eq_size!(FunctionBodyHeader, u64);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct FunctionBodyHeader {
@@ -24,8 +26,17 @@ pub struct FunctionBodyHeader {
     pub is_functions: bool,
 }
 
-pub type FunctionArgDef = (StrKey, Option<InlineValue>, ArgVec);
-pub type FunctionGotoLabel = (StrKey, u32);
+static_assertions::assert_eq_size!(FunctionArgDef, [u32; 10]);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct FunctionArgDef(pub StrKey, pub ArgVec, pub Option<InlineValue>);
+
+static_assertions::assert_eq_size!(FunctionGotoLabel, [u32; 2]);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(C)]
+pub struct FunctionGotoLabel(pub StrKey, pub u32);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
@@ -121,24 +132,29 @@ impl FunctionDic {
                 .args
                 .into_iter()
                 .map(|(var, default_value)| {
-                    (
+                    FunctionArgDef(
                         var.var,
-                        default_value,
                         var.args
                             .into_iter()
                             .map(|v| {
                                 if let Expr::Int(i) = v {
-                                    i as usize
+                                    i as u32
                                 } else {
                                     panic!("Variable index must be constant")
                                 }
                             })
                             .collect(),
+                        default_value,
                     )
                 })
                 .collect_vec()
                 .into_boxed_slice(),
-            goto_labels: func.goto_labels.into_iter().collect_vec().into_boxed_slice(),
+            goto_labels: func
+                .goto_labels
+                .into_iter()
+                .map(|(k, pos)| FunctionGotoLabel(k, pos))
+                .collect_vec()
+                .into_boxed_slice(),
             header: FunctionBodyHeader {
                 file_path: func.header.file_path,
                 is_function: false,

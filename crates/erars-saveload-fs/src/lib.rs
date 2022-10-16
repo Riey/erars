@@ -5,7 +5,7 @@ use rayon::prelude::*;
 
 use std::path::PathBuf;
 
-use erars_vm::{NullSaveLoadManager, SaveLoadManager};
+use erars_vm::SaveLoadManager;
 
 pub struct FsSaveManager {
     pub sav_path: PathBuf,
