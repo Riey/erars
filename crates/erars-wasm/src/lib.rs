@@ -2,20 +2,9 @@ use std::{collections::HashMap, sync::Arc};
 
 use erars_ast::{StrKey, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
-use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
+use erars_ui::{Color, ConsoleLine, InputRequest, InputRequestType, VirtualConsole};
 use erars_vm::{TerminalVm, VmContext, VmResult};
 use wasm_bindgen::prelude::*;
-
-#[wasm_bindgen]
-#[repr(u32)]
-pub enum ErarsReturn {
-    Exit = 0,
-
-    Input = 1,
-    InputTimeout = 2,
-
-    Redraw = 10,
-}
 
 #[wasm_bindgen]
 pub fn init_logger() {
@@ -62,32 +51,26 @@ impl ErarsContext {
         }
     }
 
-    pub fn display(&self, from: usize) -> JsValue {
-        JsValue::from_str(&serde_json::to_string(&(
-            self.vconsole.bg_color,
-            self.vconsole.hl_color,
-            self.vconsole.lines.get(from..).unwrap_or(&[]),
-        )).expect("Serialize failed"))
-    }
-
-    pub fn set_input_int(&mut self, i: i64) -> bool {
+    pub fn set_input(&mut self, s: String) -> bool {
         match self.input_req.as_ref() {
             Some((req, set_result)) if req.ty == InputRequestType::Int => {
-                let set_result = *set_result;
-                self.input_req = None;
-                if set_result {
-                    self.ctx.var.set_result(i);
-                } else {
-                    self.ctx.push(i);
+                match s.parse::<i64>() {
+                    Ok(i) => {
+                        let set_result = *set_result;
+                        self.input_req = None;
+                        if set_result {
+                            self.ctx.var.set_result(i);
+                        } else {
+                            self.ctx.push(i);
+                        }
+                        true
+                    }
+                    Err(err) => {
+                        log::error!("Invalid input: {err}");
+                        false
+                    }
                 }
-                true
             }
-            _ => false,
-        }
-    }
-
-    pub fn set_input_str(&mut self, s: String) -> bool {
-        match self.input_req.as_ref() {
             Some((req, set_result)) if req.ty == InputRequestType::Str => {
                 let set_result = *set_result;
                 self.input_req = None;
@@ -102,17 +85,35 @@ impl ErarsContext {
         }
     }
 
-    pub fn run(&mut self) -> ErarsReturn {
-        match self.vm.run_state(&mut self.vconsole, &mut self.ctx) {
+    pub fn run(&mut self, from: usize) -> JsValue {
+        let exited = match self.vm.run_state(&mut self.vconsole, &mut self.ctx) {
             VmResult::NeedInput { req, set_result } => {
                 if req.timeout.is_some() {
                     log::error!("TODO: timeout input");
                 }
                 self.input_req = Some((req, set_result));
-                ErarsReturn::Input
+                false
             }
-            VmResult::Redraw => ErarsReturn::Redraw,
-            VmResult::Exit => ErarsReturn::Exit,
+            VmResult::Redraw => false,
+            VmResult::Exit => true,
+        };
+
+        #[derive(serde::Serialize)]
+        struct Ret<'a> {
+            exited: bool,
+            current_req: Option<&'a InputRequest>,
+            bg_color: Color,
+            hl_color: Color,
+            lines: &'a [ConsoleLine],
         }
+
+        serde_wasm_bindgen::to_value(&Ret {
+            exited,
+            current_req: self.input_req.as_ref().map(|(r, _)| r),
+            bg_color: self.vconsole.bg_color,
+            hl_color: self.vconsole.hl_color,
+            lines: self.vconsole.lines().get(from..).unwrap_or(&[]),
+        })
+        .expect("Serialize failed")
     }
 }
