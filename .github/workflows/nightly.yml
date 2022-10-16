@@ -8,6 +8,56 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  release-win:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    - name: Cargo Target Cache
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('**/Cargo.lock') }}-release-lto
+        restore-keys: |
+          ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-release-lto
+          ${{ runner.os }}-cargo-target-release-lto
+    - name: Build
+      run: |
+        cargo build --profile=release-lto -p erars-stdio -p erars-http --verbose
+    - uses: actions/upload-artifact@v3
+      with:
+        name: erars-stdio.exe
+        path: target/release-lto/erars-stdio.exe
+    - uses: actions/upload-artifact@v3
+      with:
+        name: erars-http.exe
+        path: target/release-lto/erars-http.exe
+        
+  release-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    - name: Cargo Target Cache
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('**/Cargo.lock') }}-release-lto
+        restore-keys: |
+          ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-release-lto
+          ${{ runner.os }}-cargo-target-release-lto
+    - name: Build
+      run: |
+        cargo build --profile=release-lto -p erars-stdio -p erars-http --verbose
+    - uses: actions/upload-artifact@v3
+      with:
+        name: erars-stdio
+        path: target/release-lto/erars-stdio
+    - uses: actions/upload-artifact@v3
+      with:
+        name: erars-http
+        path: target/release-lto/erars-http
+
   release-wasm:
     runs-on: ubuntu-latest
     
@@ -36,53 +86,3 @@ jobs:
       with:
         name: erars_wasm
         path: crates/erars-wasm/pkg/erars_wasm*
-        
-  release-linux:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    - name: Cargo Target Cache
-      uses: actions/cache@v2
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('**/Cargo.lock') }}-release-lto
-        restore-keys: |
-          ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-release-lto
-          ${{ runner.os }}-cargo-target-release-lto
-    - name: Build
-      run: |
-        cargo build --profile=release-lto -p erars-stdio -p erars-http --verbose
-    - uses: actions/upload-artifact@v3
-      with:
-        name: erars-stdio
-        path: target/release-lto/erars-stdio
-    - uses: actions/upload-artifact@v3
-      with:
-        name: erars-http
-        path: target/release-lto/erars-http
-
-  release-win:
-    runs-on: windows-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    - name: Cargo Target Cache
-      uses: actions/cache@v2
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('**/Cargo.lock') }}-release-lto
-        restore-keys: |
-          ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-release-lto
-          ${{ runner.os }}-cargo-target-release-lto
-    - name: Build
-      run: |
-        cargo build --profile=release-lto -p erars-stdio -p erars-http --verbose
-    - uses: actions/upload-artifact@v3
-      with:
-        name: erars-stdio.exe
-        path: target/release-lto/erars-stdio.exe
-    - uses: actions/upload-artifact@v3
-      with:
-        name: erars-http.exe
-        path: target/release-lto/erars-http.exe
