@@ -221,8 +221,10 @@ impl HttpFrontend {
                             vconsole_buf.1 = Some(req);
                         }
 
-                        let mut clients = clients.lock().await;
-                        send_code(event_codes::REDRAW, &mut clients).await;
+                        {
+                            let mut clients = clients.lock().await;
+                            send_code(event_codes::REDRAW, &mut clients).await;
+                        }
 
                         let (input, timeout_msg) = match input_rx.recv_async().await {
                             Ok(value) => value,
@@ -234,21 +236,17 @@ impl HttpFrontend {
                         }
 
                         match ty {
-                            InputRequestType::AnyKey | InputRequestType::EnterKey => {}
                             InputRequestType::Int if set_result => {
-                                ctx.push(input.unwrap());
-                            }
-                            InputRequestType::Str if set_result => {
-                                ctx.push(input.unwrap());
-                            }
-                            InputRequestType::Int => {
                                 ctx.var.set_result(input.unwrap().try_into_int().unwrap());
                             }
-                            InputRequestType::Str => {
+                            InputRequestType::Str if set_result => {
                                 ctx.var.set_results(input.unwrap().try_into_str().unwrap());
                             }
+                            InputRequestType::AnyKey | InputRequestType::EnterKey => {}
+                            InputRequestType::Int | InputRequestType::Str => {
+                                ctx.push(input.unwrap());
+                            }
                         }
-                        if set_result {}
                     }
                 }
             }
