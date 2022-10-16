@@ -22,8 +22,10 @@ jobs:
           ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-release-wasm
           ${{ runner.os }}-cargo-target-release-wasm
     - name: Install wasm-pack
-      run: |
-        cargo install wasm-pack
+      uses: jetli/wasm-pack-action@v0.3.0
+      with:
+        # Optional version of wasm-pack to install(eg. 'v0.9.1', 'latest')
+        version: 'latest'
     - name: Setup wasm target
       run: |
         rustup target add wasm32-unknown-unknown
