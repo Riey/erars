@@ -1,5 +1,7 @@
-mod json_frontend;
+// mod json_frontend;
 mod stdio_frontend;
+
+use std::path::Path;
 
 use erars_ast::Value;
 use erars_loader::{load_script, run_script, save_script};
@@ -71,19 +73,20 @@ fn main() {
         None => Vec::new(),
     };
 
-    let (vm, mut ctx, tx) = if args.load {
-        unsafe { load_script(args.target_path, inputs).unwrap() }
+    let system = Box::new(stdio_frontend::StdioFrontend::new(
+        Path::new(&args.target_path).join("sav"),
+        args.json,
+    ));
+
+    let (vm, mut ctx, mut tx) = if args.load {
+        unsafe { load_script(args.target_path, inputs, system).unwrap() }
     } else {
-        run_script(args.target_path, inputs).unwrap()
+        run_script(args.target_path, inputs, system).unwrap()
     };
 
     if args.save {
         save_script(vm, ctx).unwrap();
-    } else if args.json {
-        let mut frontend = json_frontend::JsonFrontend::new(tx);
-        frontend.run(&vm, &mut ctx).unwrap();
     } else {
-        let mut frontend = stdio_frontend::StdioFrontend::new(tx);
-        frontend.run(&vm, &mut ctx).unwrap();
+        futures_executor::block_on(async move { vm.start(&mut tx, &mut ctx).await });
     }
 }

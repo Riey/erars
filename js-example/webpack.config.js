@@ -16,7 +16,6 @@ module.exports = {
         new WasmPackPlugin({
             crateDirectory: path.resolve(__dirname, "../crates/erars-wasm"),
             outDir: path.resolve(__dirname, 'pkg'),
-            outName: "erars",
             watchDirectories: [
                 path.resolve(__dirname, "../crates")
             ],

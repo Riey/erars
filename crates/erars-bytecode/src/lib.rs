@@ -15,7 +15,7 @@ use erars_vm::{
 #[cfg(target_endian = "big")]
 compile_error!("Doesn't support big endian");
 
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 1];
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 2];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {
@@ -126,13 +126,7 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
 
         let collection = &mut event[event_ty];
 
-        let has_single = read.read_u8()? != 0;
-
-        collection.single = if has_single {
-            Some(read_function_body(&mut read)?)
-        } else {
-            None
-        };
+        collection.single = read.read_u8()? != 0;
 
         let empty_len = read.read_u32::<LE>()? as usize;
         collection.empty_count = empty_len;
@@ -177,13 +171,7 @@ pub fn write_to<W: Write + WriteBytesExt>(mut out: W, dic: &FunctionDic) -> Resu
 
     for (ev, collection) in dic.event.iter() {
         out.write_u32::<LE>(ev as u32)?;
-        match collection.single.as_ref() {
-            Some(body) => {
-                out.write_u8(1)?;
-                write_function_body(&mut out, body)?;
-            }
-            None => out.write_u8(0)?,
-        }
+        out.write_u8(collection.single as u8)?;
         out.write_u32::<LE>(collection.empty_count as u32)?;
         out.write_u32::<LE>(collection.events.len() as u32)?;
         for body in collection.events.iter() {

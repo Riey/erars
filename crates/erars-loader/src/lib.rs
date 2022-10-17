@@ -20,7 +20,7 @@ use codespan_reporting::{
 use erars_ast::{StrKey, Value, VariableInfo};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
 use erars_ui::VirtualConsole;
-use erars_vm::{FunctionDic, TerminalVm, VmContext};
+use erars_vm::{FunctionDic, SystemFunctions, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
 /// Read string from path respect BOM
@@ -86,16 +86,11 @@ pub fn save_script(vm: TerminalVm, ctx: VmContext) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn make_fs_manager(target_path: &str) -> Box<dyn erars_vm::SaveLoadManager> {
-    Box::new(erars_saveload_fs::FsSaveManager::new(
-        Path::new(&target_path).join("sav"),
-    ))
-}
-
 /// SAFETY: Any reference to interner is not exist
 pub unsafe fn load_script(
     target_path: String,
     inputs: Vec<Value>,
+    system: Box<dyn SystemFunctions>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     let start = Instant::now();
 
@@ -128,11 +123,7 @@ pub unsafe fn load_script(
     let elapsed = start.elapsed();
     log::info!("Load done! {}ms elapsed", elapsed.as_millis());
 
-    let mut ctx = VmContext::new(
-        Arc::new(header),
-        Arc::new(config),
-        make_fs_manager(&target_path),
-    );
+    let mut ctx = VmContext::new(Arc::new(header), Arc::new(config), system);
 
     for (key, vars) in local_infos {
         for var in vars {
@@ -151,6 +142,7 @@ pub unsafe fn load_script(
 pub fn run_script(
     target_path: String,
     inputs: Vec<Value>,
+    system: Box<dyn SystemFunctions>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     erars_ast::init_interner();
 
@@ -402,7 +394,7 @@ pub fn run_script(
             })
             .collect::<Vec<CompiledFunction>>();
 
-        ctx = VmContext::new(header_info.clone(), config, make_fs_manager(&target_path));
+        ctx = VmContext::new(header_info.clone(), config, system);
 
         for input in inputs {
             tx.push_input(input);

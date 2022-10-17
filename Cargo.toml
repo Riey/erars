@@ -10,10 +10,8 @@ members = [
     "./crates/erars-bytecode",
     "./crates/erars-compiler",
     "./crates/erars-lexer",
-    "./crates/erars-http",
     "./crates/erars-loader",
     "./crates/erars-saveload-fs",
-    "./crates/erars-saveload-web",
     "./crates/erars-stdio",
     "./crates/erars-ui",
     "./crates/erars-vm",
@@ -38,6 +36,7 @@ serde = "1.0.145"
 log = "0.4.17"
 serde_yaml = "0.9.13"
 smol_str = "0.1.23"
+futures-executor = "0.3.24"
 
 [profile.release-lto]
 inherits = "release"
@@ -46,3 +45,5 @@ lto = true
 [[bench]]
 name = "parse"
 harness = false
+
+[features]

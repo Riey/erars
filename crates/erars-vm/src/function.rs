@@ -14,7 +14,6 @@ use itertools::Itertools;
 use crate::variable::KnownVariableNames;
 use crate::ArgVec;
 use crate::VariableStorage;
-use crate::Workflow;
 
 // StrKey(4), ArgVec(4 * 4), Option<InlineValue>(8 * 2)
 static_assertions::assert_eq_size!(FunctionArgDef, [u32; 10]);
@@ -69,31 +68,14 @@ impl FunctionBody {
 
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct EventCollection {
-    pub single: Option<FunctionBody>,
+    pub single: bool,
     pub empty_count: usize,
     pub events: Vec<FunctionBody>,
 }
 
 impl EventCollection {
-    pub fn run(
-        &self,
-        from: usize,
-        mut f: impl FnMut(&FunctionBody, usize) -> Result<Workflow>,
-    ) -> Result<Workflow> {
-        if let Some(single) = self.single.as_ref() {
-            if from == 0 {
-                return f(single, 0);
-            }
-        } else {
-            for (i, pre) in self.events[from..].iter().enumerate() {
-                match f(pre, i)? {
-                    Workflow::Return => {}
-                    other => return Ok(other),
-                }
-            }
-        }
-
-        Ok(Workflow::Return)
+    pub fn iter(&self) -> impl Iterator<Item = &'_ FunctionBody> {
+        self.events.iter()
     }
 }
 
@@ -250,16 +232,26 @@ impl FunctionDic {
     pub fn insert_event(&mut self, event: Event, body: FunctionBody) {
         let mut collection = &mut self.event[event.ty];
         match event.flags {
-            EventFlags::Single => collection.single = Some(body),
-            EventFlags::Later => {
+            EventFlags::Single => {
+                collection.events.clear();
                 collection.events.push(body);
+                collection.single = true;
+            }
+            EventFlags::Later => {
+                if !collection.single {
+                    collection.events.push(body);
+                }
             }
             EventFlags::Pre => {
-                collection.events.insert(collection.empty_count, body);
+                if !collection.single {
+                    collection.events.insert(collection.empty_count, body);
+                }
             }
             EventFlags::None => {
-                collection.events.insert(0, body);
-                collection.empty_count += 1;
+                if !collection.single {
+                    collection.events.insert(0, body);
+                    collection.empty_count += 1;
+                }
             }
         }
     }

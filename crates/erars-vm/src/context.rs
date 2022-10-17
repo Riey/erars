@@ -1,30 +1,23 @@
 use anyhow::{bail, Result};
 use std::fmt;
 use std::sync::Arc;
+use strum::Display;
 
-use erars_ast::{BeginType, EventType, ScriptPosition, StrKey, Value, VariableInfo};
+use erars_ast::{EventType, ScriptPosition, StrKey, Value, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::variable::StrKeyLike;
-use crate::{ArgVec, SaveLoadManager, SystemState, VariableStorage, VmVariable};
+use crate::{ArgVec, SystemFunctions, VariableStorage, VmVariable};
 
 use super::UniformVariable;
-
-#[derive(Clone, Debug)]
-struct StateCallStack {
-    state: SystemState,
-    phase: usize,
-    call_stack_base: usize,
-}
 
 #[derive(Clone)]
 pub struct VmContext {
     pub var: VariableStorage,
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
-    pub save_manager: Box<dyn SaveLoadManager>,
+    pub system: Box<dyn SystemFunctions>,
 
-    state: Vec<StateCallStack>,
     /// For NOSKIP/ENDNOSKIP
     pub(crate) prev_skipdisp: Option<bool>,
     /// Set `true` during SAVEGAME
@@ -43,17 +36,12 @@ impl VmContext {
     pub fn new(
         header_info: Arc<HeaderInfo>,
         config: Arc<EraConfig>,
-        save_manager: Box<dyn SaveLoadManager>,
+        system: Box<dyn SystemFunctions>,
     ) -> Self {
         let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
-            save_manager,
+            system,
             header_info,
-            state: vec![StateCallStack {
-                state: (BeginType::Title.into()),
-                phase: 0,
-                call_stack_base: 0,
-            }],
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
             prev_skipdisp: None,
@@ -110,6 +98,12 @@ impl VmContext {
         &self.stack
     }
 
+    pub fn update_last_stack_position(&mut self) {
+        if let Some(last) = self.call_stack.last_mut() {
+            last.script_position = self.current_pos;
+        }
+    }
+
     pub fn update_position(&mut self, pos: ScriptPosition) {
         self.current_pos = pos;
     }
@@ -159,63 +153,24 @@ impl VmContext {
         Ok((info, var, r.idxs.clone()))
     }
 
-    pub fn last_call_stack_base(&self) -> usize {
-        self.state.last().map_or(0, |s| s.call_stack_base)
-    }
+    pub fn new_func(&mut self, func_name: FunctionIdentifier, file_path: StrKey) {
+        if let Some(last) = self.call_stack.last_mut() {
+            last.script_position = std::mem::take(&mut self.current_pos);
+        }
 
-    pub fn push_state(&mut self, state: SystemState, call_stack_base: usize) {
-        self.state.push(StateCallStack {
-            state,
-            phase: 0,
-            call_stack_base,
-        });
-    }
-
-    pub fn push_state_with_phase(
-        &mut self,
-        state: SystemState,
-        phase: usize,
-        call_stack_base: usize,
-    ) {
-        self.state.push(StateCallStack {
-            state,
-            phase,
-            call_stack_base,
-        });
-    }
-
-    pub fn pop_state(&mut self) -> Option<(SystemState, usize, usize)> {
-        self.state.pop().map(|s| (s.state, s.phase, s.call_stack_base))
-    }
-
-    pub fn clear_state(&mut self) {
-        self.state.clear();
-    }
-
-    pub fn push_current_call_stack(
-        &mut self,
-        func_name: FunctionIdentifier,
-        file_path: StrKey,
-        instruction_pos: usize,
-    ) {
         self.call_stack.push(Callstack {
             func_name,
             file_path,
-            instruction_pos,
-            script_position: std::mem::take(&mut self.current_pos),
+            script_position: ScriptPosition::default(),
             stack_base: self.stack.len(),
         });
     }
 
-    pub fn pop_call_stack(&mut self) -> Option<Callstack> {
-        self.call_stack.pop()
+    pub fn end_func(&mut self) {
+        self.call_stack.pop();
     }
 
-    pub fn pop_call_stack_check(&mut self, call_stack_base: usize) -> Option<Callstack> {
-        if self.call_stack.len() <= call_stack_base {
-            return None;
-        }
-
+    pub fn pop_call_stack(&mut self) -> Option<Callstack> {
         self.call_stack.pop()
     }
 
@@ -351,10 +306,10 @@ impl VmContext {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Display, Clone, Copy)]
 pub enum FunctionIdentifier {
     Normal(StrKey),
-    Event(EventType, usize),
+    Event(EventType),
 }
 
 #[derive(Debug, Clone)]
@@ -363,7 +318,6 @@ pub struct Callstack {
     pub file_path: StrKey,
     pub script_position: ScriptPosition,
     pub stack_base: usize,
-    pub instruction_pos: usize,
 }
 
 #[derive(Clone, Copy)]

@@ -10,7 +10,6 @@ erars-bytecode = { path = "../erars-bytecode" }
 erars-compiler = { path = "../erars-compiler" }
 erars-ui = { path = "../erars-ui" }
 erars-vm = { path = "../erars-vm" }
-erars-saveload-fs = { path = "../erars-saveload-fs" }
 
 rayon = { version = "1.5.3", optional = true }
 anyhow = "1.0.52"
@@ -30,5 +29,4 @@ multithread = [
     "rayon",
     "hashbrown/rayon",
     "erars-vm/multithread",
-    "erars-saveload-fs/multithread"
 ]

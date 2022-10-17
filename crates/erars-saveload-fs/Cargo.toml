@@ -10,6 +10,7 @@ flate2 = "1.0.24"
 log = "0.4.17"
 rmp-serde = "1.1.1"
 rayon = { version = "1.5.3", optional = true }
+anyhow = "1.0.65"
 
 [features]
 multithread = ["erars-vm/multithread", "rayon"]
