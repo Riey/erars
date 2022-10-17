@@ -23,15 +23,11 @@ jobs:
           ${{ runner.os }}-cargo-target-release-lto
     - name: Build
       run: |
-        cargo build --profile=release-lto -p erars-stdio -p erars-http --verbose
+        cargo build --profile=release-lto -p erars-stdio --verbose
     - uses: actions/upload-artifact@v3
       with:
         name: erars-stdio.exe
         path: target/release-lto/erars-stdio.exe
-    - uses: actions/upload-artifact@v3
-      with:
-        name: erars-http.exe
-        path: target/release-lto/erars-http.exe
         
   release-linux:
     runs-on: ubuntu-latest
@@ -48,15 +44,11 @@ jobs:
           ${{ runner.os }}-cargo-target-release-lto
     - name: Build
       run: |
-        cargo build --profile=release-lto -p erars-stdio -p erars-http --verbose
+        cargo build --profile=release-lto -p erars-stdio --verbose
     - uses: actions/upload-artifact@v3
       with:
         name: erars-stdio
         path: target/release-lto/erars-stdio
-    - uses: actions/upload-artifact@v3
-      with:
-        name: erars-http
-        path: target/release-lto/erars-http
 
   release-wasm:
     runs-on: ubuntu-latest
