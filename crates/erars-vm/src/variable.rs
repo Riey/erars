@@ -1007,6 +1007,7 @@ pub enum KnownVariableNames {
     DownBase,
     LoseBase,
 
+    Train,
     Tflag,
     Tequip,
     Source,
@@ -1026,6 +1027,12 @@ impl StrKeyLike for StrKey {
     #[inline(always)]
     fn get_key(self, _: &VariableStorage) -> StrKey {
         self
+    }
+}
+
+impl<'a> StrKeyLike for &'a String {
+    fn get_key(self, var: &VariableStorage) -> StrKey {
+        var.interner().get_or_intern(self)
     }
 }
 
@@ -1053,7 +1060,7 @@ impl StrKeyLike for FunctionIdentifier {
     fn get_key(self, var: &VariableStorage) -> StrKey {
         match self {
             FunctionIdentifier::Normal(key) => key,
-            FunctionIdentifier::Event(ty, _) => ty.get_key(var),
+            FunctionIdentifier::Event(ty) => ty.get_key(var),
         }
     }
 }

@@ -25,25 +25,19 @@ pub struct TerminalVm {
     pub dic: FunctionDic,
 }
 
+impl From<Workflow> for InstructionWorkflow {
+    fn from(w: Workflow) -> Self {
+        Self::Workflow(w)
+    }
+}
+
 #[derive(Debug)]
 enum InstructionWorkflow {
-    Upstream(VmResult),
     Normal,
+    Workflow(Workflow),
+    EvalFormString(String),
     Goto(u32),
-    GotoLabel {
-        label: StrKey,
-        is_try: bool,
-    },
-    Return,
-    Begin(BeginType),
-    SwitchState(SystemState),
-    CallEvent(EventType),
-    Call {
-        name: String,
-        args: Vec<Value>,
-        is_try: bool,
-        is_jump: bool,
-    },
+    GotoLabel { label: StrKey, is_try: bool },
 }
 
 impl TerminalVm {
@@ -51,14 +45,15 @@ impl TerminalVm {
         Self { dic: function_dic }
     }
 
-    fn run_body(
+    #[async_recursion::async_recursion(?Send)]
+    async fn run_body(
         &self,
         func_identifier: FunctionIdentifier,
         body: &FunctionBody,
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
-        mut cursor: usize,
     ) -> Result<Workflow> {
+        let mut cursor = 0;
         let insts = body.body();
         let func_name = func_identifier.get_key(&ctx.var);
 
@@ -73,8 +68,23 @@ impl TerminalVm {
                 call_stack = ctx.call_stack(),
             );
 
-            match executor::run_instruction(self, func_name, inst, tx, ctx) {
+            match executor::run_instruction(self, func_name, inst, tx, ctx).await {
                 Ok(Normal) => {}
+                Ok(EvalFormString(form)) => {
+                    let parser_ctx = ParserContext::new(
+                        ctx.header_info.clone(),
+                        ctx.var.interner().get_or_intern_static("FORMS.ERB"),
+                    );
+                    let expr = erars_compiler::normal_form_str(&parser_ctx)(&form).unwrap().1;
+                    let insts = erars_compiler::compile_expr(expr).unwrap();
+
+                    for inst in insts.iter() {
+                        match executor::run_instruction(self, func_name, inst, tx, ctx).await? {
+                            InstructionWorkflow::Normal => {}
+                            _ => bail!("EvalFromString can't do flow control"),
+                        }
+                    }
+                }
                 Ok(Goto(pos)) => {
                     cursor = pos as usize;
                 }
@@ -104,80 +114,7 @@ impl TerminalVm {
                         }
                     }
                 }
-                Ok(Begin(ty)) => return Ok(Workflow::Begin(ty)),
-                Ok(Return) => return Ok(Workflow::Return),
-                Ok(CallEvent(ty)) => {
-                    ctx.push_current_call_stack(
-                        func_identifier.clone(),
-                        body.file_path().clone(),
-                        cursor,
-                    );
-                    match self.call_event(ty, tx, ctx, 0, 0)? {
-                        Workflow::Return => {
-                            ctx.pop_call_stack();
-                            continue;
-                        }
-                        other => {
-                            return Ok(other);
-                        }
-                    }
-                }
-                Ok(Call {
-                    name,
-                    args,
-                    is_jump,
-                    is_try,
-                }) => {
-                    if !is_jump {
-                        ctx.push_current_call_stack(
-                            func_identifier.clone(),
-                            body.file_path().clone(),
-                            cursor,
-                        );
-                    }
-                    match self.try_call(&name, &args, tx, ctx)? {
-                        Some(Workflow::Return) => {
-                            if is_jump {
-                                return Ok(Workflow::Return);
-                            } else {
-                                ctx.pop_call_stack();
-                                if is_try {
-                                    ctx.push(true);
-                                }
-                                continue;
-                            }
-                        }
-                        Some(other) => {
-                            return Ok(other);
-                        }
-                        None => {
-                            if !is_jump {
-                                ctx.pop_call_stack();
-                            }
-                            if is_try {
-                                ctx.push(false);
-                            } else {
-                                bail!("Function {name} is not found");
-                            }
-                        }
-                    }
-                }
-                Ok(SwitchState(state)) => {
-                    ctx.push_current_call_stack(
-                        func_identifier.clone(),
-                        body.file_path().clone(),
-                        cursor,
-                    );
-                    return Ok(Workflow::SwitchState(state));
-                }
-                Ok(Upstream(upstream)) => {
-                    ctx.push_current_call_stack(
-                        func_identifier.clone(),
-                        body.file_path().clone(),
-                        cursor,
-                    );
-                    return Ok(Workflow::Upstream(upstream));
-                }
+                Ok(Workflow(flow)) => return Ok(flow),
                 Err(err) => {
                     return Err(err);
                 }
@@ -197,18 +134,15 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    fn call_internal(
+    async fn call_internal(
         &self,
-        label: StrKey,
+        label: FunctionIdentifier,
         args: &[Value],
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
         body: &FunctionBody,
     ) -> Result<Workflow> {
-        log::trace!(
-            "CALL {label}({args:?})",
-            label = ctx.var.interner().resolve(&label)
-        );
+        log::trace!("CALL {label}({args:?})",);
 
         let mut args = args.iter().cloned();
 
@@ -239,180 +173,86 @@ impl TerminalVm {
             }
         }
 
-        let ret = self.run_body(FunctionIdentifier::Normal(label), body, tx, ctx, 0)?;
+        ctx.new_func(label, body.file_path);
+
+        let ret = self.run_body(label, body, tx, ctx).await?;
+
+        ctx.end_func();
 
         Ok(ret)
     }
 
-    // #[inline]
-    // fn call(
-    //     &self,
-    //     label: &str,
-    //     args: &[Value],
-    //     tx: &mut VirtualConsole,
-    //     ctx: &mut VmContext,
-    // ) -> Result<Workflow> {
-    //     self.call_internal(label, args, tx, ctx, self.dic.get_func(label)?)
-    // }
+    #[inline]
+    async fn call(
+        &self,
+        label: impl StrKeyLike,
+        args: &[Value],
+        tx: &mut VirtualConsole,
+        ctx: &mut VmContext,
+    ) -> Result<Workflow> {
+        let label = label.get_key(&ctx.var);
+        self.call_internal(
+            FunctionIdentifier::Normal(label),
+            args,
+            tx,
+            ctx,
+            self.dic.get_func(label)?,
+        )
+        .await
+    }
 
     #[inline]
-    pub fn try_call(
+    pub async fn try_call(
         &self,
-        label: &str,
+        label: impl StrKeyLike,
         args: &[Value],
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {
-        match ctx.var.interner().get(label) {
-            Some(label) => match self.dic.get_func_opt(label) {
-                Some(body) => self.call_internal(label, args, tx, ctx, body).map(Some),
-                None => Ok(None),
-            },
+        let label = label.get_key(&ctx.var);
+        match self.dic.get_func_opt(label) {
+            Some(body) => self
+                .call_internal(FunctionIdentifier::Normal(label), args, tx, ctx, body)
+                .await
+                .map(Some),
             None => Ok(None),
         }
     }
 
-    pub fn call_event(
+    pub async fn call_event(
         &self,
         ty: EventType,
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
-        event_idx: usize,
-        event_cursor: usize,
     ) -> Result<Workflow> {
-        self.dic.get_event(ty).run(event_idx, |body, idx| {
-            let ret = self.run_body(
-                FunctionIdentifier::Event(ty, idx),
-                body,
-                tx,
-                ctx,
-                event_cursor,
-            )?;
-
-            Ok(ret)
-        })
-    }
-
-    fn try_run_call_stack(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Workflow> {
-        let call_stack_base = ctx.last_call_stack_base();
-
-        while let Some(stack) = ctx.pop_call_stack_check(call_stack_base) {
-            log::info!("{stack:?}");
-            match stack.func_name {
-                FunctionIdentifier::Normal(name) => {
-                    let body = self.dic.get_func(name)?;
-                    match self.run_body(
-                        FunctionIdentifier::Normal(name),
-                        body,
-                        tx,
-                        ctx,
-                        stack.instruction_pos,
-                    )? {
-                        Workflow::Return => continue,
-                        other => return Ok(other),
-                    }
-                }
-                FunctionIdentifier::Event(ty, idx) => {
-                    match self.call_event(ty, tx, ctx, idx, stack.instruction_pos)? {
-                        Workflow::Return => continue,
-                        other => return Ok(other),
-                    }
-                }
+        for body in self.dic.get_event(ty).iter() {
+            match self.run_body(FunctionIdentifier::Event(ty), body, tx, ctx).await? {
+                Workflow::Return => {}
+                other => return Ok(other),
             }
         }
+
         Ok(Workflow::Return)
     }
 
-    fn run_state_internal(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<VmResult> {
-        let ret = self.try_run_call_stack(tx, ctx)?;
-        log::info!("Callstack ret: {ret:?}");
-        match ret {
-            Workflow::Return => {}
-            Workflow::Begin(ty) => {
-                ctx.clear_state();
-                ctx.clear_call_stack();
-                ctx.push_state(ty.into(), 0);
-            }
-            Workflow::Upstream(ret) => {
-                return Ok(ret);
-            }
-            Workflow::SwitchState(new_state) => {
-                ctx.push_state(new_state, ctx.stack().len());
-            }
-            Workflow::GotoState(new_state) => {
-                ctx.push_state(new_state, ctx.stack().len());
-            }
-        }
-
-        let (mut current_state, mut phase, mut call_stack_base) = match ctx.pop_state() {
-            Some(s) => s,
-            None => return Ok(VmResult::Exit),
-        };
-
-        let ret = loop {
-            let prev_phase = phase;
-            let ret = match current_state.run(self, tx, ctx, &mut phase) {
-                Ok(ret) => ret,
+    /// Return: Is this normal exit
+    pub async fn start(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> bool {
+        ctx.begin = Some(BeginType::Title);
+        loop {
+            match executor::run_begin(self, BeginType::Title, tx, ctx).await {
+                Ok(Workflow::Begin(ty)) => {
+                    ctx.begin = Some(ty);
+                }
+                Ok(Workflow::Return) => {}
+                Ok(Workflow::Exit) => {
+                    break true;
+                }
                 Err(err) => {
-                    ctx.push_state_with_phase(current_state, phase, call_stack_base);
-                    return Err(err);
-                }
-            };
-            log::info!("Run {current_state:?}[{prev_phase}] -> [{phase}] {ret:?}");
-            match ret {
-                Some(Workflow::Return) => {
-                    match ctx.pop_state() {
-                        Some(s) => {
-                            current_state = s.0;
-                            phase = s.1;
-                            call_stack_base = s.2;
-                        }
-                        None => return Ok(VmResult::Exit),
-                    };
-                }
-                Some(Workflow::Upstream(VmResult::Exit)) => {
-                    ctx.clear_state();
-                    ctx.clear_call_stack();
-                    return Ok(VmResult::Exit);
-                }
-                Some(Workflow::Upstream(ret)) => {
-                    break Ok(ret);
-                }
-                Some(Workflow::Begin(ty)) => {
-                    ctx.clear_state();
-                    ctx.clear_call_stack();
-                    current_state = ty.into();
-                    phase = 0;
-                }
-                Some(Workflow::GotoState(new_state)) => {
-                    current_state = new_state;
-                    phase = 0;
-                }
-                Some(Workflow::SwitchState(new_state)) => {
-                    ctx.push_state_with_phase(current_state, phase, ctx.stack().len());
-                    current_state = new_state;
-                    phase = 0;
-                    call_stack_base = ctx.stack().len();
-                }
-                None => {
-                    continue;
-                }
-            }
-        };
+                    report_error!(tx, "VM error occurred: {err}");
 
-        ctx.push_state_with_phase(current_state, phase, call_stack_base);
+                    ctx.update_last_stack_position();
 
-        ret
-    }
-
-    pub fn run_state(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> VmResult {
-        match self.run_state_internal(tx, ctx) {
-            Ok(ret) => ret,
-            Err(err) => {
-                report_error!(tx, "VM error occurred: {err}");
-
-                while let Some((state, phase, call_stack_base)) = ctx.pop_state() {
-                    while let Some(call_stack) = ctx.pop_call_stack_check(call_stack_base) {
+                    while let Some(call_stack) = ctx.pop_call_stack() {
                         report_error!(
                             tx,
                             "At function {func} {file}@{line}",
@@ -422,10 +262,8 @@ impl TerminalVm {
                         );
                     }
 
-                    report_error!(tx, "At state {state:?}[{phase}]");
+                    break false;
                 }
-
-                VmResult::Exit
             }
         }
     }

@@ -2,9 +2,40 @@ use crate::variable::KnownVariableNames as Var;
 
 use super::*;
 
-macro_rules! ret_set_state {
-    ($ctx:expr, $state:expr) => {
-        return Ok(InstructionWorkflow::SwitchState($state));
+macro_rules! conv_workflow {
+    ($workflow:expr) => {
+        match $workflow {
+            Workflow::Return => {}
+            other => return Ok(other.into()),
+        }
+    };
+}
+
+macro_rules! call {
+    ($vm:expr, $name:expr, $tx:expr, $ctx:expr) => {
+        call!($vm, $name, &[], $tx, $ctx)
+    };
+    ($vm:expr, $name:expr, $args:expr, $tx:expr, $ctx:expr) => {
+        conv_workflow!($vm.call($name, $args, $tx, $ctx).await?)
+    };
+}
+
+macro_rules! try_call {
+    ($vm:expr, $name:expr, $tx:expr, $ctx:expr) => {
+        try_call!($vm, $name, &[], $tx, $ctx)
+    };
+    ($vm:expr, $name:expr, $args:expr, $tx:expr, $ctx:expr) => {
+        match $vm.try_call($name, $args, $tx, $ctx).await? {
+            Some(Workflow::Return) => true,
+            None => false,
+            Some(other) => return Ok(other.into()),
+        }
+    };
+}
+
+macro_rules! call_event {
+    ($vm:expr, $ty:expr, $tx:expr, $ctx:expr) => {
+        conv_workflow!($vm.call_event($ty, $tx, $ctx).await?)
     };
 }
 
@@ -39,7 +70,7 @@ macro_rules! get_arg {
     };
 }
 
-pub(super) fn run_instruction(
+pub(super) async fn run_instruction(
     vm: &TerminalVm,
     func_name: StrKey,
     inst: &Instruction,
@@ -64,16 +95,8 @@ pub(super) fn run_instruction(
         }
         Instruction::EvalFormString => {
             let form = ctx.pop_str()?;
-            let parser_ctx = ParserContext::new(ctx.header_info.clone(), StrKey::new("FORMS.ERB"));
-            let expr = erars_compiler::normal_form_str(&parser_ctx)(&form).unwrap().1;
-            let insts = erars_compiler::compile_expr(expr).unwrap();
 
-            for inst in insts.iter() {
-                match run_instruction(vm, func_name, inst, tx, ctx)? {
-                    InstructionWorkflow::Normal => {}
-                    _ => bail!("EvalFromString can't do flow control"),
-                }
-            }
+            return Ok(InstructionWorkflow::EvalFormString(form));
         }
         Instruction::GotoLabel => {
             return Ok(InstructionWorkflow::GotoLabel {
@@ -124,15 +147,18 @@ pub(super) fn run_instruction(
                 tx.new_line();
             }
             if flags.contains(PrintFlags::WAIT) {
-                return Ok(InstructionWorkflow::Upstream(VmResult::Input {
-                    req: InputRequest {
-                        generation: tx.input_gen(),
-                        ty: InputRequestType::AnyKey,
-                        is_one: false,
-                        timeout: None,
-                    },
-                    set_result: false,
-                }));
+                let gen = tx.input_gen();
+                ctx.system
+                    .input(
+                        tx,
+                        InputRequest {
+                            generation: gen,
+                            ty: InputRequestType::AnyKey,
+                            is_one: false,
+                            timeout: None,
+                        },
+                    )
+                    .await?;
             }
         }
         Instruction::TryCall(c)
@@ -142,18 +168,13 @@ pub(super) fn run_instruction(
             let func = ctx.pop_str()?;
             let args = ctx.take_value_list(*c)?;
 
-            return Ok(InstructionWorkflow::Call {
-                name: func,
-                args,
-                is_try: matches!(inst, Instruction::TryCall(_) | Instruction::TryJump(_)),
-                is_jump: matches!(inst, Instruction::Jump(_) | Instruction::TryJump(_)),
-            });
+            call!(vm, &func, &args, tx, ctx);
         }
         Instruction::Begin(b) => {
-            return Ok(InstructionWorkflow::Begin(*b));
+            return Ok(Workflow::Begin(*b).into());
         }
         Instruction::CallEvent(ty) => {
-            return Ok(InstructionWorkflow::CallEvent(*ty));
+            call_event!(vm, *ty, tx, ctx);
         }
         Instruction::ConcatString(c) => {
             let args = ctx.take_value_list(*c)?;
@@ -822,7 +843,7 @@ pub(super) fn run_instruction(
                     check_arg_count!(1);
                     let idx = get_arg!(@u32: args, ctx);
 
-                    let (ret, rets) = match ctx.save_manager.load_local(idx) {
+                    let (ret, rets) = match ctx.system.load_local(idx).await? {
                         Some(sav) => {
                             if sav.code != ctx.header_info.gamebase.code {
                                 (2, None)
@@ -998,7 +1019,7 @@ pub(super) fn run_instruction(
 
                     ctx.push(ret);
 
-                    return Ok(InstructionWorkflow::Return);
+                    return Ok(Workflow::Return.into());
                 }
                 BuiltinCommand::Return => {
                     drop(ctx.return_func()?);
@@ -1026,7 +1047,7 @@ pub(super) fn run_instruction(
                         }
                     }
 
-                    return Ok(InstructionWorkflow::Return);
+                    return Ok(Workflow::Return.into());
                 }
                 BuiltinCommand::DrawLine => {
                     tx.draw_line(ctx.header_info.replace.drawline_str.clone());
@@ -1121,17 +1142,20 @@ pub(super) fn run_instruction(
                     tx.set_bg_color(0, 0, 0);
                 }
                 BuiltinCommand::Wait | BuiltinCommand::WaitAnykey => {
-                    return Ok(InstructionWorkflow::Upstream(VmResult::Input {
-                        req: InputRequest::normal(
-                            tx.input_gen(),
-                            if *com == BuiltinCommand::Wait {
-                                InputRequestType::EnterKey
-                            } else {
-                                InputRequestType::AnyKey
-                            },
-                        ),
-                        set_result: false,
-                    }));
+                    let gen = tx.input_gen();
+                    ctx.system
+                        .input(
+                            tx,
+                            InputRequest::normal(
+                                gen,
+                                if *com == BuiltinCommand::Wait {
+                                    InputRequestType::EnterKey
+                                } else {
+                                    InputRequestType::AnyKey
+                                },
+                            ),
+                        )
+                        .await?;
                 }
                 BuiltinCommand::SkipDisp => {
                     let arg = ctx.pop_int()?;
@@ -1230,14 +1254,13 @@ pub(super) fn run_instruction(
                         _ => unreachable!(),
                     };
 
-                    return Ok(InstructionWorkflow::Upstream(VmResult::Input {
-                        req,
-                        set_result: true,
-                    }));
+                    let ret = ctx.system.input(tx, req).await?;
+
+                    ctx.push(ret.unwrap());
                 }
                 BuiltinCommand::Quit => {
                     log::info!("Run QUIT");
-                    return Ok(InstructionWorkflow::Upstream(VmResult::Exit));
+                    return Ok(Workflow::Exit.into());
                 }
                 BuiltinCommand::SwapChara => {
                     let a = get_arg!(@u32: args, ctx);
@@ -1296,15 +1319,13 @@ pub(super) fn run_instruction(
                     }
                 }
                 BuiltinCommand::Redraw => {
-                    return Ok(InstructionWorkflow::Upstream(VmResult::Redraw));
+                    ctx.system.redraw(tx).await?;
                 }
                 BuiltinCommand::ClearLine => {
                     tx.clear_line(get_arg!(@usize: args, ctx));
                 }
                 BuiltinCommand::DoTrain => {
-                    let arg = get_arg!(@u32: args, ctx);
-
-                    ret_set_state!(ctx, SystemState::DoTrain(arg));
+                    todo!("DOTRAIN")
                 }
                 BuiltinCommand::CallTrain => {
                     let count = get_arg!(@usize: args, ctx);
@@ -1316,7 +1337,7 @@ pub(super) fn run_instruction(
                         .map(|c| u32::try_from(*c).map_err(anyhow::Error::from))
                         .collect::<Result<Vec<u32>>>()?;
 
-                    ret_set_state!(ctx, SystemState::CallTrain(commands, None));
+                    conv_workflow!(run_call_train(vm, tx, ctx, commands).await?);
                 }
                 BuiltinCommand::DelChara => {
                     let idx = get_arg!(@i64: args, ctx);
@@ -1332,26 +1353,25 @@ pub(super) fn run_instruction(
                     log::info!("Save {idx}: {description}");
 
                     let var = ctx.var.get_serializable(&ctx.header_info, description);
-                    ctx.save_manager.save_local(idx, &var);
+                    ctx.system.save_local(idx, &var).await?;
                 }
                 BuiltinCommand::LoadData => {
                     let idx = get_arg!(@u32: args, ctx);
 
-                    if let Some(sav) = ctx.save_manager.load_local(idx) {
-                        ret_set_state!(ctx, SystemState::LoadData(idx as i64, Some(sav.clone())));
-                    }
+                    conv_workflow!(run_load_data(vm, tx, ctx, idx).await?);
                 }
                 BuiltinCommand::DelData => {
                     let idx = get_arg!(@u32: args, ctx);
 
-                    ctx.save_manager.remove_local(idx);
+                    ctx.system.remove_local(idx).await?;
                 }
                 BuiltinCommand::SaveGlobal => {
-                    ctx.save_manager
-                        .save_global(&ctx.var.get_global_serializable(&ctx.header_info));
+                    ctx.system
+                        .save_global(&ctx.var.get_global_serializable(&ctx.header_info))
+                        .await?;
                 }
                 BuiltinCommand::LoadGlobal => {
-                    if let Some(global_sav) = ctx.save_manager.load_global() {
+                    if let Some(global_sav) = ctx.system.load_global().await? {
                         ctx.var.load_global_serializable(global_sav, &ctx.header_info)?;
                     }
                 }
@@ -1370,17 +1390,14 @@ pub(super) fn run_instruction(
                     ctx.push(nos as i64);
                 }
                 BuiltinCommand::SaveGame => {
-                    ret_set_state!(
-                        ctx,
-                        SystemState::SaveGame(0, ctx.save_manager.load_local_list())
-                    );
+                    conv_workflow!(run_save_game(vm, tx, ctx).await?);
                 }
-                BuiltinCommand::LoadGame => {
-                    ret_set_state!(
-                        ctx,
-                        SystemState::LoadGame(ctx.save_manager.load_local_list())
-                    );
-                }
+                BuiltinCommand::LoadGame => match run_load_game(tx, ctx).await? {
+                    Some(idx) => {
+                        conv_workflow!(run_load_data(vm, tx, ctx, idx).await?);
+                    }
+                    None => {}
+                },
                 BuiltinCommand::PutForm => {
                     let arg = get_arg!(@String: args, ctx);
 
@@ -1404,4 +1421,289 @@ pub(super) fn run_instruction(
     }
 
     Ok(InstructionWorkflow::Normal)
+}
+
+async fn run_save_game(
+    vm: &TerminalVm,
+    tx: &mut VirtualConsole,
+    ctx: &mut VmContext,
+) -> Result<Workflow> {
+    let mut savs = ctx.system.load_local_list().await?;
+    print_sav_data_list(&savs, tx);
+
+    loop {
+        match ctx.system.input_int(tx).await? {
+            100 => break Ok(Workflow::Return),
+            i if i >= 0 && i < SAVE_COUNT as i64 => {
+                let i = i as u32;
+                let write = if savs.contains_key(&i) {
+                    tx.print_line(format!("SAVE {i} already exists. Overwrite?"));
+                    tx.print_line("[0] Yes [1] No".into());
+
+                    loop {
+                        match ctx.system.input_int(tx).await? {
+                            0 => break true,
+                            1 => break false,
+                            _ => continue,
+                        }
+                    }
+                } else {
+                    true
+                };
+
+                if write {
+                    ctx.put_form_enabled = true;
+                    try_call!(vm, "SAVEINFO", tx, ctx);
+                    ctx.put_form_enabled = false;
+                    let description = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
+                    let sav = ctx.var.get_serializable(&ctx.header_info, description);
+                    ctx.system.save_local(i, &sav).await?;
+                    savs.insert(i, sav);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+async fn run_load_game(
+    tx: &mut VirtualConsole,
+    ctx: &mut VmContext,
+) -> Result<Option<u32>> {
+    let mut savs = ctx.system.load_local_list().await?;
+    print_sav_data_list(&savs, tx);
+
+    loop {
+        match ctx.system.input_int(tx).await? {
+            100 => break Ok(None),
+            i if i >= 0 && i < SAVE_COUNT as i64 => {
+                if let Some(_) = savs.remove(&(i as u32)) {
+                    ctx.system.remove_local(i as u32).await?;
+                    break Ok(Some(i as u32));
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+async fn run_load_data(
+    vm: &TerminalVm,
+    tx: &mut VirtualConsole,
+    ctx: &mut VmContext,
+    idx: u32,
+) -> Result<Workflow> {
+    let sav = ctx.system.load_local(idx).await?.unwrap();
+
+    ctx.lastload_text = sav.description.clone();
+    ctx.lastload_no = idx;
+    ctx.lastload_version = sav.version;
+    ctx.var.load_serializable(sav, &ctx.header_info)?;
+
+    try_call!(vm, "SYSTEM_LOADEND", tx, ctx);
+    call_event!(vm, EventType::Load, tx, ctx);
+
+    Ok(Workflow::Begin(BeginType::Shop))
+}
+
+async fn run_call_train(
+    vm: &TerminalVm,
+    tx: &mut VirtualConsole,
+    ctx: &mut VmContext,
+    commands: Vec<u32>,
+) -> Result<Workflow> {
+    for command in commands {
+        try_call!(vm, "SHOW_STATUS", tx, ctx);
+
+        ctx.var.prepare_train_data()?;
+        ctx.var.reset_var("NOWEX")?;
+        *ctx.var.ref_int("SELECTCOM", &[])? = command as i64;
+
+        call_event!(vm, EventType::Com, tx, ctx);
+        try_call!(vm, &format!("COM{command}"), tx, ctx);
+
+        if ctx.var.get_result() == 0 {
+            continue;
+        }
+
+        try_call!(vm, "SOURCE_CHECK", tx, ctx);
+        ctx.var.reset_var("SOURCE")?;
+        call_event!(vm, EventType::ComEnd, tx, ctx);
+    }
+
+    try_call!(vm, "CALLTRAINEND", tx, ctx);
+
+    Ok(Workflow::Return)
+}
+
+const SAVE_COUNT: u32 = 20;
+
+fn print_sav_data_list(savs: &SaveList, tx: &mut VirtualConsole) {
+    for i in 0..SAVE_COUNT {
+        match savs.get(&i) {
+            Some(sav) => {
+                tx.print_line(format!("[{i:02}] - {}", sav.description));
+            }
+            None => {
+                tx.print_line(format!("[{i:02}] - NO DATA"));
+            }
+        }
+    }
+
+    tx.print_line("[100] Return".into());
+}
+
+pub async fn run_begin(
+    vm: &TerminalVm,
+    ty: BeginType,
+    tx: &mut VirtualConsole,
+    ctx: &mut VmContext,
+) -> Result<Workflow> {
+    log::trace!("Begin {ty}");
+
+    match ty {
+        BeginType::Title => {
+            if !try_call!(vm, "SYSTEM_TITLE", tx, ctx) {
+                todo!("Default TITLE");
+            }
+        }
+        BeginType::First => {
+            call_event!(vm, EventType::First, tx, ctx);
+        }
+        BeginType::Train => {
+            ctx.var.reset_train_data()?;
+            call_event!(vm, EventType::Train, tx, ctx);
+            let train_key = ctx.var.known_key(Var::Train);
+
+            while ctx.begin.is_none() {
+                let com_no = match ctx.var.read_int(Var::NextCom, &[])? {
+                    no if no >= 0 => no,
+                    _ => {
+                        try_call!(vm, "SHOW_STATUS", tx, ctx);
+
+                        let mut printc_count = 0;
+
+                        for (no, name) in ctx.header_info.clone().var_name_var[&train_key].iter() {
+                            if try_call!(vm, &format!("COM_ABLE{no}"), tx, ctx)
+                                && ctx.var.get_result() != 0
+                                || ctx.header_info.replace.comable_init != 0
+                            {
+                                if ctx.config.printc_count != 0
+                                    && printc_count == ctx.config.printc_count
+                                {
+                                    printc_count = 0;
+                                    tx.new_line();
+                                }
+                                tx.printrc(&format!("{name}[{no:3}]"));
+                                printc_count += 1;
+                            }
+                        }
+
+                        tx.new_line();
+
+                        try_call!(vm, "SHOW_USERCOM", tx, ctx);
+
+                        ctx.var.prepare_train_data()?;
+
+                        let no = ctx.system.input_int(tx).await?;
+                        ctx.var.set_result(no);
+
+                        let com_exists = match no.try_into() {
+                            Ok(no) => ctx
+                                .header_info
+                                .var_name_var
+                                .get(&train_key)
+                                .map(|v| v.contains_key(&no))
+                                .unwrap_or(false),
+                            _ => false,
+                        };
+
+                        if com_exists {
+                            no
+                        } else {
+                            try_call!(vm, "USERCOM", tx, ctx);
+
+                            continue;
+                        }
+                    }
+                };
+
+                ctx.var.reset_var("NOWEX")?;
+
+                *ctx.var.ref_int("SELECTCOM", &[])? = com_no;
+
+                call_event!(vm, EventType::Com, tx, ctx);
+                try_call!(vm, &format!("COM{com_no}"), tx, ctx);
+
+                if ctx.var.get_result() == 0 {
+                    continue;
+                }
+
+                try_call!(vm, "SOURCE_CHECK", tx, ctx);
+
+                ctx.var.reset_var("SOURCE")?;
+
+                call_event!(vm, EventType::ComEnd, tx, ctx);
+            }
+        }
+        BeginType::AfterTrain => {
+            call_event!(vm, EventType::End, tx, ctx);
+        }
+        BeginType::AblUp => {
+            while ctx.begin.is_none() {
+                try_call!(vm, "SHOW_JUEL", tx, ctx);
+                try_call!(vm, "SHOW_ABLUP_SELECT", tx, ctx);
+
+                loop {
+                    let i = ctx.system.input_int(tx).await?;
+                    ctx.var.set_result(i);
+
+                    if matches!(i, 0..=99) {
+                        if try_call!(vm, &format!("ABLUP{i}"), tx, ctx) {
+                            break;
+                        }
+                    } else {
+                        try_call!(vm, "USERABLUP", tx, ctx);
+                        break;
+                    }
+                }
+            }
+        }
+        BeginType::TurnEnd => {
+            call_event!(vm, EventType::TurnEnd, tx, ctx);
+        }
+        BeginType::Shop => {
+            call_event!(vm, EventType::Shop, tx, ctx);
+
+            while ctx.begin.is_none() {
+                try_call!(vm, "SHOW_SHOP", tx, ctx);
+
+                let i = ctx.system.input_int(tx).await?;
+                ctx.var.set_result(i);
+
+                if i >= 0 && i < ctx.header_info.replace.sell_item_count {
+                    let sales = ctx.var.read_int("ITEMSALES", &[i as u32])?;
+
+                    if sales != 0 {
+                        let price = ctx
+                            .header_info
+                            .item_price
+                            .get(&(i as u32))
+                            .copied()
+                            .unwrap_or_default() as i64;
+                        let money = ctx.var.ref_int("MONEY", &[])?;
+
+                        if *money >= price {
+                            *money -= price;
+                            *ctx.var.ref_int("ITEM", &[i as u32])? += 1;
+                        }
+                    }
+                } else {
+                    try_call!(vm, "USERSHOP", tx, ctx);
+                }
+            }
+        }
+    }
+
+    Ok(Workflow::Return)
 }

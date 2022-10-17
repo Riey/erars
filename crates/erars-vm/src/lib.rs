@@ -1,65 +1,21 @@
 mod context;
 mod function;
-mod system_func;
 mod terminal_vm;
 mod variable;
 
-use erars_ast::BeginType;
-use erars_ui::InputRequest;
+use erars_ast::{BeginType, Value};
+use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
 use hashbrown::HashMap;
 use pad::PadStr;
 use strum::Display;
 
 pub type SaveList = HashMap<u32, SerializableVariableStorage>;
 
-pub trait SaveLoadManager {
-    fn load_local_list(&self) -> SaveList;
-    fn load_local(&self, idx: u32) -> Option<SerializableVariableStorage>;
-    fn load_global(&self) -> Option<SerializableGlobalVariableStorage>;
-    fn save_local(&self, idx: u32, sav: &SerializableVariableStorage);
-    fn remove_local(&self, idx: u32);
-    fn save_global(&self, sav: &SerializableGlobalVariableStorage);
-    fn clone_manager(&self) -> Box<dyn SaveLoadManager>;
-}
-
-impl Clone for Box<dyn SaveLoadManager> {
-    fn clone(&self) -> Self {
-        self.clone_manager()
-    }
-}
-
-pub struct NullSaveLoadManager;
-
-impl SaveLoadManager for NullSaveLoadManager {
-    fn load_local_list(&self) -> SaveList {
-        SaveList::new()
-    }
-
-    fn load_local(&self, _idx: u32) -> Option<SerializableVariableStorage> {
-        None
-    }
-
-    fn load_global(&self) -> Option<SerializableGlobalVariableStorage> {
-        None
-    }
-
-    fn save_local(&self, _idx: u32, _sav: &SerializableVariableStorage) {}
-
-    fn remove_local(&self, _idx: u32) {}
-
-    fn save_global(&self, _sav: &SerializableGlobalVariableStorage) {}
-
-    fn clone_manager(&self) -> Box<dyn SaveLoadManager> {
-        Box::new(NullSaveLoadManager)
-    }
-}
-
 pub type ArgVec = tinyvec::ArrayVec<[u32; 4]>;
 
 pub use crate::{
     context::{Callstack, LocalValue, VmContext},
     function::{EventCollection, FunctionArgDef, FunctionBody, FunctionDic, FunctionGotoLabel},
-    system_func::SystemState,
     terminal_vm::TerminalVm,
     variable::{
         SerializableGlobalVariableStorage, SerializableVariableStorage, UniformVariable,
@@ -69,13 +25,11 @@ pub use crate::{
 
 pub use erars_compiler::{EraConfig, HeaderInfo, Instruction, Language};
 
-#[derive(Display, Debug, Clone, PartialEq, Eq)]
+#[derive(Display, Debug, Clone)]
 pub enum Workflow {
     Return,
-    SwitchState(SystemState),
-    GotoState(SystemState),
+    Exit,
     Begin(BeginType),
-    Upstream(VmResult),
 }
 
 impl Default for Workflow {
@@ -84,9 +38,55 @@ impl Default for Workflow {
     }
 }
 
-#[derive(Display, Debug, Clone, PartialEq, Eq)]
+#[async_trait::async_trait(?Send)]
+pub trait SystemFunctions {
+    async fn input(
+        &self,
+        vconsole: &mut VirtualConsole,
+        req: InputRequest,
+    ) -> anyhow::Result<Option<Value>>;
+
+    async fn input_int(&self, vconsole: &mut VirtualConsole) -> anyhow::Result<i64> {
+        let req = InputRequest::normal(vconsole.input_gen(), InputRequestType::Int);
+        self.input(vconsole, req)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Value is empty"))
+            .and_then(Value::try_into_int)
+    }
+
+    async fn redraw(&self, vconsole: &mut VirtualConsole) -> anyhow::Result<()>;
+
+    async fn load_local_list(&self) -> anyhow::Result<SaveList>;
+    async fn load_local(&self, idx: u32) -> anyhow::Result<Option<SerializableVariableStorage>>;
+    async fn load_global(&self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>>;
+    async fn save_local(&self, idx: u32, sav: &SerializableVariableStorage) -> anyhow::Result<()>;
+    async fn remove_local(&self, idx: u32) -> anyhow::Result<()>;
+    async fn save_global(&self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()>;
+
+    fn clone_functions(&self) -> Box<dyn SystemFunctions>;
+}
+
+impl Clone for Box<dyn SystemFunctions> {
+    fn clone(&self) -> Self {
+        self.clone_functions()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum VmArg {
+    Empty,
+    Input(Value),
+    GlobalSav(SerializableGlobalVariableStorage),
+    LocalSav(SerializableVariableStorage),
+}
+
+#[derive(Display, Debug, Clone)]
 pub enum VmResult {
     Exit,
     Redraw,
+    RefreshGlobalSave,
+    RefreshLocalSave,
+    SaveLocal(u32, SerializableVariableStorage),
+    SaveGlobal(SerializableGlobalVariableStorage),
     Input { req: InputRequest, set_result: bool },
 }
