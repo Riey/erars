@@ -87,12 +87,10 @@ const fn begin(ty: BeginType) -> Option<Workflow> {
 }
 
 fn input_int(tx: &mut VirtualConsole) -> Option<Workflow> {
-    Some(Workflow::Upstream(
-        (VmResult::Input {
-            req: InputRequest::normal(tx.input_gen(), InputRequestType::Int),
-            set_result: false,
-        }),
-    ))
+    Some(Workflow::Upstream(VmResult::Input {
+        req: InputRequest::normal(tx.input_gen(), InputRequestType::Int),
+        set_result: false,
+    }))
 }
 
 impl SystemState {

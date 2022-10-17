@@ -1,3 +1,4 @@
+mod json_frontend;
 mod stdio_frontend;
 
 use erars_ast::Value;
@@ -25,6 +26,9 @@ struct Args {
 
     #[clap(long, help = "Don't print logs")]
     quite: bool,
+
+    #[clap(long, help = "Enable json mode")]
+    json: bool,
 
     #[clap(long, help = "Save bytecode")]
     save: bool,
@@ -75,6 +79,9 @@ fn main() {
 
     if args.save {
         save_script(vm, ctx).unwrap();
+    } else if args.json {
+        let mut frontend = json_frontend::JsonFrontend::new(tx);
+        frontend.run(&vm, &mut ctx).unwrap();
     } else {
         let mut frontend = stdio_frontend::StdioFrontend::new(tx);
         frontend.run(&vm, &mut ctx).unwrap();

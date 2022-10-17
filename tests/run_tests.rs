@@ -67,13 +67,13 @@ fn run_test() {
 
 fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
     let vm = TerminalVm::new(dic);
-    let mut tx = VirtualConsole::new(ctx.config.printc_width);
+    let mut tx = VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log);
 
     k9::assert_equal!(vm.run_state(&mut tx, &mut ctx), VmResult::Exit);
 
     let mut out = String::new();
 
-    for line in tx.lines() {
+    for line in tx.lines_from(0).iter() {
         use std::fmt::Write;
         writeln!(out, "{}", line).unwrap();
     }

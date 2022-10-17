@@ -153,6 +153,8 @@ pub struct Gamebase {
 pub struct EraConfig {
     pub lang: Language,
     pub save_nos: usize,
+    #[derivative(Default(value = "500"))]
+    pub max_log: usize,
     #[derivative(Default(value = "4"))]
     pub printc_count: usize,
     #[derivative(Default(value = "30"))]
@@ -170,6 +172,12 @@ impl EraConfig {
                 ConfigToken::Line((key, value)) => match key {
                     "PRINTCを並べる数" => {
                         ret.printc_count = match value.parse() {
+                            Ok(l) => l,
+                            Err(_) => error!(lex, format!("Invalid integer {value}")),
+                        };
+                    }
+                    "履歴ログの行数" => {
+                        ret.max_log = match value.parse() {
                             Ok(l) => l,
                             Err(_) => error!(lex, format!("Invalid integer {value}")),
                         };
