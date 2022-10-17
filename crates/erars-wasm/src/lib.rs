@@ -86,6 +86,11 @@ impl ErarsContext {
     }
 
     pub fn run(&mut self) -> JsValue {
+        if self.input_req.is_some() {
+            log::error!("Input is required current_req: {:?}", self.input_req);
+            return JsValue::NULL;
+        }
+
         let exited = match self.vm.run_state(&mut self.vconsole, &mut self.ctx) {
             VmResult::Input { req, set_result } => {
                 if req.timeout.is_some() {
