@@ -1,11 +1,11 @@
 use std::{collections::HashMap, sync::Arc};
 
+use anyhow::bail;
 use erars_ast::{StrKey, Value, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
-use erars_ui::{ConsoleSerde, InputRequest, InputRequestType, VirtualConsole};
+use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
 use erars_vm::{
-    SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, TerminalVm,
-    VmContext, VmResult,
+    SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, TerminalVm, VmContext,
 };
 use js_sys::Promise;
 use wasm_bindgen::prelude::*;
@@ -14,8 +14,14 @@ use wasm_bindgen_futures::JsFuture;
 #[wasm_bindgen(typescript_custom_section)]
 const ITEXT_STYLE: &'static str = r#"
 interface ISystemCallbacks {
-    input: (console: any) => Promise<int | string>;
+    input: (console: any) => Promise<number | string>;
     redraw: (console: any) => Promise<void>;
+
+    load_local: (idx: number) => Promise<string | null>;
+    load_global: () => Promise<string | null>;
+    save_local: (idx: number, sav: string) => Promise<void>;
+    save_global: (sav: string) => Promise<void>;
+    remove_local: (idx: number) => Promise<void>;
 }
 "#;
 
@@ -29,6 +35,17 @@ extern "C" {
     fn input(this: &ISystemCallbacks, console: JsValue) -> Promise;
     #[wasm_bindgen(method)]
     fn redraw(this: &ISystemCallbacks, console: JsValue) -> Promise;
+
+    #[wasm_bindgen(method)]
+    fn load_local(this: &ISystemCallbacks, idx: u32) -> Promise;
+    #[wasm_bindgen(method)]
+    fn load_global(this: &ISystemCallbacks) -> Promise;
+    #[wasm_bindgen(method)]
+    fn save_local(this: &ISystemCallbacks, idx: u32, sav: String) -> Promise;
+    #[wasm_bindgen(method)]
+    fn save_global(this: &ISystemCallbacks, sav: String) -> Promise;
+    #[wasm_bindgen(method)]
+    fn remove_local(this: &ISystemCallbacks, idx: u32) -> Promise;
 }
 
 #[derive(Clone)]
@@ -77,29 +94,67 @@ impl erars_vm::SystemFunctions for WasmSystem {
     }
 
     async fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
-        todo!()
+        let mut list = SaveList::new();
+
+        for idx in 0..100 {
+            if let Some(sav) = self.load_local(idx).await? {
+                list.insert(idx, sav);
+            }
+        }
+
+        Ok(list)
     }
     async fn load_local(
         &mut self,
         idx: u32,
     ) -> anyhow::Result<Option<SerializableVariableStorage>> {
-        todo!()
+        let ret = JsFuture::from(self.callbacks.load_local(idx))
+            .await
+            .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
+
+        if ret.is_null() {
+            Ok(None)
+        } else if let Some(ret) = ret.as_string() {
+            let ret = serde_json::from_str(&ret)?;
+            Ok(Some(ret))
+        } else {
+            bail!("Invalid save return {ret:?}");
+        }
     }
     async fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
-        todo!()
+        let ret = JsFuture::from(self.callbacks.load_global())
+            .await
+            .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
+        if ret.is_null() {
+            Ok(None)
+        } else if let Some(ret) = ret.as_string() {
+            let ret = serde_json::from_str(&ret)?;
+            Ok(Some(ret))
+        } else {
+            bail!("Invalid save return {ret:?}");
+        }
     }
     async fn save_local(
         &mut self,
         idx: u32,
         sav: &SerializableVariableStorage,
     ) -> anyhow::Result<()> {
-        todo!()
+        JsFuture::from(self.callbacks.save_local(idx, serde_json::to_string(sav)?))
+            .await
+            .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
+        Ok(())
     }
     async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
-        todo!()
+        JsFuture::from(self.callbacks.remove_local(idx))
+            .await
+            .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
+        Ok(())
     }
     async fn save_global(&mut self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()> {
-        todo!()
+        JsFuture::from(self.callbacks.save_global(serde_json::to_string(sav)?))
+            .await
+            .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
+        Ok(())
     }
 
     fn clone_functions(&self) -> Box<dyn erars_vm::SystemFunctions> {

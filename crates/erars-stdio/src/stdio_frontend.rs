@@ -3,35 +3,59 @@ use erars_ui::{ConsoleLinePart, FontStyle, InputRequest, InputRequestType, Virtu
 use erars_vm::{
     SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, SystemFunctions,
 };
-use std::{
-    io::{self, BufRead},
-    path::PathBuf,
-    pin::Pin,
-};
+use std::{io, path::PathBuf};
 
 #[derive(Clone)]
 pub struct StdioFrontend {
     sav_path: PathBuf,
-    drawed: usize,
+    from: usize,
     input: String,
+    json: bool,
 }
 
 impl StdioFrontend {
-    pub fn new(sav_path: PathBuf) -> Self {
+    pub fn new(sav_path: PathBuf, json: bool) -> Self {
         Self {
             sav_path,
-            drawed: 0,
+            from: 0,
             input: String::new(),
+            json,
         }
     }
 
     fn draw(
         &mut self,
+        current_req: Option<&InputRequest>,
+        vconsole: &mut VirtualConsole,
+        mut out: impl io::Write,
+    ) -> anyhow::Result<()> {
+        if !self.json {
+            return self.draw_stdio(out, vconsole);
+        }
+
+        if vconsole.need_rebuild {
+            self.from = vconsole.top_index;
+        }
+
+        let ret = vconsole.make_serializable(current_req, self.from);
+
+        serde_json::to_writer(&mut out, &ret)?;
+
+        self.from += ret.lines.len();
+        vconsole.need_rebuild = false;
+
+        out.flush()?;
+
+        Ok(())
+    }
+
+    fn draw_stdio(
+        &mut self,
         mut out: impl io::Write,
         vconsole: &mut VirtualConsole,
     ) -> anyhow::Result<()> {
-        for line in vconsole.lines_from(self.drawed).iter() {
-            self.drawed += 1;
+        for line in vconsole.lines_from(self.from).iter() {
+            self.from += 1;
             for part in line.parts.iter() {
                 match part {
                     ConsoleLinePart::Text(text, style) => {
@@ -67,7 +91,7 @@ impl SystemFunctions for StdioFrontend {
         vconsole: &mut VirtualConsole,
         req: InputRequest,
     ) -> anyhow::Result<Option<Value>> {
-        self.draw(&mut io::stdout().lock(), vconsole)?;
+        self.draw(Some(&req), vconsole, &mut io::stdout().lock())?;
 
         loop {
             let size = io::stdin().read_line(&mut self.input)?;
@@ -97,7 +121,7 @@ impl SystemFunctions for StdioFrontend {
     }
 
     async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
-        self.draw(&mut io::stdout().lock(), vconsole)
+        self.draw(None, vconsole, &mut io::stdout().lock())
     }
     async fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
         erars_saveload_fs::load_local_list(&self.sav_path)

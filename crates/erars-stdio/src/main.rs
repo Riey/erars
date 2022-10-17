@@ -75,6 +75,7 @@ fn main() {
 
     let system = Box::new(stdio_frontend::StdioFrontend::new(
         Path::new(&args.target_path).join("sav"),
+        args.json,
     ));
 
     let (vm, mut ctx, mut tx) = if args.load {
@@ -85,7 +86,6 @@ fn main() {
 
     if args.save {
         save_script(vm, ctx).unwrap();
-    } else if args.json {
     } else {
         futures_executor::block_on(async move { vm.start(&mut tx, &mut ctx).await });
     }
