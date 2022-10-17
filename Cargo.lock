@@ -477,6 +477,7 @@ dependencies = [
  "erars-ui",
  "erars-vm",
  "flexi_logger",
+ "futures-executor",
  "glob",
  "k9",
  "log",

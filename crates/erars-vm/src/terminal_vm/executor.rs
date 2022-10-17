@@ -11,14 +11,14 @@ macro_rules! conv_workflow {
     };
 }
 
-macro_rules! call {
-    ($vm:expr, $name:expr, $tx:expr, $ctx:expr) => {
-        call!($vm, $name, &[], $tx, $ctx)
-    };
-    ($vm:expr, $name:expr, $args:expr, $tx:expr, $ctx:expr) => {
-        conv_workflow!($vm.call($name, $args, $tx, $ctx).await?)
-    };
-}
+// macro_rules! call {
+//     ($vm:expr, $name:expr, $tx:expr, $ctx:expr) => {
+//         call!($vm, $name, &[], $tx, $ctx)
+//     };
+//     ($vm:expr, $name:expr, $args:expr, $tx:expr, $ctx:expr) => {
+//         conv_workflow!($vm.call($name, $args, $tx, $ctx).await?)
+//     };
+// }
 
 macro_rules! try_call {
     ($vm:expr, $name:expr, $tx:expr, $ctx:expr) => {
@@ -161,14 +161,35 @@ pub(super) async fn run_instruction(
                     .await?;
             }
         }
-        Instruction::TryCall(c)
-        | Instruction::TryJump(c)
-        | Instruction::Jump(c)
-        | Instruction::Call(c) => {
+        Instruction::TryCall(c) | Instruction::TryJump(c) => {
             let func = ctx.pop_str()?;
             let args = ctx.take_value_list(*c)?;
 
-            call!(vm, &func, &args, tx, ctx);
+            match vm.try_call(&func, &args, tx, ctx).await? {
+                Some(Workflow::Return) => {
+                    if matches!(inst, Instruction::TryJump(_)) {
+                        return Ok(Workflow::Return.into());
+                    }
+                    ctx.push(true);
+                }
+                Some(other) => return Ok(other.into()),
+                None => {
+                    ctx.push(false);
+                }
+            }
+        }
+        Instruction::Jump(c) | Instruction::Call(c) => {
+            let func = ctx.pop_str()?;
+            let args = ctx.take_value_list(*c)?;
+
+            match vm.call(&func, &args, tx, ctx).await? {
+                Workflow::Return => {
+                    if matches!(inst, Instruction::Jump(_)) {
+                        return Ok(Workflow::Return.into());
+                    }
+                }
+                other => return Ok(other.into()),
+            }
         }
         Instruction::Begin(b) => {
             return Ok(Workflow::Begin(*b).into());

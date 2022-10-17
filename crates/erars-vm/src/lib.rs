@@ -77,21 +77,51 @@ impl Clone for Box<dyn SystemFunctions> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum VmArg {
-    Empty,
-    Input(Value),
-    GlobalSav(SerializableGlobalVariableStorage),
-    LocalSav(SerializableVariableStorage),
-}
+#[derive(Clone, Copy)]
+pub struct NullSystemFunctions;
 
-#[derive(Display, Debug, Clone)]
-pub enum VmResult {
-    Exit,
-    Redraw,
-    RefreshGlobalSave,
-    RefreshLocalSave,
-    SaveLocal(u32, SerializableVariableStorage),
-    SaveGlobal(SerializableGlobalVariableStorage),
-    Input { req: InputRequest, set_result: bool },
+#[async_trait::async_trait(?Send)]
+#[allow(unused_variables)]
+impl SystemFunctions for NullSystemFunctions {
+    async fn input(
+        &mut self,
+        vconsole: &mut VirtualConsole,
+        req: InputRequest,
+    ) -> anyhow::Result<Option<Value>> {
+        Ok(None)
+    }
+
+    async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    async fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
+        Ok(SaveList::new())
+    }
+    async fn load_local(
+        &mut self,
+        idx: u32,
+    ) -> anyhow::Result<Option<SerializableVariableStorage>> {
+        Ok(None)
+    }
+    async fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
+        Ok(None)
+    }
+    async fn save_local(
+        &mut self,
+        idx: u32,
+        sav: &SerializableVariableStorage,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
+        Ok(())
+    }
+    async fn save_global(&mut self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()> {
+        Ok(())
+    }
+
+    fn clone_functions(&self) -> Box<dyn SystemFunctions> {
+        Box::new(Self)
+    }
 }
