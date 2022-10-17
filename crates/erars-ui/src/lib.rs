@@ -92,6 +92,10 @@ impl Display for ConsoleLine {
 }
 
 impl ConsoleLine {
+    pub fn is_empty(&self) -> bool {
+        self.parts.is_empty()
+    }
+
     fn push_button_merge(&mut self, text: String, style: TextStyle, value: Value) {
         let len = self
             .parts
@@ -188,27 +192,46 @@ impl ConsoleLine {
     }
 }
 
+#[derive(Serialize)]
+pub struct ConsoleSerde<'a> {
+    pub current_req: Option<&'a InputRequest>,
+    pub rebuild: bool,
+    pub bg_color: Color,
+    pub hl_color: Color,
+    #[serde(skip_serializing_if = "ConsoleLine::is_empty")]
+    pub last_line: &'a ConsoleLine,
+    pub lines: LinesFrom<'a>,
+}
+
 /// Used by ui backend
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct VirtualConsole {
     pub timeout: Option<(Instant, u32, Value)>,
-    pub lines: Vec<ConsoleLine>,
+    pub lines: VecDeque<ConsoleLine>,
+    pub last_line: ConsoleLine,
     pub style: TextStyle,
     pub bg_color: Color,
     pub hl_color: Color,
-    pub printc_width: usize,
     pub skipdisp: bool,
+    pub need_rebuild: bool,
     pub inputs: VecDeque<Value>,
     pub input_gen: u32,
+
+    max_log: usize,
+    printc_width: usize,
+    pub top_index: usize,
 }
 
 impl VirtualConsole {
-    pub fn new(printc_width: usize) -> Self {
+    pub fn new(printc_width: usize, max_log: usize) -> Self {
         Self {
             input_gen: 0,
             timeout: None,
             printc_width,
-            lines: Vec::new(),
+            need_rebuild: false,
+            lines: VecDeque::with_capacity(max_log),
+            last_line: ConsoleLine::default(),
+            max_log,
             style: TextStyle {
                 color: Color([255, 255, 255]),
                 font_family: "".into(),
@@ -218,11 +241,28 @@ impl VirtualConsole {
             hl_color: Color([255, 255, 0]),
             skipdisp: false,
             inputs: VecDeque::new(),
+            top_index: 0,
         }
     }
 
-    pub fn lines(&self) -> &[ConsoleLine] {
-        &self.lines
+    pub fn make_serializable<'a>(
+        &'a self,
+        req: Option<&'a InputRequest>,
+        from: usize,
+    ) -> ConsoleSerde<'a> {
+        ConsoleSerde {
+            current_req: req,
+            rebuild: self.need_rebuild,
+            bg_color: self.bg_color,
+            hl_color: self.hl_color,
+            last_line: &self.last_line,
+            lines: self.lines_from(from),
+        }
+    }
+
+    pub fn lines_from(&self, from: usize) -> LinesFrom<'_> {
+        let from = from.saturating_sub(self.top_index).min(self.lines.len());
+        LinesFrom { this: self, from }
     }
 
     pub fn set_skipdisp(&mut self, skipdisp: bool) {
@@ -244,37 +284,29 @@ impl VirtualConsole {
     }
 
     pub fn line_count(&self) -> usize {
-        match self.lines.last() {
-            None => 0,
-            Some(line) => self.lines.len() - line.parts.is_empty() as usize,
-        }
+        self.lines.len() + self.line_is_empty() as usize
     }
 
     pub fn line_is_empty(&self) -> bool {
-        self.lines.last().map_or(true, |l| l.parts.is_empty())
+        self.last_line.parts.is_empty()
     }
 
     pub fn reuse_last_line(&mut self, s: String) {
         if self.skipdisp {
             return;
         }
-        if self.lines.is_empty() {
-            self.lines.push(ConsoleLine::default());
-        }
-        let parts = &mut self.lines.last_mut().unwrap().parts;
+        let style = self.style.clone();
+        let parts = &mut self.last_line.parts;
 
         parts.clear();
-        parts.push(ConsoleLinePart::Text(s, self.style.clone()));
+        parts.push(ConsoleLinePart::Text(s, style));
     }
 
     pub fn print(&mut self, s: String) {
         if self.skipdisp {
             return;
         }
-        if self.lines.is_empty() {
-            self.lines.push(ConsoleLine::default());
-        }
-        self.lines.last_mut().unwrap().push_text(s, &self.style);
+        self.last_line.push_text(s, &self.style);
     }
 
     pub fn print_line(&mut self, s: String) {
@@ -282,23 +314,18 @@ impl VirtualConsole {
             return;
         }
         self.print(s);
-        self.new_line();
+        self.push_line();
     }
 
     pub fn print_button(&mut self, text: String, value: Value) {
         if self.skipdisp {
             return;
         }
-        if self.lines.is_empty() {
-            self.lines.push(ConsoleLine::default());
-        }
-        let line = &mut self.lines.last_mut().unwrap();
-        line.button_start = None;
-
-        line.parts.push(ConsoleLinePart::Button(
-            vec![(text, self.style.clone())],
-            value,
-        ));
+        let style = self.style.clone();
+        self.last_line.button_start = None;
+        self.last_line
+            .parts
+            .push(ConsoleLinePart::Button(vec![(text, style)], value));
     }
 
     pub fn printlc(&mut self, s: &str) {
@@ -309,30 +336,46 @@ impl VirtualConsole {
         self.print(s.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Right));
     }
 
+    fn push_line(&mut self) {
+        if self.lines.len() == self.max_log {
+            self.lines.pop_front();
+            self.top_index += 1;
+        }
+
+        self.lines.push_back(std::mem::take(&mut self.last_line));
+    }
+
     pub fn new_line(&mut self) {
         if self.skipdisp {
             return;
         }
-        self.lines.push(ConsoleLine::default());
+
+        self.push_line();
     }
 
     pub fn draw_line(&mut self, s: String) {
         if self.skipdisp {
             return;
         }
-        if self.lines.is_empty() {
-            self.lines.push(ConsoleLine::default());
-        }
-        self.lines
-            .last_mut()
-            .unwrap()
-            .parts
-            .push(ConsoleLinePart::Line(s, self.style.clone()));
-        self.lines.push(ConsoleLine::default());
+        let style = self.style.clone();
+        self.last_line.parts.push(ConsoleLinePart::Line(s, style));
+        self.push_line();
     }
 
     pub fn clear_line(&mut self, c: usize) {
-        self.lines.truncate(c);
+        if c == 0 {
+            return;
+        }
+
+        let c = c.min(self.lines.len().saturating_sub(1));
+
+        drop(self.lines.drain(self.lines.len() - c..));
+
+        self.need_rebuild = true;
+
+        if !self.line_is_empty() {
+            self.last_line = self.lines.pop_back().unwrap_or_default();
+        }
     }
 
     pub fn set_color(&mut self, r: u8, g: u8, b: u8) {
@@ -348,7 +391,7 @@ impl VirtualConsole {
     }
 
     pub fn set_align(&mut self, align: Alignment) {
-        self.lines.last_mut().unwrap().align = align;
+        self.last_line.align = align;
     }
 
     pub fn set_style(&mut self, style: FontStyle) {
@@ -360,7 +403,7 @@ impl VirtualConsole {
     }
 
     pub fn align(&self) -> Alignment {
-        self.lines.last().unwrap().align
+        self.last_line.align
     }
 
     pub fn color(&self) -> u32 {
@@ -449,6 +492,30 @@ impl InputRequest {
 
 fn is_left_alignment(align: &Alignment) -> bool {
     *align == Alignment::Left
+}
+
+pub struct LinesFrom<'a> {
+    this: &'a VirtualConsole,
+    from: usize,
+}
+
+impl<'a> LinesFrom<'a> {
+    pub fn len(&self) -> usize {
+        self.this.lines.len() - self.from
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &'a ConsoleLine> + Clone + 'a {
+        self.this.lines.range(self.from..self.this.lines.len())
+    }
+}
+
+impl<'a> Serialize for LinesFrom<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serde_iter::seq::serialize(&self.iter(), serializer)
+    }
 }
 
 #[test]

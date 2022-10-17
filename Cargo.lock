@@ -776,6 +776,8 @@ dependencies = [
  "log",
  "log-panics",
  "ron",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -793,6 +795,7 @@ dependencies = [
  "parking_lot",
  "regex",
  "serde",
+ "serde_iter",
  "smol_str",
  "time",
 ]
@@ -1740,6 +1743,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "serde_iter"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbd0759d0d819d81aa686d57c62fdec5ce0eed9693ba17b58d95616502db3e02"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

@@ -19,7 +19,7 @@ use axum::{
 use tower_http::compression::CompressionLayer;
 use tower_http::cors;
 
-use erars_ui::{Color, ConsoleLine, InputRequest, InputRequestType, VirtualConsole};
+use erars_ui::{Color, InputRequest, InputRequestType, LinesFrom, VirtualConsole};
 
 pub struct HttpFrontend {
     pub port: u16,
@@ -63,23 +63,12 @@ async fn start(
                 |axum::extract::Query(params): axum::extract::Query<GetRootQuery>| async move {
                     let vconsole = vconsole.read();
 
-                    #[derive(serde::Serialize)]
-                    struct Ret<'a> {
-                        current_req: Option<&'a InputRequest>,
-                        bg_color: Color,
-                        hl_color: Color,
-                        lines: &'a [ConsoleLine],
-                    }
-
                     (
                         StatusCode::OK,
                         [("Content-Type", "text/json")],
-                        serde_json::to_string(&Ret {
-                            current_req: vconsole.1.as_ref(),
-                            bg_color: vconsole.0.bg_color,
-                            hl_color: vconsole.0.hl_color,
-                            lines: vconsole.0.lines().get(params.from..).unwrap_or(&[]),
-                        })
+                        serde_json::to_string(
+                            &vconsole.0.make_serializable(vconsole.1.as_ref(), params.from),
+                        )
                         .unwrap(),
                     )
                 },
@@ -147,7 +136,7 @@ impl HttpFrontend {
         let (input_tx, input_rx) = bounded(8);
 
         let vconsole_buf = Arc::new(RwLock::new((
-            VirtualConsole::new(ctx.config.printc_width),
+            VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log),
             None,
         )));
         let clients = Arc::new(AsyncMutex::new(Slab::<(usize, WebSocket)>::new()));

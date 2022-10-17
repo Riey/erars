@@ -9,7 +9,7 @@ async function start() {
   const ctx = new ErarsContext(new Uint8Array(await game), config);
   console.log("Load success!");
 
-  const ret = ctx.run(0);
+  const ret = ctx.run();
   console.log("console display: ", ret);
 }
 

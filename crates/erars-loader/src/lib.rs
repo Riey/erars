@@ -123,7 +123,7 @@ pub unsafe fn load_script(
     log::info!("Load game data");
     let (header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
         rmp_serde::decode::from_read(&mut read)?;
-    let mut vconsole = VirtualConsole::new(config.printc_width);
+    let mut vconsole = VirtualConsole::new(config.printc_width, config.max_log);
 
     let elapsed = start.elapsed();
     log::info!("Load done! {}ms elapsed", elapsed.as_millis());
@@ -173,7 +173,7 @@ pub fn run_script(
     log::trace!("Config: {config:?}");
 
     let config = Arc::new(config);
-    let mut tx = VirtualConsole::new(config.printc_width);
+    let mut tx = VirtualConsole::new(config.printc_width, config.max_log);
 
     macro_rules! check_time {
         ($work:expr) => {

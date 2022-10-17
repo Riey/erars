@@ -18,6 +18,9 @@ time = "0.3.15"
 bitflags = "1.3.2"
 anyhow = "1.0.65"
 crossbeam-channel = "0.5.6"
+serde_iter = "0.1.1"
 
 [dev-dependencies]
 k9 = "0.11.5"
+
+[features]

@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc};
 
 use erars_ast::{StrKey, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
-use erars_ui::{Color, ConsoleLine, InputRequest, InputRequestType, VirtualConsole};
+use erars_ui::{ConsoleSerde, InputRequest, InputRequestType, VirtualConsole};
 use erars_vm::{TerminalVm, VmContext, VmResult};
 use wasm_bindgen::prelude::*;
 
@@ -18,6 +18,7 @@ pub struct ErarsContext {
     ctx: VmContext,
     vconsole: VirtualConsole,
     input_req: Option<(InputRequest, bool)>,
+    from: usize,
 }
 
 #[wasm_bindgen]
@@ -45,9 +46,10 @@ impl ErarsContext {
 
         Self {
             vm: TerminalVm { dic },
-            vconsole: VirtualConsole::new(ctx.config.printc_width),
+            vconsole: VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log),
             ctx,
             input_req: None,
+            from: 0,
         }
     }
 
@@ -83,7 +85,7 @@ impl ErarsContext {
         }
     }
 
-    pub fn run(&mut self, from: usize) -> JsValue {
+    pub fn run(&mut self) -> JsValue {
         let exited = match self.vm.run_state(&mut self.vconsole, &mut self.ctx) {
             VmResult::Input { req, set_result } => {
                 if req.timeout.is_some() {
@@ -98,23 +100,29 @@ impl ErarsContext {
 
         #[derive(serde::Serialize)]
         struct Ret<'a> {
+            #[serde(flatten)]
+            console: ConsoleSerde<'a>,
             exited: bool,
-            current_req: Option<&'a InputRequest>,
-            bg_color: Color,
-            hl_color: Color,
-            lines: &'a [ConsoleLine],
         }
 
-        serde::Serialize::serialize(
-            &Ret {
-                exited,
-                current_req: self.input_req.as_ref().map(|(r, _)| r),
-                bg_color: self.vconsole.bg_color,
-                hl_color: self.vconsole.hl_color,
-                lines: self.vconsole.lines().get(from..).unwrap_or(&[]),
-            },
+        let console = self
+            .vconsole
+            .make_serializable(self.input_req.as_ref().map(|(r, _)| r), self.from);
+        let lines = console.lines.len();
+
+        if self.vconsole.need_rebuild {
+            self.from = self.vconsole.top_index;
+        }
+
+        let ret = serde::Serialize::serialize(
+            &Ret { exited, console },
             &serde_wasm_bindgen::Serializer::json_compatible(),
         )
-        .expect("Serialize failed")
+        .expect("Serialize failed");
+
+        self.from += lines;
+        self.vconsole.need_rebuild = false;
+
+        ret
     }
 }
