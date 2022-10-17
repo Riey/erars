@@ -41,12 +41,12 @@ impl Default for Workflow {
 #[async_trait::async_trait(?Send)]
 pub trait SystemFunctions {
     async fn input(
-        &self,
+        &mut self,
         vconsole: &mut VirtualConsole,
         req: InputRequest,
     ) -> anyhow::Result<Option<Value>>;
 
-    async fn input_int(&self, vconsole: &mut VirtualConsole) -> anyhow::Result<i64> {
+    async fn input_int(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<i64> {
         let req = InputRequest::normal(vconsole.input_gen(), InputRequestType::Int);
         self.input(vconsole, req)
             .await?
@@ -54,14 +54,19 @@ pub trait SystemFunctions {
             .and_then(Value::try_into_int)
     }
 
-    async fn redraw(&self, vconsole: &mut VirtualConsole) -> anyhow::Result<()>;
+    async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()>;
 
-    async fn load_local_list(&self) -> anyhow::Result<SaveList>;
-    async fn load_local(&self, idx: u32) -> anyhow::Result<Option<SerializableVariableStorage>>;
-    async fn load_global(&self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>>;
-    async fn save_local(&self, idx: u32, sav: &SerializableVariableStorage) -> anyhow::Result<()>;
-    async fn remove_local(&self, idx: u32) -> anyhow::Result<()>;
-    async fn save_global(&self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()>;
+    async fn load_local_list(&mut self) -> anyhow::Result<SaveList>;
+    async fn load_local(&mut self, idx: u32)
+        -> anyhow::Result<Option<SerializableVariableStorage>>;
+    async fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>>;
+    async fn save_local(
+        &mut self,
+        idx: u32,
+        sav: &SerializableVariableStorage,
+    ) -> anyhow::Result<()>;
+    async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()>;
+    async fn save_global(&mut self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()>;
 
     fn clone_functions(&self) -> Box<dyn SystemFunctions>;
 }

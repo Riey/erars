@@ -3,7 +3,7 @@ use std::fmt;
 use std::sync::Arc;
 use strum::Display;
 
-use erars_ast::{BeginType, EventType, ScriptPosition, StrKey, Value, VariableInfo};
+use erars_ast::{EventType, ScriptPosition, StrKey, Value, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::variable::StrKeyLike;
@@ -17,8 +17,6 @@ pub struct VmContext {
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
     pub system: Box<dyn SystemFunctions>,
-
-    pub begin: Option<BeginType>,
 
     /// For NOSKIP/ENDNOSKIP
     pub(crate) prev_skipdisp: Option<bool>,
@@ -42,7 +40,6 @@ impl VmContext {
     ) -> Self {
         let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
-            begin: None,
             system,
             header_info,
             stack: Vec::with_capacity(1024),

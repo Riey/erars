@@ -1466,10 +1466,7 @@ async fn run_save_game(
     }
 }
 
-async fn run_load_game(
-    tx: &mut VirtualConsole,
-    ctx: &mut VmContext,
-) -> Result<Option<u32>> {
+async fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Option<u32>> {
     let mut savs = ctx.system.load_local_list().await?;
     print_sav_data_list(&savs, tx);
 
@@ -1575,7 +1572,7 @@ pub async fn run_begin(
             call_event!(vm, EventType::Train, tx, ctx);
             let train_key = ctx.var.known_key(Var::Train);
 
-            while ctx.begin.is_none() {
+            loop {
                 let com_no = match ctx.var.read_int(Var::NextCom, &[])? {
                     no if no >= 0 => no,
                     _ => {
@@ -1649,33 +1646,31 @@ pub async fn run_begin(
         BeginType::AfterTrain => {
             call_event!(vm, EventType::End, tx, ctx);
         }
-        BeginType::AblUp => {
-            while ctx.begin.is_none() {
-                try_call!(vm, "SHOW_JUEL", tx, ctx);
-                try_call!(vm, "SHOW_ABLUP_SELECT", tx, ctx);
+        BeginType::AblUp => loop {
+            try_call!(vm, "SHOW_JUEL", tx, ctx);
+            try_call!(vm, "SHOW_ABLUP_SELECT", tx, ctx);
 
-                loop {
-                    let i = ctx.system.input_int(tx).await?;
-                    ctx.var.set_result(i);
+            loop {
+                let i = ctx.system.input_int(tx).await?;
+                ctx.var.set_result(i);
 
-                    if matches!(i, 0..=99) {
-                        if try_call!(vm, &format!("ABLUP{i}"), tx, ctx) {
-                            break;
-                        }
-                    } else {
-                        try_call!(vm, "USERABLUP", tx, ctx);
+                if matches!(i, 0..=99) {
+                    if try_call!(vm, &format!("ABLUP{i}"), tx, ctx) {
                         break;
                     }
+                } else {
+                    try_call!(vm, "USERABLUP", tx, ctx);
+                    break;
                 }
             }
-        }
+        },
         BeginType::TurnEnd => {
             call_event!(vm, EventType::TurnEnd, tx, ctx);
         }
         BeginType::Shop => {
             call_event!(vm, EventType::Shop, tx, ctx);
 
-            while ctx.begin.is_none() {
+            loop {
                 try_call!(vm, "SHOW_SHOP", tx, ctx);
 
                 let i = ctx.system.input_int(tx).await?;

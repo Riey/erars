@@ -237,14 +237,17 @@ impl TerminalVm {
 
     /// Return: Is this normal exit
     pub async fn start(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> bool {
-        ctx.begin = Some(BeginType::Title);
+        let mut begin_ty = Some(BeginType::Title);
         loop {
-            match executor::run_begin(self, BeginType::Title, tx, ctx).await {
+            let current_ty = match begin_ty.take() {
+                Some(ty) => ty,
+                None => break true,
+            };
+            match executor::run_begin(self, current_ty, tx, ctx).await {
                 Ok(Workflow::Begin(ty)) => {
-                    ctx.begin = Some(ty);
+                    begin_ty = Some(ty);
                 }
-                Ok(Workflow::Return) => {}
-                Ok(Workflow::Exit) => {
+                Ok(Workflow::Return) | Ok(Workflow::Exit) => {
                     break true;
                 }
                 Err(err) => {
