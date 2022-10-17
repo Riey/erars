@@ -73,10 +73,12 @@ fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
 
     let mut out = String::new();
 
+    use std::fmt::Write;
     for line in tx.lines_from(0).iter() {
-        use std::fmt::Write;
         writeln!(out, "{}", line).unwrap();
     }
+
+    writeln!(out, "{}", tx.last_line).unwrap();
 
     // Remove lastest newline
     out.pop();

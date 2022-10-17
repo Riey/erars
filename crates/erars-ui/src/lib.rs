@@ -284,7 +284,7 @@ impl VirtualConsole {
     }
 
     pub fn line_count(&self) -> usize {
-        self.lines.len() + self.line_is_empty() as usize
+        self.lines.len() + !self.line_is_empty() as usize
     }
 
     pub fn line_is_empty(&self) -> bool {

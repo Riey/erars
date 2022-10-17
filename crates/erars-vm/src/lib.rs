@@ -58,10 +58,7 @@ pub type ArgVec = tinyvec::ArrayVec<[u32; 4]>;
 
 pub use crate::{
     context::{Callstack, LocalValue, VmContext},
-    function::{
-        EventCollection, FunctionArgDef, FunctionBody, FunctionBodyHeader, FunctionDic,
-        FunctionGotoLabel,
-    },
+    function::{EventCollection, FunctionArgDef, FunctionBody, FunctionDic, FunctionGotoLabel},
     system_func::SystemState,
     terminal_vm::TerminalVm,
     variable::{

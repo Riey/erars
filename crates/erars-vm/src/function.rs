@@ -16,22 +16,14 @@ use crate::ArgVec;
 use crate::VariableStorage;
 use crate::Workflow;
 
-static_assertions::assert_eq_size!(FunctionBodyHeader, u64);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(C)]
-pub struct FunctionBodyHeader {
-    pub file_path: StrKey,
-    pub is_function: bool,
-    pub is_functions: bool,
-}
-
+// StrKey(4), ArgVec(4 * 4), Option<InlineValue>(8 * 2)
 static_assertions::assert_eq_size!(FunctionArgDef, [u32; 10]);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct FunctionArgDef(pub StrKey, pub ArgVec, pub Option<InlineValue>);
 
+// StrKey(4), u32(4)
 static_assertions::assert_eq_size!(FunctionGotoLabel, [u32; 2]);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,7 +33,9 @@ pub struct FunctionGotoLabel(pub StrKey, pub u32);
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[repr(C)]
 pub struct FunctionBody {
-    pub header: FunctionBodyHeader,
+    pub file_path: StrKey,
+    pub is_function: bool,
+    pub is_functions: bool,
     pub goto_labels: Box<[FunctionGotoLabel]>,
     pub args: Box<[FunctionArgDef]>,
     pub body: Box<[Instruction]>,
@@ -61,15 +55,15 @@ impl FunctionBody {
     }
 
     pub fn file_path(&self) -> StrKey {
-        self.header.file_path
+        self.file_path
     }
 
     pub fn is_function(&self) -> bool {
-        self.header.is_function
+        self.is_function
     }
 
     pub fn is_functions(&self) -> bool {
-        self.header.is_functions
+        self.is_functions
     }
 }
 
@@ -155,11 +149,9 @@ impl FunctionDic {
                 .map(|(k, pos)| FunctionGotoLabel(k, pos))
                 .collect_vec()
                 .into_boxed_slice(),
-            header: FunctionBodyHeader {
-                file_path: func.header.file_path,
-                is_function: false,
-                is_functions: false,
-            },
+            file_path: func.header.file_path,
+            is_function: false,
+            is_functions: false,
         };
 
         let mut flags = EventFlags::None;
@@ -178,12 +170,12 @@ impl FunctionDic {
                     flags = f;
                 }
                 FunctionInfo::Function => {
-                    body.header.is_function = true;
-                    assert!(!body.header.is_functions);
+                    body.is_function = true;
+                    assert!(!body.is_functions);
                 }
                 FunctionInfo::FunctionS => {
-                    body.header.is_functions = true;
-                    assert!(!body.header.is_function);
+                    body.is_functions = true;
+                    assert!(!body.is_function);
                 }
                 FunctionInfo::Dim(local) => {
                     var_dic.add_local_info(func.header.name, local.var, local.info);

@@ -9,17 +9,19 @@ use std::{
 };
 
 use erars_vm::{
-    EventCollection, FunctionArgDef, FunctionBody, FunctionBodyHeader, FunctionDic,
-    FunctionGotoLabel, Instruction,
+    EventCollection, FunctionArgDef, FunctionBody, FunctionDic, FunctionGotoLabel, Instruction,
 };
+
+#[cfg(target_endian = "big")]
+compile_error!("Doesn't support big endian");
+
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 1];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {
-        let body_header = std::slice::from_raw_parts(
-            &body.header as *const FunctionBodyHeader as *const u8,
-            size_of::<FunctionBodyHeader>(),
-        );
-        out.write_all(body_header)?;
+        out.write_u32::<LE>(body.file_path.to_u32())?;
+        out.write_u8(body.is_function as u8)?;
+        out.write_u8(body.is_functions as u8)?;
 
         macro_rules! write_arr {
             ($field:ident, $ty:ty) => {
@@ -41,12 +43,9 @@ fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody
 
 fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBody> {
     unsafe {
-        let mut header: MaybeUninit<FunctionBodyHeader> = MaybeUninit::uninit();
-        let ret_bytes = std::slice::from_raw_parts_mut(
-            header.as_mut_ptr().cast::<u8>(),
-            size_of::<FunctionBodyHeader>(),
-        );
-        read.read_exact(ret_bytes)?;
+        let file_path = StrKey::from_u32(read.read_u32::<LE>()?);
+        let is_function = read.read_u8()? != 0;
+        let is_functions = read.read_u8()? != 0;
 
         macro_rules! read_arr {
             ($ty:ty) => {{
@@ -73,7 +72,9 @@ fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBod
         let insts = read_arr!(Instruction);
 
         Ok(FunctionBody {
-            header: header.assume_init(),
+            file_path,
+            is_function,
+            is_functions,
             goto_labels,
             args,
             body: insts,
@@ -83,6 +84,12 @@ fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBod
 
 pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionDic> {
     let mut buf = vec![0u8; 1024];
+
+    read.read_exact(&mut buf[..VERSION_MAGIC.len()])?;
+
+    if &buf[..VERSION_MAGIC.len()] != VERSION_MAGIC {
+        panic!("Invalid file: VERSION MAGIC mismatched")
+    }
 
     let interner = Interner::new();
 
@@ -111,9 +118,6 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
 
     let mut event: EnumMap<EventType, EventCollection> = EnumMap::default();
 
-    if read.read_u32::<LE>()? != u32::from_le_bytes([2, 2, 2, 2]) {
-        panic!("Event magic failed");
-    }
     let event_len = read.read_u32::<LE>()?;
 
     for _ in 0..event_len {
@@ -152,6 +156,7 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
 pub fn write_to<W: Write + WriteBytesExt>(mut out: W, dic: &FunctionDic) -> Result<()> {
     let len = dic.interner.len();
 
+    out.write_all(VERSION_MAGIC)?;
     out.write_u32::<LE>(len as _)?;
 
     let strings = dic.interner.iter().collect::<BTreeMap<StrKey, &str>>();
@@ -168,7 +173,6 @@ pub fn write_to<W: Write + WriteBytesExt>(mut out: W, dic: &FunctionDic) -> Resu
         write_function_body(&mut out, body)?;
     }
 
-    out.write_all(&[2, 2, 2, 2])?;
     out.write_u32::<LE>(dic.event.len() as _)?;
 
     for (ev, collection) in dic.event.iter() {
