@@ -34,6 +34,7 @@ pub enum BuiltinMethod {
     SubStringU,
     StrFind,
     StrFindU,
+    StrJoin,
     BarStr,
 
     Unicode,

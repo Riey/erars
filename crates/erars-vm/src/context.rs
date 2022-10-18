@@ -1,4 +1,4 @@
-use anyhow::{bail, Result, Context};
+use anyhow::{bail, Context, Result};
 use std::fmt;
 use std::sync::Arc;
 use strum::Display;

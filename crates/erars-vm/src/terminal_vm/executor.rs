@@ -847,6 +847,29 @@ pub(super) async fn run_instruction(
                     ctx.push(ret);
                 }
 
+                BuiltinMethod::StrJoin => {
+                    check_arg_count!(1, 4);
+
+                    let var = get_arg!(@var args);
+                    let delimiter = get_arg!(@opt @String: args, ctx);
+                    let delimiter = delimiter.as_deref().unwrap_or(",");
+                    let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                    let count = get_arg!(@opt @usize: args, ctx).unwrap_or(usize::MAX);
+                    let (info, var, _) = ctx.resolve_var_ref(&var)?;
+
+                    if info.size.len() != 1 {
+                        bail!("STRJOIN only work with 1D variable");
+                    }
+
+                    let var = var.as_str()?;
+
+                    let end = start.saturating_add(count).min(var.len());
+
+                    let ret = var[start..end].join(delimiter);
+
+                    ctx.push(ret);
+                }
+
                 BuiltinMethod::GetTime => {
                     check_arg_count!(0);
                     let now = time::OffsetDateTime::now_local()?;

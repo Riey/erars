@@ -439,6 +439,7 @@ pub enum Token<'s> {
     #[token("STRLENSU", |lex| normal_expr_method(lex, BuiltinMethod::StrLenSU), ignore(ascii_case))]
     #[token("STRFIND", |lex| normal_expr_method(lex, BuiltinMethod::StrFind), ignore(ascii_case))]
     #[token("STRFINDU", |lex| normal_expr_method(lex, BuiltinMethod::StrFindU), ignore(ascii_case))]
+    #[token("STRJOIN", |lex| normal_expr_method(lex, BuiltinMethod::StrJoin), ignore(ascii_case))]
     #[token("BARSTR", |lex| normal_expr_method(lex, BuiltinMethod::BarStr), ignore(ascii_case))]
     #[token("GETBIT", |lex| normal_expr_method(lex, BuiltinMethod::GetBit), ignore(ascii_case))]
     #[token("ABS", |lex| normal_expr_method(lex, BuiltinMethod::Abs), ignore(ascii_case))]
