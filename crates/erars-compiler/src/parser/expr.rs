@@ -575,7 +575,31 @@ pub fn call_arg_list<'c, 'a>(
     }
 }
 
-pub fn assign_op(i: &str) -> IResult<Option<BinaryOperator>> {
+#[derive(Clone, Copy)]
+enum StrAssignOp {
+    Bin(BinaryOperator),
+    Str,
+}
+
+fn str_assign_op(i: &str) -> IResult<Option<StrAssignOp>> {
+    let op = alt((
+        value(StrAssignOp::Bin(BinaryOperator::Add), char('+')),
+        value(StrAssignOp::Bin(BinaryOperator::Sub), char('-')),
+        value(StrAssignOp::Bin(BinaryOperator::Mul), char('*')),
+        value(StrAssignOp::Bin(BinaryOperator::Div), char('/')),
+        value(StrAssignOp::Bin(BinaryOperator::Rem), char('%')),
+        value(StrAssignOp::Bin(BinaryOperator::Lhs), tag("<<")),
+        value(StrAssignOp::Bin(BinaryOperator::Rhs), tag(">>")),
+        value(StrAssignOp::Bin(BinaryOperator::BitXor), char('^')),
+        value(StrAssignOp::Bin(BinaryOperator::BitOr), char('|')),
+        value(StrAssignOp::Bin(BinaryOperator::BitAnd), char('&')),
+        value(StrAssignOp::Str, char('\'')),
+    ));
+
+    context("StrAssignOp", terminated(opt(op), char('=')))(i)
+}
+
+fn assign_op(i: &str) -> IResult<Option<BinaryOperator>> {
     let op = alt((
         value(BinaryOperator::Add, char('+')),
         value(BinaryOperator::Sub, char('-')),
@@ -711,11 +735,21 @@ pub fn assign_line<'c, 'a>(
                 Stmt::Assign(var, Some(BinaryOperator::Sub), Expr::Int(1)),
             ))
         } else if ctx.is_str_var(var.var) {
-            let (i, op) = delimited(sp, assign_op, opt(char(' ')))(i)?;
-            let (i, rhs) = if op.is_some() {
-                expr(ctx)(i)?
-            } else {
-                normal_form_str(ctx)(i)?
+            let (i, op) = delimited(sp, str_assign_op, opt(char(' ')))(i)?;
+
+            let (i, rhs, op) = match op {
+                Some(StrAssignOp::Bin(op)) => {
+                    let (i, rhs) = expr(ctx)(i)?;
+                    (i, rhs, Some(op))
+                }
+                Some(StrAssignOp::Str) => {
+                    let (i, rhs) = expr(ctx)(i)?;
+                    (i, rhs, None)
+                }
+                None => {
+                    let (i, rhs) = normal_form_str(ctx)(i)?;
+                    (i, rhs, None)
+                }
             };
 
             Ok((i, Stmt::Assign(var, op, rhs)))

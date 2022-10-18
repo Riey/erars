@@ -1285,5 +1285,5 @@ fn cut_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
     let i = lex.remainder();
     let l = i.split_once('\n').map(|(l, _)| l).unwrap_or(i);
     lex.bump_unchecked(l.len());
-    l
+    l.strip_suffix('\r').unwrap_or(l)
 }
