@@ -37,14 +37,18 @@ pub fn delete_save_data(sav_path: &Path, idx: u32) -> Result<()> {
 pub fn read_save_data(sav_path: &Path, idx: u32) -> Result<Option<SerializableVariableStorage>> {
     let file = sav_path.join(make_save_file_name(idx));
 
-    let compressed = match std::fs::File::open(file) {
+    let compressed = match std::fs::File::open(&file) {
         Ok(file) => file,
         Err(_) => return Ok(None),
     };
     let mut decoder = read::GzDecoder::new(compressed);
-    let var = rmp_serde::from_read::<_, SerializableVariableStorage>(&mut decoder)?;
-
-    Ok(Some(var))
+    match rmp_serde::from_read::<_, SerializableVariableStorage>(&mut decoder) {
+        Ok(var) => Ok(Some(var)),
+        Err(err) => {
+            log::error!("Invalid save file: {} from `{}`", err, file.display());
+            Ok(None)
+        }
+    }
 }
 
 pub fn write_global_data(sav_path: &Path, sav: &SerializableGlobalVariableStorage) -> Result<()> {
@@ -63,10 +67,16 @@ pub fn write_global_data(sav_path: &Path, sav: &SerializableGlobalVariableStorag
 
 pub fn read_global_data(sav_path: &Path) -> Result<Option<SerializableGlobalVariableStorage>> {
     let file = sav_path.join(GLOBAL_SAVE_FILE_NAME);
-    let s = match std::fs::read(file) {
+    let s = match std::fs::read(&file) {
         Ok(file) => file,
         Err(_) => return Ok(None),
     };
-    let var = rmp_serde::from_read::<_, SerializableGlobalVariableStorage>(s.as_slice())?;
-    Ok(Some(var))
+
+    match rmp_serde::from_read::<_, SerializableGlobalVariableStorage>(s.as_slice()) {
+        Ok(var) => Ok(Some(var)),
+        Err(err) => {
+            log::error!("Invalid save file: {} from `{}`", err, file.display());
+            Ok(None)
+        }
+    }
 }
