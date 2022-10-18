@@ -1,3 +1,4 @@
+use anyhow::Context;
 use parking_lot::Mutex;
 #[cfg(feature = "multithread")]
 use rayon::prelude::*;
@@ -76,8 +77,8 @@ fn read_file(path: &Path) -> std::io::Result<String> {
     }
 }
 
-pub fn save_script(vm: TerminalVm, ctx: VmContext) -> anyhow::Result<()> {
-    let mut out = BufWriter::new(File::create("game.era")?);
+pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
+    let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);
     erars_bytecode::write_to(&mut out, &vm.dic)?;
     let local_infos: HashMap<StrKey, Vec<(StrKey, &VariableInfo)>> =
         ctx.var.local_infos().collect();
@@ -88,14 +89,15 @@ pub fn save_script(vm: TerminalVm, ctx: VmContext) -> anyhow::Result<()> {
 
 /// SAFETY: Any reference to interner is not exist
 pub unsafe fn load_script(
-    target_path: String,
+    target_path: &str,
     inputs: Vec<Value>,
     system: Box<dyn SystemFunctions>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     let start = Instant::now();
 
     log::info!("Load config");
-    let config_path = Path::new(target_path.as_str()).join("emuera.config");
+    let config_path = Path::new(target_path).join("emuera.config");
+    let game_path = Path::new(target_path).join("game.era");
 
     let config = if Path::new(&config_path).exists() {
         match read_file(config_path.as_ref()) {
@@ -112,12 +114,18 @@ pub unsafe fn load_script(
     log::info!("Config: {config:?}");
 
     log::info!("Load game script");
-    let mut read = BufReader::new(File::open("game.era").unwrap());
-    let dic = erars_bytecode::read_from(&mut read)?;
+
+    let file = File::open(game_path).context("Open bytecode file")?;
+    let file = memmap2::MmapOptions::new()
+        .populate()
+        .map(&file)
+        .context("mmap bytecode file")?;
+    let mut file_bytes = &*file;
+    let dic = erars_bytecode::read_from(&mut file_bytes)?;
 
     log::info!("Load game data");
     let (header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
-        rmp_serde::decode::from_read(&mut read)?;
+        rmp_serde::decode::from_read(&mut file_bytes)?;
     let mut vconsole = VirtualConsole::new(config.printc_width, config.max_log);
 
     let elapsed = start.elapsed();
@@ -140,7 +148,7 @@ pub unsafe fn load_script(
 
 #[allow(unused_assignments)]
 pub fn run_script(
-    target_path: String,
+    target_path: &str,
     inputs: Vec<Value>,
     system: Box<dyn SystemFunctions>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
@@ -148,7 +156,7 @@ pub fn run_script(
 
     let mut time = Instant::now();
 
-    let config_path = Path::new(target_path.as_str()).join("emuera.config");
+    let config_path = Path::new(target_path).join("emuera.config");
 
     let config = if Path::new(&config_path).exists() {
         match read_file(config_path.as_ref()) {

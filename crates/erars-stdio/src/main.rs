@@ -78,13 +78,13 @@ fn main() {
     ));
 
     let (vm, mut ctx, mut tx) = if args.load {
-        unsafe { load_script(args.target_path, inputs, system).unwrap() }
+        unsafe { load_script(&args.target_path, inputs, system).unwrap() }
     } else {
-        run_script(args.target_path, inputs, system).unwrap()
+        run_script(&args.target_path, inputs, system).unwrap()
     };
 
     if args.save {
-        save_script(vm, ctx).unwrap();
+        save_script(vm, ctx, &args.target_path).unwrap();
     } else {
         futures_executor::block_on(async move { vm.start(&mut tx, &mut ctx).await });
     }

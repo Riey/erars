@@ -23,6 +23,7 @@ parking_lot = "0.12.1"
 unicode-bom = "1.1.4"
 encoding_rs = "0.8.31"
 rmp-serde = "1.1.1"
+memmap2 = "0.5.7"
 
 [features]
 multithread = [
