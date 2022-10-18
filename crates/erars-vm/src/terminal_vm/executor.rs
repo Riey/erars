@@ -1,3 +1,5 @@
+use anyhow::Context;
+
 use crate::variable::KnownVariableNames as Var;
 
 use super::*;
@@ -1367,7 +1369,7 @@ pub(super) async fn run_instruction(
                         .iter()
                         // CallTrain works reverse order
                         .rev()
-                        .map(|c| u32::try_from(*c).map_err(anyhow::Error::from))
+                        .map(|c| u32::try_from(*c).context("CallTrain command convert"))
                         .collect::<Result<Vec<u32>>>()?;
 
                     conv_workflow!(run_call_train(vm, tx, ctx, commands).await?);

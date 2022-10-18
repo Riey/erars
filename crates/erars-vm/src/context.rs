@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Result, Context};
 use std::fmt;
 use std::sync::Arc;
 use strum::Display;
@@ -191,7 +191,7 @@ impl VmContext {
         self.take_value_list(count)?
             .into_iter()
             .map(|value| match value {
-                Value::Int(i) => u32::try_from(i).map_err(anyhow::Error::from),
+                Value::Int(i) => u32::try_from(i).context("Index convert error"),
                 Value::String(str) => match var_name
                     .map(|s| self.var.resolve_key(s))
                     .map(erars_ast::var_name_alias)

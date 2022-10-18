@@ -1,3 +1,4 @@
+use anyhow::Context;
 use anyhow::Result;
 use flate2::read;
 use flate2::write;
@@ -19,7 +20,7 @@ pub fn write_save_data(sav_path: &Path, idx: u32, sav: &SerializableVariableStor
     let mut file = std::fs::File::create(sav_path.join(make_save_file_name(idx)))?;
     let mut encoder = write::GzEncoder::new(&mut file, flate2::Compression::fast());
 
-    rmp_serde::encode::write(&mut encoder, &sav)?;
+    rmp_serde::encode::write(&mut encoder, &sav).context("Serialize sav")?;
 
     Ok(())
 }
@@ -59,7 +60,7 @@ pub fn write_global_data(sav_path: &Path, sav: &SerializableGlobalVariableStorag
     // Don't compress global data since it's pretty small
     std::fs::write(
         sav_path.join(GLOBAL_SAVE_FILE_NAME),
-        &rmp_serde::to_vec(&sav).unwrap(),
+        &rmp_serde::to_vec(&sav).context("Serialize global sav")?,
     )?;
 
     Ok(())
