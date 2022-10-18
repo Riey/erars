@@ -7,6 +7,7 @@ use strum::{Display, EnumString, IntoStaticStr};
 #[strum(serialize_all = "UPPERCASE")]
 #[serde(rename_all = "UPPERCASE")]
 #[allow(non_camel_case_types)]
+#[repr(u32)]
 pub enum BuiltinMethod {
     ToStr,
     ToInt,

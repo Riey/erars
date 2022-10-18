@@ -61,6 +61,7 @@ pub enum EventFlags {
     Deserialize,
     FromRepr,
 )]
+#[repr(u32)]
 pub enum EventType {
     #[strum(to_string = "EVENTFIRST")]
     First,

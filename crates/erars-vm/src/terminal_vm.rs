@@ -57,7 +57,7 @@ impl TerminalVm {
         let insts = body.body();
         let func_name = func_identifier.get_key(&ctx.var);
 
-        while let Some(inst) = insts.get(cursor) {
+        while let Some(inst) = insts.get(cursor).copied() {
             cursor += 1;
             use InstructionWorkflow::*;
 
@@ -76,9 +76,9 @@ impl TerminalVm {
                         ctx.var.interner().get_or_intern_static("FORMS.ERB"),
                     );
                     let expr = erars_compiler::normal_form_str(&parser_ctx)(&form).unwrap().1;
-                    let insts = erars_compiler::compile_expr(expr).unwrap();
+                    let insts = Vec::from(erars_compiler::compile_expr(expr).unwrap());
 
-                    for inst in insts.iter() {
+                    for inst in insts {
                         match executor::run_instruction(self, func_name, inst, tx, ctx).await? {
                             InstructionWorkflow::Normal => {}
                             _ => bail!("EvalFromString can't do flow control"),
