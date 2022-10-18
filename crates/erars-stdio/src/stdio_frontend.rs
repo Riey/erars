@@ -94,6 +94,7 @@ impl SystemFunctions for StdioFrontend {
         self.draw(Some(&req), vconsole, &mut io::stdout().lock())?;
 
         loop {
+            self.input.clear();
             let size = io::stdin().read_line(&mut self.input)?;
 
             let s = self.input[..size].trim_end_matches(&['\r', '\n']);

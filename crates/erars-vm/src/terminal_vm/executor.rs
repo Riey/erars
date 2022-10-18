@@ -1275,9 +1275,21 @@ pub(super) async fn run_instruction(
                         _ => unreachable!(),
                     };
 
+                    let ty = req.ty;
+
                     let ret = ctx.system.input(tx, req).await?;
 
-                    ctx.push(ret.unwrap());
+                    match (ty, ret) {
+                        (InputRequestType::Int, Some(Value::Int(i))) => {
+                            ctx.var.set_result(i);
+                        }
+                        (InputRequestType::Str, Some(Value::String(s))) => {
+                            ctx.var.set_results(s);
+                        }
+                        (_, _) => {
+                            bail!("Invalid input returned");
+                        }
+                    }
                 }
                 BuiltinCommand::Quit => {
                     log::info!("Run QUIT");
