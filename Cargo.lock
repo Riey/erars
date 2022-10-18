@@ -535,6 +535,7 @@ dependencies = [
  "num-derive",
  "num-traits",
  "option_set",
+ "paste",
  "serde",
  "static_assertions",
  "strum",

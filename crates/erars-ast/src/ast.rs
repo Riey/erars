@@ -57,6 +57,7 @@ pub enum Stmt {
 pub struct StmtWithPos(pub Stmt, pub ScriptPosition);
 
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[repr(transparent)]
 pub struct ScriptPosition {
     /// 0 based line index
     pub line: u32,
@@ -213,6 +214,7 @@ impl fmt::Debug for FormText {
 }
 
 option_set::option_set! {
+    #[repr(transparent)]
     pub struct PrintFlags: UpperSnake + u32 {
         const NEWLINE = 0x1;
         const WAIT = 0x2;
@@ -223,6 +225,7 @@ option_set::option_set! {
 }
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, EnumString, Display, Serialize, Deserialize)]
+#[repr(u32)]
 pub enum BeginType {
     #[strum(to_string = "TITLE")]
     Title,
