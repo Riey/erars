@@ -772,7 +772,8 @@ pub fn dim_line<'c, 'a>(
         let mut info = VariableInfo::default();
         info.is_str = is_str;
 
-        let (i, (is_chara, is_save, var, size, init)) = tuple((
+        let (i, (_is_dynamic, is_chara, is_save, var, size, init)) = tuple((
+            opt(value((), de_sp(tag("DYNAMIC")))),
             opt(value((), de_sp(tag("CHARADATA")))),
             opt(value((), de_sp(tag("SAVEDATA")))),
             de_sp(ident),
