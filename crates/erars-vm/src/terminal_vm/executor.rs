@@ -1169,6 +1169,34 @@ pub(super) async fn run_instruction(
             BuiltinCommand::ResetBgColor => {
                 tx.set_bg_color(0, 0, 0);
             }
+            BuiltinCommand::Twait => {
+                let time = get_arg!(@u32: args, ctx);
+                let force_wait = get_arg!(@i64: args, ctx) != 0;
+
+                let ty = if force_wait {
+                    InputRequestType::ForceEnterKey
+                } else {
+                    InputRequestType::EnterKey
+                };
+
+                let gen = tx.input_gen();
+                ctx.system
+                    .input(
+                        tx,
+                        InputRequest {
+                            generation: gen,
+                            ty,
+                            is_one: false,
+                            timeout: Some(Timeout {
+                                timeout: to_time(time),
+                                default_value: Value::Int(0),
+                                show_timer: false,
+                                timeout_msg: None,
+                            }),
+                        },
+                    )
+                    .await?;
+            }
             BuiltinCommand::Wait | BuiltinCommand::WaitAnykey | BuiltinCommand::ForceWait => {
                 let gen = tx.input_gen();
                 ctx.system
@@ -1208,10 +1236,6 @@ pub(super) async fn run_instruction(
             | BuiltinCommand::TOneInputS
             | BuiltinCommand::OneInput
             | BuiltinCommand::OneInputS => {
-                fn to_time(time: time::OffsetDateTime) -> i128 {
-                    time.unix_timestamp_nanos()
-                }
-
                 let req = match com {
                     BuiltinCommand::InputS => {
                         InputRequest::normal(tx.input_gen(), InputRequestType::Str)
@@ -1230,10 +1254,7 @@ pub(super) async fn run_instruction(
                         ty: InputRequestType::Str,
                         is_one: false,
                         timeout: Some(Timeout {
-                            timeout: to_time(
-                                time::OffsetDateTime::now_utc()
-                                    + time::Duration::milliseconds(get_arg!(@i64: args, ctx)),
-                            ),
+                            timeout: to_time(get_arg!(@u32: args, ctx)),
                             default_value: get_arg!(@Value: args, ctx),
                             show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                             timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1244,10 +1265,7 @@ pub(super) async fn run_instruction(
                         ty: InputRequestType::Int,
                         is_one: false,
                         timeout: Some(Timeout {
-                            timeout: to_time(
-                                time::OffsetDateTime::now_utc()
-                                    + time::Duration::milliseconds(get_arg!(@i64: args, ctx)),
-                            ),
+                            timeout: to_time(get_arg!(@u32: args, ctx)),
                             default_value: get_arg!(@Value: args, ctx),
                             show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                             timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1258,10 +1276,7 @@ pub(super) async fn run_instruction(
                         ty: InputRequestType::Str,
                         is_one: true,
                         timeout: Some(Timeout {
-                            timeout: to_time(
-                                time::OffsetDateTime::now_utc()
-                                    + time::Duration::milliseconds(get_arg!(@i64: args, ctx)),
-                            ),
+                            timeout: to_time(get_arg!(@u32: args, ctx)),
                             default_value: get_arg!(@Value: args, ctx),
                             show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                             timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1272,10 +1287,7 @@ pub(super) async fn run_instruction(
                         ty: InputRequestType::Int,
                         is_one: true,
                         timeout: Some(Timeout {
-                            timeout: to_time(
-                                time::OffsetDateTime::now_utc()
-                                    + time::Duration::milliseconds(get_arg!(@i64: args, ctx)),
-                            ),
+                            timeout: to_time(get_arg!(@u32: args, ctx)),
                             default_value: get_arg!(@Value: args, ctx),
                             show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                             timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1745,4 +1757,9 @@ pub async fn run_begin(
     }
 
     Ok(Workflow::Return)
+}
+
+fn to_time(time: u32) -> i128 {
+    (time::OffsetDateTime::now_utc() + time::Duration::milliseconds(time as i64))
+        .unix_timestamp_nanos()
 }

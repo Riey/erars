@@ -399,6 +399,7 @@ pub enum Token<'s> {
     #[token("ONEINPUTS", |lex| normal_expr_command(lex, BuiltinCommand::OneInputS), ignore(ascii_case))]
     #[token("TONEINPUT", |lex| normal_expr_command(lex, BuiltinCommand::TOneInput), ignore(ascii_case))]
     #[token("TONEINPUTS", |lex| normal_expr_command(lex, BuiltinCommand::TOneInputS), ignore(ascii_case))]
+    #[token("TWAIT", |lex| normal_expr_command(lex, BuiltinCommand::Twait), ignore(ascii_case))]
     #[token("RETURN", |lex| normal_expr_command(lex, BuiltinCommand::Return), ignore(ascii_case))]
     #[token("RETURNF", |lex| normal_expr_command(lex, BuiltinCommand::ReturnF), ignore(ascii_case))]
     #[token("CALLTRAIN", |lex| normal_expr_command(lex, BuiltinCommand::CallTrain), ignore(ascii_case))]

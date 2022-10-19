@@ -100,6 +100,7 @@ pub enum BuiltinCommand {
     ForceWait,
     Wait,
     WaitAnykey,
+    Twait,
 
     ResetStain = 25,
     ResetData,
