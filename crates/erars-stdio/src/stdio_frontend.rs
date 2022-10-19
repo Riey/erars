@@ -113,7 +113,7 @@ impl SystemFunctions for StdioFrontend {
                     log::info!("[stdio] <- \"{s}\"");
                     break Ok(Some(Value::String(s.into())));
                 }
-                InputRequestType::AnyKey | InputRequestType::EnterKey => {
+                InputRequestType::AnyKey | InputRequestType::EnterKey | InputRequestType::ForceEnterKey => {
                     log::info!("[stdio] <- \"\"");
                     break Ok(None);
                 }

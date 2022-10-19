@@ -9,11 +9,8 @@ use strum::{Display, EnumString, IntoStaticStr};
 #[allow(non_camel_case_types)]
 #[repr(u32)]
 pub enum BuiltinMethod {
-    ToStr,
+    ToStr = 0,
     ToInt,
-
-    IsSkip,
-
     Limit,
     Min,
     Max,
@@ -21,12 +18,15 @@ pub enum BuiltinMethod {
     Sqrt,
     Abs,
     Sign,
+    Log,
+    Log10,
     InRange,
     LineIsEmpty,
     GroupMatch,
     SumArray,
+    IsSkip,
 
-    Escape,
+    Escape = 20,
     Replace,
     StrLenS,
     StrLenSU,
@@ -37,9 +37,9 @@ pub enum BuiltinMethod {
     StrFindU,
     StrJoin,
     BarStr,
-
     Unicode,
-    GetExpLv,
+
+    GetExpLv = 40,
     GetPalamLv,
     GetColor,
     GetDefColor,
@@ -47,22 +47,18 @@ pub enum BuiltinMethod {
     GetDefBgColor,
     GetFocusColor,
     GetFont,
-
     GetChara,
     GetBit,
-    Log,
-    Log10,
-
     GetTime,
-    Rand,
 
+    Rand = 60,
     ChkData,
     ChkCharaData,
     FindChara,
     #[strum(serialize = "FIND_CHARADATA")]
     FindCharaData,
 
-    CsvName,
+    CsvName = 70,
     CsvCallName,
     CsvMasterName,
     CsvNickName,
@@ -85,27 +81,7 @@ pub enum BuiltinMethod {
 #[repr(u32)]
 #[allow(non_camel_case_types)]
 pub enum BuiltinCommand {
-    UpCheck,
-    CUpCheck,
-
-    Input,
-    InputS,
-    TInput,
-    TInputS,
-    OneInput,
-    OneInputS,
-    TOneInput,
-    TOneInputS,
-    Wait,
-    WaitAnykey,
-
-    SkipDisp,
-    NoSkip,
-    EndNoSkip,
-
-    Split,
-
-    Return,
+    Return = 0,
     ReturnF,
     Restart,
     Quit,
@@ -113,37 +89,48 @@ pub enum BuiltinCommand {
     DoTrain,
     CallTrain,
 
-    Redraw,
-    DrawLine,
-    CustomDrawLine,
-    ClearLine,
+    Input = 10,
+    InputS,
+    TInput,
+    TInputS,
+    OneInput,
+    OneInputS,
+    TOneInput,
+    TOneInputS,
+    ForceWait,
+    Wait,
+    WaitAnykey,
 
-    Swap,
-    PutForm,
-
-    ResetStain,
-
+    ResetStain = 25,
     ResetData,
     SaveData,
     LoadData,
     DelData,
     SaveNos,
-
     SaveGame,
     LoadGame,
-
     SaveGlobal,
     LoadGlobal,
+    PutForm,
 
-    SaveChara,
-    LoadChara,
-    AddDefChara,
-    AddChara,
-    DelChara,
-    SwapChara,
-    SortChara,
-    PickupChara,
+    UpCheck = 40,
+    CUpCheck,
+    SkipDisp,
+    NoSkip,
+    EndNoSkip,
+    Swap,
+    SetBit,
+    ClearBit,
+    InvertBit,
+    ArrayShift,
+    Varset,
+    CVarset,
+    Split,
 
+    Redraw = 60,
+    DrawLine,
+    CustomDrawLine,
+    ClearLine,
     SetColor,
     SetBgColor,
     ResetColor,
@@ -159,14 +146,14 @@ pub enum BuiltinCommand {
     SetFont,
     ChkFont,
 
-    Bar,
+    Bar = 89,
 
-    SetBit,
-    ClearBit,
-    InvertBit,
-
-    ArrayShift,
-
-    Varset,
-    CVarset,
+    SaveChara = 90,
+    LoadChara,
+    AddDefChara,
+    AddChara,
+    DelChara,
+    SwapChara,
+    SortChara,
+    PickupChara,
 }

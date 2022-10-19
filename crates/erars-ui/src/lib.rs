@@ -442,6 +442,7 @@ bitflags::bitflags! {
 pub enum InputRequestType {
     AnyKey,
     EnterKey,
+    ForceEnterKey,
     Int,
     Str,
 }

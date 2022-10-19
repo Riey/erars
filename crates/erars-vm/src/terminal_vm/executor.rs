@@ -1169,7 +1169,7 @@ pub(super) async fn run_instruction(
             BuiltinCommand::ResetBgColor => {
                 tx.set_bg_color(0, 0, 0);
             }
-            BuiltinCommand::Wait | BuiltinCommand::WaitAnykey => {
+            BuiltinCommand::Wait | BuiltinCommand::WaitAnykey | BuiltinCommand::ForceWait => {
                 let gen = tx.input_gen();
                 ctx.system
                     .input(
@@ -1178,6 +1178,8 @@ pub(super) async fn run_instruction(
                             gen,
                             if com == BuiltinCommand::Wait {
                                 InputRequestType::EnterKey
+                            } else if com == BuiltinCommand::ForceWait {
+                                InputRequestType::ForceEnterKey
                             } else {
                                 InputRequestType::AnyKey
                             },
