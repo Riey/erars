@@ -50,6 +50,8 @@ pub enum BuiltinMethod {
     GetChara,
     GetBit,
     GetTime,
+    CurrentAlign,
+    CurrentRedraw,
 
     Rand = 60,
     ChkData,
@@ -127,6 +129,7 @@ pub enum BuiltinCommand {
     Varset,
     CVarset,
     Split,
+    ForceKana,
 
     Redraw = 60,
     DrawLine,
@@ -151,8 +154,10 @@ pub enum BuiltinCommand {
 
     SaveChara = 90,
     LoadChara,
-    AddDefChara,
     AddChara,
+    AddDefChara,
+    AddCopyChara,
+    CopyChara,
     DelChara,
     SwapChara,
     SortChara,

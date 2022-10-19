@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{ensure, Context};
 
 use crate::variable::KnownVariableNames as Var;
 
@@ -868,6 +868,15 @@ pub(super) async fn run_instruction(
                 ));
             }
 
+            BuiltinMethod::CurrentAlign => {
+                let align = tx.align();
+                ctx.push(align as u32);
+            }
+
+            BuiltinMethod::CurrentRedraw => {
+                ctx.push(0);
+            }
+
             BuiltinMethod::ChkData => {
                 check_arg_count!(1);
                 let idx = get_arg!(@u32: args, ctx);
@@ -1347,8 +1356,17 @@ pub(super) async fn run_instruction(
 
                 ctx.var.del_chara_list(&list);
             }
+            BuiltinCommand::CopyChara => {
+                let from = get_arg!(@u32: args, ctx);
+                let to = get_arg!(@u32: args, ctx);
+
+                ensure!(from < ctx.var.character_len());
+                ensure!(to < ctx.var.character_len());
+
+                ctx.var.copy_chara(from, to);
+            }
             BuiltinCommand::AddChara => {
-                let no = get_arg!(@i64: args, ctx).try_into()?;
+                let no = get_arg!(@u32: args, ctx);
                 let template = ctx
                     .header_info
                     .character_templates
@@ -1359,6 +1377,10 @@ pub(super) async fn run_instruction(
 
                 ctx.var.add_chara();
                 ctx.var.set_character_template(idx, template)?;
+            }
+            BuiltinCommand::AddCopyChara => {
+                let idx = get_arg!(@u32: args, ctx);
+                ctx.var.add_copy_chara(idx);
             }
             BuiltinCommand::AddDefChara => {
                 let idx = ctx.var.character_len();
@@ -1377,6 +1399,9 @@ pub(super) async fn run_instruction(
             }
             BuiltinCommand::ClearLine => {
                 tx.clear_line(get_arg!(@usize: args, ctx));
+            }
+            BuiltinCommand::ForceKana => {
+                log::error!("FORCEKANA is not implemented!");
             }
             BuiltinCommand::DoTrain => {
                 todo!("DOTRAIN")
