@@ -1,7 +1,6 @@
 use anyhow::{bail, Context, Result};
 use std::fmt;
 use std::sync::Arc;
-use strum::Display;
 
 use erars_ast::{EventType, ScriptPosition, StrKey, Value, VariableInfo};
 use erars_compiler::{EraConfig, HeaderInfo};
@@ -306,10 +305,19 @@ impl VmContext {
     }
 }
 
-#[derive(Debug, Display, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum FunctionIdentifier {
     Normal(StrKey),
     Event(EventType),
+}
+
+impl fmt::Display for FunctionIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FunctionIdentifier::Normal(s) => s.fmt(f),
+            FunctionIdentifier::Event(ev) => ev.fmt(f),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

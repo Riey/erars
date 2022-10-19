@@ -5,6 +5,7 @@ use erars_ast::{
     EventType, NotNan, PrintFlags, ScriptPosition, StrKey, UnaryOperator,
 };
 use paste::paste;
+use std::mem::transmute;
 
 macro_rules! define_instruction {
     (@empty $(($name:ident, $ty:ident),)*) => {
@@ -15,7 +16,7 @@ macro_rules! define_instruction {
                     pub const fn $name() -> Self {
                         Self {
                             ty: InstructionType::$ty,
-                            data: InstructionData { int: 0 },
+                            data: 0,
                         }
                     }
 
@@ -30,7 +31,11 @@ macro_rules! define_instruction {
             }
         }
     };
-    ($data_ty:ty, $data_field:ident, $(($name:ident, $ty:ident),)*) => {
+    ($data_ty:ty, $(($name:ident, $ty:ident),)*) => {
+        static_assertions::assert_impl_all!($data_ty: Copy);
+        static_assertions::assert_eq_size!($data_ty, u32);
+        static_assertions::assert_eq_align!($data_ty, u32);
+
         paste! {
             impl Instruction {
                 $(
@@ -38,7 +43,7 @@ macro_rules! define_instruction {
                     pub const fn $name(n: $data_ty) -> Self {
                         Self {
                             ty: InstructionType::$ty,
-                            data: InstructionData { $data_field: n },
+                            data: unsafe { transmute(n) },
                         }
                     }
 
@@ -54,7 +59,7 @@ macro_rules! define_instruction {
                     pub const fn [<as_ $name>](self) -> Option<$data_ty> {
                         if self.[<is_ $name>]() {
                             Some(
-                                unsafe { self.data.$data_field }
+                                unsafe { transmute(self.data) }
                             )
                         } else {
                             None
@@ -111,87 +116,19 @@ enum InstructionType {
     Times = 58,
 }
 
-static_assertions::assert_eq_size!(
-    InstructionData,
-    u32,
-    StrKey,
-    NotNan<f32>,
-    BuiltinVariable,
-    BuiltinCommand,
-    BuiltinMethod,
-    BeginType,
-    EventType,
-    Alignment,
-    PrintFlags,
-    ScriptPosition,
-    BinaryOperator,
-    UnaryOperator
-);
-
-static_assertions::assert_eq_align!(
-    InstructionData,
-    u32,
-    StrKey,
-    NotNan<f32>,
-    BuiltinVariable,
-    BuiltinCommand,
-    BuiltinMethod,
-    BeginType,
-    EventType,
-    Alignment,
-    PrintFlags,
-    ScriptPosition,
-    BinaryOperator,
-    UnaryOperator
-);
-
-#[derive(Clone, Copy)]
-#[repr(C)]
-union InstructionData {
-    int32: i32,
-    int: u32,
-    str_key: StrKey,
-    float: NotNan<f32>,
-    var: BuiltinVariable,
-    com: BuiltinCommand,
-    method: BuiltinMethod,
-    begin: BeginType,
-    event: EventType,
-    alignment: Alignment,
-    print_flags: PrintFlags,
-    script_position: ScriptPosition,
-    binop: BinaryOperator,
-    unaryop: UnaryOperator,
-}
-
 static_assertions::assert_eq_size!(Instruction, (u32, u32));
 static_assertions::assert_eq_align!(Instruction, (u32, u32));
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Instruction {
     ty: InstructionType,
-    data: InstructionData,
+    data: u32,
 }
 
 impl Instruction {
     #[inline]
     pub const fn raw_data(self) -> u32 {
-        // SAFETY: data is always filled with initialized 32bit data.
-        unsafe { self.data.int }
-    }
-}
-
-impl Eq for Instruction {}
-
-impl PartialEq for Instruction {
-    fn eq(&self, other: &Self) -> bool {
-        self.ty == other.ty && self.raw_data() == other.raw_data()
-    }
-}
-
-impl Debug for Instruction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.ty.fmt(f)
+        self.data
     }
 }
 
@@ -212,13 +149,13 @@ define_instruction! {
 }
 
 define_instruction! {
-    i32, int32,
+    i32,
     (load_int, LoadInt),
     (load_int_suffix, LoadIntSuffix),
 }
 
 define_instruction! {
-    u32, int,
+    u32,
     (load_var_ref, LoadVarRef),
     (load_extern_varref, LoadExternVarRef),
     (call, Call),
@@ -232,62 +169,62 @@ define_instruction! {
 }
 
 define_instruction! {
-    StrKey, str_key,
+    StrKey,
     (load_str, LoadStr),
 }
 
 define_instruction! {
-    PrintFlags, print_flags,
+    PrintFlags,
     (print, Print),
 }
 
 define_instruction! {
-    EventType, event,
+    EventType,
     (call_event, CallEvent),
 }
 
 define_instruction! {
-    BeginType, begin,
+    BeginType,
     (begin, Begin),
 }
 
 define_instruction! {
-    BuiltinVariable, var,
+    BuiltinVariable,
     (builtin_var, BuiltinVar),
 }
 
 define_instruction! {
-    BuiltinCommand, com,
+    BuiltinCommand,
     (builtin_command, BuiltinCommand),
 }
 
 define_instruction! {
-    BuiltinMethod, method,
+    BuiltinMethod,
     (builtin_method, BuiltinMethod),
 }
 
 define_instruction! {
-    BinaryOperator, binop,
+    BinaryOperator,
     (binop, BinaryOperator),
 }
 
 define_instruction! {
-    UnaryOperator, unaryop,
+    UnaryOperator,
     (unaryop, UnaryOperator),
 }
 
 define_instruction! {
-    Alignment, alignment,
+    Alignment,
     (set_aligment, SetAlignment),
     (pad_str, PadStr),
 }
 
 define_instruction! {
-    NotNan<f32>, float,
+    NotNan<f32>,
     (times, Times),
 }
 
 define_instruction! {
-    ScriptPosition, script_position,
+    ScriptPosition,
     (report_position, ReportPosition),
 }
