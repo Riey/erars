@@ -286,12 +286,15 @@ fn ident_or_method_expr<'c, 'a>(
 
         if let Some(i) = i.strip_prefix('(') {
             let p = ctx.ban_percent.get();
+            let a = ctx.is_arg.get();
             ctx.ban_percent.set(false);
+            ctx.is_arg.set(false);
             let (i, args) = terminated(
                 separated_list0(char_sp(','), expr(ctx)),
                 pair(opt(char_sp(',')), char_sp(')')),
             )(i)?;
             ctx.ban_percent.set(p);
+            ctx.is_arg.set(a);
 
             match ident.parse() {
                 Ok(meth) => Ok((i, Expr::BuiltinMethod(meth, args))),
