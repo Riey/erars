@@ -9,7 +9,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while, take_while1},
     character::complete::*,
-    combinator::{eof, map, opt, success, value, verify},
+    combinator::{eof, map, opt, success, value},
     error::{context, ErrorKind, VerboseError},
     error_position,
     multi::{many0, separated_list0, separated_list1},
@@ -17,7 +17,6 @@ use nom::{
     sequence::{delimited, pair, preceded, terminated, tuple},
     Parser,
 };
-use unicode_xid::UnicodeXID;
 
 type Error<'a> = nom::error::VerboseError<&'a str>;
 type IResult<'a, T> = nom::IResult<&'a str, T, Error<'a>>;
@@ -46,15 +45,18 @@ fn de_sp<'a, T>(p: impl Parser<&'a str, T, Error<'a>>) -> impl FnMut(&'a str) ->
     delimited(sp, p, sp)
 }
 
+fn is_ident_char(c: char) -> bool {
+    !matches!(c, '!'..='/' | ':'..='@' | '['..='^' | '{'..='~')
+        && !c.is_ascii_control()
+        && !c.is_ascii_whitespace()
+}
+
 fn is_ident(i: &str) -> bool {
-    i.chars().all(|c| c.is_xid_continue() || c == '_')
+    i.chars().all(is_ident_char)
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
-    verify(
-        take_while(move |c: char| c.is_xid_continue() || c == '_'),
-        |s: &str| s.chars().next().map_or(false, |c| c.is_xid_start()),
-    )(i)
+    take_while1(is_ident_char)(i)
 }
 
 fn ident_or_macro<'c, 'a>(ctx: &'c ParserContext, i: &'a str) -> IResult<'a, Cow<'a, str>> {
