@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt;
 
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable,
@@ -8,70 +8,91 @@ use paste::paste;
 use std::mem::transmute;
 
 macro_rules! define_instruction {
-    (@empty $(($name:ident, $ty:ident),)*) => {
+    (
+        @empty $(($empty_name:ident, $empty_ty:ident),)*
+        $(@$data_ty:ty, $(($name:ident, $ty:ident),)*)*
+    ) => {
+        $(
+            static_assertions::assert_impl_all!($data_ty: Copy);
+            static_assertions::assert_eq_size!($data_ty, u32);
+            static_assertions::assert_eq_align!($data_ty, u32);
+        )*
         paste! {
             impl Instruction {
                 $(
                     #[inline]
-                    pub const fn $name() -> Self {
+                    pub const fn $empty_name() -> Self {
                         Self {
-                            ty: InstructionType::$ty,
+                            ty: InstructionType::$empty_ty,
                             data: 0,
                         }
                     }
 
                     #[inline]
-                    pub const fn [<is_ $name>](self) -> bool {
+                    pub const fn [<is_ $empty_name>](self) -> bool {
                         match self.ty {
-                            InstructionType::$ty => true,
+                            InstructionType::$empty_ty => true,
                             _ => false,
                         }
                     }
                 )*
+                $(
+                    $(
+                        #[inline]
+                        pub const fn $name(n: $data_ty) -> Self {
+                            Self {
+                                ty: InstructionType::$ty,
+                                data: unsafe { transmute(n) },
+                            }
+                        }
+
+                        #[inline]
+                        pub const fn [<is_ $name>](self) -> bool {
+                            match self.ty {
+                                InstructionType::$ty => true,
+                                _ => false,
+                            }
+                        }
+
+                        #[inline]
+                        pub const fn [<as_ $name>](self) -> Option<$data_ty> {
+                            if self.[<is_ $name>]() {
+                                Some(
+                                    unsafe { transmute(self.data) }
+                                )
+                            } else {
+                                None
+                            }
+                        }
+                    )*
+                )*
+            }
+
+            impl fmt::Debug for Instruction {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    match self.ty {
+                        $(
+                            InstructionType::$empty_ty => self.ty.fmt(f),
+                        )*
+                        $(
+                            $(
+                                InstructionType::$ty => write!(f, "{}({:?})", self.ty, unsafe { transmute::<_, $data_ty>(self.data) }),
+                            )*
+                        )*
+                    }
+                }
+            }
+
+            impl fmt::Display for Instruction {
+                fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                    fmt::Debug::fmt(self, f)
+                }
             }
         }
     };
-    ($data_ty:ty, $(($name:ident, $ty:ident),)*) => {
-        static_assertions::assert_impl_all!($data_ty: Copy);
-        static_assertions::assert_eq_size!($data_ty, u32);
-        static_assertions::assert_eq_align!($data_ty, u32);
-
-        paste! {
-            impl Instruction {
-                $(
-                    #[inline]
-                    pub const fn $name(n: $data_ty) -> Self {
-                        Self {
-                            ty: InstructionType::$ty,
-                            data: unsafe { transmute(n) },
-                        }
-                    }
-
-                    #[inline]
-                    pub const fn [<is_ $name>](self) -> bool {
-                        match self.ty {
-                            InstructionType::$ty => true,
-                            _ => false,
-                        }
-                    }
-
-                    #[inline]
-                    pub const fn [<as_ $name>](self) -> Option<$data_ty> {
-                        if self.[<is_ $name>]() {
-                            Some(
-                                unsafe { transmute(self.data) }
-                            )
-                        } else {
-                            None
-                        }
-                    }
-                )*
-            }
-        }
-    }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
 #[repr(u32)]
 enum InstructionType {
     Nop = 0,
@@ -119,7 +140,7 @@ enum InstructionType {
 static_assertions::assert_eq_size!(Instruction, (u32, u32));
 static_assertions::assert_eq_align!(Instruction, (u32, u32));
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Instruction {
     ty: InstructionType,
     data: u32,
@@ -146,16 +167,12 @@ define_instruction! {
     (reuse_lastline, ReuseLastLine),
     (goto_label, GotoLabel),
     (try_goto_label, TryGotoLabel),
-}
 
-define_instruction! {
-    i32,
+    @i32,
     (load_int, LoadInt),
     (load_int_suffix, LoadIntSuffix),
-}
 
-define_instruction! {
-    u32,
+    @u32,
     (load_var_ref, LoadVarRef),
     (load_extern_varref, LoadExternVarRef),
     (call, Call),
@@ -166,65 +183,41 @@ define_instruction! {
     (goto, Goto),
     (goto_if_not, GotoIfNot),
     (goto_if, GotoIf),
-}
 
-define_instruction! {
-    StrKey,
+    @StrKey,
     (load_str, LoadStr),
-}
 
-define_instruction! {
-    PrintFlags,
+    @PrintFlags,
     (print, Print),
-}
 
-define_instruction! {
-    EventType,
+    @EventType,
     (call_event, CallEvent),
-}
 
-define_instruction! {
-    BeginType,
+    @BeginType,
     (begin, Begin),
-}
 
-define_instruction! {
-    BuiltinVariable,
+    @BuiltinVariable,
     (builtin_var, BuiltinVar),
-}
 
-define_instruction! {
-    BuiltinCommand,
+    @BuiltinCommand,
     (builtin_command, BuiltinCommand),
-}
 
-define_instruction! {
-    BuiltinMethod,
+    @BuiltinMethod,
     (builtin_method, BuiltinMethod),
-}
 
-define_instruction! {
-    BinaryOperator,
+    @BinaryOperator,
     (binop, BinaryOperator),
-}
 
-define_instruction! {
-    UnaryOperator,
+    @UnaryOperator,
     (unaryop, UnaryOperator),
-}
 
-define_instruction! {
-    Alignment,
+    @Alignment,
     (set_aligment, SetAlignment),
     (pad_str, PadStr),
-}
 
-define_instruction! {
-    NotNan<f32>,
+    @NotNan<f32>,
     (times, Times),
-}
 
-define_instruction! {
-    ScriptPosition,
+    @ScriptPosition,
     (report_position, ReportPosition),
 }
