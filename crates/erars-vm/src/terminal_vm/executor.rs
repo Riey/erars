@@ -144,6 +144,8 @@ pub(super) async fn run_instruction(
             tx.printlc(&s);
         } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
             tx.printrc(&s);
+        } else if flags.contains(PrintFlags::PLAIN) {
+            tx.print_plain(s);
         } else {
             tx.print(s);
         }

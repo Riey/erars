@@ -54,6 +54,25 @@ fn strip_prefix_ignore_case<'s>(s: &'s str, pat: &str) -> Option<&'s str> {
     }
 }
 
+fn trim_text(s: &str) -> &str {
+    let s = s.strip_prefix(' ').unwrap_or(s);
+    let s = s.strip_suffix('\r').unwrap_or(s);
+    s
+}
+
+unsafe fn parse_print_plain(s: &str) -> (PrintType, &str) {
+    // skip PRINTPLAIN
+    let s = s.get_unchecked("PRINTPLAIN".len()..);
+
+    let (ty, s) = if let Some(s) = strip_prefix_ignore_case(s, "FORM") {
+        (PrintType::Form, s)
+    } else {
+        (PrintType::Plain, s)
+    };
+
+    (ty, trim_text(s))
+}
+
 unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
     // skip PRINT
     let mut s = s.get_unchecked("PRINT".len()..);
@@ -86,10 +105,7 @@ unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
     let (s, f) = parse_print_flags(s);
     flags |= f;
 
-    let s = s.strip_prefix(' ').unwrap_or(s);
-    let s = s.strip_suffix('\r').unwrap_or(s);
-
-    (flags, ty, s)
+    (flags, ty, trim_text(s))
 }
 
 #[inline]
@@ -131,9 +147,7 @@ fn lex_line_left_erh<'s>(lex: &mut Lexer<'s, ErhToken<'s>>) -> &'s str {
         }
     };
 
-    let s = s.strip_prefix(' ').unwrap_or(s);
-
-    s.strip_suffix('\r').unwrap_or(s)
+    trim_text(s)
 }
 
 fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
@@ -149,9 +163,7 @@ fn lex_line_left<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
         }
     };
 
-    let s = s.strip_prefix(' ').unwrap_or(s);
-
-    s.strip_suffix('\r').unwrap_or(s)
+    trim_text(s)
 }
 
 fn call_jump_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> (CallJumpInfo, &'s str) {
@@ -297,6 +309,8 @@ pub enum Token<'s> {
     #[token("CALLEVENT", ignore(ascii_case))]
     CallEvent,
 
+    #[regex(r"PRINTPLAIN(FORM)?[^\n]*", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
+    PrintPlain((PrintType, &'s str)),
     #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
     // #[regex(r"(?i)[pP][rR][iI][nN][tT]([sS][iI][nN][gG][lL][eE])?([dD][aA][tT][aA]|[vV]|[sS]|[fF][oO][rR][mM][sS]?)?[lLwW]?([lL]?[cC])?[^\n]*", |lex| unsafe { parse_print(lex.slice()) })]
     Print((PrintFlags, PrintType, &'s str)),

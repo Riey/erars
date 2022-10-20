@@ -4,7 +4,7 @@ mod expr;
 use erars_ast::{
     get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
     Expr, Function, FunctionHeader, FunctionInfo, Interner, ScriptPosition, Stmt, StmtWithPos,
-    StrKey, Variable, VariableInfo,
+    StrKey, Variable, VariableInfo, PrintFlags,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -734,6 +734,15 @@ impl ParserContext {
                 vec![try_nom!(lex, self::expr::normal_form_str(self)(left)).1],
             ),
             Token::ReuseLastLine(left) => Stmt::ReuseLastLine(self.interner.get_or_intern(left)),
+            Token::PrintPlain((ty, form)) => {
+                let text = match ty {
+                    PrintType::Form => try_nom!(lex, self::expr::normal_form_str(self)(form)).1,
+                    PrintType::Plain => Expr::str(&self.interner, form),
+                    _ => unreachable!(),
+                };
+
+                Stmt::Print(PrintFlags::PLAIN, text)
+            }
             Token::Print((flags, PrintType::Plain, form)) => {
                 Stmt::Print(flags, Expr::str(&self.interner, form))
             }
