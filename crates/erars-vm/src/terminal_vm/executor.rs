@@ -921,6 +921,7 @@ pub(super) async fn run_instruction(
                 ctx.var.cupcheck(tx, target, names)?;
             }
             BuiltinCommand::Restart => {
+                drop(ctx.return_func()?);
                 return Ok(InstructionWorkflow::Goto(0));
             }
             BuiltinCommand::SetBit => {

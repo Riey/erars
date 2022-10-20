@@ -403,11 +403,8 @@ impl Compiler {
 
                 let mut ends = Vec::new();
                 let mut nexts = Vec::new();
+                let mut cond_ends = Vec::new();
                 for (conds, body) in cases {
-                    for next in nexts.drain(..) {
-                        self.insert(next, Instruction::goto_if_not(self.current_no()));
-                    }
-
                     for cond in conds {
                         match cond {
                             SelectCaseCond::Single(e) => {
@@ -430,8 +427,12 @@ impl Compiler {
                                 self.push(Instruction::binop(BinaryOperator::And));
                             }
                         }
+                        cond_ends.push(self.mark());
+                    }
+                    nexts.push(self.mark());
 
-                        nexts.push(self.mark());
+                    for cond_end in cond_ends.drain(..) {
+                        self.insert(cond_end, Instruction::goto_if(self.current_no()));
                     }
 
                     for stmt in body {
@@ -441,7 +442,7 @@ impl Compiler {
                     ends.push(self.mark());
 
                     for next in nexts.drain(..) {
-                        self.insert(next, Instruction::goto_if_not(self.current_no()));
+                        self.insert(next, Instruction::goto(self.current_no()));
                     }
                 }
 
