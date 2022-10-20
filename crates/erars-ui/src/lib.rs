@@ -112,6 +112,16 @@ impl ConsoleLine {
         parts.push((text, style));
         self.parts.push(ConsoleLinePart::Button(parts, value));
     }
+    pub fn push_plain_text(&mut self, text: String, style: &TextStyle) {
+        match self.parts.last_mut() {
+            Some(ConsoleLinePart::Text(prev_text, prev_style)) if *prev_style == *style => {
+                prev_text.push_str(&text);
+            }
+            _ => {
+                self.parts.push(ConsoleLinePart::Text(text, style.clone()));
+            }
+        }
+    }
     pub fn push_text(&mut self, text: String, style: &TextStyle) {
         static BUTTON_REGEX: Lazy<Regex> =
             Lazy::new(|| Regex::new(r#"[^\[]*\[ *(\d+) *\][^\[\]]*"#).unwrap());
@@ -302,6 +312,13 @@ impl VirtualConsole {
         parts.push(ConsoleLinePart::Text(s, style));
     }
 
+    pub fn print_plain(&mut self, s: String) {
+        if self.skipdisp {
+            return;
+        }
+        self.last_line.push_plain_text(s, &self.style);
+    }
+
     pub fn print(&mut self, s: String) {
         if self.skipdisp {
             return;
@@ -442,6 +459,7 @@ bitflags::bitflags! {
 pub enum InputRequestType {
     AnyKey,
     EnterKey,
+    ForceEnterKey,
     Int,
     Str,
 }

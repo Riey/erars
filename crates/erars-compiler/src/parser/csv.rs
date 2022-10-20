@@ -28,7 +28,11 @@ pub fn name_csv_line<'s>(
     lex: &mut Lexer<'s, CsvToken<'s>>,
 ) -> ParserResult<Option<(u32, StrKey)>> {
     match lex.next() {
-        Some(CsvToken::Csv2((idx, name))) => {
+        Some(
+            CsvToken::Csv2((idx, name))
+            | CsvToken::Csv3((idx, name, ..))
+            | CsvToken::Csv4((idx, name, ..)),
+        ) => {
             let idx = match idx.parse::<u32>() {
                 Ok(idx) => idx,
                 Err(err) => return Err((format!("숫자가 와야합니다. :{err}"), lex.span())),
@@ -57,7 +61,15 @@ pub fn name_item_line<'s>(
     lex: &mut Lexer<'s, CsvToken<'s>>,
 ) -> ParserResult<Option<(u32, StrKey, u32)>> {
     match lex.next() {
-        Some(CsvToken::Csv3((idx, name, price))) => {
+        Some(CsvToken::Csv2((idx, name))) => {
+            let idx = match idx.parse::<u32>() {
+                Ok(idx) => idx,
+                Err(err) => return Err((format!("숫자가 와야합니다. :{err}"), lex.span())),
+            };
+
+            Ok(Some((idx, interner.get_or_intern(name), 0)))
+        }
+        Some(CsvToken::Csv3((idx, name, price)) | CsvToken::Csv4((idx, name, price, _))) => {
             let idx = match idx.parse::<u32>() {
                 Ok(idx) => idx,
                 Err(err) => return Err((format!("숫자가 와야합니다. :{err}"), lex.span())),

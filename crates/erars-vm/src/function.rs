@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+use derivative::Derivative;
 use enum_map::EnumMap;
 use erars_ast::get_interner;
 use erars_ast::InlineValue;
@@ -79,8 +80,10 @@ impl EventCollection {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Eq, Derivative)]
+#[derivative(Debug, PartialEq)]
 pub struct FunctionDic {
+    #[derivative(Debug = "ignore", PartialEq = "ignore")]
     pub interner: &'static Interner,
     pub normal: HashMap<StrKey, FunctionBody>,
     pub event: EnumMap<EventType, EventCollection>,

@@ -741,6 +741,19 @@ impl VariableStorage {
         });
     }
 
+    pub fn add_copy_chara(&mut self, idx: u32) {
+        self.character_len += 1;
+        self.variables.values_mut().for_each(|(_, var)| {
+            var.add_copy_chara(idx);
+        });
+    }
+
+    pub fn copy_chara(&mut self, from: u32, to: u32) {
+        self.variables.values_mut().for_each(|(_, var)| {
+            var.copy_chara(from, to);
+        });
+    }
+
     pub fn del_chara(&mut self, idx: u32) {
         self.character_len -= 1;
         self.variables.values_mut().for_each(|(_, var)| {
@@ -950,9 +963,23 @@ impl UniformVariable {
         }
     }
 
+    pub fn copy_chara(&mut self, a: u32, b: u32) {
+        if let Self::Character(c) = self {
+            let tmp = c[a as usize].clone();
+            c[b as usize] = tmp;
+        }
+    }
+
     pub fn add_chara(&mut self, info: &VariableInfo) {
         if let Self::Character(c) = self {
             c.push(VmVariable::new(info));
+        }
+    }
+
+    pub fn add_copy_chara(&mut self, idx: u32) {
+        if let Self::Character(c) = self {
+            let prev_c = c[idx as usize].clone();
+            c.push(prev_c);
         }
     }
 

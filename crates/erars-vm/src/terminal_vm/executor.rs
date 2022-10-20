@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{ensure, Context};
 
 use crate::variable::KnownVariableNames as Var;
 
@@ -144,6 +144,8 @@ pub(super) async fn run_instruction(
             tx.printlc(&s);
         } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
             tx.printrc(&s);
+        } else if flags.contains(PrintFlags::PLAIN) {
+            tx.print_plain(s);
         } else {
             tx.print(s);
         }
@@ -868,6 +870,15 @@ pub(super) async fn run_instruction(
                 ));
             }
 
+            BuiltinMethod::CurrentAlign => {
+                let align = tx.align();
+                ctx.push(align as u32);
+            }
+
+            BuiltinMethod::CurrentRedraw => {
+                ctx.push(0);
+            }
+
             BuiltinMethod::ChkData => {
                 check_arg_count!(1);
                 let idx = get_arg!(@u32: args, ctx);
@@ -1169,7 +1180,35 @@ pub(super) async fn run_instruction(
             BuiltinCommand::ResetBgColor => {
                 tx.set_bg_color(0, 0, 0);
             }
-            BuiltinCommand::Wait | BuiltinCommand::WaitAnykey => {
+            BuiltinCommand::Twait => {
+                let time = get_arg!(@u32: args, ctx);
+                let force_wait = get_arg!(@i64: args, ctx) != 0;
+
+                let ty = if force_wait {
+                    InputRequestType::ForceEnterKey
+                } else {
+                    InputRequestType::EnterKey
+                };
+
+                let gen = tx.input_gen();
+                ctx.system
+                    .input(
+                        tx,
+                        InputRequest {
+                            generation: gen,
+                            ty,
+                            is_one: false,
+                            timeout: Some(Timeout {
+                                timeout: to_time(time),
+                                default_value: Value::Int(0),
+                                show_timer: false,
+                                timeout_msg: None,
+                            }),
+                        },
+                    )
+                    .await?;
+            }
+            BuiltinCommand::Wait | BuiltinCommand::WaitAnykey | BuiltinCommand::ForceWait => {
                 let gen = tx.input_gen();
                 ctx.system
                     .input(
@@ -1178,6 +1217,8 @@ pub(super) async fn run_instruction(
                             gen,
                             if com == BuiltinCommand::Wait {
                                 InputRequestType::EnterKey
+                            } else if com == BuiltinCommand::ForceWait {
+                                InputRequestType::ForceEnterKey
                             } else {
                                 InputRequestType::AnyKey
                             },
@@ -1206,10 +1247,6 @@ pub(super) async fn run_instruction(
             | BuiltinCommand::TOneInputS
             | BuiltinCommand::OneInput
             | BuiltinCommand::OneInputS => {
-                fn to_time(time: time::OffsetDateTime) -> i128 {
-                    time.unix_timestamp_nanos()
-                }
-
                 let req = match com {
                     BuiltinCommand::InputS => {
                         InputRequest::normal(tx.input_gen(), InputRequestType::Str)
@@ -1228,10 +1265,7 @@ pub(super) async fn run_instruction(
                         ty: InputRequestType::Str,
                         is_one: false,
                         timeout: Some(Timeout {
-                            timeout: to_time(
-                                time::OffsetDateTime::now_utc()
-                                    + time::Duration::milliseconds(get_arg!(@i64: args, ctx)),
-                            ),
+                            timeout: to_time(get_arg!(@u32: args, ctx)),
                             default_value: get_arg!(@Value: args, ctx),
                             show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                             timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1242,10 +1276,7 @@ pub(super) async fn run_instruction(
                         ty: InputRequestType::Int,
                         is_one: false,
                         timeout: Some(Timeout {
-                            timeout: to_time(
-                                time::OffsetDateTime::now_utc()
-                                    + time::Duration::milliseconds(get_arg!(@i64: args, ctx)),
-                            ),
+                            timeout: to_time(get_arg!(@u32: args, ctx)),
                             default_value: get_arg!(@Value: args, ctx),
                             show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                             timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1256,10 +1287,7 @@ pub(super) async fn run_instruction(
                         ty: InputRequestType::Str,
                         is_one: true,
                         timeout: Some(Timeout {
-                            timeout: to_time(
-                                time::OffsetDateTime::now_utc()
-                                    + time::Duration::milliseconds(get_arg!(@i64: args, ctx)),
-                            ),
+                            timeout: to_time(get_arg!(@u32: args, ctx)),
                             default_value: get_arg!(@Value: args, ctx),
                             show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                             timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1270,10 +1298,7 @@ pub(super) async fn run_instruction(
                         ty: InputRequestType::Int,
                         is_one: true,
                         timeout: Some(Timeout {
-                            timeout: to_time(
-                                time::OffsetDateTime::now_utc()
-                                    + time::Duration::milliseconds(get_arg!(@i64: args, ctx)),
-                            ),
+                            timeout: to_time(get_arg!(@u32: args, ctx)),
                             default_value: get_arg!(@Value: args, ctx),
                             show_timer: get_arg!(@opt @bool: args, ctx).unwrap_or(true),
                             timeout_msg: get_arg!(@opt @String: args, ctx),
@@ -1333,8 +1358,17 @@ pub(super) async fn run_instruction(
 
                 ctx.var.del_chara_list(&list);
             }
+            BuiltinCommand::CopyChara => {
+                let from = get_arg!(@u32: args, ctx);
+                let to = get_arg!(@u32: args, ctx);
+
+                ensure!(from < ctx.var.character_len());
+                ensure!(to < ctx.var.character_len());
+
+                ctx.var.copy_chara(from, to);
+            }
             BuiltinCommand::AddChara => {
-                let no = get_arg!(@i64: args, ctx).try_into()?;
+                let no = get_arg!(@u32: args, ctx);
                 let template = ctx
                     .header_info
                     .character_templates
@@ -1345,6 +1379,10 @@ pub(super) async fn run_instruction(
 
                 ctx.var.add_chara();
                 ctx.var.set_character_template(idx, template)?;
+            }
+            BuiltinCommand::AddCopyChara => {
+                let idx = get_arg!(@u32: args, ctx);
+                ctx.var.add_copy_chara(idx);
             }
             BuiltinCommand::AddDefChara => {
                 let idx = ctx.var.character_len();
@@ -1363,6 +1401,9 @@ pub(super) async fn run_instruction(
             }
             BuiltinCommand::ClearLine => {
                 tx.clear_line(get_arg!(@usize: args, ctx));
+            }
+            BuiltinCommand::ForceKana => {
+                log::error!("FORCEKANA is not implemented!");
             }
             BuiltinCommand::DoTrain => {
                 todo!("DOTRAIN")
@@ -1743,4 +1784,9 @@ pub async fn run_begin(
     }
 
     Ok(Workflow::Return)
+}
+
+fn to_time(time: u32) -> i128 {
+    (time::OffsetDateTime::now_utc() + time::Duration::milliseconds(time as i64))
+        .unix_timestamp_nanos()
 }

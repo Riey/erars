@@ -221,6 +221,7 @@ option_set::option_set! {
         const LEFT_ALIGN = 0x4;
         const RIGHT_ALIGN = 0x8;
         const SINGLE = 0x10;
+        const PLAIN = 0x20;
     }
 }
 

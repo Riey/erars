@@ -2,22 +2,21 @@ use std::borrow::Cow;
 
 use super::ParserContext;
 use erars_ast::{
-    Alignment, BinaryOperator, Expr, FormText, InlineValue, LocalVariable, NotNan, SelectCaseCond,
-    Stmt, StrKey, UnaryOperator, Variable, VariableInfo,
+    var_name_alias, Alignment, BinaryOperator, Expr, FormText, InlineValue, LocalVariable, NotNan,
+    SelectCaseCond, Stmt, StrKey, UnaryOperator, Variable, VariableInfo,
 };
 use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while, take_while1},
     character::complete::*,
-    combinator::{eof, map, opt, success, value, verify},
+    combinator::{eof, map, opt, success, value},
     error::{context, ErrorKind, VerboseError},
     error_position,
-    multi::{many0, separated_list0, separated_list1},
+    multi::{separated_list0, separated_list1},
     number::complete::float,
     sequence::{delimited, pair, preceded, terminated, tuple},
     Parser,
 };
-use unicode_xid::UnicodeXID;
 
 type Error<'a> = nom::error::VerboseError<&'a str>;
 type IResult<'a, T> = nom::IResult<&'a str, T, Error<'a>>;
@@ -46,15 +45,18 @@ fn de_sp<'a, T>(p: impl Parser<&'a str, T, Error<'a>>) -> impl FnMut(&'a str) ->
     delimited(sp, p, sp)
 }
 
+fn is_ident_char(c: char) -> bool {
+    !matches!(c, '!'..='/' | ':'..='@' | '['..='^' | '{'..='~')
+        && !c.is_ascii_control()
+        && !c.is_ascii_whitespace()
+}
+
 fn is_ident(i: &str) -> bool {
-    i.chars().all(|c| c.is_xid_continue() || c == '_')
+    i.chars().all(is_ident_char)
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
-    verify(
-        take_while(move |c: char| c.is_xid_continue() || c == '_'),
-        |s: &str| s.chars().next().map_or(false, |c| c.is_xid_start()),
-    )(i)
+    take_while1(is_ident_char)(i)
 }
 
 fn ident_or_macro<'c, 'a>(ctx: &'c ParserContext, i: &'a str) -> IResult<'a, Cow<'a, str>> {
@@ -284,12 +286,15 @@ fn ident_or_method_expr<'c, 'a>(
 
         if let Some(i) = i.strip_prefix('(') {
             let p = ctx.ban_percent.get();
+            let a = ctx.is_arg.get();
             ctx.ban_percent.set(false);
+            ctx.is_arg.set(false);
             let (i, args) = terminated(
                 separated_list0(char_sp(','), expr(ctx)),
                 pair(opt(char_sp(',')), char_sp(')')),
             )(i)?;
             ctx.ban_percent.set(p);
+            ctx.is_arg.set(a);
 
             match ident.parse() {
                 Ok(meth) => Ok((i, Expr::BuiltinMethod(meth, args))),
@@ -770,7 +775,8 @@ pub fn dim_line<'c, 'a>(
         let mut info = VariableInfo::default();
         info.is_str = is_str;
 
-        let (i, (is_chara, is_save, var, size, init)) = tuple((
+        let (i, (_is_dynamic, is_chara, is_save, var, size, init)) = tuple((
+            opt(value((), de_sp(tag("DYNAMIC")))),
             opt(value((), de_sp(tag("CHARADATA")))),
             opt(value((), de_sp(tag("SAVEDATA")))),
             de_sp(ident),
@@ -868,37 +874,41 @@ pub fn function_line<'c, 'a>(
     }
 }
 
-fn variable_named_arg<'c, 'a>(
-    ctx: &'c ParserContext,
-    var: &'c str,
-) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
-    move |i| {
-        // alias
-        let var = erars_ast::var_name_alias(var);
-
-        let (i, ident) = ident(i)?;
-
-        let var = ctx.interner.get_or_intern(var);
-        let ident = ctx.interner.get_or_intern(ident);
-        if let Some(v) = ctx.header.var_names.get(&var).and_then(|names| names.get(&ident)) {
-            Ok((i, Expr::int(*v)))
-        } else {
-            Err(nom::Err::Error(error_position!(i, ErrorKind::Verify)))
-        }
-    }
-}
-
 pub fn variable_arg<'c, 'a>(
     ctx: &'c ParserContext,
     var: &'c str,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
-    move |i| {
+    move |mut i| {
+        let var_names = ctx
+            .header
+            .var_names
+            .get(&ctx.interner.get_or_intern(var_name_alias(var)));
         let is_arg = ctx.is_arg.get();
         ctx.is_arg.set(true);
-        let (i, args) = many0(preceded(
-            char_sp(':'),
-            alt((variable_named_arg(ctx, var), single_expr(ctx))),
-        ))(i)?;
+        let mut args = Vec::new();
+        loop {
+            let i_ = match char_sp(':')(i) {
+                Ok((i, _)) => i,
+                _ => break,
+            };
+            let (i_, expr) = single_expr(ctx)(i_)?;
+            let arg = if let Expr::Var(ref arg_var) = expr {
+                if arg_var.func_extern.is_some() {
+                    expr
+                } else {
+                    if let Some(v) = var_names.and_then(|names| names.get(&arg_var.var)) {
+                        Expr::int(*v)
+                    } else {
+                        expr
+                    }
+                }
+            } else {
+                expr
+            };
+
+            args.push(arg);
+            i = i_;
+        }
         ctx.is_arg.set(is_arg);
 
         Ok((i, args))

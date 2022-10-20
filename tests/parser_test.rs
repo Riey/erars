@@ -242,6 +242,55 @@ mod body {
             line: 4,
         },
     ),
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: LOCALS,
+                func_extern: None,
+                args: [
+                    BuiltinMethod(
+                        ToInt,
+                        [
+                            Var(
+                                Variable {
+                                    var: CHOICES,
+                                    func_extern: None,
+                                    args: [
+                                        Int(
+                                            1,
+                                        ),
+                                    ],
+                                },
+                            ),
+                        ],
+                    ),
+                ],
+            },
+            None,
+            FormText(
+                ,
+            ),
+        ),
+        ScriptPosition {
+            line: 5,
+        },
+    ),
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: LOCALS,
+                func_extern: None,
+                args: [],
+            },
+            None,
+            FormText(
+                -{Method(조사처리, [Var(Variable { var: CALLNAME, func_extern: None, args: [BuiltinMethod(ToInt, [Var(Variable { var: CHOICES, func_extern: None, args: [Int(1)] })])] }), String(이)])} 기억하고 있는 아르카나의 목록-,
+            ),
+        ),
+        ScriptPosition {
+            line: 6,
+        },
+    ),
 ]
 "
         );
