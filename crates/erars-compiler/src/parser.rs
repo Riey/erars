@@ -3,8 +3,8 @@ mod expr;
 
 use erars_ast::{
     get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
-    Expr, Function, FunctionHeader, FunctionInfo, Interner, ScriptPosition, Stmt, StmtWithPos,
-    StrKey, Variable, VariableInfo, PrintFlags,
+    Expr, Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, ScriptPosition, Stmt,
+    StmtWithPos, StrKey, Variable, VariableInfo,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};

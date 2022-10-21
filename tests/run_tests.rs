@@ -71,6 +71,11 @@ fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
 
     futures_executor::block_on(vm.start(&mut tx, &mut ctx));
 
+    let leftover = ctx.return_func().unwrap().collect::<Vec<_>>();
+    if !leftover.is_empty() {
+        panic!("Function stack is not cleared: {leftover:?}");
+    }
+
     let mut out = String::new();
 
     use std::fmt::Write;

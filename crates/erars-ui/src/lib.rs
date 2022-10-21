@@ -224,7 +224,6 @@ pub struct VirtualConsole {
     pub hl_color: Color,
     pub skipdisp: bool,
     pub need_rebuild: bool,
-    pub inputs: VecDeque<Value>,
     pub input_gen: u32,
 
     max_log: usize,
@@ -250,7 +249,6 @@ impl VirtualConsole {
             bg_color: Color([0, 0, 0]),
             hl_color: Color([255, 255, 0]),
             skipdisp: false,
-            inputs: VecDeque::new(),
             top_index: 0,
         }
     }
@@ -281,10 +279,6 @@ impl VirtualConsole {
 
     pub fn skipdisp(&self) -> bool {
         self.skipdisp
-    }
-
-    pub fn push_input(&mut self, value: Value) {
-        self.inputs.push_back(value);
     }
 
     pub fn input_gen(&mut self) -> u32 {

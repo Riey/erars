@@ -28,7 +28,6 @@ pub struct VmContext {
 
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
-    current_pos: ScriptPosition,
 }
 
 impl VmContext {
@@ -49,7 +48,6 @@ impl VmContext {
             lastload_text: "".into(),
             lastload_version: 0,
             config,
-            current_pos: ScriptPosition::default(),
         };
 
         ret.init_variable().unwrap();
@@ -89,22 +87,14 @@ impl VmContext {
         &self.call_stack
     }
 
-    pub fn current_pos(&self) -> &ScriptPosition {
-        &self.current_pos
-    }
-
     pub fn stack(&self) -> &[LocalValue] {
         &self.stack
     }
 
-    pub fn update_last_stack_position(&mut self) {
-        if let Some(last) = self.call_stack.last_mut() {
-            last.script_position = self.current_pos;
-        }
-    }
-
     pub fn update_position(&mut self, pos: ScriptPosition) {
-        self.current_pos = pos;
+        if let Some(last) = self.call_stack.last_mut() {
+            last.script_position = pos;
+        }
     }
 
     pub fn reduce_local_value(&mut self, value: LocalValue) -> Result<Value> {
@@ -153,10 +143,6 @@ impl VmContext {
     }
 
     pub fn new_func(&mut self, func_name: FunctionIdentifier, file_path: StrKey) {
-        if let Some(last) = self.call_stack.last_mut() {
-            last.script_position = std::mem::take(&mut self.current_pos);
-        }
-
         self.call_stack.push(Callstack {
             func_name,
             file_path,

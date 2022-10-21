@@ -492,6 +492,9 @@ pub enum Token<'s> {
     NormalExprMethod((BuiltinMethod, &'s str)),
 
     #[token("GETTIME", |_| single_method(BuiltinMethod::GetTime), ignore(ascii_case))]
+    #[token("GETTIMES", |_| single_method(BuiltinMethod::GetTimeS), ignore(ascii_case))]
+    #[token("GETMILLISECOND", |_| single_method(BuiltinMethod::GetMillisecond), ignore(ascii_case))]
+    #[token("GETSECOND", |_| single_method(BuiltinMethod::GetSecond), ignore(ascii_case))]
     #[token("GETFONT", |_| single_method(BuiltinMethod::GetFont), ignore(ascii_case))]
     #[token("GETCOLOR", |_| single_method(BuiltinMethod::GetColor), ignore(ascii_case))]
     #[token("GETDEFCOLOR", |_| single_method(BuiltinMethod::GetDefColor), ignore(ascii_case))]

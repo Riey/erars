@@ -38,6 +38,10 @@ serde_yaml = "0.9.13"
 smol_str = "0.1.23"
 futures-executor = "0.3.24"
 
+[profile.dev]
+# prevent stack overflow
+opt-level = 1
+
 [profile.release-lto]
 inherits = "release"
 lto = true

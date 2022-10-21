@@ -4,6 +4,16 @@ use crate::variable::KnownVariableNames as Var;
 
 use super::*;
 
+const BASE_TIME: time::OffsetDateTime = time::PrimitiveDateTime::new(
+    if let Ok(d) = time::Date::from_ordinal_date(0001, 1) {
+        d
+    } else {
+        unreachable!()
+    },
+    time::Time::MIDNIGHT,
+)
+.assume_utc();
+
 macro_rules! conv_workflow {
     ($workflow:expr) => {
         match $workflow {
@@ -707,12 +717,19 @@ pub(super) async fn run_instruction(
                 let bytes = ctx.encoding().encode(&text).0;
 
                 let sub_bytes = match length {
-                    Some(length) => &bytes.as_ref()[start..(start + length)],
-                    None => &bytes.as_ref()[start..],
+                    Some(length) => bytes.as_ref().get(start..(start + length)),
+                    None => bytes.as_ref().get(start..),
                 };
 
-                let sub_str = ctx.encoding().decode(sub_bytes).0;
-                ctx.push(sub_str.into_owned());
+                match sub_bytes {
+                    Some(sub_bytes) => {
+                        let sub_str = ctx.encoding().decode(sub_bytes).0;
+                        ctx.push(sub_str.into_owned());
+                    }
+                    None => {
+                        ctx.push("");
+                    }
+                }
             }
 
             BuiltinMethod::SubStringU => {
@@ -859,6 +876,25 @@ pub(super) async fn run_instruction(
                 check_arg_count!(0);
                 let now = time::OffsetDateTime::now_local()?;
 
+                ctx.push(
+                    format!(
+                        "{year}{month}{day}{hour}{minute}{second}",
+                        year = now.year(),
+                        month = now.month() as u8,
+                        day = now.day(),
+                        hour = now.hour(),
+                        minute = now.minute(),
+                        second = now.second()
+                    )
+                    .parse::<i64>()
+                    .unwrap(),
+                );
+            }
+
+            BuiltinMethod::GetTimeS => {
+                check_arg_count!(0);
+                let now = time::OffsetDateTime::now_local()?;
+
                 ctx.push(format!(
                     "{year:04}年{month:02}月{day:02}日 {hour:02}:{minute:02}:{second:02}",
                     year = now.year(),
@@ -870,13 +906,25 @@ pub(super) async fn run_instruction(
                 ));
             }
 
+            BuiltinMethod::GetSecond => {
+                check_arg_count!(0);
+                let diff = time::OffsetDateTime::now_utc() - BASE_TIME;
+                ctx.push(diff.whole_seconds());
+            }
+
+            BuiltinMethod::GetMillisecond => {
+                check_arg_count!(0);
+                let diff = time::OffsetDateTime::now_utc() - BASE_TIME;
+                ctx.push(diff.whole_milliseconds() as i64);
+            }
+
             BuiltinMethod::CurrentAlign => {
                 let align = tx.align();
                 ctx.push(align as u32);
             }
 
             BuiltinMethod::CurrentRedraw => {
-                ctx.push(0);
+                ctx.push(0i64);
             }
 
             BuiltinMethod::ChkData => {
@@ -986,7 +1034,7 @@ pub(super) async fn run_instruction(
 
                 match (value, start, end) {
                     (None, None, None) => {
-                        *var = UniformVariable::new(info);
+                        var.reset(info);
                     }
                     (Some(value), start, end) => {
                         let var = match var {
@@ -1383,6 +1431,7 @@ pub(super) async fn run_instruction(
             }
             BuiltinCommand::AddCopyChara => {
                 let idx = get_arg!(@u32: args, ctx);
+                ensure!(idx < ctx.var.character_len(), "캐릭터 범위를 벗어났습니다");
                 ctx.var.add_copy_chara(idx);
             }
             BuiltinCommand::AddDefChara => {
@@ -1499,7 +1548,7 @@ pub(super) async fn run_instruction(
             BuiltinCommand::LoadChara => bail!("LOADCHARA"),
         }
     } else {
-        if !inst.is_nop() {
+        if !inst.is_nop() && !inst.is_debug() {
             bail!("Unimplemented instruction: {inst:?}");
         }
     }

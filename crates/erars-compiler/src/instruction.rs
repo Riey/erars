@@ -135,6 +135,8 @@ enum InstructionType {
     UnaryOperator = 56,
     SetAlignment = 57,
     Times = 58,
+
+    Debug = 255,
 }
 
 static_assertions::assert_eq_size!(Instruction, (u32, u32));
@@ -186,6 +188,7 @@ define_instruction! {
 
     @StrKey,
     (load_str, LoadStr),
+    (debug, Debug),
 
     @PrintFlags,
     (print, Print),

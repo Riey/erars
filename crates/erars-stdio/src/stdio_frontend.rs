@@ -3,7 +3,7 @@ use erars_ui::{ConsoleLinePart, FontStyle, InputRequest, InputRequestType, Virtu
 use erars_vm::{
     SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, SystemFunctions,
 };
-use std::{io, path::PathBuf};
+use std::{collections::VecDeque, io, path::PathBuf};
 
 #[derive(Clone)]
 pub struct StdioFrontend {
@@ -11,15 +11,17 @@ pub struct StdioFrontend {
     from: usize,
     input: String,
     json: bool,
+    inputs: VecDeque<Value>,
 }
 
 impl StdioFrontend {
-    pub fn new(sav_path: PathBuf, json: bool) -> Self {
+    pub fn new(sav_path: PathBuf, json: bool, inputs: VecDeque<Value>) -> Self {
         Self {
             sav_path,
             from: 0,
             input: String::new(),
             json,
+            inputs,
         }
     }
 
@@ -92,6 +94,14 @@ impl SystemFunctions for StdioFrontend {
         req: InputRequest,
     ) -> anyhow::Result<Option<Value>> {
         self.draw(Some(&req), vconsole, &mut io::stdout().lock())?;
+
+        if !self.inputs.is_empty() {
+            if matches!(req.ty, InputRequestType::Int | InputRequestType::Str) {
+                return Ok(self.inputs.pop_front());
+            } else {
+                return Ok(None);
+            }
+        }
 
         loop {
             self.input.clear();
