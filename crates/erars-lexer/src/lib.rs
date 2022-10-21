@@ -18,6 +18,14 @@ pub fn parse_print_flags(mut s: &str) -> (&str, PrintFlags) {
         s = ss;
     }
 
+    if let Some(ss) = strip_prefix_ignore_case_char(s, 'D') {
+        flags |= PrintFlags::DEFAULT_COLOR;
+        s = ss;
+    } else if let Some(ss) = strip_prefix_ignore_case_char(s, 'K') {
+        flags |= PrintFlags::FORCE_KANA;
+        s = ss;
+    }
+
     if let Some(ss) = strip_prefix_ignore_case_char(s, 'L') {
         flags |= PrintFlags::NEWLINE;
         s = ss;
@@ -328,7 +336,7 @@ pub enum Token<'s> {
     PrintButton((PrintFlags, &'s str)),
     #[regex(r"PRINTPLAIN(FORM)?( [^\n]*)?", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
     PrintPlain((PrintType, &'s str)),
-    #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?[LW]?(L?C)?( [^\n]*)?", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
+    #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?(L?C)?[DK]?[LW]?( [^\n]*)?", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
     Print((PrintFlags, PrintType, &'s str)),
     #[token("DATA", lex_line_left, ignore(ascii_case))]
     Data(&'s str),

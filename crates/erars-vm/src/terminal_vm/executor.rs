@@ -170,6 +170,19 @@ pub(super) async fn run_instruction(
         }
     } else if let Some(flags) = inst.as_print() {
         let s = ctx.pop_str()?;
+
+        if flags.contains(PrintFlags::FORCE_KANA) {
+            log::error!("Unimplemented: FORCE_KANA");
+        }
+
+        let prev_color = if flags.contains(PrintFlags::DEFAULT_COLOR) {
+            let c = tx.color();
+            tx.set_color(0xFF, 0xFF, 0xFF);
+            Some(c)
+        } else {
+            None
+        };
+
         if flags.contains(PrintFlags::LEFT_ALIGN) {
             tx.printlc(&s);
         } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
@@ -179,6 +192,12 @@ pub(super) async fn run_instruction(
         } else {
             tx.print(s);
         }
+
+        if let Some(prev_color) = prev_color {
+            let [r, g, b, _] = prev_color.to_le_bytes();
+            tx.set_color(r, g, b);
+        }
+
         if flags.contains(PrintFlags::NEWLINE) {
             tx.new_line();
         }
