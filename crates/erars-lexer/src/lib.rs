@@ -324,11 +324,11 @@ pub enum Token<'s> {
     #[token("CALLEVENT", ignore(ascii_case))]
     CallEvent,
 
-    #[regex(r"PRINTBUTTON(L?C)?[^\n]*", |lex| unsafe { parse_print_button(lex.slice()) }, ignore(ascii_case))]
+    #[regex(r"PRINTBUTTON(L?C)?( [^\n]*)?", |lex| unsafe { parse_print_button(lex.slice()) }, ignore(ascii_case))]
     PrintButton((PrintFlags, &'s str)),
-    #[regex(r"PRINTPLAIN(FORM)?[^\n]*", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
+    #[regex(r"PRINTPLAIN(FORM)?( [^\n]*)?", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
     PrintPlain((PrintType, &'s str)),
-    #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
+    #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?[LW]?(L?C)?( [^\n]*)?", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
     Print((PrintFlags, PrintType, &'s str)),
     #[token("DATA", lex_line_left, ignore(ascii_case))]
     Data(&'s str),
