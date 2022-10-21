@@ -58,6 +58,16 @@ macro_rules! get_arg {
     (@opt $arg:expr) => {
         $arg.next()
     };
+    (@key $arg:expr, $ctx:expr) => {
+        match $arg.next() {
+            Some(LocalValue::InternedStr(key)) => key,
+            Some(v) => {
+                let s: String = $ctx.reduce_local_value(v)?.try_into()?;
+                $ctx.var.interner().get_or_intern(&s)
+            }
+            None => bail!("매개변수가 부족합니다"),
+        }
+    };
     (@var $arg:expr) => {
         match $arg.next() {
             Some(LocalValue::VarRef(r)) => r,
@@ -352,7 +362,7 @@ pub(super) async fn run_instruction(
         macro_rules! check_arg_count {
             ($expect:expr) => {
                 if c != $expect {
-                    bail!("메소드 {meth}의 매개변수는 {}개여야합니다.", $expect);
+                    bail!("메소드 {meth}의 매개변수는 {}개여야합니다. {c}", $expect);
                 }
             };
             ($min:expr, $max:expr) => {
@@ -846,6 +856,21 @@ pub(super) async fn run_instruction(
                     }
                 }
 
+                ctx.push(ret);
+            }
+            BuiltinMethod::GetNum => {
+                check_arg_count!(2);
+
+                let key = get_arg!(@var args).name;
+                let name = get_arg!(@key args, ctx);
+
+                let ret = ctx
+                    .header_info
+                    .var_names
+                    .get(&key)
+                    .and_then(|names| names.get(&name))
+                    .copied()
+                    .map_or(-1, |n| n as i64);
                 ctx.push(ret);
             }
 

@@ -465,6 +465,7 @@ pub enum Token<'s> {
     #[token("POWER", |lex| normal_expr_method(lex, BuiltinMethod::Power), ignore(ascii_case))]
     #[token("GETEXPLV", |lex| normal_expr_method(lex, BuiltinMethod::GetExpLv), ignore(ascii_case))]
     #[token("GETPALAMLV", |lex| normal_expr_method(lex, BuiltinMethod::GetPalamLv), ignore(ascii_case))]
+    #[token("GETNUM", |lex| normal_expr_method(lex, BuiltinMethod::GetNum), ignore(ascii_case))]
     #[token("UNICODE", |lex| normal_expr_method(lex, BuiltinMethod::Unicode), ignore(ascii_case))]
     #[token("STRCOUNT", |lex| normal_expr_method(lex, BuiltinMethod::StrCount), ignore(ascii_case))]
     #[token("SUBSTRING", |lex| normal_expr_method(lex, BuiltinMethod::SubString), ignore(ascii_case))]

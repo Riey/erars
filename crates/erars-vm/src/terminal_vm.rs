@@ -3,10 +3,7 @@ mod executor;
 use std::collections::BTreeSet;
 
 use crate::*;
-use crate::{
-    context::FunctionIdentifier,
-    variable::StrKeyLike,
-};
+use crate::{context::FunctionIdentifier, variable::StrKeyLike};
 use anyhow::{anyhow, bail, Result};
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,

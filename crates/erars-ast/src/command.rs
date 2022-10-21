@@ -53,6 +53,7 @@ pub enum BuiltinMethod {
     GetTimeS,
     GetMillisecond,
     GetSecond,
+    GetNum,
     CurrentAlign,
     CurrentRedraw,
 
