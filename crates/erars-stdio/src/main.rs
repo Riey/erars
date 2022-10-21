@@ -1,8 +1,7 @@
 mod stdio_frontend;
 
-use std::path::Path;
+use std::{collections::VecDeque, path::Path};
 
-use erars_ast::Value;
 use erars_loader::{load_script, run_script, save_script};
 
 #[derive(clap::Parser)]
@@ -66,26 +65,25 @@ fn main() {
     log_panics::init();
 
     let inputs = match args.use_input {
-        Some(input) => {
-            ron::from_str::<Vec<Value>>(&std::fs::read_to_string(input).unwrap()).unwrap()
-        }
-        None => Vec::new(),
+        Some(input) => ron::from_str(&std::fs::read_to_string(input).unwrap()).unwrap(),
+        None => VecDeque::new(),
     };
 
     let system = Box::new(stdio_frontend::StdioFrontend::new(
         Path::new(&args.target_path).join("sav"),
         args.json,
+        inputs,
     ));
 
     let (vm, mut ctx, mut tx) = if args.load {
-        unsafe { load_script(&args.target_path, inputs, system).unwrap() }
+        unsafe { load_script(&args.target_path, system).unwrap() }
     } else {
-        run_script(&args.target_path, inputs, system).unwrap()
+        run_script(&args.target_path, system).unwrap()
     };
 
     if args.save {
         save_script(vm, ctx, &args.target_path).unwrap();
     } else {
-        futures_executor::block_on(async move { vm.start(&mut tx, &mut ctx).await });
+        futures_executor::block_on(vm.start(&mut tx, &mut ctx));
     }
 }

@@ -559,6 +559,12 @@ pub fn expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a
     }
 }
 
+pub fn expr_pair<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, (Expr, Expr)> + 'c {
+    move |i| pair(de_sp(expr(ctx)), preceded(char(','), de_sp(expr(ctx))))(i)
+}
+
 pub fn expr_list<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {

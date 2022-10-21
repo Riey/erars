@@ -58,7 +58,6 @@ impl TerminalVm {
         let func_name = func_identifier.get_key(&ctx.var);
 
         while let Some(inst) = insts.get(cursor).copied() {
-            cursor += 1;
             use InstructionWorkflow::*;
 
             log::trace!(
@@ -69,7 +68,9 @@ impl TerminalVm {
             );
 
             match executor::run_instruction(self, func_name, inst, tx, ctx).await {
-                Ok(Normal) => {}
+                Ok(Normal) => {
+                    cursor += 1;
+                }
                 Ok(EvalFormString(form)) => {
                     let parser_ctx = ParserContext::new(
                         ctx.header_info.clone(),
@@ -84,6 +85,7 @@ impl TerminalVm {
                             _ => bail!("EvalFromString can't do flow control"),
                         }
                     }
+                    cursor += 1;
                 }
                 Ok(Goto(pos)) => {
                     cursor = pos as usize;
@@ -252,8 +254,6 @@ impl TerminalVm {
                 }
                 Err(err) => {
                     report_error!(tx, "VM error occurred: {err}");
-
-                    ctx.update_last_stack_position();
 
                     while let Some(call_stack) = ctx.pop_call_stack() {
                         report_error!(

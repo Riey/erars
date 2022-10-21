@@ -50,6 +50,10 @@ pub enum BuiltinMethod {
     GetChara,
     GetBit,
     GetTime,
+    GetTimeS,
+    GetMillisecond,
+    GetSecond,
+    GetNum,
     CurrentAlign,
     CurrentRedraw,
 

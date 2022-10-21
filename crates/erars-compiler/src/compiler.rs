@@ -334,6 +334,11 @@ impl Compiler {
             Stmt::CallEvent(ty) => {
                 self.push(Instruction::call_event(ty));
             }
+            Stmt::PrintButton { flags, text, value } => {
+                self.push_expr(text)?;
+                self.push_expr(value)?;
+                self.push(Instruction::print_button(flags));
+            }
             Stmt::Print(flags, text) => {
                 self.push_expr(text)?;
                 self.push(Instruction::print(flags));
@@ -402,12 +407,8 @@ impl Compiler {
                 self.push(Instruction::read_var());
 
                 let mut ends = Vec::new();
-                let mut nexts = Vec::new();
+                let mut cond_ends = Vec::new();
                 for (conds, body) in cases {
-                    for next in nexts.drain(..) {
-                        self.insert(next, Instruction::goto_if_not(self.current_no()));
-                    }
-
                     for cond in conds {
                         match cond {
                             SelectCaseCond::Single(e) => {
@@ -430,21 +431,27 @@ impl Compiler {
                                 self.push(Instruction::binop(BinaryOperator::And));
                             }
                         }
+                        // self.push(Instruction::debug(StrKey::new("cond_end")));
+                        cond_ends.push(self.mark());
+                    }
+                    let cond_block_end = self.mark();
 
-                        nexts.push(self.mark());
+                    for cond_end in cond_ends.drain(..) {
+                        self.insert(cond_end, Instruction::goto_if(self.current_no()));
                     }
 
+                    // self.push(Instruction::debug(StrKey::new("cond_pop")));
+                    self.push(Instruction::pop());
                     for stmt in body {
                         self.push_stmt_with_pos(stmt)?;
                     }
 
                     ends.push(self.mark());
 
-                    for next in nexts.drain(..) {
-                        self.insert(next, Instruction::goto_if_not(self.current_no()));
-                    }
+                    self.insert(cond_block_end, Instruction::goto(self.current_no()));
                 }
 
+                // self.push(Instruction::debug(StrKey::new("cond_pop_end")));
                 self.push(Instruction::pop());
 
                 if let Some(case_else) = case_else {

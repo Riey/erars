@@ -18,6 +18,14 @@ pub fn parse_print_flags(mut s: &str) -> (&str, PrintFlags) {
         s = ss;
     }
 
+    if let Some(ss) = strip_prefix_ignore_case_char(s, 'D') {
+        flags |= PrintFlags::DEFAULT_COLOR;
+        s = ss;
+    } else if let Some(ss) = strip_prefix_ignore_case_char(s, 'K') {
+        flags |= PrintFlags::FORCE_KANA;
+        s = ss;
+    }
+
     if let Some(ss) = strip_prefix_ignore_case_char(s, 'L') {
         flags |= PrintFlags::NEWLINE;
         s = ss;
@@ -58,6 +66,21 @@ fn trim_text(s: &str) -> &str {
     let s = s.strip_prefix(' ').unwrap_or(s);
     let s = s.strip_suffix('\r').unwrap_or(s);
     s
+}
+
+unsafe fn parse_print_button(s: &str) -> (PrintFlags, &str) {
+    // skip PRINTPLAIN
+    let s = s.get_unchecked("PRINTBUTTON".len()..);
+
+    let (flags, s) = if let Some(s) = strip_prefix_ignore_case(s, "LC") {
+        (PrintFlags::LEFT_ALIGN, s)
+    } else if let Some(s) = strip_prefix_ignore_case_char(s, 'C') {
+        (PrintFlags::RIGHT_ALIGN, s)
+    } else {
+        (PrintFlags::empty(), s)
+    };
+
+    (flags, trim_text(s))
 }
 
 unsafe fn parse_print_plain(s: &str) -> (PrintType, &str) {
@@ -309,10 +332,11 @@ pub enum Token<'s> {
     #[token("CALLEVENT", ignore(ascii_case))]
     CallEvent,
 
-    #[regex(r"PRINTPLAIN(FORM)?[^\n]*", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
+    #[regex(r"PRINTBUTTON(L?C)?( [^\n]*)?", |lex| unsafe { parse_print_button(lex.slice()) }, ignore(ascii_case))]
+    PrintButton((PrintFlags, &'s str)),
+    #[regex(r"PRINTPLAIN(FORM)?( [^\n]*)?", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
     PrintPlain((PrintType, &'s str)),
-    #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
-    // #[regex(r"(?i)[pP][rR][iI][nN][tT]([sS][iI][nN][gG][lL][eE])?([dD][aA][tT][aA]|[vV]|[sS]|[fF][oO][rR][mM][sS]?)?[lLwW]?([lL]?[cC])?[^\n]*", |lex| unsafe { parse_print(lex.slice()) })]
+    #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?(L?C)?[DK]?[LW]?( [^\n]*)?", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
     Print((PrintFlags, PrintType, &'s str)),
     #[token("DATA", lex_line_left, ignore(ascii_case))]
     Data(&'s str),
@@ -465,6 +489,7 @@ pub enum Token<'s> {
     #[token("POWER", |lex| normal_expr_method(lex, BuiltinMethod::Power), ignore(ascii_case))]
     #[token("GETEXPLV", |lex| normal_expr_method(lex, BuiltinMethod::GetExpLv), ignore(ascii_case))]
     #[token("GETPALAMLV", |lex| normal_expr_method(lex, BuiltinMethod::GetPalamLv), ignore(ascii_case))]
+    #[token("GETNUM", |lex| normal_expr_method(lex, BuiltinMethod::GetNum), ignore(ascii_case))]
     #[token("UNICODE", |lex| normal_expr_method(lex, BuiltinMethod::Unicode), ignore(ascii_case))]
     #[token("STRCOUNT", |lex| normal_expr_method(lex, BuiltinMethod::StrCount), ignore(ascii_case))]
     #[token("SUBSTRING", |lex| normal_expr_method(lex, BuiltinMethod::SubString), ignore(ascii_case))]
@@ -492,6 +517,9 @@ pub enum Token<'s> {
     NormalExprMethod((BuiltinMethod, &'s str)),
 
     #[token("GETTIME", |_| single_method(BuiltinMethod::GetTime), ignore(ascii_case))]
+    #[token("GETTIMES", |_| single_method(BuiltinMethod::GetTimeS), ignore(ascii_case))]
+    #[token("GETMILLISECOND", |_| single_method(BuiltinMethod::GetMillisecond), ignore(ascii_case))]
+    #[token("GETSECOND", |_| single_method(BuiltinMethod::GetSecond), ignore(ascii_case))]
     #[token("GETFONT", |_| single_method(BuiltinMethod::GetFont), ignore(ascii_case))]
     #[token("GETCOLOR", |_| single_method(BuiltinMethod::GetColor), ignore(ascii_case))]
     #[token("GETDEFCOLOR", |_| single_method(BuiltinMethod::GetDefColor), ignore(ascii_case))]

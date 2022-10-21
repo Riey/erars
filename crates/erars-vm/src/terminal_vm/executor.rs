@@ -4,6 +4,16 @@ use crate::variable::KnownVariableNames as Var;
 
 use super::*;
 
+const BASE_TIME: time::OffsetDateTime = time::PrimitiveDateTime::new(
+    if let Ok(d) = time::Date::from_ordinal_date(0001, 1) {
+        d
+    } else {
+        unreachable!()
+    },
+    time::Time::MIDNIGHT,
+)
+.assume_utc();
+
 macro_rules! conv_workflow {
     ($workflow:expr) => {
         match $workflow {
@@ -47,6 +57,16 @@ macro_rules! get_arg {
     };
     (@opt $arg:expr) => {
         $arg.next()
+    };
+    (@key $arg:expr, $ctx:expr) => {
+        match $arg.next() {
+            Some(LocalValue::InternedStr(key)) => key,
+            Some(v) => {
+                let s: String = $ctx.reduce_local_value(v)?.try_into()?;
+                $ctx.var.interner().get_or_intern(&s)
+            }
+            None => bail!("매개변수가 부족합니다"),
+        }
     };
     (@var $arg:expr) => {
         match $arg.next() {
@@ -138,8 +158,31 @@ pub(super) async fn run_instruction(
     } else if inst.is_reuse_lastline() {
         let s = ctx.pop_str()?;
         tx.reuse_last_line(s);
+    } else if let Some(flags) = inst.as_print_button() {
+        let value = ctx.pop_value()?;
+        let text = ctx.pop_str()?;
+        if flags.contains(PrintFlags::LEFT_ALIGN) {
+            tx.print_button_lc(text, value);
+        } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
+            tx.print_button_rc(text, value);
+        } else {
+            tx.print_button(text, value);
+        }
     } else if let Some(flags) = inst.as_print() {
         let s = ctx.pop_str()?;
+
+        if flags.contains(PrintFlags::FORCE_KANA) {
+            log::error!("Unimplemented: FORCE_KANA");
+        }
+
+        let prev_color = if flags.contains(PrintFlags::DEFAULT_COLOR) {
+            let c = tx.color();
+            tx.set_color(0xFF, 0xFF, 0xFF);
+            Some(c)
+        } else {
+            None
+        };
+
         if flags.contains(PrintFlags::LEFT_ALIGN) {
             tx.printlc(&s);
         } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
@@ -149,6 +192,12 @@ pub(super) async fn run_instruction(
         } else {
             tx.print(s);
         }
+
+        if let Some(prev_color) = prev_color {
+            let [r, g, b, _] = prev_color.to_le_bytes();
+            tx.set_color(r, g, b);
+        }
+
         if flags.contains(PrintFlags::NEWLINE) {
             tx.new_line();
         }
@@ -342,7 +391,7 @@ pub(super) async fn run_instruction(
         macro_rules! check_arg_count {
             ($expect:expr) => {
                 if c != $expect {
-                    bail!("메소드 {meth}의 매개변수는 {}개여야합니다.", $expect);
+                    bail!("메소드 {meth}의 매개변수는 {}개여야합니다. {c}", $expect);
                 }
             };
             ($min:expr, $max:expr) => {
@@ -707,12 +756,19 @@ pub(super) async fn run_instruction(
                 let bytes = ctx.encoding().encode(&text).0;
 
                 let sub_bytes = match length {
-                    Some(length) => &bytes.as_ref()[start..(start + length)],
-                    None => &bytes.as_ref()[start..],
+                    Some(length) => bytes.as_ref().get(start..(start + length)),
+                    None => bytes.as_ref().get(start..),
                 };
 
-                let sub_str = ctx.encoding().decode(sub_bytes).0;
-                ctx.push(sub_str.into_owned());
+                match sub_bytes {
+                    Some(sub_bytes) => {
+                        let sub_str = ctx.encoding().decode(sub_bytes).0;
+                        ctx.push(sub_str.into_owned());
+                    }
+                    None => {
+                        ctx.push("");
+                    }
+                }
             }
 
             BuiltinMethod::SubStringU => {
@@ -831,6 +887,21 @@ pub(super) async fn run_instruction(
 
                 ctx.push(ret);
             }
+            BuiltinMethod::GetNum => {
+                check_arg_count!(2);
+
+                let key = get_arg!(@var args).name;
+                let name = get_arg!(@key args, ctx);
+
+                let ret = ctx
+                    .header_info
+                    .var_names
+                    .get(&key)
+                    .and_then(|names| names.get(&name))
+                    .copied()
+                    .map_or(-1, |n| n as i64);
+                ctx.push(ret);
+            }
 
             BuiltinMethod::StrJoin => {
                 check_arg_count!(1, 4);
@@ -859,6 +930,25 @@ pub(super) async fn run_instruction(
                 check_arg_count!(0);
                 let now = time::OffsetDateTime::now_local()?;
 
+                ctx.push(
+                    format!(
+                        "{year}{month}{day}{hour}{minute}{second}",
+                        year = now.year(),
+                        month = now.month() as u8,
+                        day = now.day(),
+                        hour = now.hour(),
+                        minute = now.minute(),
+                        second = now.second()
+                    )
+                    .parse::<i64>()
+                    .unwrap(),
+                );
+            }
+
+            BuiltinMethod::GetTimeS => {
+                check_arg_count!(0);
+                let now = time::OffsetDateTime::now_local()?;
+
                 ctx.push(format!(
                     "{year:04}年{month:02}月{day:02}日 {hour:02}:{minute:02}:{second:02}",
                     year = now.year(),
@@ -870,13 +960,25 @@ pub(super) async fn run_instruction(
                 ));
             }
 
+            BuiltinMethod::GetSecond => {
+                check_arg_count!(0);
+                let diff = time::OffsetDateTime::now_utc() - BASE_TIME;
+                ctx.push(diff.whole_seconds());
+            }
+
+            BuiltinMethod::GetMillisecond => {
+                check_arg_count!(0);
+                let diff = time::OffsetDateTime::now_utc() - BASE_TIME;
+                ctx.push(diff.whole_milliseconds() as i64);
+            }
+
             BuiltinMethod::CurrentAlign => {
                 let align = tx.align();
                 ctx.push(align as u32);
             }
 
             BuiltinMethod::CurrentRedraw => {
-                ctx.push(0);
+                ctx.push(0i64);
             }
 
             BuiltinMethod::ChkData => {
@@ -921,6 +1023,7 @@ pub(super) async fn run_instruction(
                 ctx.var.cupcheck(tx, target, names)?;
             }
             BuiltinCommand::Restart => {
+                drop(ctx.return_func()?);
                 return Ok(InstructionWorkflow::Goto(0));
             }
             BuiltinCommand::SetBit => {
@@ -985,7 +1088,7 @@ pub(super) async fn run_instruction(
 
                 match (value, start, end) {
                     (None, None, None) => {
-                        *var = UniformVariable::new(info);
+                        var.reset(info);
                     }
                     (Some(value), start, end) => {
                         let var = match var {
@@ -1382,6 +1485,7 @@ pub(super) async fn run_instruction(
             }
             BuiltinCommand::AddCopyChara => {
                 let idx = get_arg!(@u32: args, ctx);
+                ensure!(idx < ctx.var.character_len(), "캐릭터 범위를 벗어났습니다");
                 ctx.var.add_copy_chara(idx);
             }
             BuiltinCommand::AddDefChara => {
@@ -1498,7 +1602,7 @@ pub(super) async fn run_instruction(
             BuiltinCommand::LoadChara => bail!("LOADCHARA"),
         }
     } else {
-        if !inst.is_nop() {
+        if !inst.is_nop() && !inst.is_debug() {
             bail!("Unimplemented instruction: {inst:?}");
         }
     }

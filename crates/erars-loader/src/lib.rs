@@ -18,7 +18,7 @@ use codespan_reporting::{
         Config,
     },
 };
-use erars_ast::{StrKey, Value, VariableInfo};
+use erars_ast::{StrKey, VariableInfo};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
 use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, SystemFunctions, TerminalVm, VmContext};
@@ -90,7 +90,6 @@ pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow:
 /// SAFETY: Any reference to interner is not exist
 pub unsafe fn load_script(
     target_path: &str,
-    inputs: Vec<Value>,
     system: Box<dyn SystemFunctions>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     let start = Instant::now();
@@ -126,7 +125,7 @@ pub unsafe fn load_script(
     log::info!("Load game data");
     let (header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
         rmp_serde::decode::from_read(&mut file_bytes)?;
-    let mut vconsole = VirtualConsole::new(config.printc_width, config.max_log);
+    let vconsole = VirtualConsole::new(config.printc_width, config.max_log);
 
     let elapsed = start.elapsed();
     log::info!("Load done! {}ms elapsed", elapsed.as_millis());
@@ -139,17 +138,12 @@ pub unsafe fn load_script(
         }
     }
 
-    for input in inputs {
-        vconsole.push_input(input);
-    }
-
     Ok((TerminalVm { dic }, ctx, vconsole))
 }
 
 #[allow(unused_assignments)]
 pub fn run_script(
     target_path: &str,
-    inputs: Vec<Value>,
     system: Box<dyn SystemFunctions>,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     erars_ast::init_interner();
@@ -170,7 +164,7 @@ pub fn run_script(
         EraConfig::default()
     };
 
-    log::trace!("Config: {config:?}");
+    log::info!("Config: {config:?}");
 
     let config = Arc::new(config);
     let mut tx = VirtualConsole::new(config.printc_width, config.max_log);
@@ -403,10 +397,6 @@ pub fn run_script(
             .collect::<Vec<CompiledFunction>>();
 
         ctx = VmContext::new(header_info.clone(), config, system);
-
-        for input in inputs {
-            tx.push_input(input);
-        }
 
         for func in funcs {
             function_dic.insert_compiled_func(

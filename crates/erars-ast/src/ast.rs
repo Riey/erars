@@ -18,6 +18,11 @@ pub enum Stmt {
         Vec<(Vec<SelectCaseCond>, Vec<StmtWithPos>)>,
         Option<Vec<StmtWithPos>>,
     ),
+    PrintButton {
+        flags: PrintFlags,
+        text: Expr,
+        value: Expr,
+    },
     Print(PrintFlags, Expr),
     PrintList(PrintFlags, Vec<Expr>),
     PrintFormS(PrintFlags, Expr),
@@ -222,6 +227,8 @@ option_set::option_set! {
         const RIGHT_ALIGN = 0x8;
         const SINGLE = 0x10;
         const PLAIN = 0x20;
+        const FORCE_KANA = 0x40;
+        const DEFAULT_COLOR = 0x80;
     }
 }
 

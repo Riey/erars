@@ -40,7 +40,6 @@ fn run_test() {
             erb_file.file_stem().unwrap().to_str().unwrap()
         ));
 
-        eprintln!("Run {}", erb_file.display());
         log::info!("Run {}", erb_file.display());
 
         let expected_ret = std::fs::read_to_string(out_file).unwrap();
@@ -58,10 +57,14 @@ fn run_test() {
         }
 
         log::info!("FunctionDic: {dic:#?}");
-
         let ret = test_runner(dic, ctx);
 
-        k9::assert_equal!(ret, expected_ret);
+        if ret != expected_ret {
+            eprintln!("[x] {}", erb_file.display());
+            k9::assert_equal!(ret, expected_ret);
+        } else {
+            eprintln!("[o] {}", erb_file.display());
+        }
     }
 }
 
@@ -70,6 +73,11 @@ fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
     let mut tx = VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log);
 
     futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+
+    let leftover = ctx.return_func().unwrap().collect::<Vec<_>>();
+    if !leftover.is_empty() {
+        panic!("Function stack is not cleared: {leftover:?}");
+    }
 
     let mut out = String::new();
 

@@ -45,7 +45,7 @@ pub struct SerializableVariableStorage {
     character_len: u32,
     rand_seed: [u8; 32],
     variables: HashMap<String, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
+    local_variables: HashMap<String, HashMap<String, (VariableInfo, UniformVariable)>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -53,7 +53,7 @@ pub struct SerializableGlobalVariableStorage {
     pub code: u32,
     pub version: u32,
     variables: HashMap<String, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
+    local_variables: HashMap<String, HashMap<String, (VariableInfo, UniformVariable)>>,
 }
 
 #[derive(Clone)]
@@ -62,7 +62,7 @@ pub struct VariableStorage {
     character_len: u32,
     rng: ChaCha20Rng,
     variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
+    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, UniformVariable)>>,
     known_variables: EnumMap<KnownVariableNames, StrKey>,
     event_keys: EnumMap<EventType, StrKey>,
 }
@@ -126,7 +126,7 @@ impl VariableStorage {
     fn load_variables(
         &mut self,
         variables: HashMap<String, (VariableInfo, UniformVariable)>,
-        local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
+        local_variables: HashMap<String, HashMap<String, (VariableInfo, UniformVariable)>>,
     ) {
         for (k, (info, var)) in variables {
             let (now_info, now_var) =
@@ -209,7 +209,7 @@ impl VariableStorage {
         is_global: bool,
     ) -> (
         HashMap<String, (VariableInfo, UniformVariable)>,
-        HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
+        HashMap<String, HashMap<String, (VariableInfo, UniformVariable)>>,
     ) {
         #[cfg(feature = "multithread")]
         let this_vars = self.variables.par_iter();
@@ -429,10 +429,12 @@ impl VariableStorage {
     }
 
     pub fn add_local_info(&mut self, func: StrKey, var_name: StrKey, info: VariableInfo) {
+        let var = UniformVariable::new(&info);
+
         self.local_variables
             .entry(func)
             .or_default()
-            .insert(var_name, (info, None));
+            .insert(var_name, (info, var));
     }
 
     pub fn ref_int(&mut self, name: impl StrKeyLike, args: &[u32]) -> Result<&mut i64> {
@@ -530,9 +532,10 @@ impl VariableStorage {
         args: &[u32],
     ) -> Result<(&mut VariableInfo, &mut VmVariable, u32)> {
         let name = name.get_key(self);
+        let target_key = self.known_key(KnownVariableNames::Target);
 
-        let target = if name != self.known_key(KnownVariableNames::Target) {
-            self.read_int("TARGET", &[])?
+        let target = if name != target_key {
+            self.read_int(target_key, &[])?
         } else {
             // NEED for break recursion
             -1
@@ -610,21 +613,7 @@ impl VariableStorage {
             .get_mut(&var)
             .ok_or_else(|| anyhow!("Variable {:?} is not exists", var))?;
 
-        if var.is_none() {
-            let mut var_ = UniformVariable::new(info);
-            if !info.init.is_empty() {
-                let var_ = var_.assume_normal();
-                for (idx, init_var) in info.init.iter().enumerate() {
-                    match init_var {
-                        InlineValue::Int(i) => var_.set(idx as u32, *i)?,
-                        InlineValue::String(s) => var_.set(idx as u32, s.resolve())?,
-                    }
-                }
-            }
-            *var = Some(var_);
-        }
-
-        Ok((info, var.as_mut().unwrap()))
+        Ok((info, var))
     }
 
     pub fn is_local_var(&self, func: impl StrKeyLike, var: impl StrKeyLike) -> bool {
@@ -794,8 +783,8 @@ impl VariableStorage {
             };
         }
 
-        set!("PALAMLV", palamlv_init);
-        set!("EXPLV", explv_init);
+        set!(KnownVariableNames::PalamLv, palamlv_init);
+        set!(KnownVariableNames::ExpLv, explv_init);
 
         self.get_var("RELATION")?.0.default_int = replace.relation_init;
         *self.ref_int("PBAND", &[])? = replace.pband_init;
@@ -857,13 +846,22 @@ pub enum VmVariable {
 }
 
 impl VmVariable {
-    fn new(info: &VariableInfo) -> Self {
+    pub fn new(info: &VariableInfo) -> Self {
         let size = info.full_size();
 
-        match info.is_str {
+        let mut ret = match info.is_str {
             false => Self::Int(vec![info.default_int; size]),
             true => Self::Str(vec![String::new(); size]),
+        };
+
+        for (idx, init_var) in info.init.iter().enumerate() {
+            match init_var {
+                InlineValue::Int(i) => ret.set(idx as u32, *i).unwrap(),
+                InlineValue::String(s) => ret.set(idx as u32, s.resolve()).unwrap(),
+            }
         }
+
+        ret
     }
 
     pub fn get(&self, idx: u32) -> Result<Value> {
@@ -930,6 +928,19 @@ impl UniformVariable {
         match self {
             UniformVariable::Character(c) => &mut c[chara_no as usize],
             UniformVariable::Normal(v) => v,
+        }
+    }
+
+    pub fn reset(&mut self, info: &VariableInfo) {
+        {
+            match self {
+                UniformVariable::Normal(var) => *var = VmVariable::new(info),
+                UniformVariable::Character(cvar) => {
+                    cvar.iter_mut().for_each(|var| {
+                        *var = VmVariable::new(info);
+                    });
+                }
+            }
         }
     }
 
@@ -1036,6 +1047,7 @@ pub enum KnownVariableNames {
 
     Train,
     Tflag,
+    Tcvar,
     Tequip,
     Source,
     Juel,
