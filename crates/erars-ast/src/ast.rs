@@ -18,6 +18,11 @@ pub enum Stmt {
         Vec<(Vec<SelectCaseCond>, Vec<StmtWithPos>)>,
         Option<Vec<StmtWithPos>>,
     ),
+    PrintButton {
+        flags: PrintFlags,
+        text: Expr,
+        value: Expr,
+    },
     Print(PrintFlags, Expr),
     PrintList(PrintFlags, Vec<Expr>),
     PrintFormS(PrintFlags, Expr),

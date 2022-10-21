@@ -734,6 +734,11 @@ impl ParserContext {
                 vec![try_nom!(lex, self::expr::normal_form_str(self)(left)).1],
             ),
             Token::ReuseLastLine(left) => Stmt::ReuseLastLine(self.interner.get_or_intern(left)),
+            Token::PrintButton((flags, form)) => {
+                let (text, value) = try_nom!(lex, self::expr::expr_pair(self)(form)).1;
+
+                Stmt::PrintButton { flags, text, value }
+            }
             Token::PrintPlain((ty, form)) => {
                 let text = match ty {
                     PrintType::Form => try_nom!(lex, self::expr::normal_form_str(self)(form)).1,

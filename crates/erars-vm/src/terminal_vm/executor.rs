@@ -158,6 +158,16 @@ pub(super) async fn run_instruction(
     } else if inst.is_reuse_lastline() {
         let s = ctx.pop_str()?;
         tx.reuse_last_line(s);
+    } else if let Some(flags) = inst.as_print_button() {
+        let value = ctx.pop_value()?;
+        let text = ctx.pop_str()?;
+        if flags.contains(PrintFlags::LEFT_ALIGN) {
+            tx.print_button_lc(text, value);
+        } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
+            tx.print_button_rc(text, value);
+        } else {
+            tx.print_button(text, value);
+        }
     } else if let Some(flags) = inst.as_print() {
         let s = ctx.pop_str()?;
         if flags.contains(PrintFlags::LEFT_ALIGN) {

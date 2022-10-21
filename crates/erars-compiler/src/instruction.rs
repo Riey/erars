@@ -106,6 +106,7 @@ enum InstructionType {
     EvalFormString = 10,
     PadStr = 11,
     ConcatString = 12,
+    Times = 13,
 
     LoadVarRef = 20,
     LoadExternVarRef = 21,
@@ -127,14 +128,14 @@ enum InstructionType {
     GotoIf = 40,
 
     Print = 50,
-    ReuseLastLine = 51,
-    BuiltinVar = 52,
-    BuiltinCommand = 53,
-    BuiltinMethod = 54,
-    BinaryOperator = 55,
-    UnaryOperator = 56,
-    SetAlignment = 57,
-    Times = 58,
+    PrintButton = 51,
+    ReuseLastLine = 52,
+    BuiltinVar = 53,
+    BuiltinCommand = 54,
+    BuiltinMethod = 55,
+    BinaryOperator = 56,
+    UnaryOperator = 57,
+    SetAlignment = 58,
 
     Debug = 255,
 }
@@ -192,6 +193,7 @@ define_instruction! {
 
     @PrintFlags,
     (print, Print),
+    (print_button, PrintButton),
 
     @EventType,
     (call_event, CallEvent),

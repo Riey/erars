@@ -339,6 +339,26 @@ impl VirtualConsole {
             .push(ConsoleLinePart::Button(vec![(text, style)], value));
     }
 
+    pub fn print_button_lc(&mut self, text: String, value: Value) {
+        if self.skipdisp {
+            return;
+        }
+        self.print_button(
+            text.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Left),
+            value,
+        );
+    }
+
+    pub fn print_button_rc(&mut self, text: String, value: Value) {
+        if self.skipdisp {
+            return;
+        }
+        self.print_button(
+            text.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Right),
+            value,
+        );
+    }
+
     pub fn printlc(&mut self, s: &str) {
         self.print(s.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Left));
     }

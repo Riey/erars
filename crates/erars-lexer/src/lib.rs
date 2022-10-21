@@ -60,6 +60,21 @@ fn trim_text(s: &str) -> &str {
     s
 }
 
+unsafe fn parse_print_button(s: &str) -> (PrintFlags, &str) {
+    // skip PRINTPLAIN
+    let s = s.get_unchecked("PRINTBUTTON".len()..);
+
+    let (flags, s) = if let Some(s) = strip_prefix_ignore_case(s, "LC") {
+        (PrintFlags::LEFT_ALIGN, s)
+    } else if let Some(s) = strip_prefix_ignore_case_char(s, 'C') {
+        (PrintFlags::RIGHT_ALIGN, s)
+    } else {
+        (PrintFlags::empty(), s)
+    };
+
+    (flags, trim_text(s))
+}
+
 unsafe fn parse_print_plain(s: &str) -> (PrintType, &str) {
     // skip PRINTPLAIN
     let s = s.get_unchecked("PRINTPLAIN".len()..);
@@ -309,10 +324,11 @@ pub enum Token<'s> {
     #[token("CALLEVENT", ignore(ascii_case))]
     CallEvent,
 
+    #[regex(r"PRINTBUTTON(L?C)?[^\n]*", |lex| unsafe { parse_print_button(lex.slice()) }, ignore(ascii_case))]
+    PrintButton((PrintFlags, &'s str)),
     #[regex(r"PRINTPLAIN(FORM)?[^\n]*", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
     PrintPlain((PrintType, &'s str)),
     #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?[LW]?(L?C)?[^\n]*", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
-    // #[regex(r"(?i)[pP][rR][iI][nN][tT]([sS][iI][nN][gG][lL][eE])?([dD][aA][tT][aA]|[vV]|[sS]|[fF][oO][rR][mM][sS]?)?[lLwW]?([lL]?[cC])?[^\n]*", |lex| unsafe { parse_print(lex.slice()) })]
     Print((PrintFlags, PrintType, &'s str)),
     #[token("DATA", lex_line_left, ignore(ascii_case))]
     Data(&'s str),

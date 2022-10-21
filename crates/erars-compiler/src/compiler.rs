@@ -334,6 +334,11 @@ impl Compiler {
             Stmt::CallEvent(ty) => {
                 self.push(Instruction::call_event(ty));
             }
+            Stmt::PrintButton { flags, text, value } => {
+                self.push_expr(text)?;
+                self.push_expr(value)?;
+                self.push(Instruction::print_button(flags));
+            }
             Stmt::Print(flags, text) => {
                 self.push_expr(text)?;
                 self.push(Instruction::print(flags));
