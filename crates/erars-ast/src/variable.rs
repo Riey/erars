@@ -21,6 +21,7 @@ pub enum BuiltinVariable {
     TstrName,
     EquipName,
     TequipName,
+    TrainName,
     PalamName,
     SourceName,
     StainName,
