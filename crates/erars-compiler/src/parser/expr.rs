@@ -781,7 +781,7 @@ pub fn dim_line<'c, 'a>(
         let mut info = VariableInfo::default();
         info.is_str = is_str;
 
-        let (i, (_is_dynamic, is_chara, is_save, var, size, init)) = tuple((
+        let (i, (is_dynamic, is_chara, is_save, var, size, init)) = tuple((
             opt(value((), de_sp(tag("DYNAMIC")))),
             opt(value((), de_sp(tag("CHARADATA")))),
             opt(value((), de_sp(tag("SAVEDATA")))),
@@ -796,6 +796,7 @@ pub fn dim_line<'c, 'a>(
             )),
         ))(i)?;
 
+        info.is_dynamic = is_dynamic.is_some();
         info.is_chara = is_chara.is_some();
         info.is_savedata = is_save.is_some();
         info.size = size.unwrap_or_default();

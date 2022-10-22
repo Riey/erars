@@ -85,6 +85,7 @@ pub struct VariableInfo {
     pub is_str: bool,
     pub is_global: bool,
     pub is_savedata: bool,
+    pub is_dynamic: bool,
     pub default_int: i64,
     pub size: Vec<u32>,
     pub init: Vec<InlineValue>,
