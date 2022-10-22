@@ -3,6 +3,7 @@ mod stdio_frontend;
 use std::{collections::VecDeque, path::Path};
 
 use erars_loader::{load_script, run_script, save_script};
+use memory_stats::memory_stats;
 
 #[derive(clap::Parser)]
 #[clap(author, version, about)]
@@ -35,6 +36,9 @@ struct Args {
 
     #[clap(long, help = "Load bytecode")]
     load: bool,
+
+    #[clap(long, help = "Just measure memory usage")]
+    measure_memory: bool,
 }
 
 fn main() {
@@ -81,9 +85,24 @@ fn main() {
         run_script(&args.target_path, system).unwrap()
     };
 
-    if args.save {
+    if args.measure_memory {
+        measure_by_drop("TerminalVm", vm);
+        measure_by_drop("VmContext", ctx);
+        measure_by_drop("VirtualConsole", tx);
+        println!(
+            "Interner takes {}KB",
+            erars_ast::get_interner().current_memory_usage() / 1024
+        );
+    } else if args.save {
         save_script(vm, ctx, &args.target_path).unwrap();
     } else {
         futures_executor::block_on(vm.start(&mut tx, &mut ctx));
     }
+}
+
+fn measure_by_drop<T>(name: &str, val: T) {
+    let prev = memory_stats().unwrap().physical_mem;
+    drop(val);
+    let current = memory_stats().unwrap().physical_mem;
+    println!("{name} takes {}KB", prev.saturating_sub(current) / 1024);
 }
