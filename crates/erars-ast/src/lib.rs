@@ -110,7 +110,7 @@ unsafe impl lasso::Key for StrKey {
 pub fn var_name_alias(var: &str) -> &str {
     match var {
         "MAXBASE" | "UPBASE" | "DOWNBASE" | "LOSEBASE" => "BASE",
-        "GOTJUEL" | "JUEL" | "UP" | "DOWN" => "PALAM",
+        "GOTJUEL" | "JUEL" | "UP" | "DOWN" | "CUP" | "CDOWN" => "PALAM",
         "ITEMSALES" | "ITEMPRICE" => "ITEM",
         "NOWEX" => "EX",
         _ => var,
