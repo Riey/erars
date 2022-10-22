@@ -467,7 +467,7 @@ dependencies = [
 
 [[package]]
 name = "erars"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "codespan",
  "codespan-reporting",
@@ -490,7 +490,7 @@ dependencies = [
 
 [[package]]
 name = "erars-ast"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -508,7 +508,7 @@ dependencies = [
 
 [[package]]
 name = "erars-bytecode"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "byteorder",
  "enum-map",
@@ -519,7 +519,7 @@ dependencies = [
 
 [[package]]
 name = "erars-compiler"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "bitflags",
  "derivative",
@@ -546,7 +546,7 @@ dependencies = [
 
 [[package]]
 name = "erars-lexer"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "bitflags",
  "cow-utils",
@@ -561,7 +561,7 @@ dependencies = [
 
 [[package]]
 name = "erars-loader"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "codespan",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "erars-saveload-fs"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "erars-vm",
@@ -597,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "erars-stdio"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "ansi_term",
  "anyhow",
@@ -621,7 +621,7 @@ dependencies = [
 
 [[package]]
 name = "erars-ui"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -641,7 +641,7 @@ dependencies = [
 
 [[package]]
 name = "erars-vm"
-version = "0.1.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -675,7 +675,7 @@ dependencies = [
 
 [[package]]
 name = "erars-wasm"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "anyhow",
  "async-trait",
