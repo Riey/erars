@@ -412,7 +412,7 @@ pub(super) async fn run_instruction(
                 let no = get_arg!(@i64: args, ctx) as u32;
                 let sp = get_arg!(@opt @i64: args, ctx);
 
-                if sp != Some(0) {
+                if sp.map_or(false, |sp| sp != 0) {
                     log::warn!("Ignore SP feature");
                 }
 
@@ -432,7 +432,7 @@ pub(super) async fn run_instruction(
                 let idx = get_arg!(@i64: args, ctx) as u32;
                 let sp = get_arg!(@opt @i64: args, ctx);
 
-                if sp != Some(0) {
+                if sp.map_or(false, |sp| sp != 0) {
                     log::warn!("Ignore SP feature");
                 }
 
