@@ -1538,7 +1538,7 @@ pub(super) async fn run_instruction(
                 log::info!("Save {idx}: {description}");
 
                 let var = ctx.var.get_serializable(&ctx.header_info, description);
-                ctx.system.save_local(idx, &var).await?;
+                ctx.system.save_local(idx, var).await?;
             }
             BuiltinCommand::LoadData => {
                 let idx = get_arg!(@u32: args, ctx);
@@ -1552,7 +1552,7 @@ pub(super) async fn run_instruction(
             }
             BuiltinCommand::SaveGlobal => {
                 ctx.system
-                    .save_global(&ctx.var.get_global_serializable(&ctx.header_info))
+                    .save_global(ctx.var.get_global_serializable(&ctx.header_info))
                     .await?;
             }
             BuiltinCommand::LoadGlobal => {
@@ -1645,7 +1645,7 @@ async fn run_save_game(
                     ctx.put_form_enabled = false;
                     let description = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
                     let sav = ctx.var.get_serializable(&ctx.header_info, description);
-                    ctx.system.save_local(i, &sav).await?;
+                    ctx.system.save_local(i, sav.clone()).await?;
                     savs.insert(i, sav);
                 }
             }

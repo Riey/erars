@@ -20,6 +20,12 @@ pub struct TextStyle {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Color(pub [u8; 3]);
 
+impl Default for Color {
+    fn default() -> Self {
+        Color([0; 3])
+    }
+}
+
 impl From<Color> for u32 {
     fn from(Color([r, g, b]): Color) -> Self {
         u32::from_le_bytes([r, g, b, 0])
@@ -30,7 +36,7 @@ impl From<Color> for u32 {
 pub enum ConsoleLinePart {
     Text(String, TextStyle),
     Line(String, TextStyle),
-    Button(Vec<(String, TextStyle)>, Value),
+    Button(Vec<(String, TextStyle)>, u32, Value),
 }
 
 impl ConsoleLinePart {
@@ -54,7 +60,7 @@ impl Display for ConsoleLinePart {
         match self {
             Self::Text(arg0, _) => write!(f, "{arg0}"),
             Self::Line(arg0, _) => write!(f, "{arg0}"),
-            Self::Button(arg0, _) => {
+            Self::Button(arg0, _, _) => {
                 for (text, _) in arg0 {
                     write!(f, "{text}")?;
                 }
@@ -96,7 +102,7 @@ impl ConsoleLine {
         self.parts.is_empty()
     }
 
-    fn push_button_merge(&mut self, text: String, style: TextStyle, value: Value) {
+    fn push_button_merge(&mut self, input_gen: u32, text: String, style: TextStyle, value: Value) {
         let len = self
             .parts
             .iter()
@@ -110,7 +116,7 @@ impl ConsoleLine {
             self.parts.drain(from..).map(ConsoleLinePart::into_text).collect()
         };
         parts.push((text, style));
-        self.parts.push(ConsoleLinePart::Button(parts, value));
+        self.parts.push(ConsoleLinePart::Button(parts, input_gen, value));
     }
     pub fn push_plain_text(&mut self, text: String, style: &TextStyle) {
         match self.parts.last_mut() {
@@ -122,7 +128,7 @@ impl ConsoleLine {
             }
         }
     }
-    pub fn push_text(&mut self, text: String, style: &TextStyle) {
+    pub fn push_text(&mut self, input_gen: u32, text: String, style: &TextStyle) {
         static BUTTON_REGEX: Lazy<Regex> =
             Lazy::new(|| Regex::new(r#"[^\[]*\[ *(\d+) *\][^\[\]]*"#).unwrap());
 
@@ -143,6 +149,7 @@ impl ConsoleLine {
                         for captures in BUTTON_REGEX.captures_iter(&btn_buf) {
                             let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
                             self.push_button_merge(
+                                input_gen,
                                 captures.get(0).unwrap().as_str().to_string(),
                                 style.clone(),
                                 Value::Int(num),
@@ -156,6 +163,7 @@ impl ConsoleLine {
                         for captures in BUTTON_REGEX.captures_iter(&text) {
                             let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
                             self.push_button_merge(
+                                input_gen,
                                 captures.get(0).unwrap().as_str().to_string(),
                                 style.clone(),
                                 Value::Int(num),
@@ -174,7 +182,7 @@ impl ConsoleLine {
             Some(ConsoleLinePart::Text(prev_text, prev_style)) if *prev_style == *style => {
                 prev_text.push_str(&text);
             }
-            Some(ConsoleLinePart::Button(parts, _)) => {
+            Some(ConsoleLinePart::Button(parts, ..)) => {
                 if let Some(pos) = has_lb {
                     let (left, right) = text.split_at(pos);
                     if parts.last().unwrap().1 == *style {
@@ -317,7 +325,7 @@ impl VirtualConsole {
         if self.skipdisp {
             return;
         }
-        self.last_line.push_text(s, &self.style);
+        self.last_line.push_text(self.input_gen, s, &self.style);
     }
 
     pub fn print_line(&mut self, s: String) {
@@ -336,7 +344,7 @@ impl VirtualConsole {
         self.last_line.button_start = None;
         self.last_line
             .parts
-            .push(ConsoleLinePart::Button(vec![(text, style)], value));
+            .push(ConsoleLinePart::Button(vec![(text, style)], self.input_gen, value));
     }
 
     pub fn print_button_lc(&mut self, text: String, value: Value) {
@@ -554,6 +562,7 @@ impl<'a> Serialize for LinesFrom<'a> {
 fn button_test() {
     let mut line = ConsoleLine::default();
     line.push_text(
+        0,
         "[0] 1 [1] 2 [ 3] 3 [456 ] 745".into(),
         &TextStyle {
             color: Color([0; 3]),
@@ -583,6 +592,7 @@ fn button_test() {
                 },
             ),
         ],
+        0,
         Int(
             0,
         ),
@@ -604,6 +614,7 @@ fn button_test() {
                 },
             ),
         ],
+        0,
         Int(
             1,
         ),
@@ -625,6 +636,7 @@ fn button_test() {
                 },
             ),
         ],
+        0,
         Int(
             3,
         ),
@@ -646,6 +658,7 @@ fn button_test() {
                 },
             ),
         ],
+        0,
         Int(
             456,
         ),
@@ -657,6 +670,7 @@ fn button_test() {
     line = ConsoleLine::default();
 
     line.push_text(
+        0,
         ">".into(),
         &TextStyle {
             color: Color([0; 3]),
@@ -666,6 +680,7 @@ fn button_test() {
     );
 
     line.push_text(
+        0,
         "[ 9]".into(),
         &TextStyle {
             color: Color([0; 3]),
@@ -675,6 +690,7 @@ fn button_test() {
     );
 
     line.push_text(
+        0,
         "2022年10月08日 22:52:52 1일째 [낮".into(),
         &TextStyle {
             color: Color([0; 3]),
@@ -718,6 +734,7 @@ fn button_test() {
                 },
             ),
         ],
+        0,
         Int(
             9,
         ),

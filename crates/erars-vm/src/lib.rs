@@ -63,10 +63,10 @@ pub trait SystemFunctions {
     async fn save_local(
         &mut self,
         idx: u32,
-        sav: &SerializableVariableStorage,
+        sav: SerializableVariableStorage,
     ) -> anyhow::Result<()>;
     async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()>;
-    async fn save_global(&mut self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()>;
+    async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()>;
 
     fn clone_functions(&self) -> Box<dyn SystemFunctions>;
 }
@@ -110,14 +110,14 @@ impl SystemFunctions for NullSystemFunctions {
     async fn save_local(
         &mut self,
         idx: u32,
-        sav: &SerializableVariableStorage,
+        sav: SerializableVariableStorage,
     ) -> anyhow::Result<()> {
         Ok(())
     }
     async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
         Ok(())
     }
-    async fn save_global(&mut self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()> {
+    async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
         Ok(())
     }
 

@@ -63,7 +63,7 @@ impl StdioFrontend {
                     ConsoleLinePart::Text(text, style) => {
                         write!(out, "{}", paint(style.color, style.font_style, &text))?;
                     }
-                    ConsoleLinePart::Button(btns, _value) => {
+                    ConsoleLinePart::Button(btns, _input_gen, _value) => {
                         for (text, style) in btns.iter() {
                             write!(out, "{}", paint(vconsole.hl_color, style.font_style, text))?;
                         }
@@ -151,15 +151,15 @@ impl SystemFunctions for StdioFrontend {
     async fn save_local(
         &mut self,
         idx: u32,
-        sav: &SerializableVariableStorage,
+        sav: SerializableVariableStorage,
     ) -> anyhow::Result<()> {
-        erars_saveload_fs::write_save_data(&self.sav_path, idx, sav)
+        erars_saveload_fs::write_save_data(&self.sav_path, idx, &sav)
     }
     async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
         erars_saveload_fs::delete_save_data(&self.sav_path, idx)
     }
-    async fn save_global(&mut self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()> {
-        erars_saveload_fs::write_global_data(&self.sav_path, sav)
+    async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
+        erars_saveload_fs::write_global_data(&self.sav_path, &sav)
     }
 
     fn clone_functions(&self) -> Box<dyn SystemFunctions> {

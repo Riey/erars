@@ -1,0 +1,22 @@
+[package]
+name = "erars-egui"
+version = "0.2.1"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+erars-ast = { path = "../erars-ast" }
+erars-compiler = { path = "../erars-compiler" }
+erars-ui = { path = "../erars-ui" }
+erars-vm = { path = "../erars-vm" }
+erars-loader = { path = "../erars-loader", features = ["multithread"] }
+erars-saveload-fs = { path = "../erars-saveload-fs", features = ["multithread"] }
+erars-proxy-system = { path = "../erars-proxy-system" }
+
+egui = "0.19.0"
+eframe = { version = "0.19.0", default-features = false, features = ["wgpu"] }
+fontdb = { version = "0.9.1", features = ["fontconfig"] }
+futures-executor = "0.3.25"
+clap = { version = "4", features = ["derive"] }
+flexi_logger = "0.24.0"
+log-panics = "2.1.0"

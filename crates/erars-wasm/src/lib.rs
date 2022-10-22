@@ -137,9 +137,9 @@ impl erars_vm::SystemFunctions for WasmSystem {
     async fn save_local(
         &mut self,
         idx: u32,
-        sav: &SerializableVariableStorage,
+        sav: SerializableVariableStorage,
     ) -> anyhow::Result<()> {
-        JsFuture::from(self.callbacks.save_local(idx, serde_json::to_string(sav)?))
+        JsFuture::from(self.callbacks.save_local(idx, serde_json::to_string(&sav)?))
             .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
         Ok(())
@@ -150,8 +150,8 @@ impl erars_vm::SystemFunctions for WasmSystem {
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
         Ok(())
     }
-    async fn save_global(&mut self, sav: &SerializableGlobalVariableStorage) -> anyhow::Result<()> {
-        JsFuture::from(self.callbacks.save_global(serde_json::to_string(sav)?))
+    async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
+        JsFuture::from(self.callbacks.save_global(serde_json::to_string(&sav)?))
             .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
         Ok(())
