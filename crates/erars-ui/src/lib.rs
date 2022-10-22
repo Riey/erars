@@ -342,9 +342,11 @@ impl VirtualConsole {
         }
         let style = self.style.clone();
         self.last_line.button_start = None;
-        self.last_line
-            .parts
-            .push(ConsoleLinePart::Button(vec![(text, style)], self.input_gen, value));
+        self.last_line.parts.push(ConsoleLinePart::Button(
+            vec![(text, style)],
+            self.input_gen,
+            value,
+        ));
     }
 
     pub fn print_button_lc(&mut self, text: String, value: Value) {

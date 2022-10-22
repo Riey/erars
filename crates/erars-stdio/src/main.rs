@@ -57,7 +57,11 @@ fn main() {
                     Naming::Numbers,
                     Cleanup::KeepLogFiles(5),
                 )
-                .log_to_file(FileSpec::default().directory(Path::new(&args.target_path).join("logs")).basename("erars"))
+                .log_to_file(
+                    FileSpec::default()
+                        .directory(Path::new(&args.target_path).join("logs"))
+                        .basename("erars"),
+                )
                 .write_mode(WriteMode::BufferAndFlush)
                 .create_symlink("last_log.log")
                 .use_utc()

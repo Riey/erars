@@ -80,7 +80,6 @@ fn main() {
         system_back.send_quit();
     });
 
-
     eframe::run_native(
         "erars",
         eframe::NativeOptions {
@@ -113,12 +112,23 @@ fn main() {
             widgets.inactive.fg_stroke.color = egui::Color32::WHITE;
             widgets.hovered.fg_stroke.color = egui::Color32::YELLOW;
 
-            ctx.egui_ctx.set_visuals(egui::Visuals {
-                button_frame: false,
-                extreme_bg_color: egui::Color32::BLACK,
-                widgets,
-                ..egui::Visuals::dark()
-            });
+            let mut style = egui::Style {
+                visuals: egui::Visuals {
+                    button_frame: false,
+                    extreme_bg_color: egui::Color32::BLACK,
+                    widgets,
+                    ..egui::Visuals::dark()
+                },
+                ..(*ctx.egui_ctx.style()).clone()
+            };
+
+            for font_id in style.text_styles.values_mut() {
+                font_id.size = 18.0
+            }
+            if let Some(head) = style.text_styles.get_mut(&egui::TextStyle::Heading) {
+                head.size = 25.0
+            }
+
             ctx.egui_ctx.set_fonts(egui::FontDefinitions {
                 families: vec![
                     (FontFamily::Monospace, vec!["D2Coding".into()]),
@@ -128,6 +138,8 @@ fn main() {
                 .collect(),
                 font_data: vec![("D2Coding".into(), data)].into_iter().collect(),
             });
+
+            ctx.egui_ctx.set_style(style);
 
             Box::new(EraApp::new(receiver, sav_path))
         }),
@@ -202,7 +214,7 @@ impl App for EraApp {
             }
         }
 
-        self.draw_console(ctx);
+        self.draw_console(ctx, frame);
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> egui::Rgba {
@@ -213,13 +225,15 @@ impl App for EraApp {
 }
 
 impl EraApp {
-    fn draw_console(&mut self, ctx: &egui::Context) {
+    fn draw_console(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let current_input_gen = self.current_req.as_ref().map(|req| req.generation);
         let receiver = &self.receiver;
 
         egui::TopBottomPanel::top("setting").show(ctx, |ui| {
             ui.menu_button("Setting", |ui| {
-                ctx.style_ui(ui);
+                if ui.button("Exit").clicked() {
+                    frame.close();
+                }
             });
         });
 
@@ -254,7 +268,7 @@ impl EraApp {
                 }
 
                 let text_edit = ui.text_edit_singleline(&mut self.input);
-                if self.current_req.is_some() {
+                if self.current_req.is_some() && !text_edit.has_focus() {
                     text_edit.request_focus();
                 }
 
@@ -281,7 +295,9 @@ impl EraApp {
                     }
                 }
                 InputRequestType::EnterKey | InputRequestType::ForceEnterKey => {
-                    if ctx.input().key_down(egui::Key::Enter) {
+                    if central_panel.response.clicked_by(egui::PointerButton::Primary)
+                        || ctx.input().key_down(egui::Key::Enter)
+                    {
                         self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
                         self.input.clear();
                         self.current_req = None;
@@ -344,10 +360,9 @@ impl EraApp {
             }
             ConsoleLinePart::Line(text, color) => {
                 let width = ui.available_width();
-                let char_width = text
-                    .chars()
-                    .map(|c| ui.fonts().glyph_width(&egui::FontId::monospace(14.0), c))
-                    .sum::<f32>();
+                let font_id = &ui.style().text_styles[&egui::TextStyle::Monospace];
+                let char_width =
+                    text.chars().map(|c| ui.fonts().glyph_width(font_id, c)).sum::<f32>();
                 let s = text.repeat((width / char_width) as usize);
                 ui.colored_label(to_egui_color(color.color), s);
             }
