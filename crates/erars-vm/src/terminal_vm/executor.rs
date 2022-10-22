@@ -982,6 +982,11 @@ pub(super) async fn run_instruction(
                 ctx.push(0i64);
             }
 
+            BuiltinMethod::SaveNos => {
+                let nos = ctx.config.save_nos;
+                ctx.push(nos as i64);
+            }
+
             BuiltinMethod::ChkData => {
                 check_arg_count!(1);
                 let idx = get_arg!(@u32: args, ctx);
@@ -1569,10 +1574,6 @@ pub(super) async fn run_instruction(
 
                 ctx.set_var_ref(&v1, temp2)?;
                 ctx.set_var_ref(&v2, temp1)?;
-            }
-            BuiltinCommand::SaveNos => {
-                let nos = ctx.config.save_nos;
-                ctx.push(nos as i64);
             }
             BuiltinCommand::SaveGame => {
                 conv_workflow!(run_save_game(vm, tx, ctx).await?);

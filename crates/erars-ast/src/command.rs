@@ -63,6 +63,7 @@ pub enum BuiltinMethod {
     FindChara,
     #[strum(serialize = "FIND_CHARADATA")]
     FindCharaData,
+    SaveNos,
 
     CsvName = 70,
     CsvCallName,
@@ -113,7 +114,6 @@ pub enum BuiltinCommand {
     SaveData,
     LoadData,
     DelData,
-    SaveNos,
     SaveGame,
     LoadGame,
     SaveGlobal,
