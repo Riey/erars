@@ -179,7 +179,7 @@ impl TerminalVm {
 
         let ret = self.run_body(label, body, tx, ctx).await?;
 
-        ctx.end_func();
+        ctx.end_func(label);
 
         Ok(ret)
     }

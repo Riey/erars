@@ -151,8 +151,12 @@ impl VmContext {
         });
     }
 
-    pub fn end_func(&mut self) {
-        self.call_stack.pop();
+    pub fn end_func(&mut self, func_name: FunctionIdentifier) {
+        self.pop_call_stack();
+
+        if let FunctionIdentifier::Normal(name) = func_name {
+            self.var.clear_dynamic_vars(name);
+        }
     }
 
     pub fn pop_call_stack(&mut self) -> Option<Callstack> {

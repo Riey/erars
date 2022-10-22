@@ -112,6 +112,17 @@ impl VariableStorage {
         self.interner.resolve(&key)
     }
 
+    pub fn clear_dynamic_vars(&mut self, name: StrKey) {
+        if let Some(local_dic) = self.local_variables.get_mut(&name) {
+            for (_, (info, var)) in local_dic.iter_mut() {
+                if info.is_dynamic {
+                    // remove dynamic variable
+                    *var = None;
+                }
+            }
+        }
+    }
+
     pub fn local_infos(
         &self,
     ) -> impl Iterator<Item = (StrKey, Vec<(StrKey, &'_ VariableInfo)>)> + '_ {
