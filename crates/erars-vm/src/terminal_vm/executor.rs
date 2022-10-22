@@ -363,9 +363,10 @@ pub(super) async fn run_instruction(
                 ctx.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
             }
 
-            AblName | TalentName | TrainName | ItemName | FlagName | ExName | ExpName | MarkName
-            | CflagName | CstrName | StrName | TstrName | EquipName | TequipName | PalamName
-            | SourceName | StainName | TcvarName | GlobalName | GlobalsName | SaveStrName => {
+            AblName | TalentName | TrainName | ItemName | FlagName | ExName | ExpName
+            | MarkName | CflagName | CstrName | StrName | TstrName | EquipName | TequipName
+            | PalamName | SourceName | StainName | TcvarName | GlobalName | GlobalsName
+            | SaveStrName => {
                 let name = <&str>::from(var).strip_suffix("NAME").unwrap();
                 let name = ctx.var.interner().get_or_intern(name);
                 let arg = args[0] as u32;

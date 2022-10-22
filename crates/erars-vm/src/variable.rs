@@ -45,7 +45,7 @@ pub struct SerializableVariableStorage {
     character_len: u32,
     rand_seed: [u8; 32],
     variables: HashMap<String, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<String, HashMap<String, (VariableInfo, UniformVariable)>>,
+    local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -53,7 +53,7 @@ pub struct SerializableGlobalVariableStorage {
     pub code: u32,
     pub version: u32,
     variables: HashMap<String, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<String, HashMap<String, (VariableInfo, UniformVariable)>>,
+    local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
 }
 
 #[derive(Clone)]
@@ -62,7 +62,7 @@ pub struct VariableStorage {
     character_len: u32,
     rng: ChaCha20Rng,
     variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, UniformVariable)>>,
+    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
     known_variables: EnumMap<KnownVariableNames, StrKey>,
     event_keys: EnumMap<EventType, StrKey>,
 }
@@ -126,7 +126,7 @@ impl VariableStorage {
     fn load_variables(
         &mut self,
         variables: HashMap<String, (VariableInfo, UniformVariable)>,
-        local_variables: HashMap<String, HashMap<String, (VariableInfo, UniformVariable)>>,
+        local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
     ) {
         for (k, (info, var)) in variables {
             let (now_info, now_var) =
@@ -209,7 +209,7 @@ impl VariableStorage {
         is_global: bool,
     ) -> (
         HashMap<String, (VariableInfo, UniformVariable)>,
-        HashMap<String, HashMap<String, (VariableInfo, UniformVariable)>>,
+        HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
     ) {
         #[cfg(feature = "multithread")]
         let this_vars = self.variables.par_iter();
@@ -429,12 +429,10 @@ impl VariableStorage {
     }
 
     pub fn add_local_info(&mut self, func: StrKey, var_name: StrKey, info: VariableInfo) {
-        let var = UniformVariable::new(&info);
-
         self.local_variables
             .entry(func)
             .or_default()
-            .insert(var_name, (info, var));
+            .insert(var_name, (info, None));
     }
 
     pub fn ref_int(&mut self, name: impl StrKeyLike, args: &[u32]) -> Result<&mut i64> {
@@ -613,6 +611,7 @@ impl VariableStorage {
             .get_mut(&var)
             .ok_or_else(|| anyhow!("Variable {:?} is not exists", var))?;
 
+        let var = var.get_or_insert_with(|| UniformVariable::new(info));
         Ok((info, var))
     }
 
