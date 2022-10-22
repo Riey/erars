@@ -15,7 +15,6 @@ macro_rules! define_instruction {
         $(
             static_assertions::assert_impl_all!($data_ty: Copy);
             static_assertions::assert_eq_size!($data_ty, u32);
-            static_assertions::assert_eq_align!($data_ty, u32);
         )*
         paste! {
             impl Instruction {
@@ -24,7 +23,7 @@ macro_rules! define_instruction {
                     pub const fn $empty_name() -> Self {
                         Self {
                             ty: InstructionType::$empty_ty,
-                            data: 0,
+                            data: [0; 4],
                         }
                     }
 
@@ -93,7 +92,7 @@ macro_rules! define_instruction {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
-#[repr(u32)]
+#[repr(u8)]
 enum InstructionType {
     Nop = 0,
     Pop = 1,
@@ -140,20 +139,13 @@ enum InstructionType {
     Debug = 255,
 }
 
-static_assertions::assert_eq_size!(Instruction, (u32, u32));
-static_assertions::assert_eq_align!(Instruction, (u32, u32));
+static_assertions::assert_eq_size!(Instruction, [u8; 5]);
+static_assertions::assert_eq_align!(Instruction, u8);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Instruction {
     ty: InstructionType,
-    data: u32,
-}
-
-impl Instruction {
-    #[inline]
-    pub const fn raw_data(self) -> u32 {
-        self.data
-    }
+    data: [u8; 4],
 }
 
 define_instruction! {
