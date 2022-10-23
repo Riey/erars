@@ -62,7 +62,7 @@ macro_rules! get_arg {
         match $arg.next() {
             Some(LocalValue::InternedStr(key)) => key,
             Some(v) => {
-                let s: String = $ctx.reduce_local_value(v)?.try_into()?;
+                let s: String = $ctx.reduce_local_value(v)?.try_into().context("매개변수의 형식이 잘못되었습니다.")?;
                 $ctx.var.interner().get_or_intern(&s)
             }
             None => bail!("매개변수가 부족합니다"),
@@ -89,7 +89,7 @@ macro_rules! get_arg {
     };
     (@opt @$t:ty: $arg:expr, $ctx:expr) => {
         match get_arg!(@opt @value $arg, $ctx) {
-            Some(v) => Some(<$t>::try_from(v)?),
+            Some(v) => Some(<$t>::try_from(v).context("매개변수의 형식이 잘못되었습니다.")?),
             None => None,
         }
     };
@@ -754,25 +754,39 @@ pub(super) async fn run_instruction(
             BuiltinMethod::SubString => {
                 check_arg_count!(1, 3);
                 let text = get_arg!(@String: args, ctx);
-                let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
-                let length = get_arg!(@opt @usize: args, ctx);
+                let start = get_arg!(@opt @i64: args, ctx).unwrap_or(0);
+                match usize::try_from(start) {
+                    Ok(start) => {
+                        let bytes = ctx.encoding().encode(&text).0;
+                        let length = get_arg!(@opt @i64: args, ctx);
 
-                let bytes = ctx.encoding().encode(&text).0;
+                        if start >= bytes.len() {
+                            ctx.push("");
+                        } else {
+                            let length = length
+                                .and_then(|i| usize::try_from(i).ok())
+                                .map(|i| i.min(bytes.len() - start));
 
-                let sub_bytes = match length {
-                    Some(length) => bytes.as_ref().get(start..(start + length)),
-                    None => bytes.as_ref().get(start..),
-                };
+                            let sub_bytes = match length {
+                                Some(length) => bytes.as_ref().get(start..(start + length)),
+                                None => bytes.as_ref().get(start..),
+                            };
 
-                match sub_bytes {
-                    Some(sub_bytes) => {
-                        let sub_str = ctx.encoding().decode(sub_bytes).0;
-                        ctx.push(sub_str.into_owned());
+                            match sub_bytes {
+                                Some(sub_bytes) => {
+                                    let sub_str = ctx.encoding().decode(sub_bytes).0;
+                                    ctx.push(sub_str.into_owned());
+                                }
+                                None => {
+                                    ctx.push("");
+                                }
+                            }
+                        }
                     }
-                    None => {
+                    _ => {
                         ctx.push("");
                     }
-                }
+                };
             }
 
             BuiltinMethod::SubStringU => {

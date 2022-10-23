@@ -287,7 +287,11 @@ impl EraApp {
                             }
                         }
 
-                        let text_edit = ui.text_edit_singleline(&mut self.input);
+                        let text_edit = ui.add_enabled(
+                            self.current_req.is_some(),
+                            egui::TextEdit::singleline(&mut self.input),
+                        );
+
                         if self.current_req.is_some() && !text_edit.has_focus() {
                             text_edit.request_focus();
                         }
