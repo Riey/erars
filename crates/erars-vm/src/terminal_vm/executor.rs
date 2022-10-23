@@ -88,7 +88,10 @@ macro_rules! get_arg {
         get_arg!(@opt @$t: $arg, $ctx).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
     };
     (@opt @$t:ty: $arg:expr, $ctx:expr) => {
-        get_arg!(@opt @value $arg, $ctx).and_then(|v| <$t>::try_from(v).ok())
+        match get_arg!(@opt @value $arg, $ctx) {
+            Some(v) => Some(<$t>::try_from(v)?),
+            None => None,
+        }
     };
 }
 
