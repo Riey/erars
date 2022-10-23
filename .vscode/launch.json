@@ -5,6 +5,21 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Launch SQN in Windows",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/erars-stdio.exe",
+            "args": [
+                "..\\EraSQNK\\",
+                "--log-level=debug",
+                "--use-input=sqn.ron",
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceRoot}",
+            "environment": [],
+            "console": "externalTerminal",
+        },
+        {
             "type": "lldb",
             "request": "launch",
             "name": "Debug executable 'erars'",
