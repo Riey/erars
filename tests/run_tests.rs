@@ -9,7 +9,7 @@ mod test_util;
 
 #[test]
 fn run_test() {
-    Logger::try_with_str("trace")
+    let _handle = Logger::try_with_str("trace")
         .unwrap()
         .rotate(
             Criterion::AgeOrSize(Age::Day, 1024 * 1024),
@@ -72,11 +72,14 @@ fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
     let vm = TerminalVm::new(dic);
     let mut tx = VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log);
 
-    futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+    let ok = futures_executor::block_on(vm.start(&mut tx, &mut ctx));
 
-    let leftover = ctx.return_func().unwrap().collect::<Vec<_>>();
-    if !leftover.is_empty() {
-        panic!("Function stack is not cleared: {leftover:?}");
+    // Check stack is empty if return success
+    if ok {
+        let leftover = ctx.return_func().unwrap().collect::<Vec<_>>();
+        if !leftover.is_empty() {
+            panic!("Function stack is not cleared: {leftover:?}");
+        }
     }
 
     let mut out = String::new();
