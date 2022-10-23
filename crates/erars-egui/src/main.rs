@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use std::path::{Path, PathBuf};
 
 use eframe::App;
@@ -43,7 +45,7 @@ fn main() {
         None
     } else {
         Some(
-            Logger::try_with_str(&args.log_level)
+            Logger::try_with_str(format!("warn,erars={}", &args.log_level))
                 .unwrap()
                 .rotate(
                     Criterion::AgeOrSize(Age::Day, 1024 * 1024),
@@ -176,6 +178,7 @@ impl App for EraApp {
                     frame.close();
                 }
                 SystemRequest::Input(req, console_frame) => {
+                    log::info!("Req <- {:?}", req.ty);
                     self.current_req = Some(req);
                     self.console_frame = console_frame;
                     self.need_scroll_down = true;
@@ -183,6 +186,7 @@ impl App for EraApp {
                 SystemRequest::Redraw(console_frame) => {
                     self.console_frame = console_frame;
                     self.need_scroll_down = true;
+                    self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
                 }
                 SystemRequest::LoadGlobal => {
                     if let Ok(sav) = erars_saveload_fs::read_global_data(&self.sav_path) {
@@ -237,52 +241,70 @@ impl EraApp {
             });
         });
 
-        let central_panel = egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                for line in self.console_frame.lines.iter().chain(
-                    if self.console_frame.last_line.is_empty() {
-                        None
-                    } else {
-                        Some(&self.console_frame.last_line)
-                    },
-                ) {
-                    match line.align {
-                        Alignment::Left => {
-                            ui.horizontal(|ui| {
-                                for part in line.parts.iter() {
-                                    Self::draw_console_part(ui, current_input_gen, part, receiver);
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.allocate_ui_with_layout(
+                ui.available_size(),
+                egui::Layout::top_down_justified(egui::Align::Min),
+                |ui| {
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        for line in self.console_frame.lines.iter().chain(
+                            if self.console_frame.last_line.is_empty() {
+                                None
+                            } else {
+                                Some(&self.console_frame.last_line)
+                            },
+                        ) {
+                            match line.align {
+                                Alignment::Left => {
+                                    ui.horizontal(|ui| {
+                                        for part in line.parts.iter() {
+                                            Self::draw_console_part(
+                                                ui,
+                                                &mut self.current_req,
+                                                current_input_gen,
+                                                part,
+                                                receiver,
+                                            );
+                                        }
+                                    });
                                 }
-                            });
-                        }
-                        Alignment::Center => {
-                            ui.vertical_centered(|ui| {
-                                for part in line.parts.iter() {
-                                    Self::draw_console_part(ui, current_input_gen, part, receiver);
+                                Alignment::Center => {
+                                    ui.vertical_centered(|ui| {
+                                        for part in line.parts.iter() {
+                                            Self::draw_console_part(
+                                                ui,
+                                                &mut self.current_req,
+                                                current_input_gen,
+                                                part,
+                                                receiver,
+                                            );
+                                        }
+                                    });
                                 }
-                            });
+                                Alignment::Right => {
+                                    todo!()
+                                }
+                            }
                         }
-                        Alignment::Right => {
-                            todo!()
+
+                        let text_edit = ui.text_edit_singleline(&mut self.input);
+                        if self.current_req.is_some() && !text_edit.has_focus() {
+                            text_edit.request_focus();
                         }
-                    }
-                }
 
-                let text_edit = ui.text_edit_singleline(&mut self.input);
-                if self.current_req.is_some() && !text_edit.has_focus() {
-                    text_edit.request_focus();
-                }
-
-                if self.need_scroll_down {
-                    ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
-                    self.need_scroll_down = false;
-                }
-            });
+                        if self.need_scroll_down {
+                            ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+                            self.need_scroll_down = false;
+                        }
+                    });
+                },
+            );
         });
 
         match self.current_req.as_ref() {
             Some(req) => match req.ty {
                 InputRequestType::AnyKey => {
-                    if central_panel.response.clicked_by(egui::PointerButton::Primary)
+                    if ctx.input().pointer.button_clicked(egui::PointerButton::Primary)
                         || ctx
                             .input()
                             .events
@@ -292,20 +314,23 @@ impl EraApp {
                         self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
                         self.input.clear();
                         self.current_req = None;
+                        log::info!("Res -> Empty");
                     }
                 }
                 InputRequestType::EnterKey | InputRequestType::ForceEnterKey => {
-                    if central_panel.response.clicked_by(egui::PointerButton::Primary)
+                    if ctx.input().pointer.button_clicked(egui::PointerButton::Primary)
                         || ctx.input().key_down(egui::Key::Enter)
                     {
                         self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
                         self.input.clear();
                         self.current_req = None;
+                        log::info!("Res -> Empty");
                     }
                 }
                 InputRequestType::Int => {
                     if ctx.input().key_down(egui::Key::Enter) {
                         if let Ok(i) = self.input.parse() {
+                            log::info!("Res -> {i}");
                             self.receiver
                                 .res_tx
                                 .send(SystemResponse::Input(Value::Int(i)))
@@ -317,12 +342,14 @@ impl EraApp {
                 }
                 InputRequestType::Str => {
                     if ctx.input().key_down(egui::Key::Enter) {
+                        log::info!("Res -> \"{}\"", self.input);
                         self.receiver
                             .res_tx
                             .send(SystemResponse::Input(Value::String(std::mem::take(
                                 &mut self.input,
                             ))))
                             .unwrap();
+                        self.input.clear();
                         self.current_req = None;
                     }
                 }
@@ -333,6 +360,7 @@ impl EraApp {
 
     fn draw_console_part(
         ui: &mut egui::Ui,
+        current_input: &mut Option<InputRequest>,
         current_input_gen: Option<u32>,
         part: &ConsoleLinePart,
         receiver: &ProxyReceiver,
@@ -346,6 +374,8 @@ impl EraApp {
                             .on_hover_cursor(egui::CursorIcon::PointingHand)
                             .clicked()
                         {
+                            log::info!("Res -> {value:?}");
+                            *current_input = None;
                             receiver.res_tx.send(SystemResponse::Input(value.clone())).unwrap();
                         }
                     }

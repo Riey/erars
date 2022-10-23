@@ -1076,6 +1076,7 @@ dependencies = [
  "flexi_logger",
  "fontdb",
  "futures-executor",
+ "log",
  "log-panics",
 ]
 
