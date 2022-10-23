@@ -83,25 +83,33 @@ fn main() {
         inputs,
     ));
 
-    let (vm, mut ctx, mut tx) = if args.load {
-        unsafe { load_script(&args.target_path, system).unwrap() }
-    } else {
-        run_script(&args.target_path, system).unwrap()
-    };
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .name("erars-runtime".into())
+        .spawn(move || {
+            let (vm, mut ctx, mut tx) = if args.load {
+                unsafe { load_script(&args.target_path, system).unwrap() }
+            } else {
+                run_script(&args.target_path, system).unwrap()
+            };
 
-    if args.measure_memory {
-        measure_by_drop("TerminalVm", vm);
-        measure_by_drop("VmContext", ctx);
-        measure_by_drop("VirtualConsole", tx);
-        println!(
-            "Interner takes {}KB",
-            erars_ast::get_interner().current_memory_usage() / 1024
-        );
-    } else if args.save {
-        save_script(vm, ctx, &args.target_path).unwrap();
-    } else {
-        futures_executor::block_on(vm.start(&mut tx, &mut ctx));
-    }
+            if args.measure_memory {
+                measure_by_drop("TerminalVm", vm);
+                measure_by_drop("VmContext", ctx);
+                measure_by_drop("VirtualConsole", tx);
+                println!(
+                    "Interner takes {}KB",
+                    erars_ast::get_interner().current_memory_usage() / 1024
+                );
+            } else if args.save {
+                save_script(vm, ctx, &args.target_path).unwrap();
+            } else {
+                futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+            }
+        })
+        .unwrap()
+        .join()
+        .unwrap();
 }
 
 fn measure_by_drop<T>(name: &str, val: T) {

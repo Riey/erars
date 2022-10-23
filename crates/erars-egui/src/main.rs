@@ -70,17 +70,21 @@ fn main() {
     let (system, receiver) = erars_proxy_system::new_proxy();
     let sav_path = Path::new(&args.target_path).join("sav");
 
-    std::thread::spawn(move || {
-        let system_back = system.clone();
-        let system = Box::new(system);
-        let (vm, mut ctx, mut tx) = if args.load {
-            unsafe { load_script(&args.target_path, system).unwrap() }
-        } else {
-            run_script(&args.target_path, system).unwrap()
-        };
-        futures_executor::block_on(vm.start(&mut tx, &mut ctx));
-        system_back.send_quit();
-    });
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .name("erars-runtime".into())
+        .spawn(move || {
+            let system_back = system.clone();
+            let system = Box::new(system);
+            let (vm, mut ctx, mut tx) = if args.load {
+                unsafe { load_script(&args.target_path, system).unwrap() }
+            } else {
+                run_script(&args.target_path, system).unwrap()
+            };
+            futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+            system_back.send_quit();
+        })
+        .unwrap();
 
     eframe::run_native(
         "erars",

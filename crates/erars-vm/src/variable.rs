@@ -44,16 +44,16 @@ pub struct SerializableVariableStorage {
     pub version: u32,
     character_len: u32,
     rand_seed: [u8; 32],
-    variables: HashMap<String, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
+    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SerializableGlobalVariableStorage {
     pub code: u32,
     pub version: u32,
-    variables: HashMap<String, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
+    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
 }
 
 #[derive(Clone)]
@@ -136,12 +136,11 @@ impl VariableStorage {
 
     fn load_variables(
         &mut self,
-        variables: HashMap<String, (VariableInfo, UniformVariable)>,
-        local_variables: HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
+        variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+        local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
     ) {
         for (k, (info, var)) in variables {
-            let (now_info, now_var) =
-                match self.interner.get(&k).and_then(|k| self.variables.get_mut(&k)) {
+            let (now_info, now_var) = match self.variables.get_mut(&k) {
                     Some(v) => v,
                     _ => {
                         log::warn!("Ignore non existing variable {k}");
@@ -158,11 +157,7 @@ impl VariableStorage {
         }
 
         for (func_name, vars) in local_variables {
-            let now_local_var = match self
-                .interner
-                .get(&func_name)
-                .and_then(|k| self.local_variables.get_mut(&k))
-            {
+            let now_local_var = match self.local_variables.get_mut(&func_name) {
                 Some(v) => v,
                 None => {
                     log::warn!("Ignore non existing function {func_name}");
@@ -171,8 +166,7 @@ impl VariableStorage {
             };
 
             for (k, (info, var)) in vars {
-                let (now_info, now_var) =
-                    match self.interner.get(&k).and_then(|k| now_local_var.get_mut(&k)) {
+                let (now_info, now_var) = match now_local_var.get_mut(&k) {
                         Some(v) => v,
                         _ => {
                             log::warn!("Ignore non existing variable {func_name}@{k}");
@@ -219,8 +213,8 @@ impl VariableStorage {
         &self,
         is_global: bool,
     ) -> (
-        HashMap<String, (VariableInfo, UniformVariable)>,
-        HashMap<String, HashMap<String, (VariableInfo, Option<UniformVariable>)>>,
+        HashMap<StrKey, (VariableInfo, UniformVariable)>,
+        HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
     ) {
         #[cfg(feature = "multithread")]
         let this_vars = self.variables.par_iter();
@@ -235,7 +229,7 @@ impl VariableStorage {
             .filter_map(|(name, (info, var))| {
                 if info.is_savedata && info.is_global == is_global {
                     Some((
-                        self.interner.resolve(name).to_string(),
+                        *name,
                         (info.clone(), var.clone()),
                     ))
                 } else {
@@ -251,7 +245,7 @@ impl VariableStorage {
                     .filter_map(|(name, (info, var))| {
                         if info.is_savedata && info.is_global == is_global {
                             Some((
-                                self.interner.resolve(name).to_string(),
+                                *name,
                                 (info.clone(), var.clone()),
                             ))
                         } else {
@@ -263,9 +257,7 @@ impl VariableStorage {
                 if vars.is_empty() {
                     None
                 } else {
-                    let fn_name: String = self.interner.resolve(fn_name).into();
-
-                    Some((fn_name, vars))
+                    Some((*fn_name, vars))
                 }
             })
             .collect();
