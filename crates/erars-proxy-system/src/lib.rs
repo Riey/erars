@@ -121,7 +121,6 @@ impl SystemFunctions for ProxySystem {
 pub struct ConsoleFrame {
     pub bg_color: Color,
     pub hl_color: Color,
-    pub last_line: ConsoleLine,
     pub lines: Vec<ConsoleLine>,
 }
 
@@ -130,8 +129,16 @@ impl ConsoleFrame {
         Self {
             bg_color: vconsole.bg_color,
             hl_color: vconsole.hl_color,
-            lines: vconsole.lines.iter().cloned().collect(),
-            last_line: vconsole.last_line.clone(),
+            lines: vconsole
+                .lines
+                .iter()
+                .chain(if vconsole.last_line.is_empty() {
+                    None
+                } else {
+                    Some(&vconsole.last_line)
+                })
+                .cloned()
+                .collect(),
         }
     }
 }
