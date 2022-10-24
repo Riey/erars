@@ -261,55 +261,63 @@ impl EraApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            egui::ScrollArea::vertical()
-                .stick_to_bottom(true)
-                .auto_shrink([false; 2])
-                .show(ui, |ui| {
-                    for line in self.console_frame.lines.iter().chain(
-                        if self.console_frame.last_line.is_empty() {
-                            None
-                        } else {
-                            Some(&self.console_frame.last_line)
-                        },
-                    ) {
-                        match line.align {
-                            Alignment::Left => {
-                                ui.horizontal_wrapped(|ui| {
-                                    for part in line.parts.iter() {
-                                        Self::draw_console_part(
-                                            ui,
-                                            &mut self.current_req,
-                                            current_input_gen,
-                                            part,
-                                            receiver,
-                                        );
-                                    }
-                                });
-                            }
-                            Alignment::Center => {
-                                ui.vertical_centered(|ui| {
-                                    for part in line.parts.iter() {
-                                        Self::draw_console_part(
-                                            ui,
-                                            &mut self.current_req,
-                                            current_input_gen,
-                                            part,
-                                            receiver,
-                                        );
-                                    }
-                                });
-                            }
-                            Alignment::Right => {
-                                todo!()
-                            }
+            egui::ScrollArea::vertical().stick_to_bottom(true).show(ui, |ui| {
+                for line in self.console_frame.lines.iter().chain(
+                    if self.console_frame.last_line.is_empty() {
+                        None
+                    } else {
+                        Some(&self.console_frame.last_line)
+                    },
+                ) {
+                    match line.align {
+                        Alignment::Left => {
+                            ui.horizontal_wrapped(|ui| {
+                                for part in line.parts.iter() {
+                                    Self::draw_console_part(
+                                        ui,
+                                        &mut self.current_req,
+                                        current_input_gen,
+                                        part,
+                                        receiver,
+                                    );
+                                }
+                            });
+                        }
+                        Alignment::Center => {
+                            ui.vertical_centered(|ui| {
+                                for part in line.parts.iter() {
+                                    Self::draw_console_part(
+                                        ui,
+                                        &mut self.current_req,
+                                        current_input_gen,
+                                        part,
+                                        receiver,
+                                    );
+                                }
+                            });
+                        }
+                        Alignment::Right => {
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                                for part in line.parts.iter().rev() {
+                                    log::info!("{part:?}");
+                                    Self::draw_console_part(
+                                        ui,
+                                        &mut self.current_req,
+                                        current_input_gen,
+                                        part,
+                                        receiver,
+                                    );
+                                }
+                            });
                         }
                     }
+                }
 
-                    if self.need_scroll_down {
-                        ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
-                        self.need_scroll_down = false;
-                    }
-                });
+                if self.need_scroll_down {
+                    ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+                    self.need_scroll_down = false;
+                }
+            })
         });
 
         match self.current_req.as_ref() {
