@@ -1,6 +1,9 @@
 #![windows_subsystem = "windows"]
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use eframe::App;
 use egui::{FontData, FontFamily, Widget};
@@ -67,25 +70,6 @@ fn main() {
 
     log_panics::init();
 
-    let (system, receiver) = erars_proxy_system::new_proxy();
-    let sav_path = Path::new(&args.target_path).join("sav");
-
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .name("erars-runtime".into())
-        .spawn(move || {
-            let system_back = system.clone();
-            let system = Box::new(system);
-            let (vm, mut ctx, mut tx) = if args.load {
-                unsafe { load_script(&args.target_path, system).unwrap() }
-            } else {
-                run_script(&args.target_path, system).unwrap()
-            };
-            futures_executor::block_on(vm.start(&mut tx, &mut ctx));
-            system_back.send_quit();
-        })
-        .unwrap();
-
     eframe::run_native(
         "erars",
         eframe::NativeOptions {
@@ -95,6 +79,26 @@ fn main() {
             ..Default::default()
         },
         Box::new(move |ctx| {
+            let egui_ctx = ctx.egui_ctx.clone();
+            let (system, receiver) =
+                erars_proxy_system::new_proxy(Arc::new(move || egui_ctx.request_repaint()));
+            let sav_path = Path::new(&args.target_path).join("sav");
+
+            std::thread::Builder::new()
+                .stack_size(8 * 1024 * 1024)
+                .name("erars-runtime".into())
+                .spawn(move || {
+                    let system_back = system.clone();
+                    let system = Box::new(system);
+                    let (vm, mut ctx, mut tx) = if args.load {
+                        unsafe { load_script(&args.target_path, system).unwrap() }
+                    } else {
+                        run_script(&args.target_path, system).unwrap()
+                    };
+                    futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+                    system_back.send_quit();
+                })
+                .unwrap();
             let mut db = fontdb::Database::new();
             db.load_system_fonts();
             let font_id = db
@@ -245,68 +249,67 @@ impl EraApp {
             });
         });
 
+        egui::TopBottomPanel::bottom("text_input_panel").show(ctx, |ui| {
+            let text_edit = ui.add_enabled(
+                self.current_req.is_some(),
+                egui::TextEdit::singleline(&mut self.input).desired_width(f32::INFINITY),
+            );
+
+            if self.current_req.is_some() && !text_edit.has_focus() {
+                text_edit.request_focus();
+            }
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.allocate_ui_with_layout(
-                ui.available_size(),
-                egui::Layout::top_down_justified(egui::Align::Min),
-                |ui| {
-                    egui::ScrollArea::vertical().show(ui, |ui| {
-                        for line in self.console_frame.lines.iter().chain(
-                            if self.console_frame.last_line.is_empty() {
-                                None
-                            } else {
-                                Some(&self.console_frame.last_line)
-                            },
-                        ) {
-                            match line.align {
-                                Alignment::Left => {
-                                    ui.horizontal(|ui| {
-                                        for part in line.parts.iter() {
-                                            Self::draw_console_part(
-                                                ui,
-                                                &mut self.current_req,
-                                                current_input_gen,
-                                                part,
-                                                receiver,
-                                            );
-                                        }
-                                    });
-                                }
-                                Alignment::Center => {
-                                    ui.vertical_centered(|ui| {
-                                        for part in line.parts.iter() {
-                                            Self::draw_console_part(
-                                                ui,
-                                                &mut self.current_req,
-                                                current_input_gen,
-                                                part,
-                                                receiver,
-                                            );
-                                        }
-                                    });
-                                }
-                                Alignment::Right => {
-                                    todo!()
-                                }
+            egui::ScrollArea::vertical()
+                .stick_to_bottom(true)
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    for line in self.console_frame.lines.iter().chain(
+                        if self.console_frame.last_line.is_empty() {
+                            None
+                        } else {
+                            Some(&self.console_frame.last_line)
+                        },
+                    ) {
+                        match line.align {
+                            Alignment::Left => {
+                                ui.horizontal_wrapped(|ui| {
+                                    for part in line.parts.iter() {
+                                        Self::draw_console_part(
+                                            ui,
+                                            &mut self.current_req,
+                                            current_input_gen,
+                                            part,
+                                            receiver,
+                                        );
+                                    }
+                                });
+                            }
+                            Alignment::Center => {
+                                ui.vertical_centered(|ui| {
+                                    for part in line.parts.iter() {
+                                        Self::draw_console_part(
+                                            ui,
+                                            &mut self.current_req,
+                                            current_input_gen,
+                                            part,
+                                            receiver,
+                                        );
+                                    }
+                                });
+                            }
+                            Alignment::Right => {
+                                todo!()
                             }
                         }
+                    }
 
-                        let text_edit = ui.add_enabled(
-                            self.current_req.is_some(),
-                            egui::TextEdit::singleline(&mut self.input),
-                        );
-
-                        if self.current_req.is_some() && !text_edit.has_focus() {
-                            text_edit.request_focus();
-                        }
-
-                        if self.need_scroll_down {
-                            ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
-                            self.need_scroll_down = false;
-                        }
-                    });
-                },
-            );
+                    if self.need_scroll_down {
+                        ui.scroll_to_cursor(Some(egui::Align::BOTTOM));
+                        self.need_scroll_down = false;
+                    }
+                });
         });
 
         match self.current_req.as_ref() {

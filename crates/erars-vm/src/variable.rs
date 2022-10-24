@@ -141,12 +141,12 @@ impl VariableStorage {
     ) {
         for (k, (info, var)) in variables {
             let (now_info, now_var) = match self.variables.get_mut(&k) {
-                    Some(v) => v,
-                    _ => {
-                        log::warn!("Ignore non existing variable {k}");
-                        continue;
-                    }
-                };
+                Some(v) => v,
+                _ => {
+                    log::warn!("Ignore non existing variable {k}");
+                    continue;
+                }
+            };
 
             if info != *now_info {
                 log::warn!("Info mismatched! Ignore load variable {k}");
@@ -167,12 +167,12 @@ impl VariableStorage {
 
             for (k, (info, var)) in vars {
                 let (now_info, now_var) = match now_local_var.get_mut(&k) {
-                        Some(v) => v,
-                        _ => {
-                            log::warn!("Ignore non existing variable {func_name}@{k}");
-                            continue;
-                        }
-                    };
+                    Some(v) => v,
+                    _ => {
+                        log::warn!("Ignore non existing variable {func_name}@{k}");
+                        continue;
+                    }
+                };
 
                 if info != *now_info {
                     log::warn!("Info mismatched! Ignore load variable {k}");
@@ -228,10 +228,7 @@ impl VariableStorage {
         let variables = this_vars
             .filter_map(|(name, (info, var))| {
                 if info.is_savedata && info.is_global == is_global {
-                    Some((
-                        *name,
-                        (info.clone(), var.clone()),
-                    ))
+                    Some((*name, (info.clone(), var.clone())))
                 } else {
                     None
                 }
@@ -244,10 +241,7 @@ impl VariableStorage {
                     .iter()
                     .filter_map(|(name, (info, var))| {
                         if info.is_savedata && info.is_global == is_global {
-                            Some((
-                                *name,
-                                (info.clone(), var.clone()),
-                            ))
+                            Some((*name, (info.clone(), var.clone())))
                         } else {
                             None
                         }

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::{bail, Context};
 use erars_ast::Value;
 use erars_ui::{Color, ConsoleLine, InputRequest, VirtualConsole};
@@ -6,16 +8,21 @@ use erars_vm::{
 };
 use flume::{unbounded, Receiver, Sender};
 
-pub fn new_proxy() -> (ProxySystem, ProxyReceiver) {
+pub fn new_proxy(notify: Arc<dyn Fn() + Send + Sync>) -> (ProxySystem, ProxyReceiver) {
     let (req_tx, req_rx) = unbounded();
     let (res_tx, res_rx) = unbounded();
 
     (
-        ProxySystem { req_tx, res_rx },
+        ProxySystem {
+            req_tx,
+            res_rx,
+            notify,
+        },
         ProxyReceiver { req_rx, res_tx },
     )
 }
 
+#[derive(Clone)]
 pub struct ProxyReceiver {
     pub req_rx: Receiver<SystemRequest>,
     pub res_tx: Sender<SystemResponse>,
@@ -25,17 +32,19 @@ pub struct ProxyReceiver {
 pub struct ProxySystem {
     req_tx: Sender<SystemRequest>,
     res_rx: Receiver<SystemResponse>,
+    notify: Arc<dyn Fn() + Send + Sync>,
 }
 
 impl ProxySystem {
     async fn wait_response(&self, req: SystemRequest) -> anyhow::Result<SystemResponse> {
         self.req_tx.send(req).context("Send SystemRequest")?;
-
+        (self.notify)();
         self.res_rx.recv_async().await.context("Recv SystemResponse")
     }
 
     pub fn send_quit(&self) {
         self.req_tx.send(SystemRequest::Quit).ok();
+        (self.notify)();
     }
 }
 
@@ -108,7 +117,7 @@ impl SystemFunctions for ProxySystem {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug, Clone)]
 pub struct ConsoleFrame {
     pub bg_color: Color,
     pub hl_color: Color,
