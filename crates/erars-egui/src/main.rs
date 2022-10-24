@@ -415,11 +415,11 @@ impl EraApp {
                 ui.colored_label(to_egui_color(color.color), s);
             }
             ConsoleLinePart::Line(text, color) => {
-                let width = ui.available_width();
+                let width = ui.available_width() - ui.spacing().item_spacing.x * 2.;
                 let font_id = &ui.style().text_styles[&egui::TextStyle::Monospace];
                 let char_width =
                     text.chars().map(|c| ui.fonts().glyph_width(font_id, c)).sum::<f32>();
-                let s = text.repeat((width / char_width) as usize);
+                let s = text.repeat((width / char_width).floor() as usize);
                 ui.colored_label(to_egui_color(color.color), s);
             }
         }
