@@ -383,7 +383,9 @@ impl VirtualConsole {
             self.top_index += 1;
         }
 
-        self.lines.push_back(std::mem::take(&mut self.last_line));
+        let new_line = std::mem::take(&mut self.last_line);
+        self.last_line.align = new_line.align;
+        self.lines.push_back(new_line);
     }
 
     pub fn new_line(&mut self) {
