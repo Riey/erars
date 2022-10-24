@@ -370,9 +370,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.2.22"
+version = "3.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86447ad904c7fb335a790c9d7fe3d0d971dc523b8ccd1561a520de9a85302750"
+checksum = "1ed5341b2301a26ab80be5cbdced622e80ed808483c52e45e3310a877d3b37d7"
 dependencies = [
  "bitflags",
  "clap_lex 0.2.4",
@@ -595,7 +595,7 @@ dependencies = [
  "atty",
  "cast",
  "ciborium",
- "clap 3.2.22",
+ "clap 3.2.21",
  "criterion-plot",
  "itertools",
  "lazy_static",
@@ -971,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "erars"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "codespan",
  "codespan-reporting",
@@ -994,7 +994,7 @@ dependencies = [
 
 [[package]]
 name = "erars-ast"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -1012,7 +1012,7 @@ dependencies = [
 
 [[package]]
 name = "erars-bytecode"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "byteorder",
  "enum-map",
@@ -1023,7 +1023,7 @@ dependencies = [
 
 [[package]]
 name = "erars-compiler"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "bitflags",
  "derivative",
@@ -1050,7 +1050,7 @@ dependencies = [
 
 [[package]]
 name = "erars-egui"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "clap 4.0.18",
  "eframe",
@@ -1071,7 +1071,7 @@ dependencies = [
 
 [[package]]
 name = "erars-lexer"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "bitflags",
  "cow-utils",
@@ -1086,7 +1086,7 @@ dependencies = [
 
 [[package]]
 name = "erars-loader"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "codespan",
@@ -1110,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "erars-proxy-system"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1123,7 +1123,7 @@ dependencies = [
 
 [[package]]
 name = "erars-saveload-fs"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "erars-vm",
@@ -1135,7 +1135,7 @@ dependencies = [
 
 [[package]]
 name = "erars-stdio"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "ansi_term",
  "anyhow",
@@ -1159,7 +1159,7 @@ dependencies = [
 
 [[package]]
 name = "erars-ui"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -1179,7 +1179,7 @@ dependencies = [
 
 [[package]]
 name = "erars-vm"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-recursion",
@@ -1213,7 +1213,7 @@ dependencies = [
 
 [[package]]
 name = "erars-wasm"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1824,9 +1824,9 @@ checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
 name = "libc"
-version = "0.2.135"
+version = "0.2.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68783febc7782c6c5cb401fbda4de5a9898be1762314da0bb2c10ced61f18b0c"
+checksum = "55edcf6c0bb319052dea84732cf99db461780fd5e8d3eb46ab6ff312ab31f197"
 
 [[package]]
 name = "libloading"
@@ -2014,26 +2014,13 @@ dependencies = [
 
 [[package]]
 name = "ndk"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2032c77e030ddee34a6787a64166008da93f6a352b629261d0fee232b8742dd4"
-dependencies = [
- "bitflags",
- "jni-sys",
- "ndk-sys 0.3.0",
- "num_enum",
- "thiserror",
-]
-
-[[package]]
-name = "ndk"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "451422b7e4718271c8b5b3aadf5adedba43dc76312454b387e98fae0fc951aa0"
 dependencies = [
  "bitflags",
  "jni-sys",
- "ndk-sys 0.4.0",
+ "ndk-sys",
  "num_enum",
  "raw-window-handle 0.5.0",
  "thiserror",
@@ -2047,31 +2034,16 @@ checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
 
 [[package]]
 name = "ndk-glue"
-version = "0.6.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d0c4a7b83860226e6b4183edac21851f05d5a51756e97a1144b7f5a6b63e65f"
-dependencies = [
- "lazy_static",
- "libc",
- "log",
- "ndk 0.6.0",
- "ndk-context",
- "ndk-macro",
- "ndk-sys 0.3.0",
-]
-
-[[package]]
-name = "ndk-glue"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0434fabdd2c15e0aab768ca31d5b7b333717f03cf02037d5a0a3ff3c278ed67f"
 dependencies = [
  "libc",
  "log",
- "ndk 0.7.0",
+ "ndk",
  "ndk-context",
  "ndk-macro",
- "ndk-sys 0.4.0",
+ "ndk-sys",
  "once_cell",
  "parking_lot",
 ]
@@ -2087,15 +2059,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "ndk-sys"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e5a6ae77c8ee183dcbbba6150e2e6b9f3f4196a7666c02a715a95692ec1fa97"
-dependencies = [
- "jni-sys",
 ]
 
 [[package]]
@@ -2972,9 +2935,9 @@ dependencies = [
 
 [[package]]
 name = "textwrap"
-version = "0.15.1"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "949517c0cf1bf4ee812e2e07e08ab448e3ae0d23472aee8a06c985f0c8815b16"
+checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 
 [[package]]
 name = "thiserror"
@@ -2998,13 +2961,30 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.15"
+version = "0.3.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d634a985c4d4238ec39cacaed2e7ae552fbd3c476b552c1deac3021b7d7eaf0c"
+checksum = "0fab5c8b9980850e06d92ddbe3ab839c062c801f3927c0fb8abd6fc8e918fbca"
 dependencies = [
  "libc",
  "num_threads",
  "serde",
+ "time-core",
+ "time-macros",
+]
+
+[[package]]
+name = "time-core"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e153e1f1acaef8acc537e68b44906d2db6436e2b35ac2c6b42640fff91f00fd"
+
+[[package]]
+name = "time-macros"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "65bb801831d812c562ae7d2bfb531f26e66e4e1f6b17307ba4149c5064710e5b"
+dependencies = [
+ "time-core",
 ]
 
 [[package]]
@@ -3391,7 +3371,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01d62aa75495ab67cdc273d0b95cc76bcedfea2ba28338a4cf9b4137949dfac5"
 dependencies = [
  "jni",
- "ndk-glue 0.6.2",
+ "ndk-glue",
  "objc",
  "raw-window-handle 0.5.0",
  "url",
@@ -3496,9 +3476,9 @@ dependencies = [
 
 [[package]]
 name = "widestring"
-version = "0.5.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17882f045410753661207383517a6f62ec3dbeb6a4ed2acce01f0728238d1983"
+checksum = "653f141f39ec16bba3c5abe400a0c60da7468261cc2cbf36805022876bc721a8"
 
 [[package]]
 name = "winapi"
@@ -3655,8 +3635,8 @@ dependencies = [
  "libc",
  "log",
  "mio",
- "ndk 0.7.0",
- "ndk-glue 0.7.0",
+ "ndk",
+ "ndk-glue",
  "objc",
  "once_cell",
  "parking_lot",
