@@ -1500,6 +1500,33 @@ Method(
     }
 
     #[test]
+    fn test_unicode_var() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/unicode_var.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            "
+Var(
+    Variable {
+        var: 변수이름,
+        func_extern: None,
+        args: [
+            Var(
+                Variable {
+                    var: 변수인자,
+                    func_extern: None,
+                    args: [],
+                },
+            ),
+        ],
+    },
+)
+"
+        );
+    }
+
+    #[test]
     fn test_var_arg() {
         k9::snapshot!(
             do_test(

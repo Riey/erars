@@ -326,7 +326,7 @@ pub enum Token<'s> {
     #[token("#SINGLE", ignore(ascii_case))]
     Single,
 
-    #[regex(r"[^!-/:-@\[-\^\{-~\u{0}-\u{1F}\u{7F}\t\n\u{0C}\r ]+", priority = 2)]
+    #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
     Ident(&'s str),
 
     #[token("CALLEVENT", ignore(ascii_case))]
