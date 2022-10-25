@@ -261,12 +261,27 @@ impl EraApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            let line_height = ui.text_style_height(&egui::TextStyle::Monospace);
+            let panel_size = ui.available_size();
+            let console_height = panel_size.y.min(
+                self.console_frame.lines.len() as f32 * (line_height + ui.spacing().item_spacing.y),
+            );
+            let console_y = panel_size.y - console_height;
+
+            if console_y > 0.0 {
+                // let console stick to bottom
+                ui.allocate_exact_size(
+                    egui::Vec2::new(panel_size.x, console_y),
+                    egui::Sense::click(),
+                );
+            }
+
             egui::ScrollArea::vertical()
                 .max_width(ui.available_width())
-                .auto_shrink([false; 2])
+                .auto_shrink([false, true])
                 .show_rows(
                     ui,
-                    ui.text_style_height(&egui::TextStyle::Monospace),
+                    line_height,
                     self.console_frame.lines.len(),
                     |ui, range| {
                         for line in self.console_frame.lines[range.clone()].iter() {
