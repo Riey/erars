@@ -282,6 +282,7 @@ impl EraApp {
 
             egui::ScrollArea::vertical()
                 .max_width(ui.available_width())
+                .always_show_scroll(true)
                 .stick_to_bottom(true)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
