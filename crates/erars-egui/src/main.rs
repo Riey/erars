@@ -272,14 +272,18 @@ impl EraApp {
                 // let console stick to bottom
                 ui.allocate_exact_size(
                     egui::Vec2::new(panel_size.x, console_y),
-                    egui::Sense::click(),
+                    egui::Sense {
+                        click: false,
+                        drag: false,
+                        focusable: false,
+                    },
                 );
             }
 
             egui::ScrollArea::vertical()
                 .max_width(ui.available_width())
                 .stick_to_bottom(true)
-                .auto_shrink([false, true])
+                .auto_shrink([false, false])
                 .show(ui, |ui| {
                     for line in self.console_frame.lines.iter() {
                         match line.align {
