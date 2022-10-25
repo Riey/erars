@@ -9,7 +9,7 @@ use nom::{
     branch::alt,
     bytes::complete::{escaped, is_not, tag, take_while, take_while1},
     character::complete::*,
-    combinator::{eof, map, opt, success, value},
+    combinator::{eof, map, map_res, opt, success, value},
     error::{context, ErrorKind, VerboseError},
     error_position,
     multi::{separated_list0, separated_list1},
@@ -372,6 +372,20 @@ fn ident_or_method_expr<'c, 'a>(
     }
 }
 
+pub fn renamed_ident<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, StrKey> + 'c {
+    move |i| {
+        let (i, key) = ident(i)?;
+        let key = ctx.interner.get_or_intern(key);
+        if let Some(value) = ctx.header.rename.get(&key) {
+            Ok((i, *value))
+        } else {
+            Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)))
+        }
+    }
+}
+
 fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         enum UnaryIncOp {
@@ -405,6 +419,10 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
             de_sp(alt((
                 value(Expr::Int(i64::MAX), tag("__INT_MAX__")),
                 value(Expr::Int(i64::MIN), tag("__INT_MIN__")),
+                map_res(
+                    context("Renamed Ident", delimited(tag("[["), de_sp(renamed_ident(ctx)), tag("]]"))),
+                    |s: StrKey| expr(ctx)(s.resolve()).map(|r| r.1),
+                ),
                 // form string
                 delimited(tag("@\""), form_str(FormStrType::Str, ctx), tag("\"")),
                 // cond form string

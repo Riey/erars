@@ -326,7 +326,7 @@ pub enum Token<'s> {
     #[token("#SINGLE", ignore(ascii_case))]
     Single,
 
-    #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
+    #[regex(r"[^!-/:-@\[-\^\{-~\u{0}-\u{1F}\u{7F}\t\n\u{0C}\r ]+", priority = 2)]
     Ident(&'s str),
 
     #[token("CALLEVENT", ignore(ascii_case))]
@@ -552,6 +552,9 @@ pub enum Token<'s> {
 
     #[regex(r"\[[^\]]+\]")]
     Preprocess(&'s str),
+
+    #[regex(r"\[\[[^\]]+\]\]", |lex| lex.slice().strip_prefix("[[").unwrap().strip_suffix("]]").unwrap())]
+    Rename(&'s str),
 
     #[token("\n")]
     Newline,

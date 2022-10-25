@@ -251,6 +251,7 @@ impl Default for DefaultLocalVarSize {
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
     pub gamebase: Gamebase,
+    pub rename: HashMap<StrKey, StrKey>,
     pub replace: ReplaceInfo,
     pub character_templates: HashMap<u32, CharacterTemplate>,
     pub item_price: HashMap<u32, u32>,
@@ -261,6 +262,18 @@ pub struct HeaderInfo {
 }
 
 impl HeaderInfo {
+    pub fn merge_rename_csv(&mut self, s: &str) -> ParserResult<()> {
+        let mut lex = Lexer::new(s);
+        let interner = get_interner();
+
+        while let Some((value, key)) = csv::csv2_line_allow_other(&mut lex)? {
+            self.rename
+                .insert(interner.get_or_intern(key), interner.get_or_intern(value));
+        }
+
+        Ok(())
+    }
+
     pub fn merge_chara_csv(&mut self, s: &str) -> ParserResult<()> {
         let mut lex = Lexer::new(s);
         let interner = get_interner();

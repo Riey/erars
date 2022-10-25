@@ -296,6 +296,19 @@ pub fn run_script(
                         }
                     }
                 }
+                "_RENAME" => {
+                    log::debug!("Merge _RENAME.CSV");
+                    match info.merge_rename_csv(&v) {
+                        Ok(()) => {}
+                        Err((err, span)) => {
+                            let file_id = files.lock().add(path.display().to_string(), v);
+                            diagnostic.lock().labels.push(
+                                Label::primary(file_id, span).with_message(format!("{}", err)),
+                            );
+                        }
+                    }
+                    log::info!("Replace: {:?}", info.rename);
+                }
                 "_REPLACE" => {
                     log::debug!("Merge _REPLACE.CSV");
                     match info.merge_replace_csv(&v) {
