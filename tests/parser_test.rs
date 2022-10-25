@@ -147,12 +147,10 @@ mod body {
 
     #[test]
     fn test_assign_str() {
-        k9::snapshot!(
-            do_test(
-                r#"tests/parse_tests/bodys/assign_str.erb"#,
-                ParserContext::parse_body_str
-            ),
-            "
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/bodys/assign_str.erb"#,
+            ParserContext::parse_body_str
+        ), "
 [
     StmtWithPos(
         Assign(
@@ -292,8 +290,7 @@ mod body {
         },
     ),
 ]
-"
-        );
+");
     }
 
     #[test]
@@ -739,12 +736,10 @@ mod body {
 
     #[test]
     fn test_print_simple() {
-        k9::snapshot!(
-            do_test(
-                r#"tests/parse_tests/bodys/print_simple.erb"#,
-                ParserContext::parse_body_str
-            ),
-            "
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/bodys/print_simple.erb"#,
+            ParserContext::parse_body_str
+        ), "
 [
     StmtWithPos(
         Print(
@@ -791,8 +786,7 @@ mod body {
         },
     ),
 ]
-"
-        );
+");
     }
 
     #[test]
@@ -1453,6 +1447,21 @@ BinopExpr(
     }
 
     #[test]
+    fn test_rename() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/rename.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            "
+Int(
+    123,
+)
+"
+        );
+    }
+
+    #[test]
     fn test_str_literal() {
         k9::snapshot!(
             do_test(
@@ -1910,12 +1919,10 @@ Function {
 
     #[test]
     fn test_juel() {
-        k9::snapshot!(
-            do_test(
-                r#"tests/parse_tests/functions/juel.erb"#,
-                ParserContext::parse_function_str
-            ),
-            "
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/functions/juel.erb"#,
+            ParserContext::parse_function_str
+        ), "
 Function {
     header: FunctionHeader {
         file_path: tests/parse_tests/functions/juel.erb,
@@ -2327,8 +2334,7 @@ Function {
         ),
     ],
 }
-"
-        );
+");
     }
 }
 mod program {
