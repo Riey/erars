@@ -2,9 +2,6 @@ name: Release
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*.*.*"
   
 jobs:
   upload:
@@ -23,8 +20,8 @@ jobs:
         with:
           draft: true
           files: |
-            erars-stdio.exe
-            erars-stdio
-            erars-egui.exe
-            erars-egui
+            erars-stdio.exe/erars-stdio.exe
+            erars-stdio/erars-stdio
+            erars-egui.exe/erars-egui.exe
+            erars-egui/erars-egui
         
