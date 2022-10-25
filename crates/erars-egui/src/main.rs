@@ -159,6 +159,7 @@ fn main() {
 struct EraApp {
     current_req: Option<InputRequest>,
     need_scroll_down: bool,
+    skip: bool,
     receiver: ProxyReceiver,
     console_frame: ConsoleFrame,
     sav_path: PathBuf,
@@ -170,6 +171,7 @@ impl EraApp {
         Self {
             current_req: None,
             need_scroll_down: false,
+            skip: false,
             receiver,
             console_frame: ConsoleFrame::default(),
             input: String::new(),
@@ -187,9 +189,19 @@ impl App for EraApp {
                 }
                 SystemRequest::Input(req, console_frame) => {
                     log::info!("Req <- {:?}", req.ty);
-                    self.current_req = Some(req);
+
                     self.console_frame = console_frame;
                     self.need_scroll_down = true;
+
+                    match req.ty {
+                        InputRequestType::AnyKey | InputRequestType::EnterKey if self.skip => {
+                            self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
+                        }
+                        _ => {
+                            self.skip = false;
+                            self.current_req = Some(req);
+                        }
+                    }
                 }
                 SystemRequest::Redraw(console_frame) => {
                     self.console_frame = console_frame;
@@ -240,6 +252,17 @@ impl EraApp {
     fn draw_console(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         let current_input_gen = self.current_req.as_ref().map(|req| req.generation);
         let receiver = &self.receiver;
+
+        if ctx.input().pointer.button_down(egui::PointerButton::Secondary)
+            && self.current_req.as_ref().map_or(true, |req| {
+                matches!(
+                    req.ty,
+                    InputRequestType::AnyKey | InputRequestType::EnterKey
+                )
+            })
+        {
+            self.skip = true;
+        }
 
         egui::TopBottomPanel::top("setting").show(ctx, |ui| {
             ui.menu_button("Setting", |ui| {
@@ -344,6 +367,7 @@ impl EraApp {
             Some(req) => match req.ty {
                 InputRequestType::AnyKey => {
                     if ctx.input().pointer.button_clicked(egui::PointerButton::Primary)
+                        || self.skip
                         || ctx
                             .input()
                             .events
@@ -358,6 +382,7 @@ impl EraApp {
                 }
                 InputRequestType::EnterKey | InputRequestType::ForceEnterKey => {
                     if ctx.input().pointer.button_clicked(egui::PointerButton::Primary)
+                        || self.skip
                         || ctx.input().key_down(egui::Key::Enter)
                     {
                         self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
