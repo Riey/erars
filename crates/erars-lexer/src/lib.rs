@@ -567,53 +567,6 @@ pub enum Token<'s> {
     Error,
 }
 
-fn csv2<'s>(lex: &mut Lexer<'s, CsvToken<'s>>) -> (&'s str, &'s str) {
-    let mut p = lex.slice().split(',');
-
-    (p.next().unwrap().trim(), p.next().unwrap().trim())
-}
-
-fn csv3<'s>(lex: &mut Lexer<'s, CsvToken<'s>>) -> (&'s str, &'s str, &'s str) {
-    let mut p = lex.slice().split(',');
-
-    (
-        p.next().unwrap().trim(),
-        p.next().unwrap().trim(),
-        p.next().unwrap().trim(),
-    )
-}
-
-fn csv4<'s>(lex: &mut Lexer<'s, CsvToken<'s>>) -> (&'s str, &'s str, &'s str, &'s str) {
-    let mut p = lex.slice().split(',');
-
-    (
-        p.next().unwrap().trim(),
-        p.next().unwrap().trim(),
-        p.next().unwrap().trim(),
-        p.next().unwrap().trim(),
-    )
-}
-
-#[derive(Logos, Debug)]
-pub enum CsvToken<'s> {
-    #[regex(r"[^,;\u{FEFF}\r\n\t　]+,[^,;\r\n\t　]*,?", csv2)]
-    Csv2((&'s str, &'s str)),
-    #[regex(r"[^,;\u{FEFF}\r\n\t　]+,[^,;\r\n\t　]*,[^,;\r\n\t　]+,?", csv3)]
-    Csv3((&'s str, &'s str, &'s str)),
-    #[regex(
-        r"[^,;\u{FEFF}\r\n\t　]+,[^,;\r\n\t　]+,[^,;\r\n\t　]+,[^,;\r\n\t　]+,?",
-        csv4
-    )]
-    Csv4((&'s str, &'s str, &'s str, &'s str)),
-
-    #[error]
-    // BOM
-    #[token("\u{FEFF}", logos::skip)]
-    #[regex(r"[ \t\r\n　]+", logos::skip)]
-    #[regex(r";[^\n]*", logos::skip)]
-    Error,
-}
-
 #[derive(Clone, Copy, Debug, Logos)]
 pub enum ConfigToken<'s> {
     #[regex(r"[^:\r\n\u{FEFF}][^:\r\n]*:[^\r\n]*", |lex| lex.slice().split_once(':').unwrap())]
