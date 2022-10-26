@@ -420,7 +420,10 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                 value(Expr::Int(i64::MAX), tag("__INT_MAX__")),
                 value(Expr::Int(i64::MIN), tag("__INT_MIN__")),
                 map_res(
-                    context("Renamed Ident", delimited(tag("[["), de_sp(renamed_ident(ctx)), tag("]]"))),
+                    context(
+                        "Renamed Ident",
+                        delimited(tag("[["), de_sp(renamed_ident(ctx)), tag("]]")),
+                    ),
                     |s: StrKey| expr(ctx)(s.resolve()).map(|r| r.1),
                 ),
                 // form string
@@ -589,6 +592,17 @@ pub fn expr_list<'c, 'a>(
     move |i| separated_list0(char(','), de_sp(expr(ctx)))(i)
 }
 
+pub fn opt_expr_list<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
+    move |i| {
+        separated_list0(
+            char(','),
+            de_sp(map(opt(expr(ctx)), |v| v.unwrap_or(Expr::Int(0)))),
+        )(i)
+    }
+}
+
 pub fn call_arg_list<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
@@ -596,8 +610,8 @@ pub fn call_arg_list<'c, 'a>(
         preceded(
             sp,
             alt((
-                de_char_sp('(', expr_list(ctx), ')'),
-                preceded(char_sp(','), expr_list(ctx)),
+                de_char_sp('(', opt_expr_list(ctx), ')'),
+                preceded(char_sp(','), opt_expr_list(ctx)),
                 value(Vec::new(), eof),
             )),
         )(i)

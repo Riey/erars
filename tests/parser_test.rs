@@ -1161,6 +1161,9 @@ mod body {
                 Int(
                     2,
                 ),
+                Int(
+                    0,
+                ),
             ],
             is_jump: false,
             is_method: false,
