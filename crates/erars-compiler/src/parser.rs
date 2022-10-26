@@ -8,6 +8,7 @@ use erars_ast::{
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
+use itertools::Itertools;
 use logos::{internal::LexerInternal, Lexer};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -22,6 +23,21 @@ use strum::{Display, EnumString};
 pub use crate::error::{ParserError, ParserResult};
 use crate::CompiledFunction;
 pub use expr::normal_form_str;
+
+macro_rules! error_csv {
+    ($msg:expr, $span:expr) => {{
+        return Err((String::from($msg), $span));
+    }};
+}
+
+macro_rules! csv_parse_int {
+    ($s:expr, $span:expr) => {
+        match $s.parse() {
+            Ok(n) => n,
+            Err(_) => error_csv!("Invalid number", $span.clone()),
+        }
+    };
+}
 
 macro_rules! error {
     ($lex:expr, $msg:expr) => {{
@@ -263,19 +279,19 @@ pub struct HeaderInfo {
 
 impl HeaderInfo {
     pub fn merge_rename_csv(&mut self, s: &str) -> ParserResult<()> {
-        let mut lex = Lexer::new(s);
         let interner = get_interner();
 
-        while let Some((value, key)) = csv::csv2_line_allow_other(&mut lex)? {
-            self.rename
-                .insert(interner.get_or_intern(key), interner.get_or_intern(value));
+        for (mut line, _) in csv::lines(s) {
+            if let Some((value, key)) = line.next_tuple() {
+                self.rename
+                    .insert(interner.get_or_intern(key), interner.get_or_intern(value));
+            }
         }
 
         Ok(())
     }
 
     pub fn merge_chara_csv(&mut self, s: &str) -> ParserResult<()> {
-        let mut lex = Lexer::new(s);
         let interner = get_interner();
         let mut template = CharacterTemplate::default();
 
@@ -302,7 +318,7 @@ impl HeaderInfo {
         }
 
         macro_rules! insert_template {
-            ($var:ident, $val1:expr, $val2:expr) => {{
+            ($var:ident, $val1:expr, $val2:expr, $span:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
                     Err(_) => {
@@ -313,19 +329,19 @@ impl HeaderInfo {
                             .copied()
                         {
                             Some(idx) => idx,
-                            None => error!(lex, "잘못된 숫자입니다."),
+                            _ => error_csv!("잘못된 숫자입니다.", $span),
                         }
                     }
                 };
 
                 let value = match $val2.parse::<u32>() {
                     Ok(idx) => idx,
-                    Err(_) => error!(lex, "잘못된 숫자입니다."),
+                    _ => error_csv!("잘못된 숫자입니다.", $span),
                 };
 
                 template.$var.insert(idx, value);
             }};
-            (@bool $var:ident, $val1:expr, $val2:expr) => {{
+            (@bool $var:ident, $val1:expr, $val2:expr, $span:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
                     Err(_) => {
@@ -336,13 +352,13 @@ impl HeaderInfo {
                             .copied()
                         {
                             Some(idx) => idx,
-                            None => error!(lex, "잘못된 숫자입니다."),
+                            _ => error_csv!("잘못된 숫자입니다.", $span),
                         }
                     }
                 };
                 template.$var.insert(idx, 1);
             }};
-            (@str $var:ident, $val1:expr, $val2:expr) => {{
+            (@str $var:ident, $val1:expr, $val2:expr, $span:expr) => {{
                 let idx = match $val1.parse::<u32>() {
                     Ok(idx) => idx,
                     Err(_) => {
@@ -353,7 +369,7 @@ impl HeaderInfo {
                             .copied()
                         {
                             Some(idx) => idx,
-                            None => error!(lex, "잘못된 숫자입니다."),
+                            _ => error_csv!("잘못된 숫자입니다.", $span),
                         }
                     }
                 };
@@ -361,27 +377,33 @@ impl HeaderInfo {
             }};
         }
 
-        while let Some((name, val1, val2)) = self::csv::chara_line(&mut lex)? {
-            match name {
-                "番号" => template.no = val1.parse().unwrap(),
-                "名前" => template.name = val1.into(),
-                "主人の呼び方" => template.master_name = val1.into(),
-                "呼び名" => template.call_name = val1.into(),
-                "あだ名" => template.nick_name = val1.into(),
-                "助手" => template.is_assi = val1.trim() == "1",
+        for (mut line, span) in csv::lines(s) {
+            if let Some((name, val1)) = line.next_tuple() {
+                let val2 = line.next().unwrap_or("");
 
-                "CSTR" => insert_template!(@str cstr, val1, val2),
+                log::info!("{name}, {val1}, {val2}");
 
-                "素質" => insert_template!(@bool talent, val1, val2),
+                match name {
+                    "番号" => template.no = val1.parse().unwrap(),
+                    "名前" => template.name = val1.into(),
+                    "主人の呼び方" => template.master_name = val1.into(),
+                    "呼び名" => template.call_name = val1.into(),
+                    "あだ名" => template.nick_name = val1.into(),
+                    "助手" => template.is_assi = val1.trim() == "1",
 
-                "基礎" => insert_template!(base, val1, val2),
-                "刻印" => insert_template!(mark, val1, val2),
-                "能力" => insert_template!(abl, val1, val2),
-                "経験" => insert_template!(exp, val1, val2),
-                "相性" => insert_template!(relation, val1, val2),
-                "装着物" => insert_template!(equip, val1, val2),
-                "フラグ" => insert_template!(cflag, val1, val2),
-                other => log::warn!("Unknown character template name: {other}"),
+                    "CSTR" => insert_template!(@str cstr, val1, val2, span),
+
+                    "素質" => insert_template!(@bool talent, val1, val2, span),
+
+                    "基礎" => insert_template!(base, val1, val2, span),
+                    "刻印" => insert_template!(mark, val1, val2, span),
+                    "能力" => insert_template!(abl, val1, val2, span),
+                    "経験" => insert_template!(exp, val1, val2, span),
+                    "相性" => insert_template!(relation, val1, val2, span),
+                    "装着物" => insert_template!(equip, val1, val2, span),
+                    "フラグ" => insert_template!(cflag, val1, val2, span),
+                    other => log::warn!("Unknown character template name: {other}"),
+                }
             }
         }
 
@@ -391,45 +413,30 @@ impl HeaderInfo {
     }
 
     pub fn merge_gamebase_csv(&mut self, s: &str) -> ParserResult<()> {
-        let mut lex = Lexer::new(s);
-
-        while let Some((name, val)) = self::csv::csv2_line_allow_other(&mut lex)? {
-            match name {
-                "コード" => {
-                    self.gamebase.code = match val.parse() {
-                        Ok(code) => code,
-                        Err(_) => error!(lex, "Invalid digits"),
+        for (mut line, span) in csv::lines(s) {
+            if let Some((name, val)) = line.next_tuple() {
+                match name {
+                    "コード" => {
+                        self.gamebase.code = csv_parse_int!(val, span);
                     }
-                }
-                "バージョン" => {
-                    self.gamebase.version = match val.parse() {
-                        Ok(code) => code,
-                        Err(_) => error!(lex, "Invalid digits"),
+                    "バージョン" => {
+                        self.gamebase.version = csv_parse_int!(val, span);
                     }
-                }
-                "バージョン違い認める" => {
-                    self.gamebase.allow_version = match val.parse() {
-                        Ok(code) => code,
-                        Err(_) => error!(lex, "Invalid digits"),
+                    "バージョン違い認める" => {
+                        self.gamebase.allow_version = csv_parse_int!(val, span);
                     }
-                }
-                "最初からいるキャラ" => {
-                    self.gamebase.default_chara = match val.parse() {
-                        Ok(code) => code,
-                        Err(_) => error!(lex, "Invalid digits"),
+                    "最初からいるキャラ" => {
+                        self.gamebase.default_chara = csv_parse_int!(val, span);
                     }
-                }
-                "アイテムなし" => {
-                    self.gamebase.no_item = match val.parse() {
-                        Ok(code) => code,
-                        Err(_) => error!(lex, "Invalid digits"),
+                    "アイテムなし" => {
+                        self.gamebase.no_item = csv_parse_int!(val, span);
                     }
+                    "作者" => self.gamebase.author = val.into(),
+                    "追加情報" => self.gamebase.info = val.into(),
+                    "製作年" => self.gamebase.year = val.into(),
+                    "タイトル" => self.gamebase.title = val.into(),
+                    other => log::error!("Unknown gamebase key: {other}"),
                 }
-                "作者" => self.gamebase.author = val.into(),
-                "追加情報" => self.gamebase.info = val.into(),
-                "製作年" => self.gamebase.year = val.into(),
-                "タイトル" => self.gamebase.title = val.into(),
-                other => log::error!("Unknown gamebase key: {other}"),
             }
         }
 
@@ -437,14 +444,17 @@ impl HeaderInfo {
     }
 
     pub fn merge_name_csv(&mut self, var: &str, s: &str) -> ParserResult<()> {
-        let mut lex = Lexer::new(s);
         let interner = get_interner();
         let var = interner.get_or_intern(var);
         let mut name_var = BTreeMap::new();
 
-        while let Some((n, s)) = self::csv::name_csv_line(interner, &mut lex)? {
-            self.var_names.entry(var).or_default().insert(s, n);
-            name_var.insert(n, s);
+        for (mut line, span) in csv::lines(s) {
+            if let Some((n, s)) = line.next_tuple() {
+                let n = csv_parse_int!(n, span);
+                let s = interner.get_or_intern(s);
+                self.var_names.entry(var).or_default().insert(s, n);
+                name_var.insert(n, s);
+            }
         }
 
         self.var_name_var.insert(var, name_var);
@@ -453,63 +463,70 @@ impl HeaderInfo {
     }
 
     pub fn merge_item_csv(&mut self, s: &str) -> ParserResult<()> {
-        let mut lex = Lexer::new(s);
         let interner = get_interner();
         let var = interner.get_or_intern_static("ITEM");
 
-        while let Some((n, s, price)) = self::csv::name_item_line(&interner, &mut lex)? {
-            self.item_price.insert(n, price);
-            self.var_names.entry(var).or_default().insert(s, n);
-            self.var_name_var.entry(var).or_default().insert(n, s);
+        for (mut line, span) in csv::lines(s) {
+            if let Some((idx, name)) = line.next_tuple() {
+                let idx = match idx.parse() {
+                    Ok(idx) => idx,
+                    _ => error_csv!("Invalid digit", span),
+                };
+                let name = interner.get_or_intern(name);
+                let price = line.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+
+                self.item_price.insert(idx, price);
+                self.var_names.entry(var).or_default().insert(name, idx);
+                self.var_name_var.entry(var).or_default().insert(idx, name);
+            }
         }
 
         Ok(())
     }
 
     pub fn merge_variable_size_csv(&mut self, s: &str) -> ParserResult<()> {
-        let mut lex = Lexer::new(s);
         let interner = get_interner();
 
-        while let Some((name, sizes)) = self::csv::variable_size_line(&mut lex)? {
-            match name.as_str() {
-                "ARG" => {
-                    self.default_local_size.default_arg_size =
-                        sizes.and_then(|v| v.first().copied())
-                }
-                "ARGS" => {
-                    self.default_local_size.default_args_size =
-                        sizes.and_then(|v| v.first().copied())
-                }
-                "LOCAL" => {
-                    self.default_local_size.default_local_size =
-                        sizes.and_then(|v| v.first().copied())
-                }
-                "LOCALS" => {
-                    self.default_local_size.default_locals_size =
-                        sizes.and_then(|v| v.first().copied())
-                }
-                name => {
-                    let name_key = interner.get_or_intern(name);
-                    match sizes {
-                        Some(sizes) => match self.global_variables.get_mut(&name_key) {
-                            Some(info) => {
-                                let info_len = info.size.len();
-                                if info.size.len() != sizes.len() {
-                                    log::error!("Variable size for {name} is not matched! Expected: {info_len} Actual: {size_len}", size_len = sizes.len());
-                                } else {
-                                    info.size.copy_from_slice(&sizes[..info_len]);
-                                }
-                            }
-                            None => {
-                                log::error!(
-                                    "Variable {name} is not exists but defined in variablesize.csv"
-                                );
-                            }
-                        },
-                        None => {
+        for (mut line, span) in csv::lines(s) {
+            if let Some(name) = line.next() {
+                let mut sizes = line.map(|part| Ok(csv_parse_int!(part, span)));
+
+                match name {
+                    "ARG" => {
+                        self.default_local_size.default_arg_size = sizes.next().transpose()?;
+                    }
+                    "ARGS" => {
+                        self.default_local_size.default_args_size = sizes.next().transpose()?;
+                    }
+                    "LOCAL" => {
+                        self.default_local_size.default_local_size = sizes.next().transpose()?;
+                    }
+                    "LOCALS" => {
+                        self.default_local_size.default_locals_size = sizes.next().transpose()?;
+                    }
+                    name => {
+                        let name_key = interner.get_or_intern(name);
+                        let sizes: Vec<_> = sizes.try_collect()?;
+                        if sizes.is_empty() {
                             // FORBIDDEN
                             log::info!("Don't use {name}");
                             self.global_variables.remove(&name_key);
+                        } else {
+                            match self.global_variables.get_mut(&name_key) {
+                                Some(info) => {
+                                    let info_len = info.size.len();
+                                    if info.size.len() != sizes.len() {
+                                        log::error!("Variable size for {name} is not matched! Expected: {info_len} Actual: {size_len}", size_len = sizes.len());
+                                    } else {
+                                        info.size.copy_from_slice(&sizes[..info_len]);
+                                    }
+                                }
+                                None => {
+                                    log::error!(
+                                    "Variable {name} is not exists but defined in variablesize.csv"
+                                );
+                                }
+                            }
                         }
                     }
                 }
@@ -520,84 +537,84 @@ impl HeaderInfo {
     }
 
     pub fn merge_replace_csv(&mut self, s: &str) -> ParserResult<()> {
-        let mut lex = Lexer::new(s);
-
-        while let Some((k, v)) = self::csv::csv2_line(&mut lex)? {
-            macro_rules! define_replace_parser {
-                (
-                    @direct [$(($dr_key:literal, $dr_field:ident),)*]
-                    @parse [$(($pa_key:literal, $pa_field:ident),)*]
-                    @match_ [$(($ma_key:literal, $ma_field:ident, [$($ma_subkey:literal => $ma_value:expr,)+]),)*]
-                    @arr [$(($ar_key:literal, $ar_field:ident),)*]
-                ) => {
-                    match k {
-                        $(
-                            $dr_key => self.replace.$dr_field = v.into(),
-                        )*
-                        $(
-                            $pa_key => match v.parse() {
-                                Ok(v) => self.replace.$pa_field = v,
-                                Err(_) => {
-                                    log::error!("Invalid value for `{k}`: {v}");
-                                    continue;
+        for (mut line, _span) in csv::lines(s) {
+            if let Some((k, v)) = line.next_tuple() {
+                macro_rules! define_replace_parser {
+                    (
+                        @direct [$(($dr_key:literal, $dr_field:ident),)*]
+                        @parse [$(($pa_key:literal, $pa_field:ident),)*]
+                        @match_ [$(($ma_key:literal, $ma_field:ident, [$($ma_subkey:literal => $ma_value:expr,)+]),)*]
+                        @arr [$(($ar_key:literal, $ar_field:ident),)*]
+                    ) => {
+                        match k {
+                            $(
+                                $dr_key => self.replace.$dr_field = v.into(),
+                            )*
+                            $(
+                                $pa_key => match v.parse() {
+                                    Ok(v) => self.replace.$pa_field = v,
+                                    Err(_) => {
+                                        log::error!("Invalid value for `{k}`: {v}");
+                                        continue;
+                                    },
                                 },
-                            },
-                        )*
-                        $(
-                            $ma_key => self.replace.$ma_field = match v {
-                                $(
-                                    $ma_subkey => $ma_value,
-                                )*
-                                _ => {
-                                    log::error!("Invalid value for `{k}`: {v}");
-                                    continue;
+                            )*
+                            $(
+                                $ma_key => self.replace.$ma_field = match v {
+                                    $(
+                                        $ma_subkey => $ma_value,
+                                    )*
+                                    _ => {
+                                        log::error!("Invalid value for `{k}`: {v}");
+                                        continue;
+                                    },
                                 },
-                            },
-                        )*
-                        $(
-                            $ar_key => match v.split('/').map(|s| s.parse()).collect::<Result<Vec<_>, _>>() {
-                                Ok(v) => self.replace.$ar_field = v,
-                                Err(_) => {
-                                    log::error!("Invalid value for `{k}`: {v}");
-                                    continue;
+                            )*
+                            $(
+                                $ar_key => match v.split('/').map(|s| s.parse()).collect::<Result<Vec<_>, _>>() {
+                                    Ok(v) => self.replace.$ar_field = v,
+                                    Err(_) => {
+                                        log::error!("Invalid value for `{k}`: {v}");
+                                        continue;
+                                    },
                                 },
-                            },
-                        )*
-                        _ => {
-                            log::error!("Unknown replace key: {k}");
+                            )*
+                            _ => {
+                                log::error!("Unknown replace key: {k}");
+                            }
                         }
-                    }
-                };
-            }
+                    };
+                }
 
-            define_replace_parser! {
-                @direct [
-                    ("お金の単位", money_unit),
-                    ("起動時簡略表示", start_message),
-                    ("DRAWLINE文字", drawline_str),
-                    ("BAR文字1", bar_str1),
-                    ("BAR文字2", bar_str2),
-                    ("システムメニュー0", system_menu0),
-                    ("システムメニュー1", system_menu1),
-                    ("時間切れ表示", timeout_message),
-                ]
-                @parse [
-                    ("販売アイテム数", sell_item_count),
-                    ("COM_ABLE初期値", comable_init),
-                    ("PBANDの初期値", pband_init),
-                    ("RELATIONの初期値", relation_init),
-                ]
-                @match_ [
-                    ("単位の位置", unit_forward, [
-                        "前" => true,
-                        "後" => false,
-                    ]),
-                ]
-                @arr [
-                    ("汚れの初期値", stain_init),
-                    ("EXPLVの初期値", explv_init),
-                    ("PALAMLVの初期値", palamlv_init),
-                ]
+                define_replace_parser! {
+                    @direct [
+                        ("お金の単位", money_unit),
+                        ("起動時簡略表示", start_message),
+                        ("DRAWLINE文字", drawline_str),
+                        ("BAR文字1", bar_str1),
+                        ("BAR文字2", bar_str2),
+                        ("システムメニュー0", system_menu0),
+                        ("システムメニュー1", system_menu1),
+                        ("時間切れ表示", timeout_message),
+                    ]
+                    @parse [
+                        ("販売アイテム数", sell_item_count),
+                        ("COM_ABLE初期値", comable_init),
+                        ("PBANDの初期値", pband_init),
+                        ("RELATIONの初期値", relation_init),
+                    ]
+                    @match_ [
+                        ("単位の位置", unit_forward, [
+                            "前" => true,
+                            "後" => false,
+                        ]),
+                    ]
+                    @arr [
+                        ("汚れの初期値", stain_init),
+                        ("EXPLVの初期値", explv_init),
+                        ("PALAMLVの初期値", palamlv_init),
+                    ]
+                }
             }
         }
 

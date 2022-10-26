@@ -242,7 +242,10 @@ pub fn run_script(
                         (csv, s),
                     ))
                 }
-                Err(_) => None,
+                Err(err) => {
+                    log::error!("Failed to load csv file: {err}");
+                    None
+                }
             })
             .collect::<HashMap<_, _>>();
 

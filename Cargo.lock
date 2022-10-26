@@ -1031,6 +1031,7 @@ dependencies = [
  "erars-ast",
  "erars-lexer",
  "hashbrown 0.12.3",
+ "itertools",
  "k9",
  "log",
  "logos",
