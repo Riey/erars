@@ -163,14 +163,12 @@ impl TerminalVm {
             if info.is_str {
                 var.as_str()?[idx] = match arg {
                     Some(Value::String(s)) => s,
-                    Some(_) => bail!("Argument type mismatched"),
-                    None => String::new(),
+                    _ => String::new(),
                 };
             } else {
                 var.as_int()?[idx] = match arg {
                     Some(Value::Int(s)) => s,
-                    Some(_) => bail!("Argument type mismatched"),
-                    None => 0,
+                    _ => 0,
                 };
             }
         }
