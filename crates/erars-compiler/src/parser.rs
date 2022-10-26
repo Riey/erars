@@ -381,8 +381,6 @@ impl HeaderInfo {
             if let Some((name, val1)) = line.next_tuple() {
                 let val2 = line.next().unwrap_or("");
 
-                log::info!("{name}, {val1}, {val2}");
-
                 match name {
                     "番号" => template.no = val1.parse().unwrap(),
                     "名前" => template.name = val1.into(),
