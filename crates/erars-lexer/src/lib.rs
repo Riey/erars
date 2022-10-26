@@ -326,7 +326,7 @@ pub enum Token<'s> {
     #[token("#SINGLE", ignore(ascii_case))]
     Single,
 
-    #[regex(r"\p{XID_Start}\p{XID_Continue}*")]
+    #[regex(r"\p{XID_Continue}+")]
     Ident(&'s str),
 
     #[token("CALLEVENT", ignore(ascii_case))]
