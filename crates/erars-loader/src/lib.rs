@@ -436,8 +436,12 @@ pub fn run_script(
                     .unwrap();
             }
             log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
-            codespan_reporting::term::emit(&mut LogWriter::default(), &config, &files, &diagnostic).unwrap();
-            anyhow::bail!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
+            {
+                let mut writer = LogWriter::default();
+                codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic).unwrap();
+                std::io::Write::flush(&mut writer).unwrap();
+            }
+            anyhow::bail!("Compile error");
         }
     }
 
@@ -452,19 +456,14 @@ struct LogWriter(String);
 impl std::io::Write for LogWriter {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let s = std::str::from_utf8(buf).unwrap();
-        if let Some((l, r)) = s.split_once('\n') {
-            self.0.push_str(l);
-            log::error!("{}", self.0);
-            self.0.clear();
-            self.0.push_str(r);
-        } else {
-            self.0.push_str(s);
-        }
+        self.0.push_str(s);
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        log::error!("{}", self.0);
+        for line in self.0.lines() {
+            log::error!("{line}");
+        }
         self.0.clear();
         Ok(())
     }
