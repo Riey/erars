@@ -90,7 +90,7 @@ fn main() {
             let (vm, mut ctx, mut tx) = if args.load {
                 unsafe { load_script(&args.target_path, system).unwrap() }
             } else {
-                run_script(&args.target_path, system).unwrap()
+                run_script(&args.target_path, system, true).unwrap()
             };
 
             if args.measure_memory {

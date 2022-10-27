@@ -90,12 +90,19 @@ fn main() {
                 .spawn(move || {
                     let system_back = system.clone();
                     let system = Box::new(system);
-                    let (vm, mut ctx, mut tx) = if args.load {
-                        unsafe { load_script(&args.target_path, system).unwrap() }
+                    let ret = if args.load {
+                        unsafe { load_script(&args.target_path, system) }
                     } else {
-                        run_script(&args.target_path, system).unwrap()
+                        run_script(&args.target_path, system, false)
                     };
-                    futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+                    match ret {
+                        Ok((vm, mut ctx, mut tx)) => {
+                            futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+                        }
+                        Err(err) => {
+                            log::error!("Game loading failed: {err}");
+                        }
+                    }
                     system_back.send_quit();
                 })
                 .unwrap();

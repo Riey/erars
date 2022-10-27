@@ -14,7 +14,7 @@ use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
     files::SimpleFiles,
     term::{
-        termcolor::{ColorChoice, StandardStream},
+        termcolor::{ColorChoice, StandardStream, WriteColor},
         Config,
     },
 };
@@ -145,6 +145,7 @@ pub unsafe fn load_script(
 pub fn run_script(
     target_path: &str,
     system: Box<dyn SystemFunctions>,
+    error_to_stderr: bool,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     erars_ast::init_interner();
 
@@ -428,15 +429,60 @@ pub fn run_script(
         let files = files.into_inner();
 
         if !diagnostic.labels.is_empty() {
-            let writer = StandardStream::stderr(ColorChoice::Always);
             let config = Config::default();
-            codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
-                .unwrap();
+            if error_to_stderr {
+                let writer = StandardStream::stderr(ColorChoice::Always);
+                codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+                    .unwrap();
+            }
             log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
+            codespan_reporting::term::emit(&mut LogWriter::default(), &config, &files, &diagnostic).unwrap();
+            anyhow::bail!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
         }
     }
 
     let vm = TerminalVm::new(function_dic);
 
     Ok((vm, ctx, tx))
+}
+
+#[derive(Default)]
+struct LogWriter(String);
+
+impl std::io::Write for LogWriter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let s = std::str::from_utf8(buf).unwrap();
+        if let Some((l, r)) = s.split_once('\n') {
+            self.0.push_str(l);
+            log::error!("{}", self.0);
+            self.0.clear();
+            self.0.push_str(r);
+        } else {
+            self.0.push_str(s);
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        log::error!("{}", self.0);
+        self.0.clear();
+        Ok(())
+    }
+}
+
+impl WriteColor for LogWriter {
+    fn supports_color(&self) -> bool {
+        false
+    }
+
+    fn set_color(
+        &mut self,
+        _spec: &codespan_reporting::term::termcolor::ColorSpec,
+    ) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    fn reset(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
