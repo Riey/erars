@@ -175,6 +175,13 @@ pub struct EraConfig {
     pub printc_count: usize,
     #[derivative(Default(value = "30"))]
     pub printc_width: usize,
+
+    #[derivative(Default(value = "String::from(\"D2Coding\")"))]
+    pub font_family: String,
+    #[derivative(Default(value = "18"))]
+    pub font_size: u32,
+    #[derivative(Default(value = "19"))]
+    pub line_height: u32,
 }
 
 impl EraConfig {
@@ -214,6 +221,21 @@ impl EraConfig {
                         ret.save_nos = match value.parse() {
                             Ok(l) => l,
                             Err(_) => error!(lex, format!("Invalid save_nos {value}")),
+                        };
+                    }
+                    "フォント名" => {
+                        ret.font_family = value.into();
+                    }
+                    "フォントサイズ" => {
+                        ret.font_size = match value.parse() {
+                            Ok(l) => l,
+                            Err(_) => error!(lex, format!("Invalid font_size {value}")),
+                        };
+                    }
+                    "一行の高さ" => {
+                        ret.line_height = match value.parse() {
+                            Ok(l) => l,
+                            Err(_) => error!(lex, format!("Invalid line_height {value}")),
                         };
                     }
                     _ => {}

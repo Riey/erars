@@ -146,9 +146,8 @@ impl VariableStorage {
             .for_each(|(_, vars)| vars.retain(|_, (info, _)| info.is_global != is_global));
 
         for (k, (info, var)) in variables {
-            let var = var.unwrap_or_else(|| {
-                UniformVariable::with_character_len(&info, self.character_len)
-            });
+            let var = var
+                .unwrap_or_else(|| UniformVariable::with_character_len(&info, self.character_len));
             self.variables.insert(k, (info, var));
         }
 
@@ -591,7 +590,8 @@ impl VariableStorage {
             .get_mut(&var)
             .ok_or_else(|| anyhow!("Variable {:?} is not exists", var))?;
 
-        let var = var.get_or_insert_with(|| UniformVariable::with_character_len(info, self.character_len));
+        let var = var
+            .get_or_insert_with(|| UniformVariable::with_character_len(info, self.character_len));
         Ok((info, var))
     }
 
