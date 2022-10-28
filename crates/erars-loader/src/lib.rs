@@ -87,16 +87,9 @@ pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow:
     Ok(())
 }
 
-/// SAFETY: Any reference to interner is not exist
-pub unsafe fn load_script(
-    target_path: &str,
-    system: Box<dyn SystemFunctions>,
-) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
-    let start = Instant::now();
-
+pub fn load_config(target_path: &str) -> EraConfig {
     log::info!("Load config");
     let config_path = Path::new(target_path).join("emuera.config");
-    let game_path = Path::new(target_path).join("game.era");
 
     let config = if Path::new(&config_path).exists() {
         match read_file(config_path.as_ref()) {
@@ -112,8 +105,20 @@ pub unsafe fn load_script(
 
     log::info!("Config: {config:?}");
 
+    config
+}
+
+/// SAFETY: Any reference to interner is not exist
+pub unsafe fn load_script(
+    target_path: &str,
+    system: Box<dyn SystemFunctions>,
+    config: EraConfig,
+) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+    let start = Instant::now();
+
     log::info!("Load game script");
 
+    let game_path = Path::new(target_path).join("game.era");
     let file = File::open(game_path).context("Open bytecode file")?;
     let file = memmap2::MmapOptions::new()
         .populate()
@@ -145,27 +150,12 @@ pub unsafe fn load_script(
 pub fn run_script(
     target_path: &str,
     system: Box<dyn SystemFunctions>,
+    config: EraConfig,
     error_to_stderr: bool,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     erars_ast::init_interner();
 
     let mut time = Instant::now();
-
-    let config_path = Path::new(target_path).join("emuera.config");
-
-    let config = if Path::new(&config_path).exists() {
-        match read_file(config_path.as_ref()) {
-            Ok(s) => EraConfig::from_text(&s).unwrap(),
-            Err(err) => {
-                log::error!("config file load error: {err}");
-                EraConfig::default()
-            }
-        }
-    } else {
-        EraConfig::default()
-    };
-
-    log::info!("Config: {config:?}");
 
     let config = Arc::new(config);
     let mut tx = VirtualConsole::new(config.printc_width, config.max_log);

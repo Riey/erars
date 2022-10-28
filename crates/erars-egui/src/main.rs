@@ -8,7 +8,7 @@ use std::{
 use eframe::App;
 use egui::{FontData, FontFamily, Widget};
 use erars_ast::{Alignment, Value};
-use erars_loader::{load_script, run_script};
+use erars_loader::{load_config, load_script, run_script};
 use erars_proxy_system::{ConsoleFrame, ProxyReceiver, SystemRequest, SystemResponse};
 use erars_ui::{ConsoleLinePart, InputRequest, InputRequestType};
 
@@ -37,6 +37,15 @@ struct Args {
 
     #[clap(long, help = "Load bytecode")]
     load: bool,
+}
+
+fn load_font_data(source: fontdb::Source) -> egui::FontData {
+    match source {
+        fontdb::Source::Binary(bin) | fontdb::Source::SharedFile(_, bin) => {
+            FontData::from_owned(Vec::from((*bin).as_ref()))
+        }
+        fontdb::Source::File(file) => FontData::from_owned(std::fs::read(file).unwrap()),
+    }
 }
 
 fn main() {
@@ -83,6 +92,30 @@ fn main() {
             let (system, receiver) =
                 erars_proxy_system::new_proxy(Arc::new(move || egui_ctx.request_repaint()));
             let sav_path = Path::new(&args.target_path).join("sav");
+            let config = load_config(&args.target_path);
+            let font_size = config.font_size;
+            let line_height = config.line_height;
+
+            let mut db = fontdb::Database::new();
+            db.load_system_fonts();
+
+            let config_font = db
+                .query(&fontdb::Query {
+                    families: &[
+                        fontdb::Family::Name(&config.font_family),
+                        fontdb::Family::Name("D2Coding"),
+                    ],
+                    ..Default::default()
+                })
+                .unwrap();
+
+            let emoji_font = db.query(&fontdb::Query {
+                families: &[
+                    fontdb::Family::Name("Noto Emoji"),
+                    fontdb::Family::Name("Segoe UI Emoji"),
+                ],
+                ..Default::default()
+            });
 
             std::thread::Builder::new()
                 .stack_size(8 * 1024 * 1024)
@@ -91,9 +124,9 @@ fn main() {
                     let system_back = system.clone();
                     let system = Box::new(system);
                     let ret = if args.load {
-                        unsafe { load_script(&args.target_path, system) }
+                        unsafe { load_script(&args.target_path, system, config) }
                     } else {
-                        run_script(&args.target_path, system, false)
+                        run_script(&args.target_path, system, config, false)
                     };
                     match ret {
                         Ok((vm, mut ctx, mut tx)) => {
@@ -106,22 +139,9 @@ fn main() {
                     system_back.send_quit();
                 })
                 .unwrap();
-            let mut db = fontdb::Database::new();
-            db.load_system_fonts();
-            let font_id = db
-                .query(&fontdb::Query {
-                    families: &[fontdb::Family::Name("D2Coding")],
-                    ..Default::default()
-                })
-                .unwrap();
-            let (source, _idx) = db.face_source(font_id).unwrap();
-
-            let data = match source {
-                fontdb::Source::Binary(bin) | fontdb::Source::SharedFile(_, bin) => {
-                    FontData::from_owned(Vec::from((*bin).as_ref()))
-                }
-                fontdb::Source::File(file) => FontData::from_owned(std::fs::read(file).unwrap()),
-            };
+            let data = load_font_data(db.face_source(config_font).unwrap().0);
+            let emoji_data =
+                emoji_font.map(|emoji_font| load_font_data(db.face_source(emoji_font).unwrap().0));
 
             let mut widgets = egui::style::Widgets::dark();
             widgets.noninteractive.bg_fill = egui::Color32::BLACK;
@@ -139,23 +159,30 @@ fn main() {
                 ..(*ctx.egui_ctx.style()).clone()
             };
 
+            style.spacing.item_spacing.y = (line_height.saturating_sub(font_size)) as f32;
+
             for font_id in style.text_styles.values_mut() {
-                font_id.size = 18.0
-            }
-            if let Some(head) = style.text_styles.get_mut(&egui::TextStyle::Heading) {
-                head.size = 25.0
+                font_id.family = FontFamily::Monospace;
+                font_id.size = font_size as f32;
             }
 
-            ctx.egui_ctx.set_fonts(egui::FontDefinitions {
-                families: vec![
-                    (FontFamily::Monospace, vec!["D2Coding".into()]),
-                    (FontFamily::Proportional, vec!["D2Coding".into()]),
-                ]
-                .into_iter()
-                .collect(),
-                font_data: vec![("D2Coding".into(), data)].into_iter().collect(),
-            });
+            let mut font_def = egui::FontDefinitions::default();
+            font_def.families.insert(
+                FontFamily::Monospace,
+                vec!["default".into(), "emoji".into()],
+            );
+            font_def.families.insert(
+                FontFamily::Proportional,
+                vec!["default".into(), "emoji".into()],
+            );
+            font_def.font_data.insert("default".into(), data);
+            if let Some(emoji_data) = emoji_data {
+                font_def.font_data.insert("emoji".into(), emoji_data);
+            } else {
+                log::warn!("Can't find emoji font");
+            }
 
+            ctx.egui_ctx.set_fonts(font_def);
             ctx.egui_ctx.set_style(style);
 
             Box::new(EraApp::new(receiver, sav_path))

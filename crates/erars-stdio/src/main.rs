@@ -2,7 +2,7 @@ mod stdio_frontend;
 
 use std::{collections::VecDeque, path::Path};
 
-use erars_loader::{load_script, run_script, save_script};
+use erars_loader::{load_config, load_script, run_script, save_script};
 use memory_stats::memory_stats;
 
 #[derive(clap::Parser)]
@@ -87,10 +87,11 @@ fn main() {
         .stack_size(8 * 1024 * 1024)
         .name("erars-runtime".into())
         .spawn(move || {
+            let config = load_config(&args.target_path);
             let (vm, mut ctx, mut tx) = if args.load {
-                unsafe { load_script(&args.target_path, system).unwrap() }
+                unsafe { load_script(&args.target_path, system, config).unwrap() }
             } else {
-                run_script(&args.target_path, system, true).unwrap()
+                run_script(&args.target_path, system, config, true).unwrap()
             };
 
             if args.measure_memory {
