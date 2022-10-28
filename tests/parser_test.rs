@@ -1471,11 +1471,26 @@ Int(
                 r#"tests/parse_tests/exprs/str_literal.erb"#,
                 ParserContext::parse_expr_str
             ),
-            "
-String(
-    ,
+            r#"
+Method(
+    test,
+    [
+        String(
+            ,
+        ),
+        String(
+            123,
+        ),
+        String(
+            
+            ,
+        ),
+        String(
+            \,
+        ),
+    ],
 )
-"
+"#
         );
     }
 

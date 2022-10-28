@@ -497,6 +497,51 @@ pub(super) async fn run_instruction(
             BuiltinMethod::CsvCflag => {
                 csv_method!(@arr cflag);
             }
+            BuiltinMethod::MesSkip | BuiltinMethod::MouseSkip => {
+                // TODO:
+                ctx.push(false);
+            }
+            BuiltinMethod::FindElement | BuiltinMethod::FindLastElement => {
+                check_arg_count!(2, 5);
+                let var = get_arg!(@var args);
+                let value = get_arg!(@value args, ctx);
+                let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                let end = get_arg!(@opt @usize: args, ctx);
+                let exact_match = get_arg!(@opt @usize: args, ctx).map_or(false, |i| i != 0);
+
+                let (info, var, _) = ctx.resolve_var_ref(&var)?;
+
+                ensure!(info.size.len() == 1, "{meth} only work with 1D variable");
+
+                let pos = if info.is_str {
+                    let value = value.try_into_str()?;
+                    let regex = regex::Regex::new(&if exact_match {
+                        format!("^{value}$")
+                    } else {
+                        value
+                    }).context("Parse FINDELEMENT argument")?;
+                    let var = var.as_str()?;
+                    let arr = range_end_opt(&var, start, end)?;
+
+                    if meth == BuiltinMethod::FindElement {
+                        arr.iter().position(|v| regex.is_match(v))
+                    } else {
+                        arr.iter().rposition(|v| regex.is_match(v))
+                    }
+                } else {
+                    let value = value.try_into_int()?;
+                    let var = var.as_int()?;
+                    let arr = range_end_opt(&var, start, end)?;
+
+                    if meth == BuiltinMethod::FindElement {
+                        arr.iter().position(|v| *v == value)
+                    } else {
+                        arr.iter().rposition(|v| *v == value)
+                    }
+                };
+
+                ctx.push(pos.map_or(-1, |p| p as i64));
+            }
             BuiltinMethod::FindChara => {
                 check_arg_count!(1, 4);
                 let mut key = get_arg!(@var args);
@@ -528,6 +573,38 @@ pub(super) async fn run_instruction(
                 log::warn!("CHKCHARADATA");
                 ctx.push(1i64);
             }
+            BuiltinMethod::AllSames => {
+                let mut all_same = true;
+
+                let init = get_arg!(@opt @value args, ctx);
+
+                if let Some(init) = init {
+                    while let Some(other) = get_arg!(@opt @value args, ctx) {
+                        if init != other {
+                            all_same = false;
+                            break;
+                        }
+                    }
+                }
+
+                ctx.push(all_same);
+            }
+            BuiltinMethod::NoSames => {
+                let mut no_same = true;
+
+                let init = get_arg!(@opt @value args, ctx);
+
+                if let Some(init) = init {
+                    while let Some(other) = get_arg!(@opt @value args, ctx) {
+                        if init == other {
+                            no_same = false;
+                            break;
+                        }
+                    }
+                }
+
+                ctx.push(no_same);
+            }
             BuiltinMethod::Rand => {
                 check_arg_count!(1, 2);
                 let n1 = get_arg!(@i64: args, ctx);
@@ -550,6 +627,24 @@ pub(super) async fn run_instruction(
                 check_arg_count!(1);
                 let x = get_arg!(@i64: args, ctx);
                 ctx.push((x as f32).sqrt() as i64);
+            }
+            BuiltinMethod::MoneyStr => {
+                check_arg_count!(1, 2);
+
+                let value = get_arg!(@i64: args, ctx);
+                let arg = get_arg!(@opt @String: args, ctx);
+
+                if let Some(arg) = arg {
+                    log::warn!("TODO: str format {arg}");
+                }
+
+                let ret = if ctx.header_info.replace.unit_forward {
+                    format!("{}{value}", ctx.header_info.replace.money_unit)
+                } else {
+                    format!("{value}{}", ctx.header_info.replace.money_unit)
+                };
+
+                ctx.push(ret);
             }
             BuiltinMethod::BarStr => {
                 check_arg_count!(3);
@@ -640,6 +735,22 @@ pub(super) async fn run_instruction(
             }
             BuiltinMethod::IsSkip => {
                 ctx.push(tx.skipdisp());
+            }
+            BuiltinMethod::Convert => {
+                check_arg_count!(1, 2);
+
+                let value = get_arg!(@i64: args, ctx);
+                let radix = get_arg!(@i64: args, ctx);
+
+                let ret = match radix {
+                    2 => format!("{value:b}"),
+                    8 => format!("{value:o}"),
+                    10 => format!("{value}"),
+                    16 => format!("{value:x}"),
+                    _ => bail!("CONVERT only accept 2, 8, 10, 16 for second argument, but give `{radix}`"),
+                };
+
+                ctx.push(ret);
             }
             BuiltinMethod::ToStr => {
                 check_arg_count!(1, 2);
@@ -1912,4 +2023,11 @@ pub async fn run_begin(
 fn to_time(time: u32) -> i128 {
     (time::OffsetDateTime::now_utc() + time::Duration::milliseconds(time as i64))
         .unix_timestamp_nanos()
+}
+
+fn range_end_opt<T>(arr: &[T], start: usize, end: Option<usize>) -> Result<&[T]> {
+    match end {
+        Some(end) => arr.get(start..end),
+        _ => arr.get(start..),
+    }.ok_or_else(|| anyhow!("Array index out of bound"))
 }
