@@ -7,7 +7,7 @@ use erars_ast::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take_while, take_while1, escaped_transform},
+    bytes::complete::{escaped_transform, is_not, tag, take_while, take_while1},
     character::complete::*,
     combinator::{eof, map, map_res, opt, success, value},
     error::{context, ErrorKind, VerboseError},
@@ -66,12 +66,16 @@ fn ident_or_macro<'c, 'a>(ctx: &'c ParserContext, i: &'a str) -> IResult<'a, Cow
 }
 
 fn parse_str<'a>(i: &'a str) -> IResult<'a, String> {
-    escaped_transform(is_not(r#"\""#), '\\', alt((
-        value("\\", char('\\')),
-        value("\"", char('"')),
-        value("\n", char('n')),
-        value("\t", char('t')),
-    )))(i)
+    escaped_transform(
+        is_not(r#"\""#),
+        '\\',
+        alt((
+            value("\\", char('\\')),
+            value("\"", char('"')),
+            value("\n", char('n')),
+            value("\t", char('t')),
+        )),
+    )(i)
 }
 
 fn alignment<'a>(i: &'a str) -> IResult<'a, Alignment> {
@@ -256,7 +260,11 @@ pub fn form_str<'c, 'a>(
 fn string<'a>(i: &'a str) -> IResult<'a, String> {
     context(
         "string",
-        delimited(char('\"'), alt((parse_str, success(String::new()))), char('\"')),
+        delimited(
+            char('\"'),
+            alt((parse_str, success(String::new()))),
+            char('\"'),
+        ),
     )(i)
 }
 

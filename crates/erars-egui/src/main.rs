@@ -109,14 +109,13 @@ fn main() {
                 })
                 .unwrap();
 
-            let fallback = db
-                .query(&fontdb::Query {
-                    families: &[
-                        fontdb::Family::Name("GulimChe"),
-                        fontdb::Family::Name("D2Coding"),
-                    ],
-                    ..Default::default()
-                });
+            let fallback = db.query(&fontdb::Query {
+                families: &[
+                    fontdb::Family::Name("GulimChe"),
+                    fontdb::Family::Name("D2Coding"),
+                ],
+                ..Default::default()
+            });
 
             let emoji_font = db.query(&fontdb::Query {
                 families: &[
@@ -201,7 +200,7 @@ fn main() {
             ctx.egui_ctx.set_fonts(font_def);
             ctx.egui_ctx.set_style(style);
 
-            Box::new(EraApp::new(receiver, sav_path))
+            Box::new(EraApp::new(receiver, sav_path, line_height))
         }),
     );
 }
@@ -214,10 +213,11 @@ struct EraApp {
     console_frame: ConsoleFrame,
     sav_path: PathBuf,
     input: String,
+    line_height: u32,
 }
 
 impl EraApp {
-    pub fn new(receiver: ProxyReceiver, sav_path: PathBuf) -> Self {
+    pub fn new(receiver: ProxyReceiver, sav_path: PathBuf, line_height: u32) -> Self {
         Self {
             current_req: None,
             need_scroll_down: false,
@@ -226,6 +226,7 @@ impl EraApp {
             console_frame: ConsoleFrame::default(),
             input: String::new(),
             sav_path,
+            line_height,
         }
     }
 }
@@ -334,24 +335,9 @@ impl EraApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let line_height = ui.text_style_height(&egui::TextStyle::Monospace);
             let panel_size = ui.available_size();
-            let console_height = panel_size.y.min(
-                self.console_frame.lines.len() as f32 * (line_height + ui.spacing().item_spacing.y),
-            );
-            let console_y = panel_size.y - console_height;
-
-            if console_y > 0.0 {
-                // let console stick to bottom
-                ui.allocate_exact_size(
-                    egui::Vec2::new(panel_size.x, console_y),
-                    egui::Sense {
-                        click: false,
-                        drag: false,
-                        focusable: false,
-                    },
-                );
-            }
+            let console_show_lines = (panel_size.y / self.line_height as f32).floor() as usize;
+            let padding = console_show_lines.saturating_sub(self.console_frame.lines.len());
 
             egui::ScrollArea::vertical()
                 .max_width(ui.available_width())
@@ -359,6 +345,9 @@ impl EraApp {
                 .stick_to_bottom(true)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
+                    for _ in 0..padding {
+                        ui.label("");
+                    }
                     for line in self.console_frame.lines.iter() {
                         match line.align {
                             Alignment::Left => {

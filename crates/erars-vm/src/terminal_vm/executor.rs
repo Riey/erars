@@ -519,7 +519,8 @@ pub(super) async fn run_instruction(
                         format!("^{value}$")
                     } else {
                         value
-                    }).context("Parse FINDELEMENT argument")?;
+                    })
+                    .context("Parse FINDELEMENT argument")?;
                     let var = var.as_str()?;
                     let arr = range_end_opt(&var, start, end)?;
 
@@ -747,7 +748,9 @@ pub(super) async fn run_instruction(
                     8 => format!("{value:o}"),
                     10 => format!("{value}"),
                     16 => format!("{value:x}"),
-                    _ => bail!("CONVERT only accept 2, 8, 10, 16 for second argument, but give `{radix}`"),
+                    _ => bail!(
+                        "CONVERT only accept 2, 8, 10, 16 for second argument, but give `{radix}`"
+                    ),
                 };
 
                 ctx.push(ret);
@@ -2029,5 +2032,6 @@ fn range_end_opt<T>(arr: &[T], start: usize, end: Option<usize>) -> Result<&[T]>
     match end {
         Some(end) => arr.get(start..end),
         _ => arr.get(start..),
-    }.ok_or_else(|| anyhow!("Array index out of bound"))
+    }
+    .ok_or_else(|| anyhow!("Array index out of bound"))
 }
