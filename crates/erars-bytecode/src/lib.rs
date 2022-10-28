@@ -15,7 +15,7 @@ use erars_vm::{
 #[cfg(target_endian = "big")]
 compile_error!("Doesn't support big endian");
 
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 6];
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 7];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {

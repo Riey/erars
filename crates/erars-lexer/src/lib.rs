@@ -472,6 +472,8 @@ pub enum Token<'s> {
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[token("ISSKIP", |lex| normal_expr_method(lex, BuiltinMethod::IsSkip), ignore(ascii_case))]
+    #[token("FINDELEMENT", |lex| normal_expr_method(lex, BuiltinMethod::FindElement), ignore(ascii_case))]
+    #[token("FINDLASTELEMENT", |lex| normal_expr_method(lex, BuiltinMethod::FindLastElement), ignore(ascii_case))]
     #[token("LIMIT", |lex| normal_expr_method(lex, BuiltinMethod::Limit), ignore(ascii_case))]
     #[token("ESCAPE", |lex| normal_expr_method(lex, BuiltinMethod::Escape), ignore(ascii_case))]
     #[token("REPLACE", |lex| normal_expr_method(lex, BuiltinMethod::Replace), ignore(ascii_case))]
@@ -481,6 +483,7 @@ pub enum Token<'s> {
     #[token("STRFINDU", |lex| normal_expr_method(lex, BuiltinMethod::StrFindU), ignore(ascii_case))]
     #[token("STRJOIN", |lex| normal_expr_method(lex, BuiltinMethod::StrJoin), ignore(ascii_case))]
     #[token("BARSTR", |lex| normal_expr_method(lex, BuiltinMethod::BarStr), ignore(ascii_case))]
+    #[token("MONEYSTR", |lex| normal_expr_method(lex, BuiltinMethod::MoneyStr), ignore(ascii_case))]
     #[token("GETBIT", |lex| normal_expr_method(lex, BuiltinMethod::GetBit), ignore(ascii_case))]
     #[token("ABS", |lex| normal_expr_method(lex, BuiltinMethod::Abs), ignore(ascii_case))]
     #[token("SIGN", |lex| normal_expr_method(lex, BuiltinMethod::Sign), ignore(ascii_case))]
