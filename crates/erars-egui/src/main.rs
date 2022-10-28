@@ -109,6 +109,15 @@ fn main() {
                 })
                 .unwrap();
 
+            let fallback = db
+                .query(&fontdb::Query {
+                    families: &[
+                        fontdb::Family::Name("GulimChe"),
+                        fontdb::Family::Name("D2Coding"),
+                    ],
+                    ..Default::default()
+                });
+
             let emoji_font = db.query(&fontdb::Query {
                 families: &[
                     fontdb::Family::Name("Noto Emoji"),
@@ -140,6 +149,8 @@ fn main() {
                 })
                 .unwrap();
             let data = load_font_data(db.face_source(config_font).unwrap().0);
+            let fallback_data =
+                fallback.map(|fallback| load_font_data(db.face_source(fallback).unwrap().0));
             let emoji_data =
                 emoji_font.map(|emoji_font| load_font_data(db.face_source(emoji_font).unwrap().0));
 
@@ -169,13 +180,18 @@ fn main() {
             let mut font_def = egui::FontDefinitions::default();
             font_def.families.insert(
                 FontFamily::Monospace,
-                vec!["default".into(), "emoji".into()],
+                vec!["default".into(), "fallback".into(), "emoji".into()],
             );
             font_def.families.insert(
                 FontFamily::Proportional,
-                vec!["default".into(), "emoji".into()],
+                vec!["default".into(), "fallback".into(), "emoji".into()],
             );
             font_def.font_data.insert("default".into(), data);
+            if let Some(fallback_data) = fallback_data {
+                font_def.font_data.insert("fallback".into(), fallback_data);
+            } else {
+                log::warn!("Can't find fallback font");
+            }
             if let Some(emoji_data) = emoji_data {
                 font_def.font_data.insert("emoji".into(), emoji_data);
             } else {
