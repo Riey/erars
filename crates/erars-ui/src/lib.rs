@@ -118,7 +118,17 @@ impl ConsoleLine {
         parts.push((text, style));
         self.parts.push(ConsoleLinePart::Button(parts, input_gen, value));
     }
-    pub fn push_plain_text(&mut self, text: String, style: &TextStyle) {
+    fn append_button_text(&mut self, text: String, style: &TextStyle) {
+        match self.parts.last_mut() {
+            Some(ConsoleLinePart::Button(parts, _, _)) => {
+                parts.last_mut().unwrap().0.push_str(&text);
+            }
+            _ => {
+                self.parts.push(ConsoleLinePart::Text(text, style.clone()));
+            }
+        }
+    }
+    fn push_plain_text(&mut self, text: String, style: &TextStyle) {
         match self.parts.last_mut() {
             Some(ConsoleLinePart::Text(prev_text, prev_style)) if *prev_style == *style => {
                 prev_text.push_str(&text);
@@ -128,9 +138,9 @@ impl ConsoleLine {
             }
         }
     }
-    pub fn push_text(&mut self, input_gen: u32, text: String, style: &TextStyle) {
+    fn push_text(&mut self, input_gen: u32, text: String, style: &TextStyle) {
         static BUTTON_REGEX: Lazy<Regex> =
-            Lazy::new(|| Regex::new(r#"[^\[]*\[ *(\d+) *\][^\[\]]*"#).unwrap());
+            Lazy::new(|| Regex::new(r#"[^\[]*\[\s*(\d+)\s*\][^\[\]]*"#).unwrap());
 
         if text.contains(']') {
             match self.button_start.take() {
@@ -146,28 +156,35 @@ impl ConsoleLine {
                     if BUTTON_REGEX.is_match(&btn_buf) {
                         drop(self.parts.drain(prev_btn_part..));
                         // TODO: respect styles
-                        for captures in BUTTON_REGEX.captures_iter(&btn_buf) {
-                            let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
-                            self.push_button_merge(
-                                input_gen,
-                                captures.get(0).unwrap().as_str().to_string(),
-                                style.clone(),
-                                Value::Int(num),
-                            );
+                        let mut start = 0;
+
+                        while let Some(capture) = BUTTON_REGEX.captures(&btn_buf[start..]) {
+                            let num: i64 = capture.get(1).unwrap().as_str().parse().unwrap();
+                            let text = capture.get(0).unwrap().as_str().to_string();
+                            start += text.len();
+                            self.push_button_merge(input_gen, text, style.clone(), Value::Int(num));
                         }
+
+                        if let Some(s) = btn_buf.get(start..) {
+                            self.append_button_text(s.into(), style);
+                        }
+
                         return;
                     }
                 }
                 None => match BUTTON_REGEX.is_match(&text) {
                     true => {
-                        for captures in BUTTON_REGEX.captures_iter(&text) {
-                            let num: i64 = captures.get(1).unwrap().as_str().parse().unwrap();
-                            self.push_button_merge(
-                                input_gen,
-                                captures.get(0).unwrap().as_str().to_string(),
-                                style.clone(),
-                                Value::Int(num),
-                            );
+                        let mut start = 0;
+
+                        while let Some(capture) = BUTTON_REGEX.captures(&text[start..]) {
+                            let num: i64 = capture.get(1).unwrap().as_str().parse().unwrap();
+                            let text = capture.get(0).unwrap().as_str().to_string();
+                            start += text.len();
+                            self.push_button_merge(input_gen, text, style.clone(), Value::Int(num));
+                        }
+
+                        if let Some(s) = text.get(start..) {
+                            self.append_button_text(s.into(), style);
                         }
                         return;
                     }
@@ -562,21 +579,62 @@ impl<'a> Serialize for LinesFrom<'a> {
     }
 }
 
+#[cfg(test)]
+macro_rules! make_test_line {
+    ($($text:expr)*) => {{
+        let mut line = ConsoleLine::default();
+        $(
+            line.push_text(
+                0,
+                String::from($text),
+                &TextStyle {
+                    color: Color([0; 3]),
+                    font_family: "".into(),
+                    font_style: FontStyle::NORMAL,
+                },
+            );
+        )*
+        line
+    }};
+}
+
+#[test]
+fn issue_73() {
+    k9::snapshot!(
+        make_test_line!("[ 0] - [텍스트]").parts,
+        r#"
+[
+    Button(
+        [
+            (
+                "[ 0] - [텍스트]",
+                TextStyle {
+                    color: Color(
+                        [
+                            0,
+                            0,
+                            0,
+                        ],
+                    ),
+                    font_family: "",
+                    font_style: NORMAL,
+                },
+            ),
+        ],
+        0,
+        Int(
+            0,
+        ),
+    ),
+]
+"#
+    );
+}
+
 #[test]
 fn button_test() {
-    let mut line = ConsoleLine::default();
-    line.push_text(
-        0,
-        "[0] 1 [1] 2 [ 3] 3 [456 ] 745".into(),
-        &TextStyle {
-            color: Color([0; 3]),
-            font_family: "".into(),
-            font_style: FontStyle::NORMAL,
-        },
-    );
-    k9::assert_equal!(line.parts.len(), 4);
     k9::snapshot!(
-        &line.parts,
+        make_test_line!("[0] 1 [1] 2 [ 3] 3 [456 ] 745").parts,
         r#"
 [
     Button(
@@ -671,40 +729,8 @@ fn button_test() {
 "#
     );
 
-    line = ConsoleLine::default();
-
-    line.push_text(
-        0,
-        ">".into(),
-        &TextStyle {
-            color: Color([0; 3]),
-            font_family: "".into(),
-            font_style: FontStyle::NORMAL,
-        },
-    );
-
-    line.push_text(
-        0,
-        "[ 9]".into(),
-        &TextStyle {
-            color: Color([0; 3]),
-            font_family: "".into(),
-            font_style: FontStyle::NORMAL,
-        },
-    );
-
-    line.push_text(
-        0,
-        "2022年10月08日 22:52:52 1일째 [낮".into(),
-        &TextStyle {
-            color: Color([0; 3]),
-            font_family: "".into(),
-            font_style: FontStyle::NORMAL,
-        },
-    );
-    k9::assert_equal!(line.parts.len(), 2);
     k9::snapshot!(
-        &line.parts,
+        make_test_line!(">" "[ 9]" "2022年10月08日 22:52:52 1일째 [낮").parts,
         r#"
 [
     Button(
