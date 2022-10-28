@@ -17,7 +17,7 @@ mod body {
             Left,
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
     StmtWithPos(
@@ -25,7 +25,7 @@ mod body {
             Center,
         ),
         ScriptPosition {
-            line: 1,
+            line: 2,
         },
     ),
     StmtWithPos(
@@ -33,18 +33,7 @@ mod body {
             Right,
         ),
         ScriptPosition {
-            line: 2,
-        },
-    ),
-    StmtWithPos(
-        Print(
-            NEWLINE,
-            FormText(
-                {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
-            ),
-        ),
-        ScriptPosition {
-            line: 4,
+            line: 3,
         },
     ),
     StmtWithPos(
@@ -56,6 +45,17 @@ mod body {
         ),
         ScriptPosition {
             line: 5,
+        },
+    ),
+    StmtWithPos(
+        Print(
+            NEWLINE,
+            FormText(
+                {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
+            ),
+        ),
+        ScriptPosition {
+            line: 6,
         },
     ),
 ]
@@ -101,7 +101,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -137,7 +137,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -165,7 +165,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
     StmtWithPos(
@@ -181,7 +181,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 1,
+            line: 2,
         },
     ),
     StmtWithPos(
@@ -197,7 +197,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 2,
+            line: 3,
         },
     ),
     StmtWithPos(
@@ -221,7 +221,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 3,
+            line: 4,
         },
     ),
     StmtWithPos(
@@ -237,7 +237,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 4,
+            line: 5,
         },
     ),
     StmtWithPos(
@@ -270,7 +270,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 5,
+            line: 6,
         },
     ),
     StmtWithPos(
@@ -286,7 +286,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 6,
+            line: 7,
         },
     ),
 ]
@@ -332,7 +332,7 @@ mod body {
             catch_body: None,
         },
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -359,7 +359,7 @@ mod body {
             ],
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -409,13 +409,13 @@ mod body {
                         ],
                     ),
                     ScriptPosition {
-                        line: 1,
+                        line: 2,
                     },
                 ),
             ],
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -440,7 +440,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -483,7 +483,7 @@ mod body {
                                 ),
                             ),
                             ScriptPosition {
-                                line: 1,
+                                line: 2,
                             },
                         ),
                     ],
@@ -511,7 +511,7 @@ mod body {
                                 ),
                             ),
                             ScriptPosition {
-                                line: 3,
+                                line: 4,
                             },
                         ),
                     ],
@@ -526,13 +526,13 @@ mod body {
                         ),
                     ),
                     ScriptPosition {
-                        line: 5,
+                        line: 6,
                     },
                 ),
             ],
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -562,7 +562,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
     StmtWithPos(
@@ -578,7 +578,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 1,
+            line: 2,
         },
     ),
     StmtWithPos(
@@ -594,7 +594,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 2,
+            line: 3,
         },
     ),
     StmtWithPos(
@@ -610,7 +610,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 3,
+            line: 4,
         },
     ),
     StmtWithPos(
@@ -626,7 +626,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 4,
+            line: 5,
         },
     ),
     StmtWithPos(
@@ -645,7 +645,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 5,
+            line: 6,
         },
     ),
     StmtWithPos(
@@ -664,7 +664,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 6,
+            line: 7,
         },
     ),
     StmtWithPos(
@@ -683,7 +683,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 7,
+            line: 8,
         },
     ),
 ]
@@ -726,7 +726,7 @@ mod body {
             ],
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -749,7 +749,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
     StmtWithPos(
@@ -760,7 +760,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 1,
+            line: 2,
         },
     ),
     StmtWithPos(
@@ -771,7 +771,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 2,
+            line: 3,
         },
     ),
     StmtWithPos(
@@ -782,7 +782,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 3,
+            line: 4,
         },
     ),
 ]
@@ -806,7 +806,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
     StmtWithPos(
@@ -817,7 +817,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 1,
+            line: 2,
         },
     ),
 ]
@@ -865,7 +865,7 @@ mod body {
                         ),
                     ),
                     ScriptPosition {
-                        line: 1,
+                        line: 2,
                     },
                 ),
                 StmtWithPos(
@@ -890,12 +890,12 @@ mod body {
                         StmtWithPos(
                             Continue,
                             ScriptPosition {
-                                line: 4,
+                                line: 5,
                             },
                         ),
                     ),
                     ScriptPosition {
-                        line: 3,
+                        line: 4,
                     },
                 ),
                 StmtWithPos(
@@ -927,18 +927,18 @@ mod body {
                         StmtWithPos(
                             Continue,
                             ScriptPosition {
-                                line: 7,
+                                line: 8,
                             },
                         ),
                     ),
                     ScriptPosition {
-                        line: 6,
+                        line: 7,
                     },
                 ),
             ],
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -978,7 +978,7 @@ mod body {
                                 ),
                             ),
                             ScriptPosition {
-                                line: 2,
+                                line: 3,
                             },
                         ),
                     ],
@@ -1003,7 +1003,7 @@ mod body {
                                 ),
                             ),
                             ScriptPosition {
-                                line: 4,
+                                line: 5,
                             },
                         ),
                     ],
@@ -1019,14 +1019,14 @@ mod body {
                             ),
                         ),
                         ScriptPosition {
-                            line: 6,
+                            line: 7,
                         },
                     ),
                 ],
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -1056,12 +1056,12 @@ mod body {
                     ),
                 ),
                 ScriptPosition {
-                    line: 1,
+                    line: 2,
                 },
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
     StmtWithPos(
@@ -1087,12 +1087,12 @@ mod body {
                     ),
                 ),
                 ScriptPosition {
-                    line: 3,
+                    line: 4,
                 },
             ),
         ),
         ScriptPosition {
-            line: 2,
+            line: 3,
         },
     ),
     StmtWithPos(
@@ -1103,7 +1103,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 5,
+            line: 6,
         },
     ),
 ]
@@ -1132,7 +1132,7 @@ mod body {
             ),
         ),
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -1171,7 +1171,7 @@ mod body {
             catch_body: None,
         },
         ScriptPosition {
-            line: 0,
+            line: 1,
         },
     ),
 ]
@@ -1638,24 +1638,13 @@ Function {
                 ),
             ),
             ScriptPosition {
-                line: 2,
+                line: 3,
             },
         ),
         StmtWithPos(
             Goto {
                 label: String(
                     LABEL,
-                ),
-                catch_body: None,
-            },
-            ScriptPosition {
-                line: 4,
-            },
-        ),
-        StmtWithPos(
-            Goto {
-                label: FormText(
-                    {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
                 ),
                 catch_body: None,
             },
@@ -1668,12 +1657,23 @@ Function {
                 label: FormText(
                     {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
                 ),
+                catch_body: None,
+            },
+            ScriptPosition {
+                line: 6,
+            },
+        ),
+        StmtWithPos(
+            Goto {
+                label: FormText(
+                    {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
+                ),
                 catch_body: Some(
                     [],
                 ),
             },
             ScriptPosition {
-                line: 6,
+                line: 7,
             },
         ),
         StmtWithPos(
@@ -1691,14 +1691,14 @@ Function {
                                 ),
                             ),
                             ScriptPosition {
-                                line: 9,
+                                line: 10,
                             },
                         ),
                     ],
                 ),
             },
             ScriptPosition {
-                line: 7,
+                line: 8,
             },
         ),
         StmtWithPos(
@@ -1711,23 +1711,6 @@ Function {
                 is_method: false,
                 try_body: [],
                 catch_body: None,
-            },
-            ScriptPosition {
-                line: 12,
-            },
-        ),
-        StmtWithPos(
-            Call {
-                name: String(
-                    BAR,
-                ),
-                args: [],
-                is_jump: false,
-                is_method: false,
-                try_body: [],
-                catch_body: Some(
-                    [],
-                ),
             },
             ScriptPosition {
                 line: 13,
@@ -1756,13 +1739,30 @@ Function {
                     BAR,
                 ),
                 args: [],
+                is_jump: false,
+                is_method: false,
+                try_body: [],
+                catch_body: Some(
+                    [],
+                ),
+            },
+            ScriptPosition {
+                line: 15,
+            },
+        ),
+        StmtWithPos(
+            Call {
+                name: String(
+                    BAR,
+                ),
+                args: [],
                 is_jump: true,
                 is_method: false,
                 try_body: [],
                 catch_body: None,
             },
             ScriptPosition {
-                line: 17,
+                line: 18,
             },
         ),
         StmtWithPos(
@@ -1779,7 +1779,7 @@ Function {
                 ),
             },
             ScriptPosition {
-                line: 18,
+                line: 19,
             },
         ),
         StmtWithPos(
@@ -1796,7 +1796,7 @@ Function {
                 ),
             },
             ScriptPosition {
-                line: 19,
+                line: 20,
             },
         ),
         StmtWithPos(
@@ -1823,7 +1823,7 @@ Function {
                 catch_body: None,
             },
             ScriptPosition {
-                line: 23,
+                line: 24,
             },
         ),
         StmtWithPos(
@@ -1831,7 +1831,7 @@ Function {
                 LABEL,
             ),
             ScriptPosition {
-                line: 25,
+                line: 26,
             },
         ),
     ],
@@ -1890,7 +1890,7 @@ Function {
                 ],
             ),
             ScriptPosition {
-                line: 2,
+                line: 3,
             },
         ),
     ],
@@ -1927,7 +1927,7 @@ Function {
                 ),
             ),
             ScriptPosition {
-                line: 2,
+                line: 3,
             },
         ),
         StmtWithPos(
@@ -1938,7 +1938,7 @@ Function {
                 ),
             ),
             ScriptPosition {
-                line: 3,
+                line: 4,
             },
         ),
     ],
@@ -2092,7 +2092,7 @@ Function {
                 ),
             ),
             ScriptPosition {
-                line: 6,
+                line: 7,
             },
         ),
         StmtWithPos(
@@ -2149,7 +2149,7 @@ Function {
                 ),
             ),
             ScriptPosition {
-                line: 8,
+                line: 9,
             },
         ),
         StmtWithPos(
@@ -2165,7 +2165,7 @@ Function {
                 ),
             ),
             ScriptPosition {
-                line: 12,
+                line: 13,
             },
         ),
         StmtWithPos(
@@ -2208,7 +2208,7 @@ Function {
                 ),
             ),
             ScriptPosition {
-                line: 14,
+                line: 15,
             },
         ),
         StmtWithPos(
@@ -2273,7 +2273,7 @@ Function {
                                                         ),
                                                     ),
                                                     ScriptPosition {
-                                                        line: 20,
+                                                        line: 21,
                                                     },
                                                 ),
                                                 StmtWithPos(
@@ -2286,7 +2286,7 @@ Function {
                                                         ],
                                                     ),
                                                     ScriptPosition {
-                                                        line: 21,
+                                                        line: 22,
                                                     },
                                                 ),
                                             ],
@@ -2312,7 +2312,7 @@ Function {
                                                         ),
                                                     ),
                                                     ScriptPosition {
-                                                        line: 24,
+                                                        line: 25,
                                                     },
                                                 ),
                                                 StmtWithPos(
@@ -2325,7 +2325,7 @@ Function {
                                                         ],
                                                     ),
                                                     ScriptPosition {
-                                                        line: 25,
+                                                        line: 26,
                                                     },
                                                 ),
                                             ],
@@ -2343,14 +2343,14 @@ Function {
                                                     ],
                                                 ),
                                                 ScriptPosition {
-                                                    line: 28,
+                                                    line: 29,
                                                 },
                                             ),
                                         ],
                                     ),
                                 ),
                                 ScriptPosition {
-                                    line: 17,
+                                    line: 18,
                                 },
                             ),
                         ],
@@ -2359,7 +2359,7 @@ Function {
                 [],
             ),
             ScriptPosition {
-                line: 16,
+                line: 17,
             },
         ),
     ],
@@ -2404,7 +2404,7 @@ mod program {
                     catch_body: None,
                 },
                 ScriptPosition {
-                    line: 1,
+                    line: 2,
                 },
             ),
         ],
@@ -2434,7 +2434,7 @@ mod program {
                     ),
                 ),
                 ScriptPosition {
-                    line: 4,
+                    line: 5,
                 },
             ),
         ],
@@ -2475,7 +2475,7 @@ mod program {
                     ),
                 ),
                 ScriptPosition {
-                    line: 1,
+                    line: 2,
                 },
             ),
         ],
@@ -2500,7 +2500,7 @@ mod program {
                     ],
                 ),
                 ScriptPosition {
-                    line: 5,
+                    line: 6,
                 },
             ),
         ],
@@ -2535,7 +2535,7 @@ mod program {
                     ),
                 ),
                 ScriptPosition {
-                    line: 1,
+                    line: 2,
                 },
             ),
         ],
@@ -2556,7 +2556,7 @@ mod program {
                     ),
                 ),
                 ScriptPosition {
-                    line: 4,
+                    line: 5,
                 },
             ),
         ],
@@ -2577,7 +2577,7 @@ mod program {
                     ),
                 ),
                 ScriptPosition {
-                    line: 7,
+                    line: 8,
                 },
             ),
         ],

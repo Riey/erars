@@ -677,7 +677,7 @@ impl ParserContext {
             local_strs: RefCell::default(),
             is_arg: Cell::new(false),
             ban_percent: Cell::new(false),
-            line: Cell::new(0),
+            line: Cell::new(1),
         }
     }
 
