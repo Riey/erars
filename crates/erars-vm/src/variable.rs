@@ -44,7 +44,7 @@ pub struct SerializableVariableStorage {
     pub version: u32,
     character_len: u32,
     rand_seed: [u8; 32],
-    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+    variables: HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>,
     local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
 }
 
@@ -52,7 +52,7 @@ pub struct SerializableVariableStorage {
 pub struct SerializableGlobalVariableStorage {
     pub code: u32,
     pub version: u32,
-    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+    variables: HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>,
     local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
 }
 
@@ -136,50 +136,27 @@ impl VariableStorage {
 
     fn load_variables(
         &mut self,
-        variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+        variables: HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>,
         local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
+        is_global: bool,
     ) {
+        self.variables.retain(|_, (info, _)| info.is_global != is_global);
+        self.local_variables
+            .iter_mut()
+            .for_each(|(_, vars)| vars.retain(|_, (info, _)| info.is_global != is_global));
+
         for (k, (info, var)) in variables {
-            let (now_info, now_var) = match self.variables.get_mut(&k) {
-                Some(v) => v,
-                _ => {
-                    log::warn!("Ignore non existing variable {k}");
-                    continue;
-                }
-            };
-
-            if info != *now_info {
-                log::warn!("Info mismatched! Ignore load variable {k}");
-                continue;
-            }
-
-            *now_var = var;
+            let var = var.unwrap_or_else(|| {
+                UniformVariable::with_character_len(&info, self.character_len)
+            });
+            self.variables.insert(k, (info, var));
         }
 
         for (func_name, vars) in local_variables {
-            let now_local_var = match self.local_variables.get_mut(&func_name) {
-                Some(v) => v,
-                None => {
-                    log::warn!("Ignore non existing function {func_name}");
-                    continue;
-                }
-            };
+            let local_var = self.local_variables.entry(func_name).or_default();
 
             for (k, (info, var)) in vars {
-                let (now_info, now_var) = match now_local_var.get_mut(&k) {
-                    Some(v) => v,
-                    _ => {
-                        log::warn!("Ignore non existing variable {func_name}@{k}");
-                        continue;
-                    }
-                };
-
-                if info != *now_info {
-                    log::warn!("Info mismatched! Ignore load variable {k}");
-                    continue;
-                }
-
-                *now_var = var;
+                local_var.insert(k, (info, var));
             }
         }
     }
@@ -189,7 +166,7 @@ impl VariableStorage {
         sav: SerializableGlobalVariableStorage,
         header: &HeaderInfo,
     ) -> Result<()> {
-        self.load_variables(sav.variables, sav.local_variables);
+        self.load_variables(sav.variables, sav.local_variables, true);
         self.init_replace(&header.replace)?;
 
         Ok(())
@@ -203,7 +180,7 @@ impl VariableStorage {
         self.character_len = sav.character_len;
         self.rng = SeedableRng::from_seed(sav.rand_seed);
 
-        self.load_variables(sav.variables, sav.local_variables);
+        self.load_variables(sav.variables, sav.local_variables, false);
         self.init_replace(&header.replace)?;
 
         Ok(())
@@ -213,7 +190,7 @@ impl VariableStorage {
         &self,
         is_global: bool,
     ) -> (
-        HashMap<StrKey, (VariableInfo, UniformVariable)>,
+        HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>,
         HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
     ) {
         #[cfg(feature = "multithread")]
@@ -227,8 +204,13 @@ impl VariableStorage {
 
         let variables = this_vars
             .filter_map(|(name, (info, var))| {
-                if info.is_savedata && info.is_global == is_global {
-                    Some((*name, (info.clone(), var.clone())))
+                if info.is_global == is_global {
+                    let var = if info.is_savedata {
+                        Some(var.clone())
+                    } else {
+                        None
+                    };
+                    Some((*name, (info.clone(), var)))
                 } else {
                     None
                 }
@@ -240,8 +222,9 @@ impl VariableStorage {
                 let vars: HashMap<_, _> = vars
                     .iter()
                     .filter_map(|(name, (info, var))| {
-                        if info.is_savedata && info.is_global == is_global {
-                            Some((*name, (info.clone(), var.clone())))
+                        if info.is_global == is_global {
+                            let var = if info.is_savedata { var.clone() } else { None };
+                            Some((*name, (info.clone(), var)))
                         } else {
                             None
                         }
@@ -608,7 +591,7 @@ impl VariableStorage {
             .get_mut(&var)
             .ok_or_else(|| anyhow!("Variable {:?} is not exists", var))?;
 
-        let var = var.get_or_insert_with(|| UniformVariable::new(info));
+        let var = var.get_or_insert_with(|| UniformVariable::with_character_len(info, self.character_len));
         Ok((info, var))
     }
 
@@ -917,6 +900,13 @@ impl UniformVariable {
         match info.is_chara {
             false => UniformVariable::Normal(VmVariable::new(info)),
             true => UniformVariable::Character(Vec::new()),
+        }
+    }
+
+    pub fn with_character_len(info: &VariableInfo, character_len: u32) -> Self {
+        match info.is_chara {
+            false => UniformVariable::Normal(VmVariable::new(info)),
+            true => UniformVariable::Character(vec![VmVariable::new(info); character_len as usize]),
         }
     }
 
