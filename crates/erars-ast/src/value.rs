@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::StrKey;
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum InlineValue {
     Int(i64),

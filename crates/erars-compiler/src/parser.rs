@@ -507,31 +507,46 @@ impl HeaderInfo {
     pub fn merge_variable_size_csv(&mut self, s: &str) -> ParserResult<()> {
         let interner = get_interner();
 
-        for (mut line, span) in csv::lines(s) {
+        for (mut line, _) in csv::lines(s) {
             if let Some(name) = line.next() {
-                let mut sizes = line.map(|part| Ok(csv_parse_int!(part, span)));
+                macro_rules! next {
+                    () => {
+                        line.next().and_then(|s| s.parse().ok())
+                    };
+                }
 
                 match name {
                     "ARG" => {
-                        self.default_local_size.default_arg_size = sizes.next().transpose()?;
+                        self.default_local_size.default_arg_size = next!();
                     }
                     "ARGS" => {
-                        self.default_local_size.default_args_size = sizes.next().transpose()?;
+                        self.default_local_size.default_args_size = next!();
                     }
                     "LOCAL" => {
-                        self.default_local_size.default_local_size = sizes.next().transpose()?;
+                        self.default_local_size.default_local_size = next!();
                     }
                     "LOCALS" => {
-                        self.default_local_size.default_locals_size = sizes.next().transpose()?;
+                        self.default_local_size.default_locals_size = next!();
                     }
                     name => {
                         let name_key = interner.get_or_intern(name);
-                        let sizes: Vec<_> = sizes.try_collect()?;
-                        if sizes.is_empty() {
-                            // FORBIDDEN
-                            log::info!("Don't use {name}");
-                            self.global_variables.remove(&name_key);
-                        } else {
+                        let mut sizes: Vec<u32> = Vec::with_capacity(4);
+
+                        let mut forbidden = false;
+
+                        for part in line {
+                            match part.parse::<u32>() {
+                                Ok(n) => sizes.push(n),
+                                _ => {
+                                    forbidden = true;
+                                    log::info!("Don't use {name}");
+                                    self.global_variables.remove(&name_key);
+                                    break;
+                                }
+                            }
+                        }
+
+                        if !forbidden {
                             match self.global_variables.get_mut(&name_key) {
                                 Some(info) => {
                                     let info_len = info.size.len();
@@ -543,8 +558,8 @@ impl HeaderInfo {
                                 }
                                 None => {
                                     log::error!(
-                                    "Variable {name} is not exists but defined in variablesize.csv"
-                                );
+                                        "Variable {name} is not exists but defined in variablesize.csv"
+                                    );
                                 }
                             }
                         }

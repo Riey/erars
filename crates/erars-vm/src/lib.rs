@@ -1,3 +1,5 @@
+pub mod check_pass;
+
 mod context;
 mod function;
 mod terminal_vm;
