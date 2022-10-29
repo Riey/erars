@@ -25,15 +25,30 @@ pub enum BuiltinMethod {
     GroupMatch,
     NoSames,
     AllSames,
+    // No free form
     SumArray,
+    // No free form
+    SumCArray,
     IsSkip,
     MouseSkip,
     MesSkip,
     Convert,
     FindElement,
     FindLastElement,
+    // No free form
+    Match,
+    // No free form
+    CMatch,
+    // No free form
+    MaxArray,
+    // No free form
+    MinArray,
+    // No free form
+    MaxCArray,
+    // No free form
+    MinCArray,
 
-    Escape = 30,
+    Escape = 40,
     Replace,
     StrLenS,
     StrLenSU,
@@ -46,13 +61,15 @@ pub enum BuiltinMethod {
     BarStr,
     MoneyStr,
     Unicode,
+    // different from command
+    EncodeToUni,
     ToUpper,
     ToLower,
     ToHalf,
     ToFull,
     IsNumeric,
 
-    GetExpLv = 50,
+    GetExpLv = 60,
     GetPalamLv,
     GetColor,
     GetDefColor,
@@ -69,8 +86,9 @@ pub enum BuiltinMethod {
     GetNum,
     CurrentAlign,
     CurrentRedraw,
+    ChkFont,
 
-    Rand = 70,
+    Rand = 80,
     ChkData,
     ChkCharaData,
     FindChara,
@@ -147,6 +165,8 @@ pub enum BuiltinCommand {
     CVarset,
     Split,
     ForceKana,
+    // different from method
+    EncodeToUni,
 
     Redraw = 60,
     DrawLine,
@@ -165,7 +185,6 @@ pub enum BuiltinCommand {
     FontStyle,
     GetStyle,
     SetFont,
-    ChkFont,
 
     Bar = 89,
 

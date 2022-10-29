@@ -1,6 +1,6 @@
 use anyhow::{ensure, Context};
 
-use crate::variable::KnownVariableNames as Var;
+use crate::{context::VariableRef, variable::KnownVariableNames as Var};
 
 use super::*;
 
@@ -522,7 +522,7 @@ pub(super) async fn run_instruction(
                     })
                     .context("Parse FINDELEMENT argument")?;
                     let var = var.as_str()?;
-                    let arr = range_end_opt(&var, start, end)?;
+                    let arr = range_end_opt(var, start, end)?;
 
                     if meth == BuiltinMethod::FindElement {
                         arr.iter().position(|v| regex.is_match(v))
@@ -532,7 +532,7 @@ pub(super) async fn run_instruction(
                 } else {
                     let value = value.try_into_int()?;
                     let var = var.as_int()?;
-                    let arr = range_end_opt(&var, start, end)?;
+                    let arr = range_end_opt(var, start, end)?;
 
                     if meth == BuiltinMethod::FindElement {
                         arr.iter().position(|v| *v == value)
@@ -707,31 +707,109 @@ pub(super) async fn run_instruction(
                 let s = get_arg!(@String: args, ctx);
                 ctx.push(s.chars().count() as i64);
             }
-            BuiltinMethod::SumArray => {
-                check_arg_count!(2, 3);
+            BuiltinMethod::SumArray | BuiltinMethod::MaxArray | BuiltinMethod::MinArray => {
+                check_arg_count!(1, 3);
 
                 let var_ref = get_arg!(@var args);
                 let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
                 let end = get_arg!(@opt @usize: args, ctx);
 
-                let target = ctx.var.read_int(Var::Target, &[])?;
-                let var = ctx.var.get_maybe_local_var(func_name, var_ref.name)?.1;
+                let var = get_single_var(func_name, var_ref, ctx)?.as_int()?;
+                let slice = range_end_opt(var, start, end)?.iter();
+                let ret = match meth {
+                    BuiltinMethod::SumArray => slice.sum::<i64>(),
+                    BuiltinMethod::MaxArray => slice.max().copied().unwrap_or(0),
+                    _ => slice.min().copied().unwrap_or(0),
+                };
+                ctx.push(ret);
+            }
+            BuiltinMethod::Match => {
+                check_arg_count!(2, 4);
 
-                let var = match var {
-                    UniformVariable::Character(cvar) => {
-                        let c_idx = var_ref.idxs.first().copied().unwrap_or(target.try_into()?);
-                        &mut cvar[c_idx as usize]
-                    }
-                    UniformVariable::Normal(var) => var,
-                }
-                .as_int()?;
+                let var_ref = get_arg!(@var args);
+                let value = get_arg!(@value args, ctx);
+                let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                let end = get_arg!(@opt @usize: args, ctx);
 
-                let slice = match end {
-                    Some(end) => &var[start..end],
-                    None => &var[start..],
+                let var = get_single_var(func_name, var_ref, ctx)?;
+
+                let ret = match value {
+                    Value::Int(i) => range_end_opt(var.as_int()?, start, end)?
+                        .iter()
+                        .filter(|v| **v == i)
+                        .count(),
+                    Value::String(s) => range_end_opt(var.as_str()?, start, end)?
+                        .iter()
+                        .filter(|v| **v == s)
+                        .count(),
                 };
 
-                let ret = slice.iter().sum::<i64>();
+                ctx.push(ret as i64);
+            }
+            BuiltinMethod::SumCArray | BuiltinMethod::MaxCArray | BuiltinMethod::MinCArray => {
+                check_arg_count!(1, 3);
+
+                let var_ref = get_arg!(@var args);
+                let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                let end = get_arg!(@opt @usize: args, ctx);
+
+                let (info, var) = ctx.var.get_maybe_local_var(func_name, var_ref.name)?;
+                ensure!(
+                    !info.is_str && info.is_chara,
+                    "{meth} only work with character int variable"
+                );
+
+                let var = var.assume_chara_vec();
+                let (_, idx) = info.calculate_single_idx(&var_ref.idxs);
+                ensure!(
+                    idx < info.full_size() as u32,
+                    "Index out of bound {idx} over {}",
+                    info.full_size()
+                );
+
+                let slice = range_end_opt(var, start, end)?
+                    .iter_mut()
+                    .map(|v| v.as_int().unwrap()[idx as usize]);
+                let ret = match meth {
+                    BuiltinMethod::SumCArray => slice.sum::<i64>(),
+                    BuiltinMethod::MaxCArray => slice.max().unwrap_or(0),
+                    _ => slice.min().unwrap_or(0),
+                };
+
+                ctx.push(ret);
+            }
+            BuiltinMethod::CMatch => {
+                check_arg_count!(2, 4);
+
+                let var_ref = get_arg!(@var args);
+                let value = get_arg!(@value args, ctx);
+                let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                let end = get_arg!(@opt @usize: args, ctx);
+
+                let mut ret = 0;
+                let (info, var) = ctx.var.get_maybe_local_var(func_name, var_ref.name)?;
+                let var = var.assume_chara_vec();
+                let (_, idx) = info.calculate_single_idx(&var_ref.idxs);
+
+                let vars = range_end_opt(var, start, end)?.iter_mut();
+
+                match value {
+                    Value::Int(i) => {
+                        for var in vars {
+                            if i == var.as_int()?[idx as usize] {
+                                ret += 1;
+                            }
+                        }
+                    }
+                    Value::String(s) => {
+                        for var in vars {
+                            if s == var.as_str()?[idx as usize] {
+                                ret += 1;
+                            }
+                        }
+                    }
+                }
+
                 ctx.push(ret);
             }
             BuiltinMethod::IsSkip => {
@@ -940,6 +1018,16 @@ pub(super) async fn run_instruction(
                 );
             }
 
+            BuiltinMethod::EncodeToUni => {
+                check_arg_count!(1, 2);
+                let s = get_arg!(@String: args, ctx);
+                let pos = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+
+                ctx.push(
+                    s.chars().nth(pos).map(|c| c as u32).ok_or_else(|| anyhow!("ENCODETOUNI start position {pos} has exceed char count of {s}"))?
+                );
+            }
+
             BuiltinMethod::ToUpper => {
                 check_arg_count!(1);
                 let s = get_arg!(@String: args, ctx);
@@ -986,7 +1074,10 @@ pub(super) async fn run_instruction(
                 check_arg_count!(0);
                 ctx.push(tx.font().to_string());
             }
-
+            BuiltinMethod::ChkFont => {
+                // TODO: CHKFONT
+                ctx.push(0i64);
+            }
             BuiltinMethod::GetColor => {
                 check_arg_count!(0);
                 ctx.push(tx.color() as i64);
@@ -1323,6 +1414,15 @@ pub(super) async fn run_instruction(
 
                 tx.print(make_bar_str(&ctx.header_info.replace, var, max, length));
             }
+            BuiltinCommand::EncodeToUni => {
+                let s = get_arg!(@String: args, ctx);
+                let result = ctx.var.get_var(Var::Result)?.1.assume_normal().as_int()?;
+                result[0] = s.len() as i64;
+                
+                for (idx, b) in s.as_bytes().iter().enumerate() {
+                    result[idx + 1] = *b as i64;
+                }
+            }
             BuiltinCommand::ReturnF => {
                 let ret = get_arg!(@value args, ctx);
 
@@ -1377,10 +1477,6 @@ pub(super) async fn run_instruction(
             }
             BuiltinCommand::GetStyle => {
                 ctx.push(tx.style().bits() as i64);
-            }
-            BuiltinCommand::ChkFont => {
-                log::warn!("TODO: CHKFONT");
-                ctx.push(0i64);
             }
             BuiltinCommand::SetFont => {
                 let font = get_arg!(@String: args, ctx);
@@ -2063,10 +2159,27 @@ fn to_time(time: u32) -> i128 {
         .unix_timestamp_nanos()
 }
 
-fn range_end_opt<T>(arr: &[T], start: usize, end: Option<usize>) -> Result<&[T]> {
+fn get_single_var(
+    func_name: StrKey,
+    var_ref: VariableRef,
+    ctx: &mut VmContext,
+) -> Result<&mut VmVariable> {
+    let target = ctx.var.read_int(Var::Target, &[])?;
+    let var = ctx.var.get_maybe_local_var(func_name, var_ref.name)?.1;
+
+    Ok(match var {
+        UniformVariable::Character(cvar) => {
+            let c_idx = var_ref.idxs.first().copied().unwrap_or(target.try_into()?);
+            &mut cvar[c_idx as usize]
+        }
+        UniformVariable::Normal(var) => var,
+    })
+}
+
+fn range_end_opt<T>(arr: &mut [T], start: usize, end: Option<usize>) -> Result<&mut [T]> {
     match end {
-        Some(end) => arr.get(start..end),
-        _ => arr.get(start..),
+        Some(end) => arr.get_mut(start..end),
+        _ => arr.get_mut(start..),
     }
     .ok_or_else(|| anyhow!("Array index out of bound"))
 }
