@@ -507,6 +507,8 @@ pub enum Token<'s> {
     #[token("CHKCHARADATA", |lex| normal_expr_method(lex, BuiltinMethod::ChkCharaData), ignore(ascii_case))]
     #[token("FINDCHARA", |lex| normal_expr_method(lex, BuiltinMethod::FindChara), ignore(ascii_case))]
     #[token("FIND_CHARADATA", |lex| normal_expr_method(lex, BuiltinMethod::FindCharaData), ignore(ascii_case))]
+    #[token("VARSIZE", |lex| normal_expr_method(lex, BuiltinMethod::VarSize), ignore(ascii_case))]
+    #[token("EXISTCSV", |lex| normal_expr_method(lex, BuiltinMethod::ExistCsv), ignore(ascii_case))]
     #[token("CSVNAME", |lex| normal_expr_method(lex, BuiltinMethod::CsvName), ignore(ascii_case))]
     #[token("CSVCALLNAME", |lex| normal_expr_method(lex, BuiltinMethod::CsvCallName), ignore(ascii_case))]
     #[token("CSVNICKNAME", |lex| normal_expr_method(lex, BuiltinMethod::CsvNickName), ignore(ascii_case))]

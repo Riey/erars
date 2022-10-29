@@ -47,6 +47,7 @@ pub enum BuiltinMethod {
     MaxCArray,
     // No free form
     MinCArray,
+    VarSize,
 
     Escape = 40,
     Replace,
@@ -94,6 +95,7 @@ pub enum BuiltinMethod {
     FindChara,
     #[strum(serialize = "FIND_CHARADATA")]
     FindCharaData,
+    ExistCsv,
     SaveNos,
     GetConfig,
     GetConfigS,
