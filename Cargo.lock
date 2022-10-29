@@ -1210,6 +1210,7 @@ dependencies = [
  "tinyvec",
  "twoway",
  "unicode-width",
+ "unicode_hfwidth",
 ]
 
 [[package]]
@@ -3142,6 +3143,12 @@ name = "unicode-xid"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f962df74c8c05a667b5ee8bcf162993134c104e96440b663c8daa176dc772d8c"
+
+[[package]]
+name = "unicode_hfwidth"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0bc9195d6d616831bad0ed6ae0c0c55be8aebb3b8d3cb3705233a1974dcd1fc"
 
 [[package]]
 name = "unsafe-libyaml"
