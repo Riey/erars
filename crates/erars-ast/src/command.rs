@@ -95,6 +95,8 @@ pub enum BuiltinMethod {
     #[strum(serialize = "FIND_CHARADATA")]
     FindCharaData,
     SaveNos,
+    GetConfig,
+    GetConfigS,
 
     CsvName = 100,
     CsvCallName,

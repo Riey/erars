@@ -1,4 +1,5 @@
 use anyhow::{ensure, Context};
+use erars_compiler::EraConfigKey;
 
 use crate::{context::VariableRef, variable::KnownVariableNames as Var};
 
@@ -1023,9 +1024,9 @@ pub(super) async fn run_instruction(
                 let s = get_arg!(@String: args, ctx);
                 let pos = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
 
-                ctx.push(
-                    s.chars().nth(pos).map(|c| c as u32).ok_or_else(|| anyhow!("ENCODETOUNI start position {pos} has exceed char count of {s}"))?
-                );
+                ctx.push(s.chars().nth(pos).map(|c| c as u32).ok_or_else(|| {
+                    anyhow!("ENCODETOUNI start position {pos} has exceed char count of {s}")
+                })?);
             }
 
             BuiltinMethod::ToUpper => {
@@ -1244,6 +1245,38 @@ pub(super) async fn run_instruction(
                 ctx.push(nos as i64);
             }
 
+            BuiltinMethod::GetConfig => {
+                check_arg_count!(1);
+                let key = get_arg!(@String: args, ctx);
+                match key.parse::<EraConfigKey>() {
+                    Ok(key) => {
+                        ctx.push(
+                            ctx.config
+                                .get_config(key)
+                                .try_into_int()
+                                .map_err(|_| anyhow!("Config key {key} has string type"))?,
+                        );
+                    }
+                    _ => bail!("Invalid config key: {key}"),
+                }
+            }
+
+            BuiltinMethod::GetConfigS => {
+                check_arg_count!(1);
+                let key = get_arg!(@String: args, ctx);
+                match key.parse::<EraConfigKey>() {
+                    Ok(key) => {
+                        ctx.push(
+                            ctx.config
+                                .get_config(key)
+                                .try_into_str()
+                                .map_err(|_| anyhow!("Config key {key} has int type"))?,
+                        );
+                    }
+                    _ => bail!("Invalid config key: {key}"),
+                }
+            }
+
             BuiltinMethod::ChkData => {
                 check_arg_count!(1);
                 let idx = get_arg!(@u32: args, ctx);
@@ -1418,7 +1451,7 @@ pub(super) async fn run_instruction(
                 let s = get_arg!(@String: args, ctx);
                 let result = ctx.var.get_var(Var::Result)?.1.assume_normal().as_int()?;
                 result[0] = s.len() as i64;
-                
+
                 for (idx, b) in s.as_bytes().iter().enumerate() {
                     result[idx + 1] = *b as i64;
                 }

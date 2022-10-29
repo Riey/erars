@@ -164,6 +164,33 @@ pub struct Gamebase {
     pub title: String,
 }
 
+#[derive(Clone, Copy, Debug, Display, EnumString)]
+pub enum EraConfigKey {
+    #[strum(to_string = "内部で使用する東アジア言語")]
+    Lang,
+
+    #[strum(to_string = "表示するセーブデータ数")]
+    SaveNos,
+
+    #[strum(to_string = "フォント名")]
+    FontFamily,
+
+    #[strum(to_string = "フォントサイズ")]
+    FontSize,
+
+    #[strum(to_string = "一行の高さ")]
+    LineHeight,
+
+    #[strum(to_string = "PRINTCを並べる数")]
+    PrintcCount,
+
+    #[strum(to_string = "PRINTCの文字数")]
+    PrintcWidth,
+
+    #[strum(to_string = "履歴ログの行数")]
+    MaxLog,
+}
+
 #[derive(Clone, Debug, derivative::Derivative, Serialize, Deserialize)]
 #[derivative(Default)]
 pub struct EraConfig {
@@ -185,6 +212,19 @@ pub struct EraConfig {
 }
 
 impl EraConfig {
+    pub fn get_config(&self, key: EraConfigKey) -> erars_ast::Value {
+        match key {
+            EraConfigKey::PrintcCount => self.printc_count.into(),
+            EraConfigKey::MaxLog => self.max_log.into(),
+            EraConfigKey::PrintcWidth => self.printc_width.into(),
+            EraConfigKey::Lang => self.lang.to_string().into(),
+            EraConfigKey::SaveNos => self.save_nos.into(),
+            EraConfigKey::FontFamily => self.font_family.clone().into(),
+            EraConfigKey::FontSize => self.font_size.into(),
+            EraConfigKey::LineHeight => self.line_height.into(),
+        }
+    }
+
     pub fn from_text(s: &str) -> ParserResult<Self> {
         let mut ret = Self::default();
 
@@ -192,53 +232,55 @@ impl EraConfig {
 
         while let Some(line) = lex.next() {
             match line {
-                ConfigToken::Line((key, value)) => match key {
-                    "PRINTCを並べる数" => {
-                        ret.printc_count = match value.parse() {
-                            Ok(l) => l,
-                            Err(_) => error!(lex, format!("Invalid integer {value}")),
-                        };
-                    }
-                    "履歴ログの行数" => {
-                        ret.max_log = match value.parse() {
-                            Ok(l) => l,
-                            Err(_) => error!(lex, format!("Invalid integer {value}")),
-                        };
-                    }
-                    "PRINTCの文字数" => {
-                        ret.printc_width = match value.parse() {
-                            Ok(l) => l,
-                            Err(_) => error!(lex, format!("Invalid integer {value}")),
-                        };
-                    }
-                    "内部で使用する東アジア言語" => {
-                        ret.lang = match value.parse() {
-                            Ok(l) => l,
-                            Err(_) => error!(lex, format!("Invalid language {value}")),
-                        };
-                    }
-                    "表示するセーブデータ数" => {
-                        ret.save_nos = match value.parse() {
-                            Ok(l) => l,
-                            Err(_) => error!(lex, format!("Invalid save_nos {value}")),
-                        };
-                    }
-                    "フォント名" => {
-                        ret.font_family = value.into();
-                    }
-                    "フォントサイズ" => {
-                        ret.font_size = match value.parse() {
-                            Ok(l) => l,
-                            Err(_) => error!(lex, format!("Invalid font_size {value}")),
-                        };
-                    }
-                    "一行の高さ" => {
-                        ret.line_height = match value.parse() {
-                            Ok(l) => l,
-                            Err(_) => error!(lex, format!("Invalid line_height {value}")),
-                        };
-                    }
-                    _ => {}
+                ConfigToken::Line((key, value)) => match key.parse() {
+                    Ok(key) => match key {
+                        EraConfigKey::PrintcCount => {
+                            ret.printc_count = match value.parse() {
+                                Ok(l) => l,
+                                Err(_) => error!(lex, format!("Invalid integer {value}")),
+                            };
+                        }
+                        EraConfigKey::MaxLog => {
+                            ret.max_log = match value.parse() {
+                                Ok(l) => l,
+                                Err(_) => error!(lex, format!("Invalid integer {value}")),
+                            };
+                        }
+                        EraConfigKey::PrintcWidth => {
+                            ret.printc_width = match value.parse() {
+                                Ok(l) => l,
+                                Err(_) => error!(lex, format!("Invalid integer {value}")),
+                            };
+                        }
+                        EraConfigKey::Lang => {
+                            ret.lang = match value.parse() {
+                                Ok(l) => l,
+                                Err(_) => error!(lex, format!("Invalid language {value}")),
+                            };
+                        }
+                        EraConfigKey::SaveNos => {
+                            ret.save_nos = match value.parse() {
+                                Ok(l) => l,
+                                Err(_) => error!(lex, format!("Invalid save_nos {value}")),
+                            };
+                        }
+                        EraConfigKey::FontFamily => {
+                            ret.font_family = value.into();
+                        }
+                        EraConfigKey::FontSize => {
+                            ret.font_size = match value.parse() {
+                                Ok(l) => l,
+                                Err(_) => error!(lex, format!("Invalid font_size {value}")),
+                            };
+                        }
+                        EraConfigKey::LineHeight => {
+                            ret.line_height = match value.parse() {
+                                Ok(l) => l,
+                                Err(_) => error!(lex, format!("Invalid line_height {value}")),
+                            };
+                        }
+                    },
+                    Err(_) => {}
                 },
                 ConfigToken::Error => error!(lex, format!("Invalid token: {}", lex.slice())),
             }
