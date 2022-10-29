@@ -1277,6 +1277,27 @@ pub(super) async fn run_instruction(
                 }
             }
 
+            BuiltinMethod::VarSize => {
+                check_arg_count!(1, 2);
+                let var = get_arg!(@var args);
+                let dim = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+                let info = ctx.var.get_maybe_local_var(var.func_name, var.name)?.0;
+
+                let ret = if let Some(ret) = info.size.get(dim) {
+                    *ret
+                } else {
+                    bail!("VARSIZE exceed dimension of variable {name} dim is {dim} but variable's dimension is {var_dim}", name = var.name, var_dim = info.size.len());
+                };
+
+                ctx.push(ret);
+            }
+
+            BuiltinMethod::ExistCsv => {
+                check_arg_count!(1);
+                let no = get_arg!(@u32: args, ctx);
+                ctx.push(ctx.header_info.character_templates.contains_key(&no));
+            }
+
             BuiltinMethod::ChkData => {
                 check_arg_count!(1);
                 let idx = get_arg!(@u32: args, ctx);
