@@ -1098,13 +1098,14 @@ pub(super) async fn run_instruction(
 
                 ctx.push(
                     format!(
-                        "{year}{month}{day}{hour}{minute}{second}",
+                        "{year:04}{month:02}{day:02}{hour:02}{minute:02}{second:02}{milli:03}",
                         year = now.year(),
                         month = now.month() as u8,
                         day = now.day(),
                         hour = now.hour(),
                         minute = now.minute(),
-                        second = now.second()
+                        second = now.second(),
+                        milli = now.millisecond(),
                     )
                     .parse::<i64>()
                     .unwrap(),
