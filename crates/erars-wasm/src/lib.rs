@@ -183,7 +183,7 @@ impl WasmSystem {
             &console,
             &serde_wasm_bindgen::Serializer::json_compatible(),
         )
-        .expect("Serializa falied");
+        .expect("Serialize falied");
 
         self.from += lines;
         vconsole.need_rebuild = false;
@@ -233,6 +233,14 @@ impl ErarsContext {
             vconsole: VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log),
             ctx,
         }
+    }
+
+    pub fn get_config(&self) -> JsValue {
+        serde::Serialize::serialize(
+            &*self.ctx.config,
+            &serde_wasm_bindgen::Serializer::json_compatible(),
+        )
+        .expect("Serialize falied")
     }
 
     pub async fn run(&mut self) -> bool {
