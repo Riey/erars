@@ -301,7 +301,6 @@ pub fn run_script(
                             );
                         }
                     }
-                    log::info!("Replace: {:?}", info.rename);
                 }
                 "_REPLACE" => {
                     log::debug!("Merge _REPLACE.CSV");
@@ -433,6 +432,12 @@ pub fn run_script(
             }
             anyhow::bail!("Compile error");
         }
+
+        check_time!("Report errors");
+
+        erars_vm::check_pass::check_function_exist(&function_dic);
+
+        check_time!("Check codes");
     }
 
     let vm = TerminalVm::new(function_dic);
