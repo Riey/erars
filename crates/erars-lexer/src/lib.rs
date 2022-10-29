@@ -417,6 +417,7 @@ pub enum Token<'s> {
     #[token("PUTFORM", |lex| normal_expr_command(lex, BuiltinCommand::PutForm), ignore(ascii_case))]
     #[token("SETCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetColorByName), ignore(ascii_case))]
     #[token("SETBGCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetBgColorByName), ignore(ascii_case))]
+    #[token("ENCODETOUNI", |lex| normal_expr_command(lex, BuiltinCommand::EncodeToUni), ignore(ascii_case))]
     StrFormCommand((BuiltinCommand, &'s str)),
 
     #[token("STRLENFORM", |lex| normal_expr_method(lex, BuiltinMethod::StrLenS), ignore(ascii_case))]
@@ -452,7 +453,6 @@ pub enum Token<'s> {
     #[token("ARRAYSHIFT", |lex| normal_expr_command(lex, BuiltinCommand::ArrayShift), ignore(ascii_case))]
     #[token("SWAP", |lex| normal_expr_command(lex, BuiltinCommand::Swap), ignore(ascii_case))]
     #[token("REDRAW", |lex| normal_expr_command(lex, BuiltinCommand::Redraw), ignore(ascii_case))]
-    #[token("CHKFONT", |lex| normal_expr_command(lex, BuiltinCommand::ChkFont), ignore(ascii_case))]
     #[token("SETFONT", |lex| normal_expr_command(lex, BuiltinCommand::SetFont), ignore(ascii_case))]
     #[token("FONTSTYLE", |lex| normal_expr_command(lex, BuiltinCommand::FontStyle), ignore(ascii_case))]
     #[token("SAVEDATA", |lex| normal_expr_command(lex, BuiltinCommand::SaveData), ignore(ascii_case))]
@@ -484,6 +484,7 @@ pub enum Token<'s> {
     #[token("STRJOIN", |lex| normal_expr_method(lex, BuiltinMethod::StrJoin), ignore(ascii_case))]
     #[token("BARSTR", |lex| normal_expr_method(lex, BuiltinMethod::BarStr), ignore(ascii_case))]
     #[token("MONEYSTR", |lex| normal_expr_method(lex, BuiltinMethod::MoneyStr), ignore(ascii_case))]
+    #[token("CHKFONT", |lex| normal_expr_method(lex, BuiltinMethod::ChkFont), ignore(ascii_case))]
     #[token("GETBIT", |lex| normal_expr_method(lex, BuiltinMethod::GetBit), ignore(ascii_case))]
     #[token("ABS", |lex| normal_expr_method(lex, BuiltinMethod::Abs), ignore(ascii_case))]
     #[token("SIGN", |lex| normal_expr_method(lex, BuiltinMethod::Sign), ignore(ascii_case))]
