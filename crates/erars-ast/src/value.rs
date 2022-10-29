@@ -165,6 +165,12 @@ impl From<i64> for Value {
     }
 }
 
+impl From<usize> for Value {
+    fn from(v: usize) -> Self {
+        Self::Int(v as i64)
+    }
+}
+
 impl From<bool> for Value {
     fn from(b: bool) -> Self {
         Self::Int(b as _)
