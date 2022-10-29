@@ -46,6 +46,11 @@ pub enum BuiltinMethod {
     BarStr,
     MoneyStr,
     Unicode,
+    ToUpper,
+    ToLower,
+    ToHalf,
+    ToFull,
+    IsNumeric,
 
     GetExpLv = 50,
     GetPalamLv,

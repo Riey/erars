@@ -32,6 +32,7 @@ tinyvec = "1.6.0"
 static_assertions = "1.1.0"
 async-trait = "0.1.57"
 async-recursion = "1.0.0"
+unicode_hfwidth = "0.2.0"
 
 [dev-dependencies]
 k9 = "0.11.5"

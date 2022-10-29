@@ -931,13 +931,47 @@ pub(super) async fn run_instruction(
 
             BuiltinMethod::Unicode => {
                 check_arg_count!(1);
-                let code = get_arg!(@i64: args, ctx).try_into()?;
+                let code = get_arg!(@u32: args, ctx);
 
                 ctx.push(
                     char::from_u32(code)
                         .ok_or_else(|| anyhow!("u32 {code} is not valid unicode codepoint"))?
                         .to_string(),
                 );
+            }
+
+            BuiltinMethod::ToUpper => {
+                check_arg_count!(1);
+                let s = get_arg!(@String: args, ctx);
+                ctx.push(s.to_uppercase());
+            }
+
+            BuiltinMethod::ToLower => {
+                check_arg_count!(1);
+                let s = get_arg!(@String: args, ctx);
+                ctx.push(s.to_lowercase());
+            }
+
+            BuiltinMethod::ToHalf => {
+                check_arg_count!(1);
+                let s = get_arg!(@String: args, ctx);
+                ctx.push(String::from_iter(
+                    s.chars().map(|c| unicode_hfwidth::to_halfwidth(c).unwrap_or(c)),
+                ));
+            }
+
+            BuiltinMethod::ToFull => {
+                check_arg_count!(1);
+                let s = get_arg!(@String: args, ctx);
+                ctx.push(String::from_iter(
+                    s.chars().map(|c| unicode_hfwidth::to_fullwidth(c).unwrap_or(c)),
+                ));
+            }
+
+            BuiltinMethod::IsNumeric => {
+                check_arg_count!(1);
+                let s = get_arg!(@String: args, ctx);
+                ctx.push(s.parse::<i64>().is_ok());
             }
 
             BuiltinMethod::GetDefColor => {
