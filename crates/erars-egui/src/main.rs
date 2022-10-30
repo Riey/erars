@@ -238,11 +238,8 @@ impl App for EraApp {
                 SystemRequest::Quit => {
                     frame.close();
                 }
-                SystemRequest::Input(req, console_frame) => {
+                SystemRequest::Input(req) => {
                     log::info!("Req <- {:?}", req.ty);
-
-                    self.console_frame = console_frame;
-                    self.need_scroll_down = true;
 
                     match req.ty {
                         InputRequestType::AnyKey | InputRequestType::EnterKey if self.skip => {

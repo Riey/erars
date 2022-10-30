@@ -57,6 +57,8 @@ impl TerminalVm {
         let insts = body.body();
         let func_name = func_identifier.get_key(&ctx.var);
 
+        ctx.system.redraw(tx).await?;
+
         while let Some(inst) = insts.get(cursor).copied() {
             use InstructionWorkflow::*;
 

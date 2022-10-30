@@ -42,15 +42,21 @@ impl Default for Workflow {
 
 #[async_trait::async_trait(?Send)]
 pub trait SystemFunctions {
-    async fn input(
+    async fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>>;
+
+    async fn input_redraw(
         &mut self,
         vconsole: &mut VirtualConsole,
         req: InputRequest,
-    ) -> anyhow::Result<Option<Value>>;
+    ) -> anyhow::Result<Option<Value>> {
+        self.redraw(vconsole).await?;
+        self.input(req).await
+    }
 
-    async fn input_int(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<i64> {
+    async fn input_int_redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<i64> {
         let req = InputRequest::normal(vconsole.input_gen(), InputRequestType::Int);
-        self.input(vconsole, req)
+
+        self.input_redraw(vconsole, req)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Value is empty"))
             .and_then(Value::try_into_int)
@@ -85,11 +91,7 @@ pub struct NullSystemFunctions;
 #[async_trait::async_trait(?Send)]
 #[allow(unused_variables)]
 impl SystemFunctions for NullSystemFunctions {
-    async fn input(
-        &mut self,
-        vconsole: &mut VirtualConsole,
-        req: InputRequest,
-    ) -> anyhow::Result<Option<Value>> {
+    async fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
         Ok(None)
     }
 

@@ -50,18 +50,8 @@ impl ProxySystem {
 
 #[async_trait::async_trait(?Send)]
 impl SystemFunctions for ProxySystem {
-    async fn input(
-        &mut self,
-        vconsole: &mut VirtualConsole,
-        req: InputRequest,
-    ) -> anyhow::Result<Option<Value>> {
-        match self
-            .wait_response(SystemRequest::Input(
-                req,
-                ConsoleFrame::from_vconsole(vconsole),
-            ))
-            .await?
-        {
+    async fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
+        match self.wait_response(SystemRequest::Input(req)).await? {
             SystemResponse::Empty => Ok(None),
             SystemResponse::Input(value) => Ok(Some(value)),
             _ => bail!("Invalid proxy response"),
@@ -145,7 +135,7 @@ impl ConsoleFrame {
 
 pub enum SystemRequest {
     Redraw(ConsoleFrame),
-    Input(InputRequest, ConsoleFrame),
+    Input(InputRequest),
     SaveLocal(u32, SerializableVariableStorage),
     SaveGlobal(SerializableGlobalVariableStorage),
     LoadLocal(u32),

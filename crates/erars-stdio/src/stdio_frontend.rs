@@ -3,7 +3,7 @@ use erars_ui::{ConsoleLinePart, FontStyle, InputRequest, InputRequestType, Virtu
 use erars_vm::{
     SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, SystemFunctions,
 };
-use std::{collections::VecDeque, io, path::PathBuf};
+use std::{collections::VecDeque, io::{self, Write}, path::PathBuf};
 
 #[derive(Clone)]
 pub struct StdioFrontend {
@@ -27,7 +27,6 @@ impl StdioFrontend {
 
     fn draw(
         &mut self,
-        current_req: Option<&InputRequest>,
         vconsole: &mut VirtualConsole,
         mut out: impl io::Write,
     ) -> anyhow::Result<()> {
@@ -39,7 +38,7 @@ impl StdioFrontend {
             self.from = vconsole.top_index;
         }
 
-        let ret = vconsole.make_serializable(current_req, self.from);
+        let ret = vconsole.make_serializable(self.from);
 
         serde_json::to_writer(&mut out, &ret)?;
 
@@ -88,19 +87,21 @@ impl StdioFrontend {
 
 #[async_trait::async_trait(?Send)]
 impl SystemFunctions for StdioFrontend {
-    async fn input(
-        &mut self,
-        vconsole: &mut VirtualConsole,
-        req: InputRequest,
-    ) -> anyhow::Result<Option<Value>> {
-        self.draw(Some(&req), vconsole, &mut io::stdout().lock())?;
-
+    async fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
         if !self.inputs.is_empty() {
             if matches!(req.ty, InputRequestType::Int | InputRequestType::Str) {
                 return Ok(self.inputs.pop_front());
             } else {
                 return Ok(None);
             }
+        }
+
+        if self.json {
+            let out = io::stdout();
+            let mut out = out.lock();
+            writeln!(out)?;
+            serde_json::to_writer(&mut out, &req)?;
+            writeln!(out)?;
         }
 
         loop {
@@ -134,7 +135,7 @@ impl SystemFunctions for StdioFrontend {
     }
 
     async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
-        self.draw(None, vconsole, &mut io::stdout().lock())
+        self.draw(vconsole, &mut io::stdout().lock())
     }
     async fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
         erars_saveload_fs::load_local_list(&self.sav_path)

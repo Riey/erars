@@ -1,6 +1,6 @@
 [package]
 name = "erars-vm"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 
@@ -39,6 +39,7 @@ k9 = "0.11.5"
 
 [target.'wasm32-unknown-unknown'.dependencies]
 getrandom = { version = "0.2.7", features = ["js"] }
+time = { version = "0.3.14", features = ["wasm-bindgen"] }
 
 [features]
 multithread = ["rayon", "hashbrown/rayon"]

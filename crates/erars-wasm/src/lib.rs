@@ -8,13 +8,14 @@ use erars_vm::{
     SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, TerminalVm, VmContext,
 };
 use js_sys::Promise;
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::JsFuture;
 
 #[wasm_bindgen(typescript_custom_section)]
 const ITEXT_STYLE: &'static str = r#"
 interface ISystemCallbacks {
-    input: (console: any) => Promise<number | string>;
+    input: (input_req: any) => Promise<bigint | string>;
     redraw: (console: any) => Promise<void>;
 
     load_local: (idx: number) => Promise<string | null>;
@@ -32,7 +33,7 @@ extern "C" {
     pub type ISystemCallbacks;
 
     #[wasm_bindgen(method)]
-    fn input(this: &ISystemCallbacks, console: JsValue) -> Promise;
+    fn input(this: &ISystemCallbacks, input_req: JsValue) -> Promise;
     #[wasm_bindgen(method)]
     fn redraw(this: &ISystemCallbacks, console: JsValue) -> Promise;
 
@@ -54,16 +55,18 @@ pub struct WasmSystem {
     from: usize,
 }
 
+const JS_SERIALIZER: serde_wasm_bindgen::Serializer = serde_wasm_bindgen::Serializer::new()
+    .serialize_large_number_types_as_bigints(true)
+    .serialize_maps_as_objects(false)
+    .serialize_missing_as_null(false);
+
 #[async_trait::async_trait(?Send)]
 impl erars_vm::SystemFunctions for WasmSystem {
-    async fn input(
-        &mut self,
-        vconsole: &mut VirtualConsole,
-        req: InputRequest,
-    ) -> anyhow::Result<Option<Value>> {
-        let console = self.make_console_status(Some(&req), vconsole);
+    async fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
+        let req_js = req.serialize(&JS_SERIALIZER).expect("Serialize InputRequest");
+
         loop {
-            let value = JsFuture::from(self.callbacks.input(console.clone()))
+            let value = JsFuture::from(self.callbacks.input(req_js.clone()))
                 .await
                 .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
 
@@ -86,7 +89,7 @@ impl erars_vm::SystemFunctions for WasmSystem {
     }
 
     async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
-        let console = self.make_console_status(None, vconsole);
+        let console = self.make_console_status(vconsole);
         JsFuture::from(self.callbacks.redraw(console))
             .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
@@ -167,23 +170,15 @@ impl WasmSystem {
         Self { callbacks, from: 0 }
     }
 
-    pub fn make_console_status(
-        &mut self,
-        input_req: Option<&InputRequest>,
-        vconsole: &mut VirtualConsole,
-    ) -> JsValue {
+    pub fn make_console_status(&mut self, vconsole: &mut VirtualConsole) -> JsValue {
         if vconsole.need_rebuild {
             self.from = vconsole.top_index;
         }
 
-        let console = vconsole.make_serializable(input_req, self.from);
+        let console = vconsole.make_serializable(self.from);
         let lines = console.lines.len();
 
-        let value = serde::Serialize::serialize(
-            &console,
-            &serde_wasm_bindgen::Serializer::json_compatible(),
-        )
-        .expect("Serialize falied");
+        let value = console.serialize(&JS_SERIALIZER).expect("Serialize Console falied");
 
         self.from += lines;
         vconsole.need_rebuild = false;
