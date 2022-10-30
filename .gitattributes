@@ -1,4 +1,5 @@
 tests/compile_tests/* linguist-vendored
 tests/parse_tests/* linguist-vendored
 tests/run_tests/* linguist-vendored
+js-example/* linguist-vendored
 ERB/* linguist-vendored

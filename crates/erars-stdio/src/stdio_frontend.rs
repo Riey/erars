@@ -3,7 +3,11 @@ use erars_ui::{ConsoleLinePart, FontStyle, InputRequest, InputRequestType, Virtu
 use erars_vm::{
     SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, SystemFunctions,
 };
-use std::{collections::VecDeque, io::{self, Write}, path::PathBuf};
+use std::{
+    collections::VecDeque,
+    io::{self, Write},
+    path::PathBuf,
+};
 
 #[derive(Clone)]
 pub struct StdioFrontend {
