@@ -16,9 +16,6 @@ module.exports = {
         new WasmPackPlugin({
             crateDirectory: path.resolve(__dirname, "../crates/erars-wasm"),
             outDir: path.resolve(__dirname, 'pkg'),
-            watchDirectories: [
-                path.resolve(__dirname, "../crates")
-            ],
         }),
         // Have this example work in Edge which doesn't ship `TextEncoder` or
         // `TextDecoder` at this time.
@@ -27,7 +24,7 @@ module.exports = {
           TextEncoder: ['text-encoding', 'TextEncoder']
         })
     ],
-    mode: 'development',
+    mode: 'production',
     experiments: {
         asyncWebAssembly: true
    }

@@ -229,7 +229,6 @@ impl ConsoleLine {
 
 #[derive(Serialize)]
 pub struct ConsoleSerde<'a> {
-    pub current_req: Option<&'a InputRequest>,
     pub rebuild: bool,
     pub bg_color: Color,
     pub hl_color: Color,
@@ -278,13 +277,8 @@ impl VirtualConsole {
         }
     }
 
-    pub fn make_serializable<'a>(
-        &'a self,
-        req: Option<&'a InputRequest>,
-        from: usize,
-    ) -> ConsoleSerde<'a> {
+    pub fn make_serializable<'a>(&'a self, from: usize) -> ConsoleSerde<'a> {
         ConsoleSerde {
-            current_req: req,
             rebuild: self.need_rebuild,
             bg_color: self.bg_color,
             hl_color: self.hl_color,

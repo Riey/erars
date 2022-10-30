@@ -938,11 +938,7 @@ pub fn variable_arg<'c, 'a>(
         let is_arg = ctx.is_arg.get();
         ctx.is_arg.set(true);
         let mut args = Vec::new();
-        loop {
-            let i_ = match char_sp(':')(i) {
-                Ok((i, _)) => i,
-                _ => break,
-            };
+        while let Ok((i_, _)) = char_sp(':')(i) {
             let (i_, expr) = single_expr(ctx)(i_)?;
             let arg = if let Expr::Var(ref arg_var) = expr {
                 if arg_var.func_extern.is_some() {

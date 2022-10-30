@@ -232,56 +232,57 @@ impl EraConfig {
 
         while let Some(line) = lex.next() {
             match line {
-                ConfigToken::Line((key, value)) => match key.parse() {
-                    Ok(key) => match key {
-                        EraConfigKey::PrintcCount => {
-                            ret.printc_count = match value.parse() {
-                                Ok(l) => l,
-                                Err(_) => error!(lex, format!("Invalid integer {value}")),
-                            };
+                ConfigToken::Line((key, value)) => {
+                    if let Ok(key) = key.parse() {
+                        match key {
+                            EraConfigKey::PrintcCount => {
+                                ret.printc_count = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => error!(lex, format!("Invalid integer {value}")),
+                                };
+                            }
+                            EraConfigKey::MaxLog => {
+                                ret.max_log = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => error!(lex, format!("Invalid integer {value}")),
+                                };
+                            }
+                            EraConfigKey::PrintcWidth => {
+                                ret.printc_width = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => error!(lex, format!("Invalid integer {value}")),
+                                };
+                            }
+                            EraConfigKey::Lang => {
+                                ret.lang = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => error!(lex, format!("Invalid language {value}")),
+                                };
+                            }
+                            EraConfigKey::SaveNos => {
+                                ret.save_nos = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => error!(lex, format!("Invalid save_nos {value}")),
+                                };
+                            }
+                            EraConfigKey::FontFamily => {
+                                ret.font_family = value.into();
+                            }
+                            EraConfigKey::FontSize => {
+                                ret.font_size = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => error!(lex, format!("Invalid font_size {value}")),
+                                };
+                            }
+                            EraConfigKey::LineHeight => {
+                                ret.line_height = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => error!(lex, format!("Invalid line_height {value}")),
+                                };
+                            }
                         }
-                        EraConfigKey::MaxLog => {
-                            ret.max_log = match value.parse() {
-                                Ok(l) => l,
-                                Err(_) => error!(lex, format!("Invalid integer {value}")),
-                            };
-                        }
-                        EraConfigKey::PrintcWidth => {
-                            ret.printc_width = match value.parse() {
-                                Ok(l) => l,
-                                Err(_) => error!(lex, format!("Invalid integer {value}")),
-                            };
-                        }
-                        EraConfigKey::Lang => {
-                            ret.lang = match value.parse() {
-                                Ok(l) => l,
-                                Err(_) => error!(lex, format!("Invalid language {value}")),
-                            };
-                        }
-                        EraConfigKey::SaveNos => {
-                            ret.save_nos = match value.parse() {
-                                Ok(l) => l,
-                                Err(_) => error!(lex, format!("Invalid save_nos {value}")),
-                            };
-                        }
-                        EraConfigKey::FontFamily => {
-                            ret.font_family = value.into();
-                        }
-                        EraConfigKey::FontSize => {
-                            ret.font_size = match value.parse() {
-                                Ok(l) => l,
-                                Err(_) => error!(lex, format!("Invalid font_size {value}")),
-                            };
-                        }
-                        EraConfigKey::LineHeight => {
-                            ret.line_height = match value.parse() {
-                                Ok(l) => l,
-                                Err(_) => error!(lex, format!("Invalid line_height {value}")),
-                            };
-                        }
-                    },
-                    Err(_) => {}
-                },
+                    }
+                }
                 ConfigToken::Error => error!(lex, format!("Invalid token: {}", lex.slice())),
             }
         }
@@ -833,7 +834,7 @@ impl ParserContext {
             }
             Token::CustomDrawLine(custom) => Stmt::Command(
                 BuiltinCommand::CustomDrawLine,
-                vec![Expr::str(&self.interner, custom)],
+                vec![Expr::str(self.interner, custom)],
             ),
             Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
             Token::Throw(left) => Stmt::Command(
@@ -1175,7 +1176,7 @@ impl ParserContext {
                                 header: FunctionHeader {
                                     name: self.interner.get_or_intern(label),
                                     args,
-                                    file_path: self.file_path.clone(),
+                                    file_path: self.file_path,
                                     infos,
                                 },
                                 goto_labels: compiler.goto_labels,
@@ -1189,7 +1190,7 @@ impl ParserContext {
                                 header: FunctionHeader {
                                     name: self.interner.get_or_intern(label),
                                     args,
-                                    file_path: self.file_path.clone(),
+                                    file_path: self.file_path,
                                     infos,
                                 },
                                 goto_labels: compiler.goto_labels,
@@ -1283,7 +1284,7 @@ impl ParserContext {
                                 header: FunctionHeader {
                                     name: self.interner.get_or_intern(label),
                                     args,
-                                    file_path: self.file_path.clone(),
+                                    file_path: self.file_path,
                                     infos,
                                 },
                                 body,
@@ -1296,7 +1297,7 @@ impl ParserContext {
                                 header: FunctionHeader {
                                     name: self.interner.get_or_intern(label),
                                     args,
-                                    file_path: self.file_path.clone(),
+                                    file_path: self.file_path,
                                     infos,
                                 },
                                 body,
@@ -1368,21 +1369,21 @@ impl ParserContext {
 }
 
 impl ParserContext {
-    pub fn parse_program_str<'s>(&self, s: &'s str) -> ParserResult<Vec<Function>> {
+    pub fn parse_program_str(&self, s: &str) -> ParserResult<Vec<Function>> {
         self.parse(&mut Lexer::new(s))
     }
 
-    pub fn parse_function_str<'s>(&self, s: &'s str) -> ParserResult<Function> {
+    pub fn parse_function_str(&self, s: &str) -> ParserResult<Function> {
         self.parse_program_str(s).map(|f| f.into_iter().next().unwrap())
     }
 
-    pub fn parse_expr_str<'s>(&self, s: &'s str) -> ParserResult<Expr> {
-        let lex = Lexer::<Token<'s>>::new(s);
+    pub fn parse_expr_str(&self, s: &str) -> ParserResult<Expr> {
+        let lex = Lexer::<Token>::new(s);
         Ok(try_nom!(lex, self::expr::expr(self)(s)).1)
     }
 
-    pub fn parse_body_str<'s>(&self, s: &'s str) -> ParserResult<Vec<StmtWithPos>> {
-        let mut lex = Lexer::<Token<'s>>::new(s);
+    pub fn parse_body_str(&self, s: &str) -> ParserResult<Vec<StmtWithPos>> {
+        let mut lex = Lexer::<Token>::new(s);
         let mut body = Vec::new();
 
         loop {
@@ -1395,7 +1396,7 @@ impl ParserContext {
         Ok(body)
     }
 
-    pub fn parse_stmt_str<'s>(&self, s: &'s str) -> ParserResult<StmtWithPos> {
+    pub fn parse_stmt_str(&self, s: &str) -> ParserResult<StmtWithPos> {
         let mut lex = Lexer::new(s);
         let first = self.next_token(&mut lex)?.unwrap();
         self.parse_stmt(first, &mut lex)

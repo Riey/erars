@@ -6,7 +6,7 @@ use crate::{context::VariableRef, variable::KnownVariableNames as Var};
 use super::*;
 
 const BASE_TIME: time::OffsetDateTime = time::PrimitiveDateTime::new(
-    if let Ok(d) = time::Date::from_ordinal_date(0001, 1) {
+    if let Ok(d) = time::Date::from_ordinal_date(1, 1) {
         d
     } else {
         unreachable!()
@@ -208,7 +208,7 @@ pub(super) async fn run_instruction(
         if flags.contains(PrintFlags::WAIT) {
             let gen = tx.input_gen();
             ctx.system
-                .input(
+                .input_redraw(
                     tx,
                     InputRequest {
                         generation: gen,
@@ -1617,7 +1617,7 @@ pub(super) async fn run_instruction(
 
                 let gen = tx.input_gen();
                 ctx.system
-                    .input(
+                    .input_redraw(
                         tx,
                         InputRequest {
                             generation: gen,
@@ -1636,7 +1636,7 @@ pub(super) async fn run_instruction(
             BuiltinCommand::Wait | BuiltinCommand::WaitAnykey | BuiltinCommand::ForceWait => {
                 let gen = tx.input_gen();
                 ctx.system
-                    .input(
+                    .input_redraw(
                         tx,
                         InputRequest::normal(
                             gen,
@@ -1734,7 +1734,7 @@ pub(super) async fn run_instruction(
 
                 let ty = req.ty;
 
-                let ret = ctx.system.input(tx, req).await?;
+                let ret = ctx.system.input_redraw(tx, req).await?;
 
                 match (ty, ret) {
                     (InputRequestType::Int, Some(Value::Int(i))) => {
@@ -1937,7 +1937,7 @@ async fn run_save_game(
     print_sav_data_list(&savs, tx);
 
     loop {
-        match ctx.system.input_int(tx).await? {
+        match ctx.system.input_int_redraw(tx).await? {
             100 => break Ok(Workflow::Return),
             i if i >= 0 && i < SAVE_COUNT as i64 => {
                 let i = i as u32;
@@ -1946,7 +1946,7 @@ async fn run_save_game(
                     tx.print_line("[0] Yes [1] No".into());
 
                     loop {
-                        match ctx.system.input_int(tx).await? {
+                        match ctx.system.input_int_redraw(tx).await? {
                             0 => break true,
                             1 => break false,
                             _ => continue,
@@ -1976,7 +1976,7 @@ async fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<O
     print_sav_data_list(&savs, tx);
 
     loop {
-        match ctx.system.input_int(tx).await? {
+        match ctx.system.input_int_redraw(tx).await? {
             100 => break Ok(None),
             i if i >= 0 && i < SAVE_COUNT as i64 => {
                 if let Some(_) = savs.remove(&(i as u32)) {
@@ -2107,7 +2107,7 @@ pub async fn run_begin(
 
                         ctx.var.prepare_train_data()?;
 
-                        let no = ctx.system.input_int(tx).await?;
+                        let no = ctx.system.input_int_redraw(tx).await?;
                         ctx.var.set_result(no);
 
                         let com_exists = match no.try_into() {
@@ -2156,7 +2156,7 @@ pub async fn run_begin(
             try_call!(vm, "SHOW_ABLUP_SELECT", tx, ctx);
 
             loop {
-                let i = ctx.system.input_int(tx).await?;
+                let i = ctx.system.input_int_redraw(tx).await?;
                 ctx.var.set_result(i);
 
                 if matches!(i, 0..=99) {
@@ -2178,7 +2178,7 @@ pub async fn run_begin(
             loop {
                 try_call!(vm, "SHOW_SHOP", tx, ctx);
 
-                let i = ctx.system.input_int(tx).await?;
+                let i = ctx.system.input_int_redraw(tx).await?;
                 ctx.var.set_result(i);
 
                 if i >= 0 && i < ctx.header_info.replace.sell_item_count {

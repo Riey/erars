@@ -139,7 +139,7 @@ impl VmContext {
     ) -> Result<(&'c mut VariableInfo, &'c mut UniformVariable, ArgVec)> {
         let (info, var) = self.var.get_maybe_local_var(r.func_name, r.name)?;
 
-        Ok((info, var, r.idxs.clone()))
+        Ok((info, var, r.idxs))
     }
 
     pub fn new_func(&mut self, func_name: FunctionIdentifier, file_path: StrKey) {
