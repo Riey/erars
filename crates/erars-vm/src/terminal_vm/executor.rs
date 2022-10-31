@@ -742,7 +742,7 @@ async fn run_builtin_method(
     macro_rules! csv_method {
         ($field:ident) => {
             check_arg_count!(1, 2);
-            let no = get_arg!(@i64: args, ctx) as u32;
+            let no = get_arg!(@i64: args, ctx);
             let sp = get_arg!(@opt @i64: args, ctx);
 
             if sp.map_or(false, |sp| sp != 0) {
@@ -761,7 +761,7 @@ async fn run_builtin_method(
 
         (@arr $field:ident) => {
             check_arg_count!(2, 3);
-            let no = get_arg!(@i64: args, ctx) as u32;
+            let no = get_arg!(@i64: args, ctx);
             let idx = get_arg!(@i64: args, ctx) as u32;
             let sp = get_arg!(@opt @i64: args, ctx);
 
@@ -1622,7 +1622,7 @@ async fn run_builtin_method(
 
         BuiltinMethod::ExistCsv => {
             check_arg_count!(1);
-            let no = get_arg!(@u32: args, ctx);
+            let no = get_arg!(@i64: args, ctx);
             ctx.push(ctx.header_info.character_templates.contains_key(&no));
         }
 
@@ -2129,7 +2129,7 @@ async fn run_builtin_command(
             ctx.var.copy_chara(from, to);
         }
         BuiltinCommand::AddChara => {
-            let no = get_arg!(@u32: args, ctx);
+            let no = get_arg!(@i64: args, ctx);
             let template = ctx
                 .header_info
                 .character_templates

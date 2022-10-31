@@ -87,23 +87,23 @@ macro_rules! try_nom {
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct CharacterTemplate {
-    pub no: u32,
+    pub no: i64,
     pub is_assi: bool,
     pub name: String,
     pub call_name: String,
     pub nick_name: String,
     pub master_name: String,
-    pub base: HashMap<u32, u32>,
-    pub abl: HashMap<u32, u32>,
-    pub cflag: HashMap<u32, u32>,
-    pub equip: HashMap<u32, u32>,
-    pub juel: HashMap<u32, u32>,
+    pub base: HashMap<u32, i64>,
+    pub abl: HashMap<u32, i64>,
+    pub cflag: HashMap<u32, i64>,
+    pub equip: HashMap<u32, i64>,
+    pub juel: HashMap<u32, i64>,
     pub cstr: HashMap<u32, String>,
-    pub talent: HashMap<u32, u32>,
-    pub exp: HashMap<u32, u32>,
-    pub ex: HashMap<u32, u32>,
-    pub mark: HashMap<u32, u32>,
-    pub relation: HashMap<u32, u32>,
+    pub talent: HashMap<u32, i64>,
+    pub exp: HashMap<u32, i64>,
+    pub ex: HashMap<u32, i64>,
+    pub mark: HashMap<u32, i64>,
+    pub relation: HashMap<u32, i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -334,7 +334,7 @@ pub struct HeaderInfo {
     pub gamebase: Gamebase,
     pub rename: HashMap<StrKey, StrKey>,
     pub replace: ReplaceInfo,
-    pub character_templates: HashMap<u32, CharacterTemplate>,
+    pub character_templates: HashMap<i64, CharacterTemplate>,
     pub item_price: HashMap<u32, u32>,
     pub var_names: HashMap<StrKey, HashMap<StrKey, u32>>,
     pub var_name_var: HashMap<StrKey, BTreeMap<u32, StrKey>>,
@@ -399,7 +399,7 @@ impl HeaderInfo {
                     }
                 };
 
-                let value = match $val2.parse::<u32>() {
+                let value = match $val2.parse::<i64>() {
                     Ok(idx) => idx,
                     _ => error_csv!("잘못된 숫자입니다.", $span),
                 };
