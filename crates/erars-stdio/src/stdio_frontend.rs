@@ -45,6 +45,7 @@ impl StdioFrontend {
         let ret = vconsole.make_serializable(self.from);
 
         serde_json::to_writer(&mut out, &ret)?;
+        writeln!(out)?;
 
         self.from += ret.lines.len();
         vconsole.need_rebuild = false;
@@ -103,7 +104,6 @@ impl SystemFunctions for StdioFrontend {
         if self.json {
             let out = io::stdout();
             let mut out = out.lock();
-            writeln!(out)?;
             serde_json::to_writer(&mut out, &req)?;
             writeln!(out)?;
         }
@@ -139,6 +139,10 @@ impl SystemFunctions for StdioFrontend {
     }
 
     async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
+        if !vconsole.need_rebuild && self.from == vconsole.line_count() && vconsole.line_is_empty() {
+            // skip redraw
+            return Ok(());
+        }
         self.draw(vconsole, &mut io::stdout().lock())
     }
     async fn load_local_list(&mut self) -> anyhow::Result<SaveList> {

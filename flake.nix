@@ -55,15 +55,24 @@
                     );
                 in rec
                 {
-                    devShell = pkgs.mkShell {
+                    devShell = pkgs.mkShell rec {
                         name = "erars-shell";
                         nativeBuildInputs = with pkgs; [
                             pkg-config
+                            cmake
                             rustfmt
                             rustc
                             cargo
                             just
                         ];
+                        buildInputs = with pkgs; [
+                            fontconfig
+                            xorg.libX11
+                            xorg.libXcursor
+                            xorg.libXrandr
+                            xorg.libXi
+                        ];
+                        LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}:/run/opengl-driver/lib";
                         RUST_BACKTRACE=1;
                     };
 
