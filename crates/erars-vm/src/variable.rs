@@ -112,6 +112,14 @@ impl VariableStorage {
         self.interner.resolve(&key)
     }
 
+    pub fn check_var_exists(&self, fn_name: StrKey, name: StrKey) -> bool {
+        self.variables.contains_key(&name)
+            || self
+                .local_variables
+                .get(&fn_name)
+                .map_or(false, |v| v.contains_key(&name))
+    }
+
     pub fn clear_dynamic_vars(&mut self, name: StrKey) {
         if let Some(local_dic) = self.local_variables.get_mut(&name) {
             for (_, (info, var)) in local_dic.iter_mut() {
