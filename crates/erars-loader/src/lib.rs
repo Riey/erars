@@ -435,7 +435,7 @@ pub fn run_script(
 
         check_time!("Report errors");
 
-        erars_vm::check_pass::check_function_exist(&function_dic);
+        erars_vm::check_pass::check_function(&function_dic, &ctx.var);
 
         check_time!("Check codes");
     }
