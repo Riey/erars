@@ -16,6 +16,9 @@ use crate::variable::KnownVariableNames;
 use crate::ArgVec;
 use crate::VariableStorage;
 
+// Tag(8), Data(8)
+static_assertions::assert_eq_size!(InlineValue, (u64, i64));
+
 // StrKey(4), ArgVec(4 * 4), Option<InlineValue>(8 * 2)
 static_assertions::assert_eq_size!(FunctionArgDef, [u32; 10]);
 

@@ -860,15 +860,15 @@ pub fn dim_line<'c, 'a>(
 pub fn const_eval<'e>(ctx: &ParserContext, expr: &'e Expr) -> Result<InlineValue, &'e Expr> {
     match expr {
         Expr::Int(i) => Ok(InlineValue::Int(*i)),
-        Expr::String(s) => Ok(InlineValue::String(*s)),
+        Expr::String(s) => Ok(InlineValue::String(*s, 0)),
         Expr::UnaryopExpr(expr, op) => match op {
             UnaryOperator::Minus => match const_eval(ctx, expr)? {
                 InlineValue::Int(i) => Ok(InlineValue::Int(-i)),
-                InlineValue::String(_) => Err(expr),
+                InlineValue::String(_, _) => Err(expr),
             },
             UnaryOperator::Not => match const_eval(ctx, expr)? {
                 InlineValue::Int(i) => Ok(InlineValue::Int(!i)),
-                InlineValue::String(_) => Err(expr),
+                InlineValue::String(_, _) => Err(expr),
             },
         },
         _ => Err(expr),

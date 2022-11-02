@@ -836,7 +836,7 @@ impl VmVariable {
         for (idx, init_var) in info.init.iter().enumerate() {
             match init_var {
                 InlineValue::Int(i) => ret.set(idx as u32, *i).unwrap(),
-                InlineValue::String(s) => ret.set(idx as u32, s.resolve()).unwrap(),
+                InlineValue::String(s, _) => ret.set(idx as u32, s.resolve()).unwrap(),
             }
         }
 

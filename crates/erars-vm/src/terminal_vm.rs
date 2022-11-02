@@ -156,7 +156,7 @@ impl TerminalVm {
             let arg = args.next().or_else(|| {
                 default_value.clone().map(|v| match v {
                     InlineValue::Int(i) => Value::Int(i),
-                    InlineValue::String(s) => Value::String(s.resolve().into()),
+                    InlineValue::String(s, _) => Value::String(s.resolve().into()),
                 })
             });
 
