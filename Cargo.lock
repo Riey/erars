@@ -971,7 +971,7 @@ dependencies = [
 
 [[package]]
 name = "erars"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "codespan",
  "codespan-reporting",
@@ -1215,7 +1215,7 @@ dependencies = [
 
 [[package]]
 name = "erars-wasm"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "anyhow",
  "async-trait",
