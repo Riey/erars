@@ -10,6 +10,7 @@ use strum::{Display, EnumString, IntoStaticStr};
 #[repr(u32)]
 pub enum BuiltinVariable {
     AblName,
+    BaseName,
     TalentName,
     ItemName,
     FlagName,

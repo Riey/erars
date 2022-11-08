@@ -367,7 +367,7 @@ pub(super) async fn run_instruction(
                 ctx.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
             }
 
-            AblName | TalentName | TrainName | ItemName | FlagName | ExName | ExpName
+            AblName | BaseName | TalentName | TrainName | ItemName | FlagName | ExName | ExpName
             | MarkName | CflagName | CstrName | StrName | TstrName | EquipName | TequipName
             | PalamName | SourceName | StainName | TcvarName | GlobalName | GlobalsName
             | SaveStrName => {
