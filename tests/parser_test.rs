@@ -1876,6 +1876,8 @@ Function {
                         is_chara: false,
                         is_str: false,
                         is_global: false,
+                        is_const: false,
+                        is_ref: false,
                         is_savedata: false,
                         is_dynamic: false,
                         default_int: 0,
