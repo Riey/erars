@@ -4,6 +4,8 @@ use erars_ast::StrKey;
 #[cfg(feature = "multithread")]
 use rayon::prelude::*;
 
+// TODO: const assign pass
+
 fn check_function_exist_inner(fn_name: StrKey, func: &FunctionBody, dic: &FunctionDic) {
     let mut current_line = 1;
     for (i, inst) in func.body().iter().enumerate() {

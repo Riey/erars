@@ -121,7 +121,13 @@ impl VmContext {
     }
 
     pub fn set_var_ref(&mut self, var_ref: &VariableRef, value: Value) -> Result<()> {
-        let (_, var, idx) = self.resolve_var_ref(var_ref)?;
+        let (info, var, idx) = self.resolve_var_ref(var_ref)?;
+        if info.is_const {
+            bail!(
+                "variable {} can't be modified because it's CONST",
+                var_ref.name
+            );
+        }
         var.set(idx, value)?;
         Ok(())
     }

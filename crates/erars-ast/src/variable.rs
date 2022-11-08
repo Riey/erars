@@ -85,6 +85,8 @@ pub struct VariableInfo {
     pub is_chara: bool,
     pub is_str: bool,
     pub is_global: bool,
+    pub is_const: bool,
+    pub is_ref: bool,
     pub is_savedata: bool,
     pub is_dynamic: bool,
     pub default_int: i64,
