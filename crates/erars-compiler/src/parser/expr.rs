@@ -317,9 +317,9 @@ fn ident_or_method_expr<'c, 'a>(
             let (i, func_extern) = var_func_extern(ctx, i)?;
             match ident {
                 Cow::Borrowed(ident) => {
-                    let var = to_var_ident(ident);
+                    let var = ident;
                     if !ctx.is_arg.get() {
-                        let (i, args) = variable_arg(ctx, &var)(i)?;
+                        let (i, args) = variable_arg(ctx, var)(i)?;
 
                         if let Ok(var) = var.parse() {
                             Ok((i, Expr::BuiltinVar(var, args)))
@@ -755,18 +755,6 @@ pub fn times_line<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IRes
     }
 }
 
-pub fn to_var_ident<'s>(s: impl Into<Cow<'s, str>>) -> Cow<'s, str> {
-    let s = s.into();
-
-    if Cow::as_ref(&s).chars().any(|c| c.is_ascii_lowercase()) {
-        // todo send diagnostic
-        log::warn!("Variable name is not UPPERCASE: {s}");
-        Cow::Owned(s.as_ref().to_ascii_uppercase())
-    } else {
-        s
-    }
-}
-
 pub fn assign_line<'c, 'a>(
     ctx: &'c ParserContext,
     ident: &'c str,
@@ -778,8 +766,6 @@ pub fn assign_line<'c, 'a>(
             log::error!("Expanded variable name in assign line is incorrect `{var_name}`");
             return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
         }
-
-        let var_name = to_var_ident(var_name);
 
         i = i.trim_end_matches(' ');
 
@@ -868,7 +854,7 @@ pub fn dim_line<'c, 'a>(
         Ok((
             i,
             LocalVariable {
-                var: ctx.interner.get_or_intern(to_var_ident(var)),
+                var: ctx.interner.get_or_intern(var),
                 info,
             },
         ))
