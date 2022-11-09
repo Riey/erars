@@ -1,18 +1,12 @@
 use anyhow::Context;
+use erars_reader::read_file;
 use parking_lot::Mutex;
 #[cfg(feature = "multithread")]
 use rayon::prelude::*;
-use std::{
-    fs::File,
-    io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom},
-    path::Path,
-    sync::Arc,
-    time::Instant,
-};
+use std::{fs::File, io::BufWriter, path::Path, sync::Arc, time::Instant};
 
 use codespan_reporting::{
     diagnostic::{Diagnostic, Label},
-    files::SimpleFiles,
     term::{
         termcolor::{ColorChoice, StandardStream, WriteColor},
         Config,
@@ -20,62 +14,10 @@ use codespan_reporting::{
 };
 use erars_ast::{StrKey, VariableInfo};
 use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
+use erars_lint::{check_function, ErarsFiles};
 use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, SystemFunctions, TerminalVm, VmContext};
 use hashbrown::HashMap;
-
-/// Read string from path respect BOM
-fn read_file(path: &Path) -> std::io::Result<String> {
-    let mut file = std::fs::File::open(path)?;
-
-    use unicode_bom::Bom;
-
-    match Bom::from(&mut file) {
-        Bom::Utf8 => {
-            file.seek(SeekFrom::Start(Bom::Utf8.len() as _))?;
-            let mut out = String::with_capacity(file.metadata()?.len() as usize);
-            file.read_to_string(&mut out)?;
-            Ok(out)
-        }
-        other => {
-            file.seek(SeekFrom::Start(other.len() as _))?;
-            let encoding = match other {
-                Bom::Null => encoding_rs::SHIFT_JIS,
-                Bom::Utf16Be => encoding_rs::UTF_16BE,
-                Bom::Utf16Le => encoding_rs::UTF_16LE,
-                Bom::Utf8 => unreachable!(),
-                other => panic!("Unsupported BOM {other}"),
-            };
-
-            let mut decoder = encoding.new_decoder();
-
-            let len = decoder
-                .max_utf8_buffer_length(file.metadata()?.len() as usize)
-                .expect("File is too large");
-
-            let mut reader = BufReader::new(file);
-            let mut out = String::with_capacity(len);
-
-            loop {
-                let src = reader.fill_buf()?;
-
-                if src.is_empty() {
-                    break;
-                }
-
-                let (_ret, size, had_errors) = decoder.decode_to_string(src, &mut out, false);
-
-                if had_errors {
-                    log::error!("Invalid text detected from {}", path.display());
-                }
-
-                reader.consume(size);
-            }
-
-            Ok(out)
-        }
-    }
-}
 
 pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
     let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);
@@ -155,6 +97,8 @@ pub fn run_script(
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     erars_ast::init_interner();
 
+    let interner = erars_ast::get_interner();
+
     let mut time = Instant::now();
 
     let config = Arc::new(config);
@@ -213,9 +157,19 @@ pub fn run_script(
         #[cfg(feature = "multithread")]
         let erbs = erbs.par_bridge();
 
-        let mut files = Mutex::new(SimpleFiles::new());
-        let mut diagnostic =
-            Mutex::new(Diagnostic::error().with_code("E0001").with_message("Compile ERROR"));
+        let files = Mutex::new(ErarsFiles::new());
+        let diagnostics = Mutex::new(Vec::new());
+
+        macro_rules! report_error {
+            ($code:expr, $msg:expr, $path:expr, $source:expr, $err:expr, $span:expr) => {
+                diagnostics.lock().push(
+                    Diagnostic::error()
+                        .with_code($code)
+                        .with_message($msg)
+                        .with_labels(vec![Label::primary(files.lock().add(interner.get_or_intern($path.display().to_string()), $source), $span).with_message($err)]),
+                );
+            };
+        }
 
         let mut info = HeaderInfo {
             global_variables: var_infos,
@@ -255,10 +209,7 @@ pub fn run_script(
                     match info.merge_name_csv(&k, &v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(path.display().to_string(), v);
-                            diagnostic.lock().labels.push(
-                                Label::primary(file_id, span).with_message(format!("{}", err)),
-                            );
+                            report_error!("E0000", "Parse name csv", path, v, err, span);
                         }
                     }
                 }
@@ -268,10 +219,7 @@ pub fn run_script(
                     match info.merge_gamebase_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(path.display().to_string(), v);
-                            diagnostic.lock().labels.push(
-                                Label::primary(file_id, span).with_message(format!("{}", err)),
-                            );
+                            report_error!("E0000", "Parse gamebase csv", path, v, err, span);
                         }
                     }
 
@@ -283,10 +231,7 @@ pub fn run_script(
                     match info.merge_variable_size_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(path.display().to_string(), v);
-                            diagnostic.lock().labels.push(
-                                Label::primary(file_id, span).with_message(format!("{}", err)),
-                            );
+                            report_error!("E0000", "Parse variablesize csv", path, v, err, span);
                         }
                     }
                 }
@@ -295,10 +240,7 @@ pub fn run_script(
                     match info.merge_rename_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(path.display().to_string(), v);
-                            diagnostic.lock().labels.push(
-                                Label::primary(file_id, span).with_message(format!("{}", err)),
-                            );
+                            report_error!("E0000", "Parse _rename csv", path, v, err, span);
                         }
                     }
                 }
@@ -307,10 +249,7 @@ pub fn run_script(
                     match info.merge_replace_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(path.display().to_string(), v);
-                            diagnostic.lock().labels.push(
-                                Label::primary(file_id, span).with_message(format!("{}", err)),
-                            );
+                            report_error!("E0000", "Parse _replace csv", path, v, err, span);
                         }
                     }
                     log::info!("Replace: {:?}", info.replace);
@@ -320,10 +259,7 @@ pub fn run_script(
                     match info.merge_item_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
-                            let file_id = files.lock().add(path.display().to_string(), v);
-                            diagnostic.lock().labels.push(
-                                Label::primary(file_id, span).with_message(format!("{}", err)),
-                            );
+                            report_error!("E0000", "Parse item csv", path, v, err, span);
                         }
                     }
                 }
@@ -340,11 +276,7 @@ pub fn run_script(
             match info.merge_chara_csv(&v) {
                 Ok(()) => {}
                 Err((err, span)) => {
-                    let file_id = files.lock().add(path.display().to_string(), v);
-                    diagnostic
-                        .lock()
-                        .labels
-                        .push(Label::primary(file_id, span).with_message(format!("{}", err)));
+                    report_error!("E0000", "Parse character csv", path, v, err, span);
                 }
             }
         }
@@ -361,11 +293,7 @@ pub fn run_script(
             match info.merge_header(&source) {
                 Ok(()) => (),
                 Err((err, span)) => {
-                    let file_id = files.get_mut().add(erh.to_str().unwrap().to_string(), source);
-                    diagnostic
-                        .get_mut()
-                        .labels
-                        .push(Label::primary(file_id, span).with_message(format!("{}", err)));
+                    report_error!("E1000", "Parse erh", erh, source, err, span);
                 }
             }
         }
@@ -391,11 +319,7 @@ pub fn run_script(
                 match program {
                     Ok(p) => p,
                     Err((err, span)) => {
-                        let file_id = files.lock().add(erb.to_str().unwrap().to_string(), source);
-                        diagnostic
-                            .lock()
-                            .labels
-                            .push(Label::primary(file_id, span).with_message(format!("{}", err)));
+                        report_error!("E2000", "Parse erb", erb, source, err, span);
                         Vec::new()
                     }
                 }
@@ -414,30 +338,38 @@ pub fn run_script(
 
         check_time!("Parse/Compile ERB");
 
-        let diagnostic = diagnostic.into_inner();
-        let files = files.into_inner();
+        let mut diagnostics = diagnostics.into_inner();
+        let mut files = files.into_inner();
 
-        if !diagnostic.labels.is_empty() {
+        diagnostics.extend(check_function(&function_dic, &ctx.var, &mut files));
+
+        check_time!("Check codes");
+
+        if !diagnostics.is_empty() {
+            log::error!("총 {}개의 에러가 발생했습니다.", diagnostics.len());
+
             let config = Config::default();
             if error_to_stderr {
                 let writer = StandardStream::stderr(ColorChoice::Always);
-                codespan_reporting::term::emit(&mut writer.lock(), &config, &files, &diagnostic)
+                for diagnostic in diagnostics {
+                    codespan_reporting::term::emit(
+                        &mut writer.lock(),
+                        &config,
+                        &files,
+                        &diagnostic,
+                    )
                     .unwrap();
+                    {
+                        let mut writer = LogWriter::default();
+                        codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic)
+                            .unwrap();
+                        std::io::Write::flush(&mut writer).unwrap();
+                    }
+                }
             }
-            log::error!("총 {}개의 에러가 발생했습니다.", diagnostic.labels.len());
-            {
-                let mut writer = LogWriter::default();
-                codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic).unwrap();
-                std::io::Write::flush(&mut writer).unwrap();
-            }
-            anyhow::bail!("Compile error");
         }
 
         check_time!("Report errors");
-
-        erars_vm::check_pass::check_function(&function_dic, &ctx.var);
-
-        check_time!("Check codes");
     }
 
     let vm = TerminalVm::new(function_dic);

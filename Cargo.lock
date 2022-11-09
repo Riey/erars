@@ -1086,16 +1086,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "erars-lint"
+version = "0.1.0"
+dependencies = [
+ "codespan-reporting",
+ "erars-ast",
+ "erars-compiler",
+ "erars-reader",
+ "erars-vm",
+ "hashbrown 0.12.3",
+ "parking_lot",
+ "rayon",
+]
+
+[[package]]
 name = "erars-loader"
 version = "0.4.0"
 dependencies = [
  "anyhow",
  "codespan",
  "codespan-reporting",
- "encoding_rs",
  "erars-ast",
  "erars-bytecode",
  "erars-compiler",
+ "erars-lint",
+ "erars-reader",
  "erars-ui",
  "erars-vm",
  "glob",
@@ -1106,7 +1121,6 @@ dependencies = [
  "rayon",
  "rmp-serde",
  "serde_yaml",
- "unicode-bom",
 ]
 
 [[package]]
@@ -1120,6 +1134,15 @@ dependencies = [
  "erars-ui",
  "erars-vm",
  "flume",
+]
+
+[[package]]
+name = "erars-reader"
+version = "0.1.0"
+dependencies = [
+ "encoding_rs",
+ "log",
+ "unicode-bom",
 ]
 
 [[package]]

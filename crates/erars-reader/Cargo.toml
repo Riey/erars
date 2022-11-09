@@ -1,0 +1,10 @@
+[package]
+name = "erars-reader"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+unicode-bom = "1.1.4"
+encoding_rs = "0.8.31"
+log = "0.4.17"

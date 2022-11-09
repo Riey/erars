@@ -461,18 +461,23 @@ mod body {
         If(
             [
                 (
-                    BinopExpr(
-                        Var(
-                            Variable {
-                                var: A,
-                                func_extern: None,
-                                args: [],
-                            },
+                    ExprWithPos(
+                        BinopExpr(
+                            Var(
+                                Variable {
+                                    var: A,
+                                    func_extern: None,
+                                    args: [],
+                                },
+                            ),
+                            Greater,
+                            Int(
+                                1,
+                            ),
                         ),
-                        Greater,
-                        Int(
-                            1,
-                        ),
+                        ScriptPosition {
+                            line: 1,
+                        },
                     ),
                     [
                         StmtWithPos(
@@ -489,18 +494,23 @@ mod body {
                     ],
                 ),
                 (
-                    BinopExpr(
-                        Var(
-                            Variable {
-                                var: A,
-                                func_extern: None,
-                                args: [],
-                            },
+                    ExprWithPos(
+                        BinopExpr(
+                            Var(
+                                Variable {
+                                    var: A,
+                                    func_extern: None,
+                                    args: [],
+                                },
+                            ),
+                            Equal,
+                            Int(
+                                1,
+                            ),
                         ),
-                        Equal,
-                        Int(
-                            1,
-                        ),
+                        ScriptPosition {
+                            line: 3,
+                        },
                     ),
                     [
                         StmtWithPos(
@@ -2232,27 +2242,32 @@ Function {
             If(
                 [
                     (
-                        BinopExpr(
-                            BuiltinMethod(
-                                Abs,
-                                [
-                                    Var(
-                                        Variable {
-                                            var: LOCAL,
-                                            func_extern: None,
-                                            args: [
-                                                Int(
-                                                    2,
-                                                ),
-                                            ],
-                                        },
-                                    ),
-                                ],
+                        ExprWithPos(
+                            BinopExpr(
+                                BuiltinMethod(
+                                    Abs,
+                                    [
+                                        Var(
+                                            Variable {
+                                                var: LOCAL,
+                                                func_extern: None,
+                                                args: [
+                                                    Int(
+                                                        2,
+                                                    ),
+                                                ],
+                                            },
+                                        ),
+                                    ],
+                                ),
+                                Greater,
+                                Int(
+                                    0,
+                                ),
                             ),
-                            Greater,
-                            Int(
-                                0,
-                            ),
+                            ScriptPosition {
+                                line: 17,
+                            },
                         ),
                         [
                             StmtWithPos(
