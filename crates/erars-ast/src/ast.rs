@@ -30,7 +30,7 @@ pub enum Stmt {
     ReuseLastLine(StrKey),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<StmtWithPos>),
-    If(Vec<(Expr, Vec<StmtWithPos>)>, Vec<StmtWithPos>),
+    If(Vec<(ExprWithPos, Vec<StmtWithPos>)>, Vec<StmtWithPos>),
     Times(Variable, NotNan<f32>),
     Goto {
         label: Expr,
@@ -60,6 +60,9 @@ pub enum Stmt {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StmtWithPos(pub Stmt, pub ScriptPosition);
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExprWithPos(pub Expr, pub ScriptPosition);
 
 /// 1 based line index
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Serialize, Deserialize)]

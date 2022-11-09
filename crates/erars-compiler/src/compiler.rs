@@ -510,7 +510,8 @@ impl Compiler {
                 let mut end_stack = Vec::with_capacity(32);
 
                 for (cond, body) in else_ifs {
-                    self.push_if(cond, body)?;
+                    self.push(Instruction::report_position(cond.1));
+                    self.push_if(cond.0, body)?;
                     end_stack.push(self.mark());
                 }
 

@@ -4,7 +4,7 @@ mod expr;
 use erars_ast::{
     get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
     Expr, Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, ScriptPosition, Stmt,
-    StmtWithPos, StrKey, Variable, VariableInfo,
+    StmtWithPos, StrKey, Variable, VariableInfo, ExprWithPos,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -1076,6 +1076,7 @@ impl ParserContext {
             }
             Token::If(left) => {
                 let mut is_else = false;
+                let mut cond_pos = self.current_pos();
                 let mut cond = try_nom!(lex, self::expr::expr(self)(left)).1;
                 let mut block = Vec::new();
                 let mut if_elses = Vec::new();
@@ -1085,8 +1086,9 @@ impl ParserContext {
                         Some(Token::ElseIf(left)) => {
                             let left = left.trim_start_matches(' ');
 
-                            if_elses.push((cond, block));
+                            if_elses.push((ExprWithPos(cond, cond_pos), block));
                             block = Vec::new();
+                            cond_pos = self.current_pos();
                             cond = if left.is_empty() {
                                 Expr::Int(1)
                             } else {
@@ -1095,13 +1097,14 @@ impl ParserContext {
                         }
                         Some(Token::Else) => {
                             is_else = true;
-                            if_elses.push((cond, block));
+                            if_elses.push((ExprWithPos(cond, cond_pos), block));
+                            cond_pos = self.current_pos();
                             cond = Expr::Int(1);
                             block = Vec::new();
                         }
                         Some(Token::EndIf) => {
                             if !is_else {
-                                if_elses.push((cond, block));
+                                if_elses.push((ExprWithPos(cond, cond_pos), block));
                                 block = Vec::new();
                             }
                             break;
