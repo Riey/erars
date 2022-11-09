@@ -24,6 +24,7 @@ serde = { version = "1.0.145", features = ["derive"] }
 async-trait = "0.1.57"
 futures-executor = "0.3.24"
 memory-stats = "1.0.0"
+mimalloc = { version = "0.1.31", default-features = false }
 
 [features]
 with-backtrace = ["log-panics/with-backtrace"]

@@ -986,6 +986,7 @@ dependencies = [
  "k9",
  "log",
  "log-panics",
+ "mimalloc",
  "ron",
  "serde",
  "serde_yaml",
@@ -1068,6 +1069,7 @@ dependencies = [
  "futures-executor",
  "log",
  "log-panics",
+ "mimalloc",
 ]
 
 [[package]]
@@ -1176,6 +1178,7 @@ dependencies = [
  "log",
  "log-panics",
  "memory-stats",
+ "mimalloc",
  "ron",
  "serde",
  "serde_json",
@@ -1864,6 +1867,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c37567b180c1af25924b303ddf1ee4467653783440c62360beb2b322a4d93361"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "link-cplusplus"
 version = "1.0.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1979,6 +1991,15 @@ dependencies = [
  "foreign-types 0.3.2",
  "log",
  "objc",
+]
+
+[[package]]
+name = "mimalloc"
+version = "0.1.31"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b32d6a9ac92d0239d7bfa31137fb47634ac7272a3c11bcee91379ac100781670"
+dependencies = [
+ "libmimalloc-sys",
 ]
 
 [[package]]

@@ -12,6 +12,9 @@ use erars_loader::{load_config, load_script, run_script};
 use erars_proxy_system::{ConsoleFrame, ProxyReceiver, SystemRequest, SystemResponse};
 use erars_ui::{ConsoleLinePart, InputRequest, InputRequestType};
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(clap::Parser)]
 #[clap(author, version, about)]
 struct Args {

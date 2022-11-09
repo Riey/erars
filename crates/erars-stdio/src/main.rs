@@ -5,6 +5,9 @@ use std::{collections::VecDeque, path::Path};
 use erars_loader::{load_config, load_script, run_script, save_script};
 use memory_stats::memory_stats;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[derive(clap::Parser)]
 #[clap(author, version, about)]
 struct Args {

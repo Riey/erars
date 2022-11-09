@@ -4,6 +4,9 @@ use criterion::*;
 use erars_ast::StrKey;
 use erars_compiler::{compile, HeaderInfo, ParserContext};
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn gen_bench(count: usize) -> String {
     let mut ret = String::from("@FUNC\n");
 

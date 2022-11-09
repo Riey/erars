@@ -21,3 +21,4 @@ clap = { version = "4", features = ["derive"] }
 flexi_logger = "0.24.0"
 log-panics = "2.1.0"
 log = "0.4.17"
+mimalloc = { version = "0.1.31", default-features = false }
