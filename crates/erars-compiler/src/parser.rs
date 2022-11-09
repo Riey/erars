@@ -3,8 +3,8 @@ mod expr;
 
 use erars_ast::{
     get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
-    Expr, Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, ScriptPosition, Stmt,
-    StmtWithPos, StrKey, Variable, VariableInfo, ExprWithPos,
+    Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, Interner, PrintFlags,
+    ScriptPosition, Stmt, StmtWithPos, StrKey, Variable, VariableInfo,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -1142,6 +1142,7 @@ impl ParserContext {
                 let i = cut_line(lex);
                 try_nom!(lex, self::expr::assign_line(self, var)(i)).1
             }
+            Token::SortChara(args) => try_nom!(lex, self::expr::sortchara_line(self)(args)).1,
             Token::NormalExprCommand((com, args)) => {
                 let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
                 Stmt::Command(com, args)
