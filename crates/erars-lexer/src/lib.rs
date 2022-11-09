@@ -412,6 +412,8 @@ pub enum Token<'s> {
     CustomDrawLine(&'s str),
     #[regex("REUSELASTLINE", lex_line_left, ignore(ascii_case))]
     ReuseLastLine(&'s str),
+    #[token("SORTCHARA", lex_line_left, ignore(ascii_case))]
+    SortChara(&'s str),
 
     #[token("RETURNFORM", |lex| normal_expr_command(lex, BuiltinCommand::Return), ignore(ascii_case))]
     #[token("PUTFORM", |lex| normal_expr_command(lex, BuiltinCommand::PutForm), ignore(ascii_case))]
@@ -465,7 +467,6 @@ pub enum Token<'s> {
     #[token("COPYCHARA", |lex| normal_expr_command(lex, BuiltinCommand::CopyChara), ignore(ascii_case))]
     #[token("DELCHARA", |lex| normal_expr_command(lex, BuiltinCommand::DelChara), ignore(ascii_case))]
     #[token("SWAPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::SwapChara), ignore(ascii_case))]
-    #[token("SORTCHARA", |lex| normal_expr_command(lex, BuiltinCommand::SortChara), ignore(ascii_case))]
     #[token("PICKUPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::PickupChara), ignore(ascii_case))]
     #[token("SPLIT", |lex| normal_expr_command(lex, BuiltinCommand::Split), ignore(ascii_case))]
     #[token("CUPCHECK", |lex| normal_expr_command(lex, BuiltinCommand::CUpCheck), ignore(ascii_case))]

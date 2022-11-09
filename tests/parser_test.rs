@@ -1122,6 +1122,120 @@ mod body {
     }
 
     #[test]
+    fn test_sortchara() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/sortchara.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    StmtWithPos(
+        Command(
+            SortChara,
+            [
+                Var(
+                    Variable {
+                        var: NO,
+                        func_extern: None,
+                        args: [],
+                    },
+                ),
+                Int(
+                    1,
+                ),
+            ],
+        ),
+        ScriptPosition {
+            line: 1,
+        },
+    ),
+    StmtWithPos(
+        Command(
+            SortChara,
+            [
+                Var(
+                    Variable {
+                        var: NO,
+                        func_extern: None,
+                        args: [],
+                    },
+                ),
+                Int(
+                    0,
+                ),
+            ],
+        ),
+        ScriptPosition {
+            line: 2,
+        },
+    ),
+    StmtWithPos(
+        Command(
+            SortChara,
+            [
+                Var(
+                    Variable {
+                        var: NAME,
+                        func_extern: None,
+                        args: [],
+                    },
+                ),
+                Int(
+                    1,
+                ),
+            ],
+        ),
+        ScriptPosition {
+            line: 3,
+        },
+    ),
+    StmtWithPos(
+        Command(
+            SortChara,
+            [
+                Var(
+                    Variable {
+                        var: NAME,
+                        func_extern: None,
+                        args: [],
+                    },
+                ),
+                Int(
+                    1,
+                ),
+            ],
+        ),
+        ScriptPosition {
+            line: 4,
+        },
+    ),
+    StmtWithPos(
+        Command(
+            SortChara,
+            [
+                Var(
+                    Variable {
+                        var: NAME,
+                        func_extern: None,
+                        args: [],
+                    },
+                ),
+                Int(
+                    1,
+                ),
+            ],
+        ),
+        ScriptPosition {
+            line: 5,
+        },
+    ),
+]
+"
+        );
+    }
+
+    #[test]
     fn test_times() {
         k9::snapshot!(
             do_test(

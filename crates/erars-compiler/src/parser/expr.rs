@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use super::ParserContext;
 use erars_ast::{
-    var_name_alias, Alignment, BinaryOperator, Expr, FormText, InlineValue, LocalVariable, NotNan,
-    SelectCaseCond, Stmt, StrKey, UnaryOperator, Variable, VariableInfo,
+    var_name_alias, Alignment, BinaryOperator, BuiltinCommand, Expr, FormText, InlineValue,
+    LocalVariable, NotNan, SelectCaseCond, Stmt, StrKey, UnaryOperator, Variable, VariableInfo,
 };
 use nom::{
     branch::alt,
@@ -752,6 +752,49 @@ pub fn times_line<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IRes
         let (i, var) = variable(ctx)(i)?;
         let (i, times) = preceded(char_sp(','), float)(i)?;
         Ok((i, Stmt::Times(var, NotNan::new(times).unwrap())))
+    }
+}
+
+pub fn sortchara_line<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
+    move |i| {
+        let mut forward_parser = opt(alt((
+            value(false, de_sp(tag("BACK"))),
+            value(true, de_sp(tag("FORWARD"))),
+        )));
+        let (i, forward) = forward_parser(i)?;
+
+        let (i, var) = if forward.is_none() {
+            opt(variable(ctx))(i)?
+        } else {
+            (i, None)
+        };
+
+        let (i, forward) = if forward.is_none() {
+            opt(alt((
+                value(false, tag("BACK")),
+                value(true, tag("FORWARD")),
+            )))(i)?
+        } else {
+            (i, forward)
+        };
+
+        let var = var.unwrap_or_else(|| Variable {
+            var: ctx.interner.get_or_intern_static("NO"),
+            args: Vec::new(),
+            func_extern: None,
+        });
+
+        let forward = forward.unwrap_or(true);
+
+        Ok((
+            i,
+            Stmt::Command(
+                BuiltinCommand::SortChara,
+                vec![Expr::Var(var), Expr::int(forward)],
+            ),
+        ))
     }
 }
 
