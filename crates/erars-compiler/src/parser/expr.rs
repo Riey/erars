@@ -52,7 +52,7 @@ fn is_ident_char(c: char) -> bool {
 }
 
 fn is_ident(i: &str) -> bool {
-    i.chars().all(is_ident_char)
+    i.chars().next().map_or(false, |i| !matches!(i, '0'..='9')) && i.chars().all(is_ident_char)
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {

@@ -1351,6 +1351,21 @@ Var(
     }
 
     #[test]
+    fn test_macro() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/macro.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            "
+Int(
+    1,
+)
+"
+        );
+    }
+
+    #[test]
     fn test_method() {
         k9::snapshot!(
             do_test(
