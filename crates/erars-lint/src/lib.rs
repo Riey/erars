@@ -86,7 +86,7 @@ fn check_function_exist_inner(
     files: &Mutex<&mut ErarsFiles>,
     diagnostics: &Mutex<Vec<Diagnostic>>,
 ) {
-    let mut current_line = 0;
+    let mut current_line = 1;
     for (i, inst) in func.body().iter().enumerate() {
         if let Some(pos) = inst.as_report_position() {
             current_line = pos.line;
@@ -103,7 +103,7 @@ fn check_function_exist_inner(
                         .with_message(format!("Find CALL `{name}` but @{name} is not exists."))
                         .with_labels(vec![Label::primary(
                             file_id,
-                            files.line_range(file_id, current_line as usize).unwrap(),
+                            files.line_range(file_id, current_line as usize - 1).unwrap(),
                         )]);
                     diagnostics.lock().push(diagnostic);
                 }
@@ -160,7 +160,7 @@ fn check_variable_exist_inner(
                     .with_message(msg)
                     .with_labels(vec![Label::primary(
                         file_id,
-                        files.line_range(file_id, current_line as usize).unwrap(),
+                        files.line_range(file_id, current_line as usize - 1).unwrap(),
                     )]);
 
                 let name = name.resolve();
