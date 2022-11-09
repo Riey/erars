@@ -73,14 +73,6 @@ pub trait SystemFunctions {
     ) -> anyhow::Result<()>;
     async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()>;
     async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()>;
-
-    fn clone_functions(&self) -> Box<dyn SystemFunctions>;
-}
-
-impl Clone for Box<dyn SystemFunctions> {
-    fn clone(&self) -> Self {
-        self.clone_functions()
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -121,9 +113,5 @@ impl SystemFunctions for NullSystemFunctions {
     }
     async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
         Ok(())
-    }
-
-    fn clone_functions(&self) -> Box<dyn SystemFunctions> {
-        Box::new(Self)
     }
 }

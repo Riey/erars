@@ -49,7 +49,6 @@ extern "C" {
     fn remove_local(this: &ISystemCallbacks, idx: u32) -> Promise;
 }
 
-#[derive(Clone)]
 pub struct WasmSystem {
     callbacks: ISystemCallbacks,
     from: usize,
@@ -158,10 +157,6 @@ impl erars_vm::SystemFunctions for WasmSystem {
             .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
         Ok(())
-    }
-
-    fn clone_functions(&self) -> Box<dyn erars_vm::SystemFunctions> {
-        Box::new(self.clone())
     }
 }
 

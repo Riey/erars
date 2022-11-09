@@ -1065,10 +1065,10 @@ dependencies = [
  "erars-vm",
  "flexi_logger",
  "fontdb",
- "futures-executor",
  "log",
  "log-panics",
  "mimalloc",
+ "pollster",
 ]
 
 [[package]]
@@ -1173,11 +1173,11 @@ dependencies = [
  "erars-ui",
  "erars-vm",
  "flexi_logger",
- "futures-executor",
  "log",
  "log-panics",
  "memory-stats",
  "mimalloc",
+ "pollster",
  "ron",
  "serde",
  "serde_json",

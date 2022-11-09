@@ -10,7 +10,6 @@ use crate::{ArgVec, SystemFunctions, VariableStorage, VmVariable};
 
 use super::UniformVariable;
 
-#[derive(Clone)]
 pub struct VmContext {
     pub var: VariableStorage,
     pub header_info: Arc<HeaderInfo>,

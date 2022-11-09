@@ -89,9 +89,9 @@ pub unsafe fn load_script(
 }
 
 #[allow(unused_assignments)]
-pub fn run_script(
+pub async fn run_script(
     target_path: &str,
-    system: Box<dyn SystemFunctions>,
+    mut system: Box<dyn SystemFunctions>,
     config: EraConfig,
     error_to_stderr: bool,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
@@ -106,11 +106,16 @@ pub fn run_script(
 
     macro_rules! check_time {
         ($work:expr) => {
+            check_time!($work, system);
+        };
+
+        ($work:expr, $system:expr) => {
             let m = time.elapsed().as_millis();
             time = Instant::now();
 
-            tx.print_line(format!("[{}]: {}ms", $work, m));
             log::info!("[{}]: {}ms", $work, m);
+            tx.print_line(format!("[{}]: {}ms", $work, m));
+            $system.redraw(&mut tx).await?;
         };
     }
 
@@ -336,14 +341,14 @@ pub fn run_script(
             );
         }
 
-        check_time!("Parse/Compile ERB");
+        check_time!("Parse/Compile ERB", ctx.system);
 
         let mut diagnostics = diagnostics.into_inner();
         let mut files = files.into_inner();
 
         diagnostics.extend(check_function(&function_dic, &ctx.var, &mut files));
 
-        check_time!("Check codes");
+        check_time!("Check codes", ctx.system);
 
         if !diagnostics.is_empty() {
             log::error!("총 {}개의 에러가 발생했습니다.", diagnostics.len());
@@ -369,7 +374,7 @@ pub fn run_script(
             }
         }
 
-        check_time!("Report errors");
+        check_time!("Report errors", ctx.system);
     }
 
     let vm = TerminalVm::new(function_dic);

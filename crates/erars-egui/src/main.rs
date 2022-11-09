@@ -137,11 +137,11 @@ fn main() {
                     let ret = if args.load {
                         unsafe { load_script(&args.target_path, system, config) }
                     } else {
-                        run_script(&args.target_path, system, config, false)
+                        pollster::block_on(run_script(&args.target_path, system, config, false))
                     };
                     match ret {
                         Ok((vm, mut ctx, mut tx)) => {
-                            futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+                            pollster::block_on(vm.start(&mut tx, &mut ctx));
                         }
                         Err(err) => {
                             log::error!("Game loading failed: {err}");

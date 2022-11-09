@@ -101,10 +101,6 @@ impl SystemFunctions for ProxySystem {
         self.wait_response(SystemRequest::SaveGlobal(sav)).await?;
         Ok(())
     }
-
-    fn clone_functions(&self) -> Box<dyn erars_vm::SystemFunctions> {
-        Box::new(self.clone())
-    }
 }
 
 #[derive(Default, Debug, Clone)]

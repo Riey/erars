@@ -94,7 +94,7 @@ fn main() {
             let (vm, mut ctx, mut tx) = if args.load {
                 unsafe { load_script(&args.target_path, system, config).unwrap() }
             } else {
-                run_script(&args.target_path, system, config, true).unwrap()
+                pollster::block_on(run_script(&args.target_path, system, config, true)).unwrap()
             };
 
             if args.measure_memory {
@@ -108,7 +108,7 @@ fn main() {
             } else if args.save {
                 save_script(vm, ctx, &args.target_path).unwrap();
             } else {
-                futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+                pollster::block_on(vm.start(&mut tx, &mut ctx));
             }
         })
         .unwrap()

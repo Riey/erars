@@ -9,7 +9,6 @@ use std::{
     path::PathBuf,
 };
 
-#[derive(Clone)]
 pub struct StdioFrontend {
     sav_path: PathBuf,
     from: usize,
@@ -170,10 +169,6 @@ impl SystemFunctions for StdioFrontend {
     }
     async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
         erars_saveload_fs::write_global_data(&self.sav_path, &sav)
-    }
-
-    fn clone_functions(&self) -> Box<dyn SystemFunctions> {
-        Box::new(self.clone())
     }
 }
 
