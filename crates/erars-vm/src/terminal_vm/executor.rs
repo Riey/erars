@@ -162,6 +162,7 @@ pub(super) async fn run_instruction(
     } else if inst.is_reuse_lastline() {
         let s = ctx.pop_str()?;
         tx.reuse_last_line(s);
+        ctx.system.redraw(tx)?;
     } else if let Some(flags) = inst.as_print_button() {
         let value = ctx.pop_value()?;
         let text = ctx.pop_str()?;
@@ -172,6 +173,7 @@ pub(super) async fn run_instruction(
         } else {
             tx.print_button(text, value);
         }
+        ctx.system.redraw(tx)?;
     } else if let Some(flags) = inst.as_print() {
         let s = ctx.pop_str()?;
 
@@ -205,11 +207,12 @@ pub(super) async fn run_instruction(
         if flags.contains(PrintFlags::NEWLINE) {
             tx.new_line();
         }
+
+        ctx.system.redraw(tx)?;
         if flags.contains(PrintFlags::WAIT) {
             let gen = tx.input_gen();
             ctx.system
-                .input_redraw(
-                    tx,
+                .input(
                     InputRequest {
                         generation: gen,
                         ty: InputRequestType::AnyKey,
@@ -2159,7 +2162,7 @@ async fn run_builtin_command(
             }
         }
         BuiltinCommand::Redraw => {
-            ctx.system.redraw(tx).await?;
+            ctx.system.redraw(tx)?;
         }
         BuiltinCommand::ClearLine => {
             tx.clear_line(get_arg!(@usize: args, ctx));

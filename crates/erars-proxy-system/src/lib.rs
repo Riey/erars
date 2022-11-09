@@ -58,9 +58,10 @@ impl SystemFunctions for ProxySystem {
         }
     }
 
-    async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
-        self.wait_response(SystemRequest::Redraw(ConsoleFrame::from_vconsole(vconsole)))
-            .await?;
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
+        self.req_tx
+            .send(SystemRequest::Redraw(ConsoleFrame::from_vconsole(vconsole)))
+            .context("Send SystemRequest")?;
         Ok(())
     }
 

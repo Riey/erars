@@ -258,7 +258,6 @@ impl App for EraApp {
                 SystemRequest::Redraw(console_frame) => {
                     self.console_frame = console_frame;
                     self.need_scroll_down = true;
-                    self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
                 }
                 SystemRequest::LoadGlobal => {
                     if let Ok(sav) = erars_saveload_fs::read_global_data(&self.sav_path) {
@@ -353,35 +352,8 @@ impl EraApp {
                         match line.align {
                             Alignment::Left => {
                                 ui.horizontal_wrapped(|ui| {
-                                    for part in line.parts.iter() {
-                                        Self::draw_console_part(
-                                            ui,
-                                            &mut self.current_req,
-                                            current_input_gen,
-                                            part,
-                                            receiver,
-                                        );
-                                    }
-                                });
-                            }
-                            Alignment::Center => {
-                                ui.vertical_centered(|ui| {
-                                    for part in line.parts.iter() {
-                                        Self::draw_console_part(
-                                            ui,
-                                            &mut self.current_req,
-                                            current_input_gen,
-                                            part,
-                                            receiver,
-                                        );
-                                    }
-                                });
-                            }
-                            Alignment::Right => {
-                                ui.with_layout(
-                                    egui::Layout::right_to_left(egui::Align::TOP),
-                                    |ui| {
-                                        for part in line.parts.iter().rev() {
+                                    if ui.is_visible() {
+                                        for part in line.parts.iter() {
                                             Self::draw_console_part(
                                                 ui,
                                                 &mut self.current_req,
@@ -389,6 +361,39 @@ impl EraApp {
                                                 part,
                                                 receiver,
                                             );
+                                        }
+                                    }
+                                });
+                            }
+                            Alignment::Center => {
+                                ui.vertical_centered(|ui| {
+                                    if ui.is_visible() {
+                                        for part in line.parts.iter() {
+                                            Self::draw_console_part(
+                                                ui,
+                                                &mut self.current_req,
+                                                current_input_gen,
+                                                part,
+                                                receiver,
+                                            );
+                                        }
+                                    }
+                                });
+                            }
+                            Alignment::Right => {
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::TOP),
+                                    |ui| {
+                                        if ui.is_visible() {
+                                            for part in line.parts.iter().rev() {
+                                                Self::draw_console_part(
+                                                    ui,
+                                                    &mut self.current_req,
+                                                    current_input_gen,
+                                                    part,
+                                                    receiver,
+                                                );
+                                            }
                                         }
                                     },
                                 );

@@ -16,7 +16,7 @@ use wasm_bindgen_futures::JsFuture;
 const ITEXT_STYLE: &'static str = r#"
 interface ISystemCallbacks {
     input: (input_req: any) => Promise<bigint | string>;
-    redraw: (console: any) => Promise<void>;
+    redraw: (console: any);
 
     load_local: (idx: number) => Promise<string | null>;
     load_global: () => Promise<string | null>;
@@ -35,7 +35,7 @@ extern "C" {
     #[wasm_bindgen(method)]
     fn input(this: &ISystemCallbacks, input_req: JsValue) -> Promise;
     #[wasm_bindgen(method)]
-    fn redraw(this: &ISystemCallbacks, console: JsValue) -> Promise;
+    fn redraw(this: &ISystemCallbacks, console: JsValue);
 
     #[wasm_bindgen(method)]
     fn load_local(this: &ISystemCallbacks, idx: u32) -> Promise;
@@ -87,11 +87,9 @@ impl erars_vm::SystemFunctions for WasmSystem {
         }
     }
 
-    async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
         let console = self.make_console_status(vconsole);
-        JsFuture::from(self.callbacks.redraw(console))
-            .await
-            .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
+        self.callbacks.redraw(console);
         Ok(())
     }
 

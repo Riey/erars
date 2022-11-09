@@ -47,7 +47,7 @@ pub trait SystemFunctions {
         vconsole: &mut VirtualConsole,
         req: InputRequest,
     ) -> anyhow::Result<Option<Value>> {
-        self.redraw(vconsole).await?;
+        self.redraw(vconsole)?;
         self.input(req).await
     }
 
@@ -60,7 +60,7 @@ pub trait SystemFunctions {
             .and_then(Value::try_into_int)
     }
 
-    async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()>;
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()>;
 
     async fn load_local_list(&mut self) -> anyhow::Result<SaveList>;
     async fn load_local(&mut self, idx: u32)
@@ -85,7 +85,7 @@ impl SystemFunctions for NullSystemFunctions {
         Ok(None)
     }
 
-    async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
         Ok(())
     }
 

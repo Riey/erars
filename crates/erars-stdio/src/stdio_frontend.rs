@@ -137,7 +137,7 @@ impl SystemFunctions for StdioFrontend {
         }
     }
 
-    async fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
         if !vconsole.need_rebuild && self.from == vconsole.line_count() && vconsole.line_is_empty()
         {
             // skip redraw

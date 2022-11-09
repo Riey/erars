@@ -1053,6 +1053,7 @@ dependencies = [
 name = "erars-egui"
 version = "0.5.0"
 dependencies = [
+ "async-trait",
  "clap 4.0.22",
  "eframe",
  "egui",

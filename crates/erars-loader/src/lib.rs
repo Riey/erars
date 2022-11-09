@@ -115,7 +115,7 @@ pub async fn run_script(
 
             log::info!("[{}]: {}ms", $work, m);
             tx.print_line(format!("[{}]: {}ms", $work, m));
-            $system.redraw(&mut tx).await?;
+            $system.redraw(&mut tx)?;
         };
     }
 
