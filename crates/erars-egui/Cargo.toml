@@ -15,7 +15,7 @@ erars-proxy-system = { path = "../erars-proxy-system" }
 
 egui = { git = "https://github.com/emilk/egui" }
 eframe = { git = "https://github.com/emilk/egui", default-features = false, features = ["wgpu"] }
-fontdb = { version = "0.9.1", features = ["fontconfig"] }
+fontdb = { version = "0.10.0", features = ["fontconfig"] }
 clap = { version = "4", features = ["derive"] }
 flexi_logger = "0.24.0"
 log-panics = "2.1.0"

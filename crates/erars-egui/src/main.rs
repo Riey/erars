@@ -172,6 +172,7 @@ fn main() {
                 ..(*ctx.egui_ctx.style()).clone()
             };
 
+            style.spacing.item_spacing.x = 0.0;
             style.spacing.item_spacing.y = (line_height.saturating_sub(font_size)) as f32;
 
             for font_id in style.text_styles.values_mut() {
@@ -470,21 +471,14 @@ impl EraApp {
     ) {
         match part {
             ConsoleLinePart::Button(btn_parts, input_gen, value) => {
-                if current_input_gen == Some(*input_gen) {
-                    for (text, style) in btn_parts.iter() {
-                        if EraButton::new(text.clone(), style)
-                            .ui(ui)
-                            .on_hover_cursor(egui::CursorIcon::PointingHand)
-                            .clicked()
-                        {
-                            log::info!("Res -> {value:?}");
-                            *current_input = None;
-                            receiver.res_tx.send(SystemResponse::Input(value.clone())).unwrap();
-                        }
-                    }
-                } else {
-                    for (s, color) in btn_parts.iter() {
-                        ui.colored_label(to_egui_color(color.color), s);
+                for (text, style) in btn_parts.iter() {
+                    let enabled = current_input_gen == Some(*input_gen);
+                    let btn_res = EraButton::new(text.clone(), style, enabled).ui(ui);
+                    if enabled && btn_res.on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
+                    {
+                        log::info!("Res -> {value:?}");
+                        *current_input = None;
+                        receiver.res_tx.send(SystemResponse::Input(value.clone())).unwrap();
                     }
                 }
             }
@@ -492,7 +486,7 @@ impl EraApp {
                 ui.colored_label(to_egui_color(color.color), s);
             }
             ConsoleLinePart::Line(text, color) => {
-                let width = ui.available_width() - ui.spacing().item_spacing.x * 2.;
+                let width = ui.available_width();
                 let font_id = &ui.style().text_styles[&egui::TextStyle::Monospace];
                 let char_width =
                     text.chars().map(|c| ui.fonts().glyph_width(font_id, c)).sum::<f32>();
@@ -512,14 +506,16 @@ struct EraButton {
     text: egui::WidgetText,
     color: egui::Color32,
     hl_color: egui::Color32,
+    enabled: bool,
 }
 
 impl EraButton {
-    pub fn new(text: String, style: &erars_ui::TextStyle) -> Self {
+    pub fn new(text: String, style: &erars_ui::TextStyle, enabled: bool) -> Self {
         Self {
             text: text.into(),
             color: to_egui_color(style.color),
             hl_color: egui::Color32::YELLOW,
+            enabled,
         }
     }
 }
@@ -532,16 +528,20 @@ impl Widget for EraButton {
             ui.available_width(),
             egui::TextStyle::Button,
         );
-        let (rect, response) = ui.allocate_at_least(
+        let (rect, response) = ui.allocate_exact_size(
             text.size(),
-            egui::Sense::click().union(egui::Sense::hover()),
+            if self.enabled {
+                egui::Sense::click()
+            } else {
+                egui::Sense::hover()
+            },
         );
         response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, text.text()));
 
         if ui.is_rect_visible(rect) {
             let text_pos = ui.layout().align_size_within_rect(text.size(), rect).min;
 
-            let color = if response.hovered() {
+            let color = if self.enabled && response.hovered() {
                 self.hl_color
             } else {
                 self.color
