@@ -212,14 +212,12 @@ pub(super) async fn run_instruction(
         if flags.contains(PrintFlags::WAIT) {
             let gen = tx.input_gen();
             ctx.system
-                .input(
-                    InputRequest {
-                        generation: gen,
-                        ty: InputRequestType::AnyKey,
-                        is_one: false,
-                        timeout: None,
-                    },
-                )
+                .input(InputRequest {
+                    generation: gen,
+                    ty: InputRequestType::AnyKey,
+                    is_one: false,
+                    timeout: None,
+                })
                 .await?;
         }
     } else if let Some(c) = inst.as_try_call().or_else(|| inst.as_try_jump()) {

@@ -10,8 +10,6 @@ use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
-#[cfg(feature = "multithread")]
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use erars_ui::VirtualConsole;
@@ -44,16 +42,16 @@ pub struct SerializableVariableStorage {
     pub version: u32,
     character_len: u32,
     rand_seed: [u8; 32],
-    variables: HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>,
-    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
+    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, UniformVariable)>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct SerializableGlobalVariableStorage {
     pub code: u32,
     pub version: u32,
-    variables: HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>,
-    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
+    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, UniformVariable)>>,
 }
 
 #[derive(Clone)]
@@ -144,28 +142,42 @@ impl VariableStorage {
 
     fn load_variables(
         &mut self,
-        variables: HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>,
-        local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
+        mut variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
+        mut local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, UniformVariable)>>,
         is_global: bool,
     ) {
-        self.variables.retain(|_, (info, _)| info.is_global != is_global);
-        self.local_variables
-            .iter_mut()
-            .for_each(|(_, vars)| vars.retain(|_, (info, _)| info.is_global != is_global));
-
-        for (k, (info, var)) in variables {
-            let var = var
-                .unwrap_or_else(|| UniformVariable::with_character_len(&info, self.character_len));
-            self.variables.insert(k, (info, var));
-        }
-
-        for (func_name, vars) in local_variables {
-            let local_var = self.local_variables.entry(func_name).or_default();
-
-            for (k, (info, var)) in vars {
-                local_var.insert(k, (info, var));
+        self.variables.iter_mut().for_each(|(name, (info, var))| {
+            if info.is_global != is_global {
+                return;
             }
-        }
+            if let Some((sav_info, sav_var)) = variables.remove(name) {
+                if *info == sav_info {
+                    *var = sav_var;
+                    return;
+                }
+            }
+            *var = UniformVariable::with_character_len(info, self.character_len);
+        });
+
+        self.local_variables.iter_mut().for_each(|(fn_name, vars)| {
+            let Some(mut sav_vars) = local_variables.remove(fn_name) else {
+                vars.values_mut().for_each(|v| if v.0.is_global == is_global { v.1 = None; });
+                return;
+            };
+
+            vars.iter_mut().for_each(|(name, (info, var))| {
+                if info.is_global != is_global {
+                    return;
+                }
+                if let Some((sav_info, sav_var)) = sav_vars.remove(name) {
+                    if *info == sav_info {
+                        *var = Some(sav_var);
+                        return;
+                    }
+                }
+                *var = None;
+            });
+        });
     }
 
     pub fn load_global_serializable(
@@ -197,27 +209,20 @@ impl VariableStorage {
         &self,
         is_global: bool,
     ) -> (
-        HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>,
-        HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
+        HashMap<StrKey, (VariableInfo, UniformVariable)>,
+        HashMap<StrKey, HashMap<StrKey, (VariableInfo, UniformVariable)>>,
     ) {
-        #[cfg(feature = "multithread")]
-        let this_vars = self.variables.par_iter();
-        #[cfg(not(feature = "multithread"))]
         let this_vars = self.variables.iter();
-        #[cfg(feature = "multithread")]
-        let this_local_vars = self.local_variables.par_iter();
-        #[cfg(not(feature = "multithread"))]
         let this_local_vars = self.local_variables.iter();
 
         let variables = this_vars
             .filter_map(|(name, (info, var))| {
                 if info.is_global == is_global {
-                    let var = if info.is_savedata {
-                        Some(var.clone())
+                    if info.is_savedata {
+                        Some((*name, (info.clone(), var.clone())))
                     } else {
                         None
-                    };
-                    Some((*name, (info.clone(), var)))
+                    }
                 } else {
                     None
                 }
@@ -230,7 +235,11 @@ impl VariableStorage {
                     .iter()
                     .filter_map(|(name, (info, var))| {
                         if info.is_global == is_global {
-                            let var = if info.is_savedata { var.clone() } else { None };
+                            let var = if info.is_savedata {
+                                var.clone()?
+                            } else {
+                                return None;
+                            };
                             Some((*name, (info.clone(), var)))
                         } else {
                             None

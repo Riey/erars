@@ -53,4 +53,8 @@ lto = true
 name = "parse"
 harness = false
 
+[[bench]]
+name = "save"
+harness = false
+
 [features]
