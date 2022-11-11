@@ -1,0 +1,16 @@
+[package]
+name = "erars-capi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+erars-ast = { path = "../erars-ast" }
+erars-compiler = { path = "../erars-compiler" }
+erars-ui = { path = "../erars-ui" }
+erars-vm = { path = "../erars-vm" }
+erars-loader = { path = "../erars-loader", features = ["multithread"] }
+erars-saveload-fs = { path = "../erars-saveload-fs", features = ["multithread"] }
+erars-proxy-system = { path = "../erars-proxy-system" }
