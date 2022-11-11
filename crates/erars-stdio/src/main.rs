@@ -94,7 +94,7 @@ fn main() {
             let (vm, mut ctx, mut tx) = if args.load {
                 unsafe { load_script(&args.target_path, system, config).unwrap() }
             } else {
-                pollster::block_on(run_script(&args.target_path, system, config, true)).unwrap()
+                run_script(&args.target_path, system, config, true).unwrap()
             };
 
             if args.measure_memory {

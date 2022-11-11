@@ -8,6 +8,7 @@ license = "GPL-3.0-or-later"
 members = [
     "./crates/erars-ast",
     "./crates/erars-bytecode",
+    "./crates/erars-capi",
     "./crates/erars-compiler",
     "./crates/erars-egui",
     "./crates/erars-proxy-system",

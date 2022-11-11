@@ -89,7 +89,7 @@ pub unsafe fn load_script(
 }
 
 #[allow(unused_assignments)]
-pub async fn run_script(
+pub fn run_script(
     target_path: &str,
     mut system: Box<dyn SystemFunctions>,
     config: EraConfig,

@@ -137,7 +137,7 @@ fn main() {
                     let ret = if args.load {
                         unsafe { load_script(&args.target_path, system, config) }
                     } else {
-                        pollster::block_on(run_script(&args.target_path, system, config, false))
+                        run_script(&args.target_path, system, config, false)
                     };
                     match ret {
                         Ok((vm, mut ctx, mut tx)) => {
