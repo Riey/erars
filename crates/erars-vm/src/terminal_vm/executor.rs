@@ -1517,35 +1517,14 @@ async fn run_builtin_method(
             check_arg_count!(0);
             let now = time::OffsetDateTime::now_local()?;
 
-            ctx.push(
-                format!(
-                    "{year:04}{month:02}{day:02}{hour:02}{minute:02}{second:02}{milli:03}",
-                    year = now.year(),
-                    month = now.month() as u8,
-                    day = now.day(),
-                    hour = now.hour(),
-                    minute = now.minute(),
-                    second = now.second(),
-                    milli = now.millisecond(),
-                )
-                .parse::<i64>()
-                .unwrap(),
-            );
+            ctx.push(get_time(now));
         }
 
         BuiltinMethod::GetTimeS => {
             check_arg_count!(0);
             let now = time::OffsetDateTime::now_local()?;
 
-            ctx.push(format!(
-                "{year:04}年{month:02}月{day:02}日 {hour:02}:{minute:02}:{second:02}",
-                year = now.year(),
-                month = now.month() as u8,
-                day = now.day(),
-                hour = now.hour(),
-                minute = now.minute(),
-                second = now.second()
-            ));
+            ctx.push(get_times(now));
         }
 
         BuiltinMethod::GetSecond => {
@@ -1675,6 +1654,12 @@ async fn run_builtin_command(
             let target = get_arg!(@u32: args, ctx);
             let names = ctx.header_info.var_name_var.get(&palam).unwrap();
             ctx.var.cupcheck(tx, target, names)?;
+        }
+        BuiltinCommand::GetTime => {
+            let now = time::OffsetDateTime::now_local()?;
+
+            ctx.var.set_result(get_time(now));
+            ctx.var.set_results(get_times(now));
         }
         BuiltinCommand::Restart => {
             drop(ctx.return_func()?);
@@ -2258,4 +2243,31 @@ async fn run_builtin_command(
     }
 
     Ok(InstructionWorkflow::Normal)
+}
+
+fn get_time(now: time::OffsetDateTime) -> i64 {
+    format!(
+        "{year:04}{month:02}{day:02}{hour:02}{minute:02}{second:02}{milli:03}",
+        year = now.year(),
+        month = now.month() as u8,
+        day = now.day(),
+        hour = now.hour(),
+        minute = now.minute(),
+        second = now.second(),
+        milli = now.millisecond(),
+    )
+    .parse::<i64>()
+    .unwrap()
+}
+
+fn get_times(now: time::OffsetDateTime) -> String {
+    format!(
+        "{year:04}年{month:02}月{day:02}日 {hour:02}:{minute:02}:{second:02}",
+        year = now.year(),
+        month = now.month() as u8,
+        day = now.day(),
+        hour = now.hour(),
+        minute = now.minute(),
+        second = now.second()
+    )
 }

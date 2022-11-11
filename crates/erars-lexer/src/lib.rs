@@ -527,8 +527,6 @@ pub enum Token<'s> {
     #[token("CSVCFLAG", |lex| normal_expr_method(lex, BuiltinMethod::CsvCflag), ignore(ascii_case))]
     NormalExprMethod((BuiltinMethod, &'s str)),
 
-    #[token("GETTIME", |_| single_method(BuiltinMethod::GetTime), ignore(ascii_case))]
-    #[token("GETTIMES", |_| single_method(BuiltinMethod::GetTimeS), ignore(ascii_case))]
     #[token("GETMILLISECOND", |_| single_method(BuiltinMethod::GetMillisecond), ignore(ascii_case))]
     #[token("GETSECOND", |_| single_method(BuiltinMethod::GetSecond), ignore(ascii_case))]
     #[token("GETFONT", |_| single_method(BuiltinMethod::GetFont), ignore(ascii_case))]
@@ -558,6 +556,7 @@ pub enum Token<'s> {
     #[token("FONTITALIC", |_| single_command(BuiltinCommand::FontItalic), ignore(ascii_case))]
     #[token("FONTREGULAR", |_| single_command(BuiltinCommand::FontRegular), ignore(ascii_case))]
     #[token("UPCHECK", |_| single_command(BuiltinCommand::UpCheck), ignore(ascii_case))]
+    #[token("GETTIME", |_| single_command(BuiltinCommand::GetTime), ignore(ascii_case))]
     #[token("CONTINUE", |_| Stmt::Continue, ignore(ascii_case))]
     #[token("BREAK", |_| Stmt::Break, ignore(ascii_case))]
     DirectStmt(Stmt),

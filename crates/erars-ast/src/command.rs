@@ -171,6 +171,8 @@ pub enum BuiltinCommand {
     ForceKana,
     // different from method
     EncodeToUni,
+    // different from method
+    GetTime,
 
     Redraw = 60,
     DrawLine,
