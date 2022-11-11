@@ -89,7 +89,7 @@ pub unsafe fn load_script(
 }
 
 #[allow(unused_assignments)]
-pub async fn run_script(
+pub fn run_script(
     target_path: &str,
     mut system: Box<dyn SystemFunctions>,
     config: EraConfig,
@@ -351,25 +351,23 @@ pub async fn run_script(
         check_time!("Check codes", ctx.system);
 
         if !diagnostics.is_empty() {
-            log::error!("총 {}개의 에러가 발생했습니다.", diagnostics.len());
-
             let config = Config::default();
-            if error_to_stderr {
-                let writer = StandardStream::stderr(ColorChoice::Always);
-                for diagnostic in diagnostics {
-                    codespan_reporting::term::emit(
-                        &mut writer.lock(),
-                        &config,
-                        &files,
-                        &diagnostic,
-                    )
-                    .unwrap();
-                    {
-                        let mut writer = LogWriter::default();
-                        codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic)
-                            .unwrap();
-                        std::io::Write::flush(&mut writer).unwrap();
-                    }
+            let writer = StandardStream::stderr(ColorChoice::Always);
+            let mut writer = writer.lock();
+            for diagnostic in diagnostics.iter().take(40) {
+                if error_to_stderr {
+                    codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic)
+                        .unwrap();
+                }
+                let mut writer = LogWriter::default();
+                codespan_reporting::term::emit(&mut writer, &config, &files, &diagnostic).unwrap();
+                std::io::Write::flush(&mut writer).unwrap();
+            }
+
+            if let Some(left) = diagnostics.len().checked_sub(20) {
+                if error_to_stderr {
+                    eprintln!("And {left} more errors...");
+                    log::error!("And {left} more errors...");
                 }
             }
         }
