@@ -13,4 +13,8 @@ erars-ui = { path = "../erars-ui" }
 erars-vm = { path = "../erars-vm" }
 erars-loader = { path = "../erars-loader", features = ["multithread"] }
 erars-saveload-fs = { path = "../erars-saveload-fs", features = ["multithread"] }
-erars-proxy-system = { path = "../erars-proxy-system" }
+pollster = "0.2.5"
+serde_json = "1.0.87"
+async-trait = "0.1.58"
+anyhow = "1.0.66"
+log = "0.4.17"

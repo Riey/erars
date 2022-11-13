@@ -1,0 +1,64 @@
+struct Color {
+    r: ubyte;
+    g: ubyte;
+    b: ubyte;
+}
+
+enum FontStyle: ubyte (bit_flags) {
+    BOLD,
+    ITALIC,
+    STRIKELINE,
+    UNDERLINE,
+}
+
+table TextStyle {
+    color: Color (required);
+    font_style: FontStyle;
+    font_family: string (required);
+}
+
+table ConsoleLinePartText {
+    text: string (required);
+    style: TextStyle (required);
+}
+
+table ConsoleLinePartLine {
+    line_text: string (required);
+    style: TextStyle (required);
+}
+
+table ConsoleLinePartButton {
+    btn_parts: [ConsoleLinePartText] (required);
+    generation: uint;
+    value: string (required);
+}
+
+union ConsoleLinePart {
+    ConsoleLinePartText,
+    ConsoleLinePartLine,
+    ConsoleLinePartButton,
+}
+
+// until Vectors of unions is supported
+table ConsoleLinePartWrap {
+    part: ConsoleLinePart;
+}
+
+enum LineAlign: ubyte {
+    Left,
+    Center,
+    Right,
+}
+
+table ConsoleLine {
+    align: LineAlign;
+    parts: [ConsoleLinePartWrap] (required);
+}
+
+table DrawRequest {
+    bg_color: Color (required);
+    hl_color: Color (required);
+    need_rebuild: bool;
+    last_line: ConsoleLine;
+    lines: [ConsoleLine] (required);
+}
