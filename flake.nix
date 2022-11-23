@@ -64,15 +64,11 @@
                             rustc
                             cargo
                             just
+                            flatbuffers
                         ];
                         buildInputs = with pkgs; [
-                            fontconfig
-                            xorg.libX11
-                            xorg.libXcursor
-                            xorg.libXrandr
-                            xorg.libXi
+                            zeromq
                         ];
-                        LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath buildInputs}:/run/opengl-driver/lib";
                         RUST_BACKTRACE=1;
                     };
 

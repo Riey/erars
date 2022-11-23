@@ -30,9 +30,10 @@ twoway = "0.2.2"
 derivative = "2.2.0"
 tinyvec = "1.6.0"
 static_assertions = "1.1.0"
-async-trait = "0.1.57"
-async-recursion = "1.0.0"
 unicode_hfwidth = "0.2.0"
+zmq = "0.10.0"
+flatbuffers = "22.10.26"
+serde_json = "1.0.89"
 
 [dev-dependencies]
 k9 = "0.11.5"

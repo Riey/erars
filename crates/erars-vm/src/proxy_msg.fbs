@@ -1,0 +1,52 @@
+struct Color {
+    r:ubyte;
+    g:ubyte;
+    b:ubyte;
+}
+
+enum ConsoleLinePartType: ubyte {
+    Text,
+    Line,
+    Button,
+}
+
+enum FontStyle: uint (bit_flags) {
+    BOLD,
+    ITALIC,
+    STRIKELINE,
+    UNDERLINE,
+}
+
+enum LineAlign: ubyte {
+    Left,
+    Center,
+    Right,
+}
+
+table TextStyle {
+    color: Color;
+    font_family: string;
+    font_style: FontStyle;
+}
+
+table ConsoleLineSubPart {
+    text: string;
+    color: Color;
+}
+
+table ConsoleLinePart {
+    ty: ConsoleLinePartType;
+    inner: [ConsoleLineSubPart] (required);
+}
+
+table ConsoleLine {
+    align: LineAlign;
+    parts: [ConsoleLinePart] (required);
+}
+
+table RedrawRequest {
+    rebuild:bool;
+    bg_color:Color;
+    hl_color:Color;
+    lines: [ConsoleLine] (required);
+}

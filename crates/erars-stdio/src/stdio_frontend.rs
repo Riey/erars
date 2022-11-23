@@ -91,7 +91,7 @@ impl StdioFrontend {
 
 #[async_trait::async_trait(?Send)]
 impl SystemFunctions for StdioFrontend {
-    async fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
+    fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
         if !self.inputs.is_empty() {
             if matches!(req.ty, InputRequestType::Int | InputRequestType::Str) {
                 return Ok(self.inputs.pop_front());
@@ -145,29 +145,29 @@ impl SystemFunctions for StdioFrontend {
         }
         self.draw(vconsole, &mut io::stdout().lock())
     }
-    async fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
+    fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
         erars_saveload_fs::load_local_list(&self.sav_path)
     }
-    async fn load_local(
+    fn load_local(
         &mut self,
         idx: u32,
     ) -> anyhow::Result<Option<SerializableVariableStorage>> {
         erars_saveload_fs::read_save_data(&self.sav_path, idx)
     }
-    async fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
+    fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
         erars_saveload_fs::read_global_data(&self.sav_path)
     }
-    async fn save_local(
+    fn save_local(
         &mut self,
         idx: u32,
         sav: SerializableVariableStorage,
     ) -> anyhow::Result<()> {
         erars_saveload_fs::write_save_data(&self.sav_path, idx, &sav)
     }
-    async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
+    fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
         erars_saveload_fs::delete_save_data(&self.sav_path, idx)
     }
-    async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
+    fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
         erars_saveload_fs::write_global_data(&self.sav_path, &sav)
     }
 }

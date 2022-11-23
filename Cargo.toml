@@ -9,8 +9,6 @@ members = [
     "./crates/erars-ast",
     "./crates/erars-bytecode",
     "./crates/erars-compiler",
-    "./crates/erars-egui",
-    "./crates/erars-proxy-system",
     "./crates/erars-reader",
     "./crates/erars-lexer",
     "./crates/erars-lint",
@@ -19,7 +17,6 @@ members = [
     "./crates/erars-stdio",
     "./crates/erars-ui",
     "./crates/erars-vm",
-    "./crates/erars-wasm",
 ]
 
 [dev-dependencies]
