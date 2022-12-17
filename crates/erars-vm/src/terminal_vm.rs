@@ -45,8 +45,7 @@ impl TerminalVm {
         Self { dic: function_dic }
     }
 
-    #[async_recursion::async_recursion(?Send)]
-    async fn run_body(
+    fn run_body(
         &self,
         func_identifier: FunctionIdentifier,
         body: &FunctionBody,
@@ -67,7 +66,7 @@ impl TerminalVm {
                 call_stack = ctx.call_stack(),
             );
 
-            match executor::run_instruction(self, func_name, inst, tx, ctx).await {
+            match executor::run_instruction(self, func_name, inst, tx, ctx) {
                 Ok(Normal) => {
                     cursor += 1;
                 }
@@ -80,7 +79,7 @@ impl TerminalVm {
                     let insts = Vec::from(erars_compiler::compile_expr(expr).unwrap());
 
                     for inst in insts {
-                        match executor::run_instruction(self, func_name, inst, tx, ctx).await? {
+                        match executor::run_instruction(self, func_name, inst, tx, ctx)? {
                             InstructionWorkflow::Normal => {}
                             _ => bail!("EvalFromString can't do flow control"),
                         }
@@ -136,7 +135,7 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    async fn call_internal(
+    fn call_internal(
         &self,
         label: FunctionIdentifier,
         args: &[Value],
@@ -175,7 +174,7 @@ impl TerminalVm {
 
         ctx.new_func(label, body.file_path);
 
-        let ret = self.run_body(label, body, tx, ctx).await?;
+        let ret = self.run_body(label, body, tx, ctx)?;
 
         ctx.end_func(label);
 
@@ -183,7 +182,7 @@ impl TerminalVm {
     }
 
     #[inline]
-    async fn call(
+    fn call(
         &self,
         label: impl StrKeyLike,
         args: &[Value],
@@ -198,11 +197,10 @@ impl TerminalVm {
             ctx,
             self.dic.get_func(label)?,
         )
-        .await
     }
 
     #[inline]
-    pub async fn try_call(
+    pub fn try_call(
         &self,
         label: impl StrKeyLike,
         args: &[Value],
@@ -213,20 +211,19 @@ impl TerminalVm {
         match self.dic.get_func_opt(label) {
             Some(body) => self
                 .call_internal(FunctionIdentifier::Normal(label), args, tx, ctx, body)
-                .await
                 .map(Some),
             None => Ok(None),
         }
     }
 
-    pub async fn call_event(
+    pub fn call_event(
         &self,
         ty: EventType,
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
         for body in self.dic.get_event(ty).iter() {
-            match self.run_body(FunctionIdentifier::Event(ty), body, tx, ctx).await? {
+            match self.run_body(FunctionIdentifier::Event(ty), body, tx, ctx)? {
                 Workflow::Return => {}
                 other => return Ok(other),
             }
@@ -236,14 +233,14 @@ impl TerminalVm {
     }
 
     /// Return: Is this normal exit
-    pub async fn start(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> bool {
+    pub fn start(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> bool {
         let mut begin_ty = Some(BeginType::Title);
         loop {
             let current_ty = match begin_ty.take() {
                 Some(ty) => ty,
                 None => break true,
             };
-            match executor::run_begin(self, current_ty, tx, ctx).await {
+            match executor::run_begin(self, current_ty, tx, ctx) {
                 Ok(Workflow::Begin(ty)) => {
                     begin_ty = Some(ty);
                 }

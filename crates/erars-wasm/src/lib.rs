@@ -59,14 +59,12 @@ const JS_SERIALIZER: serde_wasm_bindgen::Serializer = serde_wasm_bindgen::Serial
     .serialize_maps_as_objects(false)
     .serialize_missing_as_null(false);
 
-#[async_trait::async_trait(?Send)]
 impl erars_vm::SystemFunctions for WasmSystem {
-    async fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
+    fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
         let req_js = req.serialize(&JS_SERIALIZER).expect("Serialize InputRequest");
 
         loop {
             let value = JsFuture::from(self.callbacks.input(req_js.clone()))
-                .await
                 .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
 
             match req.ty {
@@ -93,23 +91,20 @@ impl erars_vm::SystemFunctions for WasmSystem {
         Ok(())
     }
 
-    async fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
+    fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
         let mut list = SaveList::new();
 
         for idx in 0..100 {
-            if let Some(sav) = self.load_local(idx).await? {
+            if let Some(sav) = self.load_local(idx)? {
                 list.insert(idx, sav);
             }
         }
 
         Ok(list)
     }
-    async fn load_local(
-        &mut self,
-        idx: u32,
-    ) -> anyhow::Result<Option<SerializableVariableStorage>> {
+
+    fn load_local(&mut self, idx: u32) -> anyhow::Result<Option<SerializableVariableStorage>> {
         let ret = JsFuture::from(self.callbacks.load_local(idx))
-            .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
 
         if ret.is_null() {
@@ -121,9 +116,8 @@ impl erars_vm::SystemFunctions for WasmSystem {
             bail!("Invalid save return {ret:?}");
         }
     }
-    async fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
+    fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
         let ret = JsFuture::from(self.callbacks.load_global())
-            .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
         if ret.is_null() {
             Ok(None)
@@ -134,25 +128,18 @@ impl erars_vm::SystemFunctions for WasmSystem {
             bail!("Invalid save return {ret:?}");
         }
     }
-    async fn save_local(
-        &mut self,
-        idx: u32,
-        sav: SerializableVariableStorage,
-    ) -> anyhow::Result<()> {
+    fn save_local(&mut self, idx: u32, sav: SerializableVariableStorage) -> anyhow::Result<()> {
         JsFuture::from(self.callbacks.save_local(idx, serde_json::to_string(&sav)?))
-            .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
         Ok(())
     }
-    async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
+    fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
         JsFuture::from(self.callbacks.remove_local(idx))
-            .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
         Ok(())
     }
-    async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
+    fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
         JsFuture::from(self.callbacks.save_global(serde_json::to_string(&sav)?))
-            .await
             .map_err(|err| anyhow::anyhow!("Js error: {err:?}"))?;
         Ok(())
     }
@@ -231,7 +218,7 @@ impl ErarsContext {
         .expect("Serialize falied")
     }
 
-    pub async fn run(&mut self) -> bool {
-        self.vm.start(&mut self.vconsole, &mut self.ctx).await
+    pub fn run(&mut self) -> bool {
+        self.vm.start(&mut self.vconsole, &mut self.ctx)
     }
 }

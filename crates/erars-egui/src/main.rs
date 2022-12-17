@@ -141,7 +141,7 @@ fn main() {
                     };
                     match ret {
                         Ok((vm, mut ctx, mut tx)) => {
-                            pollster::block_on(vm.start(&mut tx, &mut ctx));
+                            vm.start(&mut tx, &mut ctx);
                         }
                         Err(err) => {
                             log::error!("Game loading failed: {err}");

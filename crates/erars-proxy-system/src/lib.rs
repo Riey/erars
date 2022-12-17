@@ -36,10 +36,10 @@ pub struct ProxySystem {
 }
 
 impl ProxySystem {
-    async fn wait_response(&self, req: SystemRequest) -> anyhow::Result<SystemResponse> {
+    fn wait_response(&self, req: SystemRequest) -> anyhow::Result<SystemResponse> {
         self.req_tx.send(req).context("Send SystemRequest")?;
         (self.notify)();
-        self.res_rx.recv_async().await.context("Recv SystemResponse")
+        self.res_rx.recv().context("Recv SystemResponse")
     }
 
     pub fn send_quit(&self) {
@@ -48,10 +48,9 @@ impl ProxySystem {
     }
 }
 
-#[async_trait::async_trait(?Send)]
 impl SystemFunctions for ProxySystem {
-    async fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
-        match self.wait_response(SystemRequest::Input(req)).await? {
+    fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
+        match self.wait_response(SystemRequest::Input(req))? {
             SystemResponse::Empty => Ok(None),
             SystemResponse::Input(value) => Ok(Some(value)),
             _ => bail!("Invalid proxy response"),
@@ -65,41 +64,34 @@ impl SystemFunctions for ProxySystem {
         Ok(())
     }
 
-    async fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
-        match self.wait_response(SystemRequest::LoadLocalList).await? {
+    fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
+        match self.wait_response(SystemRequest::LoadLocalList)? {
             SystemResponse::SaveList(list) => Ok(list),
             _ => bail!("Invalid proxy response"),
         }
     }
-    async fn load_local(
-        &mut self,
-        idx: u32,
-    ) -> anyhow::Result<Option<SerializableVariableStorage>> {
-        match self.wait_response(SystemRequest::LoadLocal(idx)).await? {
+    fn load_local(&mut self, idx: u32) -> anyhow::Result<Option<SerializableVariableStorage>> {
+        match self.wait_response(SystemRequest::LoadLocal(idx))? {
             SystemResponse::LocalSav(sav) => Ok(sav),
             _ => bail!("Invalid proxy response"),
         }
     }
-    async fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
-        match self.wait_response(SystemRequest::LoadGlobal).await? {
+    fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
+        match self.wait_response(SystemRequest::LoadGlobal)? {
             SystemResponse::GlobalSav(sav) => Ok(sav),
             _ => bail!("Invalid proxy response"),
         }
     }
-    async fn save_local(
-        &mut self,
-        idx: u32,
-        sav: SerializableVariableStorage,
-    ) -> anyhow::Result<()> {
-        self.wait_response(SystemRequest::SaveLocal(idx, sav)).await?;
+    fn save_local(&mut self, idx: u32, sav: SerializableVariableStorage) -> anyhow::Result<()> {
+        self.wait_response(SystemRequest::SaveLocal(idx, sav))?;
         Ok(())
     }
-    async fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
-        self.wait_response(SystemRequest::RemoveLocal(idx)).await?;
+    fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
+        self.wait_response(SystemRequest::RemoveLocal(idx))?;
         Ok(())
     }
-    async fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
-        self.wait_response(SystemRequest::SaveGlobal(sav)).await?;
+    fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
+        self.wait_response(SystemRequest::SaveGlobal(sav))?;
         Ok(())
     }
 }
