@@ -164,9 +164,12 @@ fn main() {
 
             let mut style = egui::Style {
                 visuals: egui::Visuals {
-                    button_frame: false,
+                    button_frame: true,
                     extreme_bg_color: egui::Color32::BLACK,
+                    faint_bg_color: egui::Color32::BLACK,
                     widgets,
+                    panel_fill: egui::Color32::BLACK,
+                    window_fill: egui::Color32::BLACK,
                     ..egui::Visuals::dark()
                 },
                 ..(*ctx.egui_ctx.style()).clone()

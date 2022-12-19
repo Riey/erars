@@ -13,8 +13,8 @@ erars-loader = { path = "../erars-loader", features = ["multithread"] }
 erars-saveload-fs = { path = "../erars-saveload-fs", features = ["multithread"] }
 erars-proxy-system = { path = "../erars-proxy-system" }
 
-egui = { git = "https://github.com/emilk/egui" }
-eframe = { git = "https://github.com/emilk/egui", default-features = false, features = ["wgpu"] }
+egui = "0.20.1"
+eframe = { version = "0.20.1", default-features = false, features = ["wgpu"] }
 fontdb = { version = "0.10.0", features = ["fontconfig"] }
 clap = { version = "4", features = ["derive"] }
 flexi_logger = "0.24.0"

@@ -108,7 +108,7 @@ fn main() {
             } else if args.save {
                 save_script(vm, ctx, &args.target_path).unwrap();
             } else {
-                pollster::block_on(vm.start(&mut tx, &mut ctx));
+                vm.start(&mut tx, &mut ctx);
             }
         })
         .unwrap()
