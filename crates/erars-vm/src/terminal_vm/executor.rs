@@ -1619,9 +1619,7 @@ fn run_builtin_method(
                     } else if sav.version < ctx.header_info.gamebase.allow_version {
                         (3, None)
                     } else {
-                        let description = sav.description.clone();
-                        ctx.var.load_serializable(sav.to_local_data()?, &ctx.header_info)?;
-                        (0, Some(description))
+                        (0, Some(sav.description))
                     }
                 }
                 None => (1, None),

@@ -12,7 +12,7 @@ erars-ui = { path = "../erars-ui" }
 anyhow = "1.0.52"
 bitflags = "1.3.2"
 enum-map = { version = "2.0.0", features = ["serde"] }
-hashbrown = { version = "0.12", features = ["serde"] }
+hashbrown = { version = "0.13", features = ["serde"] }
 itertools = "0.10.3"
 log = "0.4.14"
 serde = { version = "1.0.132", features = ["derive"] }
@@ -30,8 +30,6 @@ twoway = "0.2.2"
 derivative = "2.2.0"
 tinyvec = "1.6.0"
 static_assertions = "1.1.0"
-async-trait = "0.1.57"
-async-recursion = "1.0.0"
 unicode_hfwidth = "0.2.0"
 rmp-serde = "1.1.1"
 flate2 = "1.0.25"

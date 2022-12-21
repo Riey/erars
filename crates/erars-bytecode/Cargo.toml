@@ -9,4 +9,4 @@ erars-vm = { path = "../erars-vm" }
 
 byteorder = "1.4.3"
 enum-map = "2.4.1"
-hashbrown = "0.12.3"
+hashbrown = "0.13.1"

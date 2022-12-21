@@ -85,6 +85,7 @@ fn main() {
             renderer: eframe::Renderer::Wgpu,
             drag_and_drop_support: false,
             resizable: true,
+            initial_window_size: Some(egui::vec2(700.0, 500.0)),
             ..Default::default()
         },
         Box::new(move |ctx| {
