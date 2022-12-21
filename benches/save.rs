@@ -19,6 +19,7 @@ fn save(c: &mut Criterion) {
         }),
         Default::default(),
         Box::new(NullSystemFunctions),
+        "sav".into(),
     );
     ctx.var.add_chara();
     c.bench_function("save_local", |b| {

@@ -33,6 +33,7 @@ fn run_test() {
             header.clone(),
             Arc::new(EraConfig::from_text(include_str!("../emuera.config")).unwrap()),
             Box::new(NullSystemFunctions),
+            "sav".into(),
         );
         let erb_file = erb_file.unwrap();
         let out_file = erb_file.parent().unwrap().join(format!(
@@ -72,7 +73,7 @@ fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
     let vm = TerminalVm::new(dic);
     let mut tx = VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log);
 
-    let ok = futures_executor::block_on(vm.start(&mut tx, &mut ctx));
+    let ok = vm.start(&mut tx, &mut ctx);
 
     // Check stack is empty if return success
     if ok {

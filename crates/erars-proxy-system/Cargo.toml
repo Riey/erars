@@ -6,7 +6,6 @@ license = "GPL-3.0-or-later"
 
 [dependencies]
 anyhow = "1.0.66"
-async-trait = "0.1.58"
 erars-ast = { path = "../erars-ast" }
 erars-compiler = { path = "../erars-compiler" }
 erars-ui = { path = "../erars-ui" }

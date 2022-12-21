@@ -1,9 +1,6 @@
 #![windows_subsystem = "windows"]
 
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 use eframe::App;
 use egui::{FontData, FontFamily, Widget};
@@ -88,13 +85,13 @@ fn main() {
             renderer: eframe::Renderer::Wgpu,
             drag_and_drop_support: false,
             resizable: true,
+            initial_window_size: Some(egui::vec2(700.0, 500.0)),
             ..Default::default()
         },
         Box::new(move |ctx| {
             let egui_ctx = ctx.egui_ctx.clone();
             let (system, receiver) =
                 erars_proxy_system::new_proxy(Arc::new(move || egui_ctx.request_repaint()));
-            let sav_path = Path::new(&args.target_path).join("sav");
             let config = load_config(&args.target_path);
             let font_size = config.font_size;
             let line_height = config.line_height;
@@ -141,7 +138,7 @@ fn main() {
                     };
                     match ret {
                         Ok((vm, mut ctx, mut tx)) => {
-                            pollster::block_on(vm.start(&mut tx, &mut ctx));
+                            vm.start(&mut tx, &mut ctx);
                         }
                         Err(err) => {
                             log::error!("Game loading failed: {err}");
@@ -164,9 +161,12 @@ fn main() {
 
             let mut style = egui::Style {
                 visuals: egui::Visuals {
-                    button_frame: false,
+                    button_frame: true,
                     extreme_bg_color: egui::Color32::BLACK,
+                    faint_bg_color: egui::Color32::BLACK,
                     widgets,
+                    panel_fill: egui::Color32::BLACK,
+                    window_fill: egui::Color32::BLACK,
                     ..egui::Visuals::dark()
                 },
                 ..(*ctx.egui_ctx.style()).clone()
@@ -204,7 +204,7 @@ fn main() {
             ctx.egui_ctx.set_fonts(font_def);
             ctx.egui_ctx.set_style(style);
 
-            Box::new(EraApp::new(receiver, sav_path, line_height))
+            Box::new(EraApp::new(receiver, line_height))
         }),
     );
 }
@@ -215,13 +215,12 @@ struct EraApp {
     skip: bool,
     receiver: ProxyReceiver,
     console_frame: ConsoleFrame,
-    sav_path: PathBuf,
     input: String,
     line_height: u32,
 }
 
 impl EraApp {
-    pub fn new(receiver: ProxyReceiver, sav_path: PathBuf, line_height: u32) -> Self {
+    pub fn new(receiver: ProxyReceiver, line_height: u32) -> Self {
         Self {
             current_req: None,
             need_scroll_down: false,
@@ -229,7 +228,6 @@ impl EraApp {
             receiver,
             console_frame: ConsoleFrame::default(),
             input: String::new(),
-            sav_path,
             line_height,
         }
     }
@@ -258,33 +256,6 @@ impl App for EraApp {
                 SystemRequest::Redraw(console_frame) => {
                     self.console_frame = console_frame;
                     self.need_scroll_down = true;
-                }
-                SystemRequest::LoadGlobal => {
-                    if let Ok(sav) = erars_saveload_fs::read_global_data(&self.sav_path) {
-                        self.receiver.res_tx.send(SystemResponse::GlobalSav(sav)).unwrap();
-                    }
-                }
-                SystemRequest::LoadLocalList => {
-                    if let Ok(sav) = erars_saveload_fs::load_local_list(&self.sav_path) {
-                        self.receiver.res_tx.send(SystemResponse::SaveList(sav)).unwrap();
-                    }
-                }
-                SystemRequest::LoadLocal(idx) => {
-                    if let Ok(sav) = erars_saveload_fs::read_save_data(&self.sav_path, idx) {
-                        self.receiver.res_tx.send(SystemResponse::LocalSav(sav)).unwrap();
-                    }
-                }
-                SystemRequest::SaveLocal(idx, sav) => {
-                    erars_saveload_fs::write_save_data(&self.sav_path, idx, &sav).ok();
-                    self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
-                }
-                SystemRequest::RemoveLocal(idx) => {
-                    erars_saveload_fs::delete_save_data(&self.sav_path, idx).ok();
-                    self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
-                }
-                SystemRequest::SaveGlobal(sav) => {
-                    erars_saveload_fs::write_global_data(&self.sav_path, &sav).ok();
-                    self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
                 }
             }
         }

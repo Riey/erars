@@ -1,5 +1,6 @@
 use anyhow::{bail, Context, Result};
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use erars_ast::{EventType, ScriptPosition, StrKey, Value, VariableInfo};
@@ -15,6 +16,7 @@ pub struct VmContext {
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
     pub system: Box<dyn SystemFunctions>,
+    pub sav_dir: PathBuf,
 
     /// For NOSKIP/ENDNOSKIP
     pub(crate) prev_skipdisp: Option<bool>,
@@ -34,9 +36,11 @@ impl VmContext {
         header_info: Arc<HeaderInfo>,
         config: Arc<EraConfig>,
         system: Box<dyn SystemFunctions>,
+        sav_dir: PathBuf,
     ) -> Self {
         let mut ret = Self {
             var: VariableStorage::new(&header_info.global_variables),
+            sav_dir,
             system,
             header_info,
             stack: Vec::with_capacity(1024),

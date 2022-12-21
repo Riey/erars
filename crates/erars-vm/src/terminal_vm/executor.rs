@@ -29,7 +29,7 @@ macro_rules! conv_workflow {
 //         call!($vm, $name, &[], $tx, $ctx)
 //     };
 //     ($vm:expr, $name:expr, $args:expr, $tx:expr, $ctx:expr) => {
-//         conv_workflow!($vm.call($name, $args, $tx, $ctx).await?)
+//         conv_workflow!($vm.call($name, $args, $tx, $ctx)?)
 //     };
 // }
 
@@ -38,7 +38,7 @@ macro_rules! try_call {
         try_call!($vm, $name, &[], $tx, $ctx)
     };
     ($vm:expr, $name:expr, $args:expr, $tx:expr, $ctx:expr) => {
-        match $vm.try_call($name, $args, $tx, $ctx).await? {
+        match $vm.try_call($name, $args, $tx, $ctx)? {
             Some(Workflow::Return) => true,
             None => false,
             Some(other) => return Ok(other.into()),
@@ -48,7 +48,7 @@ macro_rules! try_call {
 
 macro_rules! call_event {
     ($vm:expr, $ty:expr, $tx:expr, $ctx:expr) => {
-        conv_workflow!($vm.call_event($ty, $tx, $ctx).await?)
+        conv_workflow!($vm.call_event($ty, $tx, $ctx)?)
     };
 }
 
@@ -96,7 +96,7 @@ macro_rules! get_arg {
     };
 }
 
-pub(super) async fn run_instruction(
+pub(super) fn run_instruction(
     vm: &TerminalVm,
     func_name: StrKey,
     inst: Instruction,
@@ -211,20 +211,18 @@ pub(super) async fn run_instruction(
         ctx.system.redraw(tx)?;
         if flags.contains(PrintFlags::WAIT) {
             let gen = tx.input_gen();
-            ctx.system
-                .input(InputRequest {
-                    generation: gen,
-                    ty: InputRequestType::AnyKey,
-                    is_one: false,
-                    timeout: None,
-                })
-                .await?;
+            ctx.system.input(InputRequest {
+                generation: gen,
+                ty: InputRequestType::AnyKey,
+                is_one: false,
+                timeout: None,
+            })?;
         }
     } else if let Some(c) = inst.as_try_call().or_else(|| inst.as_try_jump()) {
         let func = ctx.pop_strkey()?;
         let args = ctx.take_value_list(c)?;
 
-        match vm.try_call(func, &args, tx, ctx).await? {
+        match vm.try_call(func, &args, tx, ctx)? {
             Some(Workflow::Return) => {
                 if inst.is_try_jump() {
                     return Ok(Workflow::Return.into());
@@ -240,7 +238,7 @@ pub(super) async fn run_instruction(
         let func = ctx.pop_strkey()?;
         let args = ctx.take_value_list(c)?;
 
-        match vm.call(func, &args, tx, ctx).await? {
+        match vm.call(func, &args, tx, ctx)? {
             Workflow::Return => {
                 if inst.is_jump() {
                     return Ok(Workflow::Return.into());
@@ -391,9 +389,9 @@ pub(super) async fn run_instruction(
 
         ctx.push(value);
     } else if let Some(meth) = inst.as_builtin_method() {
-        run_builtin_method(meth, func_name, tx, ctx).await?;
+        run_builtin_method(meth, func_name, tx, ctx)?;
     } else if let Some(com) = inst.as_builtin_command() {
-        return run_builtin_command(com, vm, tx, ctx).await;
+        return run_builtin_command(com, vm, tx, ctx);
     } else {
         if !inst.is_nop() && !inst.is_debug() {
             bail!("Unimplemented instruction: {inst:?}");
@@ -403,16 +401,16 @@ pub(super) async fn run_instruction(
     Ok(InstructionWorkflow::Normal)
 }
 
-async fn run_save_game(
+fn run_save_game(
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
 ) -> Result<Workflow> {
-    let mut savs = ctx.system.load_local_list().await?;
+    let mut savs = crate::save::load_local_list(&ctx.sav_dir)?;
     print_sav_data_list(&savs, tx);
 
     loop {
-        match ctx.system.input_int_redraw(tx).await? {
+        match ctx.system.input_int_redraw(tx)? {
             100 => break Ok(Workflow::Return),
             i if i >= 0 && i < SAVE_COUNT as i64 => {
                 let i = i as u32;
@@ -421,7 +419,7 @@ async fn run_save_game(
                     tx.print_line("[0] Yes [1] No".into());
 
                     loop {
-                        match ctx.system.input_int_redraw(tx).await? {
+                        match ctx.system.input_int_redraw(tx)? {
                             0 => break true,
                             1 => break false,
                             _ => continue,
@@ -437,8 +435,8 @@ async fn run_save_game(
                     ctx.put_form_enabled = false;
                     let description = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
                     let sav = ctx.var.get_serializable(&ctx.header_info, description);
-                    ctx.system.save_local(i, sav.clone()).await?;
-                    savs.insert(i, sav);
+                    crate::save::write_save_data(&ctx.sav_dir, i, &sav)?;
+                    savs.insert(i, Either::Left(sav));
                 }
             }
             _ => {}
@@ -446,16 +444,15 @@ async fn run_save_game(
     }
 }
 
-async fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Option<u32>> {
-    let mut savs = ctx.system.load_local_list().await?;
+fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Option<u32>> {
+    let mut savs = crate::save::load_local_list(&ctx.sav_dir)?;
     print_sav_data_list(&savs, tx);
 
     loop {
-        match ctx.system.input_int_redraw(tx).await? {
+        match ctx.system.input_int_redraw(tx)? {
             100 => break Ok(None),
             i if i >= 0 && i < SAVE_COUNT as i64 => {
                 if let Some(_) = savs.remove(&(i as u32)) {
-                    ctx.system.remove_local(i as u32).await?;
                     break Ok(Some(i as u32));
                 }
             }
@@ -464,13 +461,15 @@ async fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<O
     }
 }
 
-async fn run_load_data(
+fn run_load_data(
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
     idx: u32,
 ) -> Result<Workflow> {
-    let sav = ctx.system.load_local(idx).await?.unwrap();
+    let sav = crate::save::read_save_data(&ctx.sav_dir, idx)?
+        .unwrap()
+        .to_local_data()?;
 
     ctx.lastload_text = sav.description.clone();
     ctx.lastload_no = idx;
@@ -483,7 +482,7 @@ async fn run_load_data(
     Ok(Workflow::Begin(BeginType::Shop))
 }
 
-async fn run_call_train(
+fn run_call_train(
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
@@ -518,8 +517,11 @@ const SAVE_COUNT: u32 = 20;
 fn print_sav_data_list(savs: &SaveList, tx: &mut VirtualConsole) {
     for i in 0..SAVE_COUNT {
         match savs.get(&i) {
-            Some(sav) => {
-                tx.print_line(format!("[{i:02}] - {}", sav.description));
+            Some(
+                Either::Left(SerializableVariableStorage { description, .. })
+                | Either::Right(RawSaveData { description, .. }),
+            ) => {
+                tx.print_line(format!("[{i:02}] - {description}"));
             }
             None => {
                 tx.print_line(format!("[{i:02}] - NO DATA"));
@@ -530,7 +532,7 @@ fn print_sav_data_list(savs: &SaveList, tx: &mut VirtualConsole) {
     tx.print_line("[100] Return".into());
 }
 
-pub async fn run_begin(
+pub fn run_begin(
     vm: &TerminalVm,
     ty: BeginType,
     tx: &mut VirtualConsole,
@@ -582,7 +584,7 @@ pub async fn run_begin(
 
                         ctx.var.prepare_train_data()?;
 
-                        let no = ctx.system.input_int_redraw(tx).await?;
+                        let no = ctx.system.input_int_redraw(tx)?;
                         ctx.var.set_result(no);
 
                         let com_exists = match no.try_into() {
@@ -631,7 +633,7 @@ pub async fn run_begin(
             try_call!(vm, "SHOW_ABLUP_SELECT", tx, ctx);
 
             loop {
-                let i = ctx.system.input_int_redraw(tx).await?;
+                let i = ctx.system.input_int_redraw(tx)?;
                 ctx.var.set_result(i);
 
                 if matches!(i, 0..=99) {
@@ -653,7 +655,7 @@ pub async fn run_begin(
             loop {
                 try_call!(vm, "SHOW_SHOP", tx, ctx);
 
-                let i = ctx.system.input_int_redraw(tx).await?;
+                let i = ctx.system.input_int_redraw(tx)?;
                 ctx.var.set_result(i);
 
                 if i >= 0 && i < ctx.header_info.replace.sell_item_count {
@@ -713,7 +715,7 @@ fn range_end_opt<T>(arr: &mut [T], start: usize, end: Option<usize>) -> Result<&
     .ok_or_else(|| anyhow!("Array index out of bound"))
 }
 
-async fn run_builtin_method(
+fn run_builtin_method(
     meth: BuiltinMethod,
     func_name: StrKey,
     tx: &mut VirtualConsole,
@@ -1610,15 +1612,14 @@ async fn run_builtin_method(
             check_arg_count!(1);
             let idx = get_arg!(@u32: args, ctx);
 
-            let (ret, rets) = match ctx.system.load_local(idx).await? {
+            let (ret, rets) = match crate::save::read_save_data(&ctx.sav_dir, idx)? {
                 Some(sav) => {
                     if sav.code != ctx.header_info.gamebase.code {
                         (2, None)
                     } else if sav.version < ctx.header_info.gamebase.allow_version {
                         (3, None)
                     } else {
-                        ctx.var.load_serializable(sav.clone(), &ctx.header_info)?;
-                        (0, Some(sav.description.clone()))
+                        (0, Some(sav.description))
                     }
                 }
                 None => (1, None),
@@ -1633,7 +1634,7 @@ async fn run_builtin_method(
     Ok(())
 }
 
-async fn run_builtin_command(
+fn run_builtin_command(
     com: BuiltinCommand,
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
@@ -1938,40 +1939,36 @@ async fn run_builtin_command(
             };
 
             let gen = tx.input_gen();
-            ctx.system
-                .input_redraw(
-                    tx,
-                    InputRequest {
-                        generation: gen,
-                        ty,
-                        is_one: false,
-                        timeout: Some(Timeout {
-                            timeout: to_time(time),
-                            default_value: Value::Int(0),
-                            show_timer: false,
-                            timeout_msg: None,
-                        }),
-                    },
-                )
-                .await?;
+            ctx.system.input_redraw(
+                tx,
+                InputRequest {
+                    generation: gen,
+                    ty,
+                    is_one: false,
+                    timeout: Some(Timeout {
+                        timeout: to_time(time),
+                        default_value: Value::Int(0),
+                        show_timer: false,
+                        timeout_msg: None,
+                    }),
+                },
+            )?;
         }
         BuiltinCommand::Wait | BuiltinCommand::WaitAnykey | BuiltinCommand::ForceWait => {
             let gen = tx.input_gen();
-            ctx.system
-                .input_redraw(
-                    tx,
-                    InputRequest::normal(
-                        gen,
-                        if com == BuiltinCommand::Wait {
-                            InputRequestType::EnterKey
-                        } else if com == BuiltinCommand::ForceWait {
-                            InputRequestType::ForceEnterKey
-                        } else {
-                            InputRequestType::AnyKey
-                        },
-                    ),
-                )
-                .await?;
+            ctx.system.input_redraw(
+                tx,
+                InputRequest::normal(
+                    gen,
+                    if com == BuiltinCommand::Wait {
+                        InputRequestType::EnterKey
+                    } else if com == BuiltinCommand::ForceWait {
+                        InputRequestType::ForceEnterKey
+                    } else {
+                        InputRequestType::AnyKey
+                    },
+                ),
+            )?;
         }
         BuiltinCommand::SkipDisp => {
             let arg = ctx.pop_int()?;
@@ -2056,7 +2053,7 @@ async fn run_builtin_command(
 
             let ty = req.ty;
 
-            let ret = ctx.system.input_redraw(tx, req).await?;
+            let ret = ctx.system.input_redraw(tx, req)?;
 
             match (ty, ret) {
                 (InputRequestType::Int, Some(Value::Int(i))) => {
@@ -2165,7 +2162,7 @@ async fn run_builtin_command(
                 .map(|c| u32::try_from(*c).context("CallTrain command convert"))
                 .collect::<Result<Vec<u32>>>()?;
 
-            conv_workflow!(run_call_train(vm, tx, ctx, commands).await?);
+            conv_workflow!(run_call_train(vm, tx, ctx, commands)?);
         }
         BuiltinCommand::DelChara => {
             let idx = get_arg!(@i64: args, ctx);
@@ -2181,26 +2178,28 @@ async fn run_builtin_command(
             log::info!("Save {idx}: {description}");
 
             let var = ctx.var.get_serializable(&ctx.header_info, description);
-            ctx.system.save_local(idx, var).await?;
+            crate::save::write_save_data(&ctx.sav_dir, idx, &var)?;
         }
         BuiltinCommand::LoadData => {
             let idx = get_arg!(@u32: args, ctx);
 
-            conv_workflow!(run_load_data(vm, tx, ctx, idx).await?);
+            conv_workflow!(run_load_data(vm, tx, ctx, idx)?);
         }
         BuiltinCommand::DelData => {
             let idx = get_arg!(@u32: args, ctx);
 
-            ctx.system.remove_local(idx).await?;
+            crate::save::delete_save_data(&ctx.sav_dir, idx)?;
         }
         BuiltinCommand::SaveGlobal => {
-            ctx.system
-                .save_global(ctx.var.get_global_serializable(&ctx.header_info))
-                .await?;
+            crate::save::write_global_data(
+                &ctx.sav_dir,
+                &ctx.var.get_global_serializable(&ctx.header_info),
+            )?;
         }
         BuiltinCommand::LoadGlobal => {
-            if let Some(global_sav) = ctx.system.load_global().await? {
-                ctx.var.load_global_serializable(global_sav, &ctx.header_info)?;
+            if let Some(global_sav) = crate::save::read_global_data(&ctx.sav_dir)? {
+                ctx.var
+                    .load_global_serializable(global_sav.to_global_data()?, &ctx.header_info)?;
             }
         }
         BuiltinCommand::Swap => {
@@ -2214,11 +2213,11 @@ async fn run_builtin_command(
             ctx.set_var_ref(&v2, temp1)?;
         }
         BuiltinCommand::SaveGame => {
-            conv_workflow!(run_save_game(vm, tx, ctx).await?);
+            conv_workflow!(run_save_game(vm, tx, ctx)?);
         }
-        BuiltinCommand::LoadGame => match run_load_game(tx, ctx).await? {
+        BuiltinCommand::LoadGame => match run_load_game(tx, ctx)? {
             Some(idx) => {
-                conv_workflow!(run_load_data(vm, tx, ctx, idx).await?);
+                conv_workflow!(run_load_data(vm, tx, ctx, idx)?);
             }
             None => {}
         },

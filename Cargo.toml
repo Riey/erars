@@ -15,11 +15,9 @@ members = [
     "./crates/erars-lexer",
     "./crates/erars-lint",
     "./crates/erars-loader",
-    "./crates/erars-saveload-fs",
     "./crates/erars-stdio",
     "./crates/erars-ui",
     "./crates/erars-vm",
-    "./crates/erars-wasm",
 ]
 
 [dev-dependencies]
@@ -40,7 +38,6 @@ serde = "1.0.145"
 log = "0.4.17"
 serde_yaml = "0.9.13"
 smol_str = "0.1.23"
-futures-executor = "0.3.24"
 mimalloc = { version = "0.1.31", default-features = false }
 
 [profile.dev]
