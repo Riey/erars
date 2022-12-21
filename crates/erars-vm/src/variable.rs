@@ -15,7 +15,9 @@ use serde::{Deserialize, Serialize};
 use erars_ui::VirtualConsole;
 use strum::{Display, IntoStaticStr};
 
-use crate::context::FunctionIdentifier;
+use crate::{
+    context::FunctionIdentifier, SerializableGlobalVariableStorage, SerializableVariableStorage,
+};
 
 macro_rules! set_var {
     ($self:expr, $name:ident, $value:expr) => {
@@ -33,25 +35,6 @@ macro_rules! set_var {
             }
         }
     };
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct SerializableVariableStorage {
-    pub description: String,
-    pub code: u32,
-    pub version: u32,
-    character_len: u32,
-    rand_seed: [u8; 32],
-    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, UniformVariable)>>,
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug, Default)]
-pub struct SerializableGlobalVariableStorage {
-    pub code: u32,
-    pub version: u32,
-    variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, UniformVariable)>>,
 }
 
 #[derive(Clone)]

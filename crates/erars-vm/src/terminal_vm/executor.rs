@@ -406,7 +406,7 @@ fn run_save_game(
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
 ) -> Result<Workflow> {
-    let mut savs = ctx.system.load_local_list()?;
+    let mut savs = crate::save::load_local_list(&ctx.sav_dir)?;
     print_sav_data_list(&savs, tx);
 
     loop {
@@ -435,8 +435,8 @@ fn run_save_game(
                     ctx.put_form_enabled = false;
                     let description = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
                     let sav = ctx.var.get_serializable(&ctx.header_info, description);
-                    ctx.system.save_local(i, sav.clone())?;
-                    savs.insert(i, sav);
+                    crate::save::write_save_data(&ctx.sav_dir, i, &sav)?;
+                    savs.insert(i, Either::Left(sav));
                 }
             }
             _ => {}
@@ -445,7 +445,7 @@ fn run_save_game(
 }
 
 fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Option<u32>> {
-    let mut savs = ctx.system.load_local_list()?;
+    let mut savs = crate::save::load_local_list(&ctx.sav_dir)?;
     print_sav_data_list(&savs, tx);
 
     loop {
@@ -453,7 +453,6 @@ fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Option<
             100 => break Ok(None),
             i if i >= 0 && i < SAVE_COUNT as i64 => {
                 if let Some(_) = savs.remove(&(i as u32)) {
-                    ctx.system.remove_local(i as u32)?;
                     break Ok(Some(i as u32));
                 }
             }
@@ -468,7 +467,9 @@ fn run_load_data(
     ctx: &mut VmContext,
     idx: u32,
 ) -> Result<Workflow> {
-    let sav = ctx.system.load_local(idx)?.unwrap();
+    let sav = crate::save::read_save_data(&ctx.sav_dir, idx)?
+        .unwrap()
+        .to_local_data()?;
 
     ctx.lastload_text = sav.description.clone();
     ctx.lastload_no = idx;
@@ -516,8 +517,11 @@ const SAVE_COUNT: u32 = 20;
 fn print_sav_data_list(savs: &SaveList, tx: &mut VirtualConsole) {
     for i in 0..SAVE_COUNT {
         match savs.get(&i) {
-            Some(sav) => {
-                tx.print_line(format!("[{i:02}] - {}", sav.description));
+            Some(
+                Either::Left(SerializableVariableStorage { description, .. })
+                | Either::Right(RawSaveData { description, .. }),
+            ) => {
+                tx.print_line(format!("[{i:02}] - {description}"));
             }
             None => {
                 tx.print_line(format!("[{i:02}] - NO DATA"));
@@ -1608,15 +1612,16 @@ fn run_builtin_method(
             check_arg_count!(1);
             let idx = get_arg!(@u32: args, ctx);
 
-            let (ret, rets) = match ctx.system.load_local(idx)? {
+            let (ret, rets) = match crate::save::read_save_data(&ctx.sav_dir, idx)? {
                 Some(sav) => {
                     if sav.code != ctx.header_info.gamebase.code {
                         (2, None)
                     } else if sav.version < ctx.header_info.gamebase.allow_version {
                         (3, None)
                     } else {
-                        ctx.var.load_serializable(sav.clone(), &ctx.header_info)?;
-                        (0, Some(sav.description.clone()))
+                        let description = sav.description.clone();
+                        ctx.var.load_serializable(sav.to_local_data()?, &ctx.header_info)?;
+                        (0, Some(description))
                     }
                 }
                 None => (1, None),
@@ -2175,7 +2180,7 @@ fn run_builtin_command(
             log::info!("Save {idx}: {description}");
 
             let var = ctx.var.get_serializable(&ctx.header_info, description);
-            ctx.system.save_local(idx, var)?;
+            crate::save::write_save_data(&ctx.sav_dir, idx, &var)?;
         }
         BuiltinCommand::LoadData => {
             let idx = get_arg!(@u32: args, ctx);
@@ -2185,15 +2190,18 @@ fn run_builtin_command(
         BuiltinCommand::DelData => {
             let idx = get_arg!(@u32: args, ctx);
 
-            ctx.system.remove_local(idx)?;
+            crate::save::delete_save_data(&ctx.sav_dir, idx)?;
         }
         BuiltinCommand::SaveGlobal => {
-            ctx.system
-                .save_global(ctx.var.get_global_serializable(&ctx.header_info))?;
+            crate::save::write_global_data(
+                &ctx.sav_dir,
+                &ctx.var.get_global_serializable(&ctx.header_info),
+            )?;
         }
         BuiltinCommand::LoadGlobal => {
-            if let Some(global_sav) = ctx.system.load_global()? {
-                ctx.var.load_global_serializable(global_sav, &ctx.header_info)?;
+            if let Some(global_sav) = crate::save::read_global_data(&ctx.sav_dir)? {
+                ctx.var
+                    .load_global_serializable(global_sav.to_global_data()?, &ctx.header_info)?;
             }
         }
         BuiltinCommand::Swap => {

@@ -80,11 +80,7 @@ fn main() {
         None => VecDeque::new(),
     };
 
-    let system = Box::new(stdio_frontend::StdioFrontend::new(
-        Path::new(&args.target_path).join("sav"),
-        args.json,
-        inputs,
-    ));
+    let system = Box::new(stdio_frontend::StdioFrontend::new(args.json, inputs));
 
     std::thread::Builder::new()
         .stack_size(8 * 1024 * 1024)

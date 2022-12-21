@@ -1,26 +1,26 @@
 mod context;
 mod function;
+mod save;
 mod terminal_vm;
 mod variable;
 
 use erars_ast::{BeginType, Value};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
 use hashbrown::HashMap;
+use itertools::Either;
 use pad::PadStr;
 use strum::Display;
 
-pub type SaveList = HashMap<u32, SerializableVariableStorage>;
+pub type SaveList = HashMap<u32, Either<SerializableVariableStorage, RawSaveData>>;
 
 pub type ArgVec = tinyvec::ArrayVec<[u32; 4]>;
 
 pub use crate::{
     context::{Callstack, LocalValue, VmContext},
     function::{EventCollection, FunctionArgDef, FunctionBody, FunctionDic, FunctionGotoLabel},
+    save::{RawSaveData, SerializableGlobalVariableStorage, SerializableVariableStorage},
     terminal_vm::TerminalVm,
-    variable::{
-        SerializableGlobalVariableStorage, SerializableVariableStorage, UniformVariable,
-        VariableStorage, VmVariable,
-    },
+    variable::{UniformVariable, VariableStorage, VmVariable},
 };
 
 pub use erars_compiler::{EraConfig, HeaderInfo, Instruction, Language};
@@ -59,13 +59,6 @@ pub trait SystemFunctions {
     }
 
     fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()>;
-
-    fn load_local_list(&mut self) -> anyhow::Result<SaveList>;
-    fn load_local(&mut self, idx: u32) -> anyhow::Result<Option<SerializableVariableStorage>>;
-    fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>>;
-    fn save_local(&mut self, idx: u32, sav: SerializableVariableStorage) -> anyhow::Result<()>;
-    fn remove_local(&mut self, idx: u32) -> anyhow::Result<()>;
-    fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()>;
 }
 
 #[derive(Clone, Copy)]
@@ -78,25 +71,6 @@ impl SystemFunctions for NullSystemFunctions {
     }
 
     fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
-        Ok(SaveList::new())
-    }
-    fn load_local(&mut self, idx: u32) -> anyhow::Result<Option<SerializableVariableStorage>> {
-        Ok(None)
-    }
-    fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
-        Ok(None)
-    }
-    fn save_local(&mut self, idx: u32, sav: SerializableVariableStorage) -> anyhow::Result<()> {
-        Ok(())
-    }
-    fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
-        Ok(())
-    }
-    fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
         Ok(())
     }
 }

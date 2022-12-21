@@ -10,7 +10,6 @@ erars-compiler = { path = "../erars-compiler" }
 erars-ui = { path = "../erars-ui" }
 erars-vm = { path = "../erars-vm" }
 erars-loader = { path = "../erars-loader", features = ["multithread"] }
-erars-saveload-fs = { path = "../erars-saveload-fs", features = ["multithread"] }
 erars-proxy-system = { path = "../erars-proxy-system" }
 
 egui = "0.20.1"

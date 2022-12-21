@@ -77,7 +77,12 @@ pub unsafe fn load_script(
     let elapsed = start.elapsed();
     log::info!("Load done! {}ms elapsed", elapsed.as_millis());
 
-    let mut ctx = VmContext::new(Arc::new(header), Arc::new(config), system);
+    let mut ctx = VmContext::new(
+        Arc::new(header),
+        Arc::new(config),
+        system,
+        Path::new(target_path).join("sav"),
+    );
 
     for (key, vars) in local_infos {
         for var in vars {
@@ -331,7 +336,12 @@ pub fn run_script(
             })
             .collect::<Vec<CompiledFunction>>();
 
-        ctx = VmContext::new(header_info.clone(), config, system);
+        ctx = VmContext::new(
+            header_info.clone(),
+            config,
+            system,
+            Path::new(target_path).join("sav"),
+        );
 
         for func in funcs {
             function_dic.insert_compiled_func(

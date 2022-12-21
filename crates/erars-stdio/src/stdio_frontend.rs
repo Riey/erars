@@ -1,16 +1,12 @@
 use erars_ast::Value;
 use erars_ui::{ConsoleLinePart, FontStyle, InputRequest, InputRequestType, VirtualConsole};
-use erars_vm::{
-    SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, SystemFunctions,
-};
+use erars_vm::SystemFunctions;
 use std::{
     collections::VecDeque,
     io::{self, Write},
-    path::PathBuf,
 };
 
 pub struct StdioFrontend {
-    sav_path: PathBuf,
     from: usize,
     input: String,
     json: bool,
@@ -18,9 +14,8 @@ pub struct StdioFrontend {
 }
 
 impl StdioFrontend {
-    pub fn new(sav_path: PathBuf, json: bool, inputs: VecDeque<Value>) -> Self {
+    pub fn new(json: bool, inputs: VecDeque<Value>) -> Self {
         Self {
-            sav_path,
             from: 0,
             input: String::new(),
             json,
@@ -143,24 +138,6 @@ impl SystemFunctions for StdioFrontend {
             return Ok(());
         }
         self.draw(vconsole, &mut io::stdout().lock())
-    }
-    fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
-        erars_saveload_fs::load_local_list(&self.sav_path)
-    }
-    fn load_local(&mut self, idx: u32) -> anyhow::Result<Option<SerializableVariableStorage>> {
-        erars_saveload_fs::read_save_data(&self.sav_path, idx)
-    }
-    fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
-        erars_saveload_fs::read_global_data(&self.sav_path)
-    }
-    fn save_local(&mut self, idx: u32, sav: SerializableVariableStorage) -> anyhow::Result<()> {
-        erars_saveload_fs::write_save_data(&self.sav_path, idx, &sav)
-    }
-    fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
-        erars_saveload_fs::delete_save_data(&self.sav_path, idx)
-    }
-    fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
-        erars_saveload_fs::write_global_data(&self.sav_path, &sav)
     }
 }
 

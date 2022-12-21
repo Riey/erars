@@ -1,11 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::{bail, Context};
+use anyhow::Context;
 use erars_ast::Value;
 use erars_ui::{Color, ConsoleLine, InputRequest, VirtualConsole};
-use erars_vm::{
-    SaveList, SerializableGlobalVariableStorage, SerializableVariableStorage, SystemFunctions,
-};
+use erars_vm::SystemFunctions;
 use flume::{unbounded, Receiver, Sender};
 
 pub fn new_proxy(notify: Arc<dyn Fn() + Send + Sync>) -> (ProxySystem, ProxyReceiver) {
@@ -53,7 +51,6 @@ impl SystemFunctions for ProxySystem {
         match self.wait_response(SystemRequest::Input(req))? {
             SystemResponse::Empty => Ok(None),
             SystemResponse::Input(value) => Ok(Some(value)),
-            _ => bail!("Invalid proxy response"),
         }
     }
 
@@ -61,37 +58,6 @@ impl SystemFunctions for ProxySystem {
         self.req_tx
             .send(SystemRequest::Redraw(ConsoleFrame::from_vconsole(vconsole)))
             .context("Send SystemRequest")?;
-        Ok(())
-    }
-
-    fn load_local_list(&mut self) -> anyhow::Result<SaveList> {
-        match self.wait_response(SystemRequest::LoadLocalList)? {
-            SystemResponse::SaveList(list) => Ok(list),
-            _ => bail!("Invalid proxy response"),
-        }
-    }
-    fn load_local(&mut self, idx: u32) -> anyhow::Result<Option<SerializableVariableStorage>> {
-        match self.wait_response(SystemRequest::LoadLocal(idx))? {
-            SystemResponse::LocalSav(sav) => Ok(sav),
-            _ => bail!("Invalid proxy response"),
-        }
-    }
-    fn load_global(&mut self) -> anyhow::Result<Option<SerializableGlobalVariableStorage>> {
-        match self.wait_response(SystemRequest::LoadGlobal)? {
-            SystemResponse::GlobalSav(sav) => Ok(sav),
-            _ => bail!("Invalid proxy response"),
-        }
-    }
-    fn save_local(&mut self, idx: u32, sav: SerializableVariableStorage) -> anyhow::Result<()> {
-        self.wait_response(SystemRequest::SaveLocal(idx, sav))?;
-        Ok(())
-    }
-    fn remove_local(&mut self, idx: u32) -> anyhow::Result<()> {
-        self.wait_response(SystemRequest::RemoveLocal(idx))?;
-        Ok(())
-    }
-    fn save_global(&mut self, sav: SerializableGlobalVariableStorage) -> anyhow::Result<()> {
-        self.wait_response(SystemRequest::SaveGlobal(sav))?;
         Ok(())
     }
 }
@@ -125,20 +91,10 @@ impl ConsoleFrame {
 pub enum SystemRequest {
     Redraw(ConsoleFrame),
     Input(InputRequest),
-    SaveLocal(u32, SerializableVariableStorage),
-    SaveGlobal(SerializableGlobalVariableStorage),
-    LoadLocal(u32),
-    LoadGlobal,
-    RemoveLocal(u32),
-    LoadLocalList,
-
     Quit,
 }
 
 pub enum SystemResponse {
     Empty,
     Input(Value),
-    SaveList(SaveList),
-    LocalSav(Option<SerializableVariableStorage>),
-    GlobalSav(Option<SerializableGlobalVariableStorage>),
 }

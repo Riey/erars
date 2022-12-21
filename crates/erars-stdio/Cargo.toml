@@ -10,7 +10,6 @@ erars-compiler = { path = "../erars-compiler" }
 erars-ui = { path = "../erars-ui" }
 erars-vm = { path = "../erars-vm" }
 erars-loader = { path = "../erars-loader", features = ["multithread"] }
-erars-saveload-fs = { path = "../erars-saveload-fs", features = ["multithread"] }
 
 clap = { version = "4", features = ["derive"] }
 log-panics = "2.1.0"

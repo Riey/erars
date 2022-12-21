@@ -20,6 +20,21 @@
             "console": "externalTerminal",
         },
         {
+            "name": "Launch YM in Windows",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/erars-stdio.exe",
+            "args": [
+                "..\\eraTHYMKR\\",
+                "--log-level=debug",
+                "--use-input=shop.ron",
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceRoot}",
+            "environment": [],
+            "console": "externalTerminal",
+        },
+        {
             "type": "lldb",
             "request": "launch",
             "name": "Debug executable 'erars'",
