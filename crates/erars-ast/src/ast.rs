@@ -232,6 +232,7 @@ option_set::option_set! {
         const PLAIN = 0x20;
         const FORCE_KANA = 0x40;
         const DEFAULT_COLOR = 0x80;
+        const DEBUG = 0x100;
     }
 }
 

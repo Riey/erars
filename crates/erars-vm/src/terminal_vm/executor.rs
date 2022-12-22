@@ -177,6 +177,11 @@ pub(super) fn run_instruction(
     } else if let Some(flags) = inst.as_print() {
         let s = ctx.pop_str()?;
 
+        if flags.contains(PrintFlags::DEBUG) {
+            // TODO: check DEBUG
+            return Ok(InstructionWorkflow::Normal);
+        }
+
         if flags.contains(PrintFlags::FORCE_KANA) {
             log::error!("Unimplemented: FORCE_KANA");
         }

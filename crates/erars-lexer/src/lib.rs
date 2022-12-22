@@ -96,7 +96,19 @@ unsafe fn parse_print_plain(s: &str) -> (PrintType, &str) {
     (ty, trim_text(s))
 }
 
+unsafe fn parse_debug_print(s: &str) -> (PrintFlags, PrintType, &str) {
+    // skip DEBUG
+    let s = s.get_unchecked("DEBUG".len()..);
+    let (mut flags, ty, s) = parse_print(s);
+    flags |= PrintFlags::DEBUG;
+
+    (flags, ty, s)
+}
+
 unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
+    // skip DEBUG
+    let s = s.trim_start_matches("DEBUG");
+
     // skip PRINT
     let mut s = s.get_unchecked("PRINT".len()..);
     let mut flags = PrintFlags::empty();
@@ -346,7 +358,7 @@ pub enum Token<'s> {
     #[token("#SINGLE", ignore(ascii_case))]
     Single,
 
-    #[regex(r"[^!-/:-@\[-\^\{-~\x00-\x1F\x7F\t\n\x0C\r ]+", priority = 2)]
+    #[regex(r"[^!-/:-@\[-\^\{-~\x00-\x1F\x7F\t\n\x0C\r ]+", priority = 3)]
     Ident(&'s str),
 
     #[token("CALLEVENT", ignore(ascii_case))]
@@ -356,6 +368,7 @@ pub enum Token<'s> {
     PrintButton((PrintFlags, &'s str)),
     #[regex(r"PRINTPLAIN(FORM)?( [^\n]*)?", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
     PrintPlain((PrintType, &'s str)),
+    #[regex(r"DEBUGPRINT(SINGLE)?(DATA|V|S|FORMS?)?(L?C)?[DK]?[LW]?( [^\n]*)?", |lex| unsafe { parse_debug_print(lex.slice()) }, ignore(ascii_case))]
     #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?(L?C)?[DK]?[LW]?( [^\n]*)?", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
     Print((PrintFlags, PrintType, &'s str)),
     #[token("DATA", lex_line_left, ignore(ascii_case))]
