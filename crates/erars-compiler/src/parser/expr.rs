@@ -879,10 +879,7 @@ pub fn dim_line<'c, 'a>(
             opt(preceded(char_sp(','), separated_list0(char_sp(','), u32))),
             opt(preceded(
                 char_sp('='),
-                separated_list0(
-                    char_sp(','),
-                    map(expr(ctx), |expr| const_eval_log_error(ctx, &expr)),
-                ),
+                separated_list0(char_sp(','), expr(ctx)),
             )),
         ))(i)?;
 
@@ -904,34 +901,6 @@ pub fn dim_line<'c, 'a>(
     }
 }
 
-pub fn const_eval<'e>(ctx: &ParserContext, expr: &'e Expr) -> Result<InlineValue, &'e Expr> {
-    match expr {
-        Expr::Int(i) => Ok(InlineValue::Int(*i)),
-        Expr::String(s) => Ok(InlineValue::String(*s, 0)),
-        Expr::UnaryopExpr(expr, op) => match op {
-            UnaryOperator::Minus => match const_eval(ctx, expr)? {
-                InlineValue::Int(i) => Ok(InlineValue::Int(-i)),
-                InlineValue::String(_, _) => Err(expr),
-            },
-            UnaryOperator::Not => match const_eval(ctx, expr)? {
-                InlineValue::Int(i) => Ok(InlineValue::Int(!i)),
-                InlineValue::String(_, _) => Err(expr),
-            },
-        },
-        _ => Err(expr),
-    }
-}
-
-pub fn const_eval_log_error(ctx: &ParserContext, expr: &Expr) -> InlineValue {
-    match const_eval(ctx, expr) {
-        Ok(v) => v,
-        Err(expr) => {
-            log::error!("Const evaluation failed for expr {expr:?}");
-            InlineValue::Int(0)
-        }
-    }
-}
-
 pub fn form_arg_expr<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
@@ -948,7 +917,7 @@ fn function_arg_list<'c, 'a>(
                 variable(ctx),
                 opt(preceded(
                     char_sp('='),
-                    map(expr(ctx), |expr| const_eval_log_error(ctx, &expr)),
+                    map(expr(ctx), |expr| ctx.header.const_eval_log_error(&expr)),
                 )),
             )),
         )(i)

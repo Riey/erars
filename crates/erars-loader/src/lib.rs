@@ -90,7 +90,14 @@ pub unsafe fn load_script(
         }
     }
 
-    Ok((TerminalVm { dic }, ctx, vconsole))
+    Ok((
+        TerminalVm {
+            dic,
+            header: ctx.header_info.clone(),
+        },
+        ctx,
+        vconsole,
+    ))
 }
 
 #[allow(unused_assignments)]
@@ -385,7 +392,7 @@ pub fn run_script(
         check_time!("Report errors", ctx.system);
     }
 
-    let vm = TerminalVm::new(function_dic);
+    let vm = TerminalVm::new(function_dic, ctx.header_info.clone());
 
     Ok((vm, ctx, tx))
 }

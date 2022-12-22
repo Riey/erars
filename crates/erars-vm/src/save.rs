@@ -5,7 +5,7 @@ use hashbrown::HashMap;
 use itertools::Either;
 use serde::{Deserialize, Serialize};
 use std::{
-    io::{Read, Write, BufReader},
+    io::{BufReader, Read, Write},
     path::Path,
 };
 

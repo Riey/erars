@@ -1,6 +1,7 @@
 mod executor;
 
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use crate::*;
 use crate::{context::FunctionIdentifier, variable::StrKeyLike};
@@ -23,6 +24,7 @@ macro_rules! report_error {
 
 pub struct TerminalVm {
     pub dic: FunctionDic,
+    pub header: Arc<HeaderInfo>,
 }
 
 impl From<Workflow> for InstructionWorkflow {
@@ -41,8 +43,11 @@ enum InstructionWorkflow {
 }
 
 impl TerminalVm {
-    pub fn new(function_dic: FunctionDic) -> Self {
-        Self { dic: function_dic }
+    pub fn new(function_dic: FunctionDic, header: Arc<HeaderInfo>) -> Self {
+        Self {
+            dic: function_dic,
+            header,
+        }
     }
 
     fn run_body(

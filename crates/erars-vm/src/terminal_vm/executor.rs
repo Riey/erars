@@ -1728,7 +1728,7 @@ fn run_builtin_command(
 
             match (value, start, end) {
                 (None, None, None) => {
-                    var.reset(info);
+                    var.reset(&vm.header, info);
                 }
                 (Some(value), start, end) => {
                     let var = match var {

@@ -39,7 +39,7 @@ impl VmContext {
         sav_dir: PathBuf,
     ) -> Self {
         let mut ret = Self {
-            var: VariableStorage::new(&header_info.global_variables),
+            var: VariableStorage::new(header_info.clone(), &header_info.global_variables),
             sav_dir,
             system,
             header_info,

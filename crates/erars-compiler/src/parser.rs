@@ -3,8 +3,8 @@ mod expr;
 
 use erars_ast::{
     get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
-    Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, Interner, PrintFlags,
-    ScriptPosition, Stmt, StmtWithPos, StrKey, Variable, VariableInfo,
+    Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, InlineValue, Interner, PrintFlags,
+    ScriptPosition, Stmt, StmtWithPos, StrKey, UnaryOperator, Variable, VariableInfo,
 };
 use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
 use hashbrown::{HashMap, HashSet};
@@ -343,6 +343,53 @@ pub struct HeaderInfo {
 }
 
 impl HeaderInfo {
+    pub fn const_eval_log_error(&self, expr: &Expr) -> InlineValue {
+        match self.const_eval(expr) {
+            Ok(v) => v,
+            Err(expr) => {
+                log::error!("Const evaluation failed for expr {expr:?}");
+                InlineValue::Int(0)
+            }
+        }
+    }
+
+    pub fn const_eval<'e>(&self, expr: &'e Expr) -> Result<InlineValue, &'e Expr> {
+        match expr {
+            Expr::Int(i) => Ok(InlineValue::Int(*i)),
+            Expr::String(s) => Ok(InlineValue::String(*s, 0)),
+            Expr::UnaryopExpr(expr, op) => match op {
+                UnaryOperator::Minus => match self.const_eval(expr)? {
+                    InlineValue::Int(i) => Ok(InlineValue::Int(-i)),
+                    InlineValue::String(_, _) => Err(expr),
+                },
+                UnaryOperator::Not => match self.const_eval(expr)? {
+                    InlineValue::Int(i) => Ok(InlineValue::Int(!i)),
+                    InlineValue::String(_, _) => Err(expr),
+                },
+            },
+            Expr::Var(var) => {
+                if let Some(var_info) = match var.func_extern {
+                    Some(_func) => {
+                        log::warn!("TODO: local const");
+                        return Err(expr);
+                    }
+                    None => self.global_variables.get(&var.var),
+                } {
+                    if var_info.is_const {
+                        let Some(init) = var_info.init.get(0) else { return Err(expr); };
+                        let Ok(init) = self.const_eval(init) else { return Err(expr); };
+                        Ok(init)
+                    } else {
+                        Err(expr)
+                    }
+                } else {
+                    return Err(expr);
+                }
+            }
+            _ => Err(expr),
+        }
+    }
+
     pub fn merge_rename_csv(&mut self, s: &str) -> ParserResult<()> {
         let interner = get_interner();
 
@@ -1228,25 +1275,11 @@ impl ParserContext {
                             infos.push(FunctionInfo::Dim(var));
                         }
                         Some(Token::LocalSize(size)) => {
-                            let size = self::expr::const_eval_log_error(
-                                self,
-                                &try_nom!(lex, self::expr::expr(self)(size)).1,
-                            )
-                            .to_int()
-                            .unwrap_or_default()
-                            .try_into()
-                            .unwrap_or_default();
+                            let size = try_nom!(lex, self::expr::expr(self)(size)).1;
                             infos.push(FunctionInfo::LocalSize(size));
                         }
                         Some(Token::LocalSSize(size)) => {
-                            let size = self::expr::const_eval_log_error(
-                                self,
-                                &try_nom!(lex, self::expr::expr(self)(size)).1,
-                            )
-                            .to_int()
-                            .unwrap_or_default()
-                            .try_into()
-                            .unwrap_or_default();
+                            let size = try_nom!(lex, self::expr::expr(self)(size)).1;
                             infos.push(FunctionInfo::LocalSSize(size));
                         }
                         Some(other) => match self.parse_stmt(other, lex) {
@@ -1334,25 +1367,11 @@ impl ParserContext {
                             infos.push(FunctionInfo::Dim(var));
                         }
                         Some(Token::LocalSize(size)) => {
-                            let size = self::expr::const_eval_log_error(
-                                self,
-                                &try_nom!(lex, self::expr::expr(self)(size)).1,
-                            )
-                            .to_int()
-                            .unwrap_or_default()
-                            .try_into()
-                            .unwrap_or_default();
+                            let size = try_nom!(lex, self::expr::expr(self)(size)).1;
                             infos.push(FunctionInfo::LocalSize(size));
                         }
                         Some(Token::LocalSSize(size)) => {
-                            let size = self::expr::const_eval_log_error(
-                                self,
-                                &try_nom!(lex, self::expr::expr(self)(size)).1,
-                            )
-                            .to_int()
-                            .unwrap_or_default()
-                            .try_into()
-                            .unwrap_or_default();
+                            let size = try_nom!(lex, self::expr::expr(self)(size)).1;
                             infos.push(FunctionInfo::LocalSSize(size));
                         }
                         Some(other) => match self.parse_stmt(other, lex) {

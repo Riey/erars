@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::Debug,
+    sync::Arc,
 };
 
 use anyhow::{anyhow, bail, Result};
@@ -40,6 +41,7 @@ macro_rules! set_var {
 #[derive(Clone)]
 pub struct VariableStorage {
     interner: &'static Interner,
+    header: Arc<HeaderInfo>,
     character_len: u32,
     rng: ChaCha20Rng,
     variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
@@ -49,17 +51,18 @@ pub struct VariableStorage {
 }
 
 impl VariableStorage {
-    pub fn new(infos: &HashMap<StrKey, VariableInfo>) -> Self {
+    pub fn new(header: Arc<HeaderInfo>, infos: &HashMap<StrKey, VariableInfo>) -> Self {
         let mut variables = HashMap::new();
 
         for (k, v) in infos {
-            variables.insert(*k, (v.clone(), UniformVariable::new(v)));
+            variables.insert(*k, (v.clone(), UniformVariable::new(&header, v)));
         }
 
         let interner = get_interner();
 
         Self {
             character_len: 0,
+            header,
             rng: ChaCha20Rng::from_entropy(),
             variables,
             local_variables: HashMap::new(),
@@ -71,6 +74,11 @@ impl VariableStorage {
             },
             interner,
         }
+    }
+
+    #[inline]
+    pub fn header(&self) -> &HeaderInfo {
+        &self.header
     }
 
     #[inline]
@@ -139,7 +147,7 @@ impl VariableStorage {
                     return;
                 }
             }
-            *var = UniformVariable::with_character_len(info, self.character_len);
+            *var = UniformVariable::with_character_len(&self.header, info, self.character_len);
         });
 
         self.local_variables.iter_mut().for_each(|(fn_name, vars)| {
@@ -590,8 +598,9 @@ impl VariableStorage {
             .get_mut(&var)
             .ok_or_else(|| anyhow!("Variable {:?} is not exists", var))?;
 
-        let var = var
-            .get_or_insert_with(|| UniformVariable::with_character_len(info, self.character_len));
+        let var = var.get_or_insert_with(|| {
+            UniformVariable::with_character_len(&self.header, info, self.character_len)
+        });
         Ok((info, var))
     }
 
@@ -689,7 +698,7 @@ impl VariableStorage {
     pub fn reset_data(&mut self, replace: &ReplaceInfo) -> Result<()> {
         self.character_len = 0;
         for var in self.variables.values_mut() {
-            var.1 = UniformVariable::new(&var.0);
+            var.1 = UniformVariable::new(&self.header, &var.0);
         }
         self.init_replace(replace)?;
 
@@ -705,7 +714,7 @@ impl VariableStorage {
     pub fn add_chara(&mut self) {
         self.character_len += 1;
         self.variables.values_mut().for_each(|(info, var)| {
-            var.add_chara(info);
+            var.add_chara(&self.header, info);
         });
     }
 
@@ -825,7 +834,7 @@ pub enum VmVariable {
 }
 
 impl VmVariable {
-    pub fn new(info: &VariableInfo) -> Self {
+    pub fn new(header: &HeaderInfo, info: &VariableInfo) -> Self {
         let size = info.full_size();
 
         let mut ret = match info.is_str {
@@ -834,8 +843,8 @@ impl VmVariable {
         };
 
         for (idx, init_var) in info.init.iter().enumerate() {
-            match init_var {
-                InlineValue::Int(i) => ret.set(idx as u32, *i).unwrap(),
+            match header.const_eval_log_error(init_var) {
+                InlineValue::Int(i) => ret.set(idx as u32, i).unwrap(),
                 InlineValue::String(s, _) => ret.set(idx as u32, s.resolve()).unwrap(),
             }
         }
@@ -896,17 +905,24 @@ pub enum UniformVariable {
 }
 
 impl UniformVariable {
-    pub fn new(info: &VariableInfo) -> Self {
+    pub fn new(header: &HeaderInfo, info: &VariableInfo) -> Self {
         match info.is_chara {
-            false => UniformVariable::Normal(VmVariable::new(info)),
+            false => UniformVariable::Normal(VmVariable::new(header, info)),
             true => UniformVariable::Character(Vec::new()),
         }
     }
 
-    pub fn with_character_len(info: &VariableInfo, character_len: u32) -> Self {
+    pub fn with_character_len(
+        header: &HeaderInfo,
+        info: &VariableInfo,
+        character_len: u32,
+    ) -> Self {
         match info.is_chara {
-            false => UniformVariable::Normal(VmVariable::new(info)),
-            true => UniformVariable::Character(vec![VmVariable::new(info); character_len as usize]),
+            false => UniformVariable::Normal(VmVariable::new(header, info)),
+            true => UniformVariable::Character(vec![
+                VmVariable::new(header, info);
+                character_len as usize
+            ]),
         }
     }
 
@@ -917,13 +933,13 @@ impl UniformVariable {
         }
     }
 
-    pub fn reset(&mut self, info: &VariableInfo) {
+    pub fn reset(&mut self, header: &HeaderInfo, info: &VariableInfo) {
         {
             match self {
-                UniformVariable::Normal(var) => *var = VmVariable::new(info),
+                UniformVariable::Normal(var) => *var = VmVariable::new(header, info),
                 UniformVariable::Character(cvar) => {
                     cvar.iter_mut().for_each(|var| {
-                        *var = VmVariable::new(info);
+                        *var = VmVariable::new(header, info);
                     });
                 }
             }
@@ -967,9 +983,9 @@ impl UniformVariable {
         }
     }
 
-    pub fn add_chara(&mut self, info: &VariableInfo) {
+    pub fn add_chara(&mut self, header: &HeaderInfo, info: &VariableInfo) {
         if let Self::Character(c) = self {
-            c.push(VmVariable::new(info));
+            c.push(VmVariable::new(header, info));
         }
     }
 

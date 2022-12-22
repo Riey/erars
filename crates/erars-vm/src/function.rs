@@ -149,10 +149,18 @@ impl FunctionDic {
         for info in func.header.infos {
             match info {
                 FunctionInfo::LocalSize(size) => {
-                    local_size = Some(size);
+                    local_size = var_dic
+                        .header()
+                        .const_eval_log_error(&size)
+                        .to_int()
+                        .and_then(|i| i.try_into().ok());
                 }
                 FunctionInfo::LocalSSize(size) => {
-                    locals_size = Some(size);
+                    locals_size = var_dic
+                        .header()
+                        .const_eval_log_error(&size)
+                        .to_int()
+                        .and_then(|i| i.try_into().ok());
                 }
                 FunctionInfo::EventFlag(f) => {
                     flags = f;

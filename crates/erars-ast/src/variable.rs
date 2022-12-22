@@ -1,4 +1,4 @@
-use crate::{Expr, InlineValue, StrKey};
+use crate::{Expr, StrKey};
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString, IntoStaticStr};
 
@@ -91,7 +91,7 @@ pub struct VariableInfo {
     pub is_dynamic: bool,
     pub default_int: i64,
     pub size: Vec<u32>,
-    pub init: Vec<InlineValue>,
+    pub init: Vec<Expr>,
 }
 
 impl VariableInfo {
