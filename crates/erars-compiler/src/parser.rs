@@ -600,7 +600,7 @@ impl HeaderInfo {
                                     }
                                 }
                                 None => {
-                                    log::error!(
+                                    log::warn!(
                                         "Variable {name} is not exists but defined in variablesize.csv"
                                     );
                                 }
