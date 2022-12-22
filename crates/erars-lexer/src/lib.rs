@@ -96,22 +96,16 @@ unsafe fn parse_print_plain(s: &str) -> (PrintType, &str) {
     (ty, trim_text(s))
 }
 
-unsafe fn parse_debug_print(s: &str) -> (PrintFlags, PrintType, &str) {
-    // skip DEBUG
-    let s = s.get_unchecked("DEBUG".len()..);
-    let (mut flags, ty, s) = parse_print(s);
-    flags |= PrintFlags::DEBUG;
+unsafe fn parse_print(mut s: &str) -> (PrintFlags, PrintType, &str) {
+    let mut flags = PrintFlags::empty();
 
-    (flags, ty, s)
-}
-
-unsafe fn parse_print(s: &str) -> (PrintFlags, PrintType, &str) {
-    // skip DEBUG
-    let s = s.trim_start_matches("DEBUG");
+    if let Some(ss) = s.strip_prefix("DEBUG") {
+        flags |= PrintFlags::DEBUG;
+        s = ss;
+    }
 
     // skip PRINT
-    let mut s = s.get_unchecked("PRINT".len()..);
-    let mut flags = PrintFlags::empty();
+    s = s.get_unchecked("PRINT".len()..);
 
     if let Some(ss) = strip_prefix_ignore_case(s, "SINGLE") {
         flags |= PrintFlags::SINGLE;
@@ -368,8 +362,7 @@ pub enum Token<'s> {
     PrintButton((PrintFlags, &'s str)),
     #[regex(r"PRINTPLAIN(FORM)?( [^\n]*)?", |lex| unsafe { parse_print_plain(lex.slice()) }, ignore(ascii_case))]
     PrintPlain((PrintType, &'s str)),
-    #[regex(r"DEBUGPRINT(SINGLE)?(DATA|V|S|FORMS?)?(L?C)?[DK]?[LW]?( [^\n]*)?", |lex| unsafe { parse_debug_print(lex.slice()) }, ignore(ascii_case))]
-    #[regex(r"PRINT(SINGLE)?(DATA|V|S|FORMS?)?(L?C)?[DK]?[LW]?( [^\n]*)?", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
+    #[regex(r"(DEBUG)?PRINT(SINGLE)?(DATA|V|S|FORMS?)?(L?C)?[DK]?[LW]?( [^\n]*)?", |lex| unsafe { parse_print(lex.slice()) }, ignore(ascii_case))]
     Print((PrintFlags, PrintType, &'s str)),
     #[token("DATA", lex_line_left, ignore(ascii_case))]
     Data(&'s str),

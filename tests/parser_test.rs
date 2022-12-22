@@ -2580,7 +2580,24 @@ Function {
             ),
         ],
     },
-    body: [],
+    body: [
+        StmtWithPos(
+            Assign(
+                Variable {
+                    var: 「지금여기에」,
+                    func_extern: None,
+                    args: [],
+                },
+                None,
+                Int(
+                    2,
+                ),
+            ),
+            ScriptPosition {
+                line: 5,
+            },
+        ),
+    ],
 }
 "
         );
