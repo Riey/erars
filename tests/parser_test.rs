@@ -2020,7 +2020,9 @@ Function {
                         is_savedata: false,
                         is_dynamic: false,
                         default_int: 0,
-                        size: [],
+                        size: [
+                            1,
+                        ],
                         init: [
                             Int(
                                 2,
@@ -2526,6 +2528,62 @@ Function {
     ],
 }
 ");
+    }
+
+    #[test]
+    fn test_weird_ident() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/functions/weird_ident.erb"#,
+                ParserContext::parse_function_str
+            ),
+            "
+Function {
+    header: FunctionHeader {
+        file_path: tests/parse_tests/functions/weird_ident.erb,
+        name: FOO,
+        args: [],
+        infos: [
+            Dim(
+                LocalVariable {
+                    var: 「여기에있어」,
+                    info: VariableInfo {
+                        is_chara: false,
+                        is_str: false,
+                        is_global: false,
+                        is_const: false,
+                        is_ref: false,
+                        is_savedata: false,
+                        is_dynamic: false,
+                        default_int: 0,
+                        size: [],
+                        init: [],
+                    },
+                },
+            ),
+            Dim(
+                LocalVariable {
+                    var: 「지금여기에」,
+                    info: VariableInfo {
+                        is_chara: false,
+                        is_str: false,
+                        is_global: false,
+                        is_const: false,
+                        is_ref: false,
+                        is_savedata: false,
+                        is_dynamic: false,
+                        default_int: 0,
+                        size: [],
+                        init: [],
+                    },
+                },
+            ),
+        ],
+    },
+    body: [],
+}
+"
+        );
     }
 }
 mod program {
