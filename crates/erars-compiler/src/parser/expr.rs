@@ -888,7 +888,8 @@ pub fn dim_line<'c, 'a>(
         info.is_ref = is_ref.is_some();
         info.is_chara = is_chara.is_some();
         info.is_savedata = is_save.is_some();
-        info.size = size.unwrap_or_default();
+        info.size =
+            size.unwrap_or_else(|| init.as_ref().map(|v| vec![v.len() as u32]).unwrap_or_default());
         info.init = init.unwrap_or_default();
 
         Ok((

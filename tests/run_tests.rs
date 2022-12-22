@@ -70,7 +70,7 @@ fn run_test() {
 }
 
 fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
-    let vm = TerminalVm::new(dic);
+    let vm = TerminalVm::new(dic, ctx.header_info.clone());
     let mut tx = VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log);
 
     let ok = vm.start(&mut tx, &mut ctx);
