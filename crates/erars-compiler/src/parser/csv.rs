@@ -5,7 +5,7 @@ pub fn lines<'a>(
     s.trim_start_matches("\u{FEFF}").lines().filter_map(move |s| {
         let start = s.as_ptr() as usize - begin;
 
-        let s = match s.split_once(';') {
+        let s = match s.split_once([';', '；']) {
             Some((left, _)) => left,
             None => s,
         }

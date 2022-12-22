@@ -278,7 +278,7 @@ pub enum ErhToken<'s> {
     // BOM
     #[token("\u{FEFF}", logos::skip)]
     #[regex(r"[ \t\r\n]+", logos::skip)]
-    #[regex(r";[^\n]*", logos::skip)]
+    #[regex(r"[；;][^\n]*", logos::skip)]
     Error,
 }
 
@@ -574,7 +574,7 @@ pub enum Token<'s> {
     // BOM
     #[token("\u{FEFF}", logos::skip)]
     #[regex(r"[ \t\r　]+", logos::skip)]
-    #[regex(r";[^\n]*", logos::skip)]
+    #[regex(r"[；;][^\n]*", logos::skip)]
     Error,
 }
 
@@ -587,6 +587,6 @@ pub enum ConfigToken<'s> {
     // BOM
     #[token("\u{FEFF}", logos::skip)]
     #[regex(r"[ \t\r\n　]+", logos::skip)]
-    #[regex(r";[^\n]*", logos::skip)]
+    #[regex(r"[；;][^\n]*", logos::skip)]
     Error,
 }

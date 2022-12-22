@@ -3,3 +3,7 @@
 基礎,체력,2000
 ; test minus value
 フラグ,0,-1
+; test comment
+フラグ,0,2;60日目から休む
+; test full-width comment
+フラグ,1,2；60日目から休む
