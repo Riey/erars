@@ -159,7 +159,8 @@ fn normal_expr_method<'s>(
 
 fn lex_line_left_erh<'s>(lex: &mut Lexer<'s, ErhToken<'s>>) -> &'s str {
     let args = lex.remainder();
-    let s = match args.split_once('\n') {
+
+    let s = match args.split_once(if lex.extras.is_curly_brace { '}' } else { '\n' }) {
         Some((args, _)) => {
             lex.bump_unchecked(args.len());
             args
@@ -263,7 +264,23 @@ pub enum PrintType {
     Data,
 }
 
+#[derive(Default, Debug)]
+pub struct LexerExtras {
+    is_curly_brace: bool,
+}
+
+fn logos_open_brace_erh<'s>(lex: &mut Lexer<'s, ErhToken<'s>>) -> logos::Skip {
+    lex.extras.is_curly_brace = true;
+    logos::Skip
+}
+
+fn logos_close_brace_erh<'s>(lex: &mut Lexer<'s, ErhToken<'s>>) -> logos::Skip {
+    lex.extras.is_curly_brace = false;
+    logos::Skip
+}
+
 #[derive(Logos, Debug, Eq, PartialEq)]
+#[logos(extras = LexerExtras)]
 pub enum ErhToken<'s> {
     #[token("#DEFINE", lex_line_left_erh, ignore(ascii_case))]
     Define(&'s str),
@@ -277,12 +294,15 @@ pub enum ErhToken<'s> {
     #[error]
     // BOM
     #[token("\u{FEFF}", logos::skip)]
+    #[token("{", logos_open_brace_erh)]
+    #[token("}", logos_close_brace_erh)]
     #[regex(r"[ \t\r\n]+", logos::skip)]
     #[regex(r"[；;][^\n]*", logos::skip)]
     Error,
 }
 
 #[derive(Logos, Debug, Eq, PartialEq)]
+#[logos(extras = LexerExtras)]
 pub enum Token<'s> {
     #[token("@", lex_line_left)]
     At(&'s str),
