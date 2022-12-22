@@ -63,35 +63,3 @@ jobs:
       with:
         name: erars-egui
         path: target/release-lto/erars-egui
-
-  release-wasm:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v3
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-    - name: Cargo Target Cache
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('**/Cargo.lock') }}-release-wasm
-        restore-keys: |
-          ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-release-wasm
-          ${{ runner.os }}-cargo-target-release-wasm
-    - name: Install wasm-pack
-      uses: jetli/wasm-pack-action@v0.3.0
-      with:
-        # Optional version of wasm-pack to install(eg. 'v0.9.1', 'latest')
-        version: 'latest'
-    - name: Setup wasm target
-      run: |
-        rustup target add wasm32-unknown-unknown
-    - name: Build
-      run: |
-        wasm-pack build crates/erars-wasm
-    - uses: actions/upload-artifact@v3
-      with:
-        name: erars_wasm
-        path: crates/erars-wasm/pkg/erars_wasm*
