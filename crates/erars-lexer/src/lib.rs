@@ -430,6 +430,8 @@ pub enum Token<'s> {
     Alignment,
     #[token("BEGIN", ignore(ascii_case))]
     Begin,
+    #[token("HTML_PRINT", lex_line_left, ignore(ascii_case))]
+    HtmlPrint(&'s str),
     #[token("TIMES", lex_line_left, ignore(ascii_case))]
     Times(&'s str),
     #[token("THROW", lex_line_left, ignore(ascii_case))]
@@ -441,6 +443,7 @@ pub enum Token<'s> {
     #[token("SORTCHARA", lex_line_left, ignore(ascii_case))]
     SortChara(&'s str),
 
+    #[token("DRAWLINEFORM", |lex| normal_expr_command(lex, BuiltinCommand::CustomDrawLine), ignore(ascii_case))]
     #[token("RETURNFORM", |lex| normal_expr_command(lex, BuiltinCommand::Return), ignore(ascii_case))]
     #[token("PUTFORM", |lex| normal_expr_command(lex, BuiltinCommand::PutForm), ignore(ascii_case))]
     #[token("SETCOLORBYNAME", |lex| normal_expr_command(lex, BuiltinCommand::SetColorByName), ignore(ascii_case))]
@@ -479,6 +482,7 @@ pub enum Token<'s> {
     #[token("INVERTBIT", |lex| normal_expr_command(lex, BuiltinCommand::InvertBit), ignore(ascii_case))]
     #[token("BAR", |lex| normal_expr_command(lex, BuiltinCommand::Bar), ignore(ascii_case))]
     #[token("ARRAYSHIFT", |lex| normal_expr_command(lex, BuiltinCommand::ArrayShift), ignore(ascii_case))]
+    #[token("ARRAYMOVE", |lex| normal_expr_command(lex, BuiltinCommand::ArrayMove), ignore(ascii_case))]
     #[token("SWAP", |lex| normal_expr_command(lex, BuiltinCommand::Swap), ignore(ascii_case))]
     #[token("REDRAW", |lex| normal_expr_command(lex, BuiltinCommand::Redraw), ignore(ascii_case))]
     #[token("SETFONT", |lex| normal_expr_command(lex, BuiltinCommand::SetFont), ignore(ascii_case))]
@@ -496,6 +500,7 @@ pub enum Token<'s> {
     #[token("PICKUPCHARA", |lex| normal_expr_command(lex, BuiltinCommand::PickupChara), ignore(ascii_case))]
     #[token("SPLIT", |lex| normal_expr_command(lex, BuiltinCommand::Split), ignore(ascii_case))]
     #[token("CUPCHECK", |lex| normal_expr_command(lex, BuiltinCommand::CUpCheck), ignore(ascii_case))]
+    #[token("RANDOMIZE", |lex| normal_expr_command(lex, BuiltinCommand::Randomize), ignore(ascii_case))]
     NormalExprCommand((BuiltinCommand, &'s str)),
 
     #[token("ISSKIP", |lex| normal_expr_method(lex, BuiltinMethod::IsSkip), ignore(ascii_case))]
@@ -583,6 +588,8 @@ pub enum Token<'s> {
     #[token("FONTREGULAR", |_| single_command(BuiltinCommand::FontRegular), ignore(ascii_case))]
     #[token("UPCHECK", |_| single_command(BuiltinCommand::UpCheck), ignore(ascii_case))]
     #[token("GETTIME", |_| single_command(BuiltinCommand::GetTime), ignore(ascii_case))]
+    #[token("DUMPRAND", |_| single_command(BuiltinCommand::DumpRand), ignore(ascii_case))]
+    #[token("INITRAND", |_| single_command(BuiltinCommand::InitRand), ignore(ascii_case))]
     #[token("CONTINUE", |_| Stmt::Continue, ignore(ascii_case))]
     #[token("BREAK", |_| Stmt::Break, ignore(ascii_case))]
     DirectStmt(Stmt),

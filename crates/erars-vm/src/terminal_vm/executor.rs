@@ -1650,6 +1650,9 @@ fn run_builtin_command(
     let mut args = ctx.take_list(c).collect::<Vec<_>>().into_iter();
 
     match com {
+        BuiltinCommand::HtmlPrint => {
+            log::warn!("TODO: HTML_PRINT");
+        }
         BuiltinCommand::UpCheck => {
             let palam = ctx.var.known_key(Var::Palam);
             let names = ctx.header_info.var_name_var.get(&palam).unwrap();
@@ -1713,6 +1716,9 @@ fn run_builtin_command(
                 let empty_value = empty_value.try_into()?;
                 array_shift(var, empty_value, start as usize, count as usize)?;
             }
+        }
+        BuiltinCommand::ArrayMove => {
+            bail!("TODO: ARRAYMOVE");
         }
         BuiltinCommand::Throw => {
             let msg = get_arg!(@opt @String: args, ctx);
@@ -2245,6 +2251,10 @@ fn run_builtin_command(
         }
         BuiltinCommand::SaveChara => bail!("SAVECHARA"),
         BuiltinCommand::LoadChara => bail!("LOADCHARA"),
+
+        BuiltinCommand::Randomize => bail!("RANDOMIZE"),
+        BuiltinCommand::DumpRand => bail!("DUMPRAND"),
+        BuiltinCommand::InitRand => log::warn!("TODO: INITRAND"),
     }
 
     Ok(InstructionWorkflow::Normal)

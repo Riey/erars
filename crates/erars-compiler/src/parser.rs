@@ -889,6 +889,13 @@ impl ParserContext {
                 BuiltinCommand::Throw,
                 vec![try_nom!(lex, self::expr::normal_form_str(self)(left)).1],
             ),
+            Token::HtmlPrint(left) => {
+                // TODO: html
+                Stmt::Print(
+                    PrintFlags::NEWLINE,
+                    Expr::String(self.interner.get_or_intern(left)),
+                )
+            }
             Token::ReuseLastLine(left) => Stmt::ReuseLastLine(self.interner.get_or_intern(left)),
             Token::PrintButton((flags, form)) => {
                 let (text, value) = try_nom!(lex, self::expr::expr_pair(self)(form)).1;

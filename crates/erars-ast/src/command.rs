@@ -165,6 +165,7 @@ pub enum BuiltinCommand {
     ClearBit,
     InvertBit,
     ArrayShift,
+    ArrayMove,
     Varset,
     CVarset,
     Split,
@@ -185,6 +186,9 @@ pub enum BuiltinCommand {
     SetColorByName,
     SetBgColorByName,
 
+    #[strum(serialize = "HTML_PRINT")]
+    HtmlPrint,
+
     FontBold,
     FontItalic,
     FontRegular,
@@ -204,4 +208,8 @@ pub enum BuiltinCommand {
     SwapChara,
     SortChara,
     PickupChara,
+
+    Randomize = 110,
+    DumpRand,
+    InitRand,
 }
