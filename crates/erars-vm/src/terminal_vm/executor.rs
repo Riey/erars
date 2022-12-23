@@ -188,6 +188,7 @@ pub(super) fn run_instruction(
 
         let prev_color = if flags.contains(PrintFlags::DEFAULT_COLOR) {
             let c = tx.color();
+            // TODO: respect config
             tx.set_color(0xFF, 0xFF, 0xFF);
             Some(c)
         } else {

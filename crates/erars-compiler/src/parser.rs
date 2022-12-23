@@ -441,13 +441,14 @@ impl HeaderInfo {
                             .copied()
                         {
                             Some(idx) => idx,
-                            _ => error_csv!("잘못된 숫자입니다.", $span),
+                            _ => error_csv!("알수없는 플래그 인덱스입니다.", $span),
                         }
                     }
                 };
 
                 let value = match $val2.parse::<i64>() {
                     Ok(idx) => idx,
+                    _ if $val2.is_empty() => 0,
                     _ => error_csv!("잘못된 숫자입니다.", $span),
                 };
 

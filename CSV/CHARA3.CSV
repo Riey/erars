@@ -4,6 +4,8 @@
 ; test minus value
 フラグ,0,-1
 ; test comment
-フラグ,0,2;60日目から休む
+フラグ,1,2;60日目から休む
 ; test full-width comment
-フラグ,1,2；60日目から休む
+フラグ,2,2；60日目から休む
+; test empty
+フラグ,3,
