@@ -3,7 +3,6 @@ mod error;
 mod instruction;
 mod parser;
 
-use erars_lexer::PreprocessorRegex;
 use once_cell::sync::Lazy;
 
 pub static PP_REGEX: Lazy<PreprocessorRegex> = Lazy::new(|| {
@@ -14,7 +13,7 @@ pub static PP_REGEX: Lazy<PreprocessorRegex> = Lazy::new(|| {
 });
 
 pub use compiler::{compile, compile_expr, compile_stmt, CompiledFunction};
-pub use erars_lexer::Preprocessor;
+pub use erars_lexer::{Preprocessor, PreprocessorRegex, Bump};
 pub use error::{CompileError, CompileResult, ParserError, ParserResult};
 pub use instruction::Instruction;
 pub use logos::Lexer;

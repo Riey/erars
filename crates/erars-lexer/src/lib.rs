@@ -1,12 +1,15 @@
 mod inst;
 mod sharp;
 
+use std::mem::MaybeUninit;
+
 use logos::Logos;
 
 use erars_ast::*;
 use regex_automata::dfa::dense;
 use regex_automata::dfa::Automaton;
 
+pub use bumpalo::Bump;
 pub use inst::InstructionCode;
 pub use sharp::SharpCode;
 pub use strum::IntoEnumIterator;
@@ -237,7 +240,7 @@ impl<'s> Preprocessor<'s> {
         }
     }
 
-    fn next_raw_line<'a>(&mut self, line_buf: &'a mut String) -> &'a str
+    fn next_raw_line<'a>(&mut self, b: &'a Bump) -> &'a str
     where
         's: 'a,
     {
@@ -248,11 +251,23 @@ impl<'s> Preprocessor<'s> {
         let line = if let Some(open_brace) = self.s.strip_prefix('{') {
             let (raw, left) = open_brace.split_once('}').unwrap_or((open_brace, ""));
             self.s = left;
-            line_buf.clear();
-            for line in raw.split_terminator('\n') {
-                line_buf.push_str(line);
+            unsafe {
+                let buf =
+                    b.alloc_layout(std::alloc::Layout::from_size_align_unchecked(raw.len(), 1));
+
+                let mut start = 0;
+
+                for line in raw.split_terminator('\n') {
+                    start += line.len();
+                    std::ptr::copy_nonoverlapping(
+                        line.as_ptr(),
+                        buf.as_ptr().add(start),
+                        line.len(),
+                    );
+                }
+
+                std::str::from_utf8_unchecked(std::slice::from_raw_parts(buf.as_ptr(), start))
             }
-            line_buf
         } else {
             let (line, left) = self.s.split_once('\n').unwrap_or((self.s, ""));
             self.s = left;
@@ -264,20 +279,20 @@ impl<'s> Preprocessor<'s> {
         line
     }
 
-    pub fn next_line<'a>(&mut self, line_buf: &'a mut String) -> Option<EraLine<'a>>
+    pub fn next_line<'a>(&mut self, b: &'a Bump) -> Option<EraLine<'a>>
     where
         's: 'a,
     {
         use num_traits::FromPrimitive;
 
-        let line = self.next_raw_line(line_buf);
+        let line = self.next_raw_line(b);
 
         if line.is_empty() {
             None
         } else if let Some(line) = line.strip_prefix('#') {
             if let Some(m) = self.re.sharp_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
                 if let Some(sharp) = SharpCode::from_u32(m.pattern().as_u32()) {
-                    let line = unsafe { line.get_unchecked(<&str>::from(sharp).len()..) };
+                    let line = unsafe { line.get_unchecked(<&str>::from(sharp).len()..) }.trim_start();
                     Some(EraLine::SharpLine { sharp, args: line })
                 } else {
                     unreachable!()
@@ -291,8 +306,17 @@ impl<'s> Preprocessor<'s> {
             Some(EraLine::GotoLine(line))
         } else if let Some(m) = self.re.inst_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
             if let Some(inst) = InstructionCode::from_u32(m.pattern().as_u32()) {
-                let line = unsafe { line.get_unchecked(<&str>::from(inst).len()..) };
-                Some(EraLine::InstLine { inst, args: line })
+                if inst == InstructionCode::PRINT {
+                    let (flags, ty, line) = unsafe { parse_print(line) };
+                    Some(EraLine::PrintLine {
+                        flags,
+                        ty,
+                        args: line,
+                    })
+                } else {
+                    let line = unsafe { line.get_unchecked(<&str>::from(inst).len()..) };
+                    Some(EraLine::InstLine { inst, args: line })
+                }
             } else {
                 unreachable!()
             }
@@ -373,6 +397,12 @@ pub enum EraLine<'s> {
         args: &'s str,
     },
     GotoLine(&'s str),
+
+    PrintLine {
+        flags: PrintFlags,
+        ty: PrintType,
+        args: &'s str,
+    },
 
     InstLine {
         inst: InstructionCode,

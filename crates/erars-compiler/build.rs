@@ -5,10 +5,12 @@ fn main() {
     println!("cargo:rerun-if-changed=../erars-lexer");
 
     let patterns = InstructionCode::iter()
-        .map(|c| if c == InstructionCode::PRINT {
-            format!("^{c}(?-u:\\w*)")
-        } else {
-            format!("^{c}(?-u:\\b)")
+        .map(|c| {
+            if c == InstructionCode::PRINT {
+                format!("^{c}(?-u:\\w*)")
+            } else {
+                format!("^{c}(?-u:\\b)")
+            }
         })
         .collect::<Vec<_>>();
 

@@ -14,7 +14,7 @@ use codespan_reporting::{
 };
 use erars_ast::{StrKey, VariableInfo};
 use erars_compiler::{
-    CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext, Preprocessor, PP_REGEX,
+    CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext, Preprocessor, PP_REGEX, Bump,
 };
 use erars_lint::{check_function, ErarsFiles};
 use erars_ui::VirtualConsole;
@@ -335,7 +335,7 @@ pub fn run_script(
 
                 let program = ctx.parse_and_compile(
                     &mut Preprocessor::new(&PP_REGEX, source.as_str()),
-                    &mut String::new(),
+                    &mut Bump::new(),
                 );
 
                 match program {

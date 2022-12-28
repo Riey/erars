@@ -15,7 +15,6 @@
 pub enum InstructionCode {
     SET, //数値代入文 or 文字列代入文
     //SETS,//文字列代入文
-
     CLEARLINE,
     REUSELASTLINE,
 
@@ -25,7 +24,7 @@ pub enum InstructionCode {
     TINPUT,
     TWAIT,
     WAITANYKEY,
-    WAIT,   //改行待ち。
+    WAIT,      //改行待ち。
     FORCEWAIT, //スキップで省略できないWAIT、強制TWAITと違い、スキップを打ち切る
     ONEINPUT,
     ONEINPUTS,
@@ -78,7 +77,7 @@ pub enum InstructionCode {
 
     JUMP, //関数に移動
     CALLEVENT,
-    CALL, //関数に移動。移動元を記憶し、RETURNで帰る。
+    CALL,       //関数に移動。移動元を記憶し、RETURNで帰る。
     RETURN, //__INT_EXPRESSION__,//関数の終了。RESULTに整数を格納可能。省略した場合、０。(次の@～～がRETURNと見なされる。)
     RETURNFORM, //__FORM_STR__,//関数の終了。RESULTに整数を格納可能。省略した場合、０。(次の@～～がRETURNと見なされる。)
     RETURNF,
@@ -247,5 +246,9 @@ pub enum InstructionCode {
 
     INPUTMOUSEKEY,
 
-    PRINT,  //文字を表示する
+    PRINTBUTTONLC,
+    PRINTBUTTONC,
+    PRINTBUTTON,
+    PRINTPLAIN,
+    PRINT, //文字を表示する
 }

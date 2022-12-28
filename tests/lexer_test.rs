@@ -1,13 +1,13 @@
 use erars_compiler::PP_REGEX;
-use erars_lexer::{Preprocessor, PreprocessorRegex};
+use erars_lexer::{Preprocessor, Bump};
 
 #[test]
 fn lex_test() {
     let mut pp = Preprocessor::new(&PP_REGEX, include_str!("../ERB/SYSTEM.ERB"));
 
-    let mut line_buf = String::new();
+    let mut b = Bump::new();
 
-    while let Some(line) = pp.next_line(&mut line_buf) {
+    while let Some(line) = pp.next_line(&mut b) {
         dbg!(line);
     }
 
