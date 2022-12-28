@@ -992,10 +992,22 @@ impl ParserContext {
                         Ok(align) => Stmt::Alignment(align),
                         Err(_) => error!(pp.span(), "Invalid alignment"),
                     },
+                    BEGIN => match args.trim().parse() {
+                        Ok(ty) => Stmt::Begin(ty),
+                        Err(_) => error!(pp.span(), "Invalid alignment"),
+                    },
+
+                    RETURN => normal_command!(BuiltinCommand::Return),
+                    RETURNF => normal_command!(BuiltinCommand::ReturnF),
                     INPUT => normal_command!(BuiltinCommand::Input),
                     INPUTS => normal_command!(BuiltinCommand::InputS),
                     RESETDATA => normal_command!(BuiltinCommand::ResetData),
                     RESET_STAIN => normal_command!(BuiltinCommand::ResetStain),
+                    ADDCHARA => normal_command!(BuiltinCommand::AddChara),
+                    ADDDEFCHARA => normal_command!(BuiltinCommand::AddDefChara),
+                    DELCHARA => normal_command!(BuiltinCommand::DelChara),
+                    COPYCHARA => normal_command!(BuiltinCommand::CopyChara),
+                    SWAPCHARA => normal_command!(BuiltinCommand::SwapChara),
 
                     CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF => {
                         let (name, args) = try_nom!(

@@ -642,22 +642,24 @@ pub fn call_jump_line<'c, 'a>(
     is_form: bool,
 ) -> impl FnMut(&'a str) -> IResult<'a, (Expr, Vec<Expr>)> + 'c {
     move |i| {
-        let (i, name) = if is_form {
-            form_arg_expr(ctx)(i)?
-        } else {
-            let (i, function) = ident(i)?;
-            let function = ctx.replace(function);
+        context("call_jump_line", move |i| {
+            let (i, name) = if is_form {
+                form_arg_expr(ctx)(i)?
+            } else {
+                let (i, function) = ident(i)?;
+                let function = ctx.replace(function);
 
-            if !is_ident(function.as_ref()) {
-                panic!("CALL/JUMP문은 식별자를 받아야합니다");
-            }
+                if !is_ident(function.as_ref()) {
+                    panic!("CALL/JUMP문은 식별자를 받아야합니다");
+                }
 
-            (i, Expr::str(&ctx.interner, function))
-        };
+                (i, Expr::str(&ctx.interner, function))
+            };
 
-        let (i, args) = call_arg_list(ctx)(i)?;
+            let (i, args) = call_arg_list(ctx)(i)?;
 
-        Ok((i, (name, args)))
+            Ok((i, (name, args)))
+        })(i)
     }
 }
 
