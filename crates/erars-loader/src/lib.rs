@@ -13,7 +13,9 @@ use codespan_reporting::{
     },
 };
 use erars_ast::{StrKey, VariableInfo};
-use erars_compiler::{CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext};
+use erars_compiler::{
+    CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext, Preprocessor, PP_REGEX,
+};
 use erars_lint::{check_function, ErarsFiles};
 use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, SystemFunctions, TerminalVm, VmContext};
@@ -331,7 +333,10 @@ pub fn run_script(
 
                 log::debug!("Parse And Compile {}", erb.display());
 
-                let program = ctx.parse_and_compile(&mut Lexer::new(source.as_str()));
+                let program = ctx.parse_and_compile(
+                    &mut Preprocessor::new(&PP_REGEX, source.as_str()),
+                    &mut String::new(),
+                );
 
                 match program {
                     Ok(p) => p,

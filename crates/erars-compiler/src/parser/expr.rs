@@ -637,41 +637,6 @@ enum StrAssignOp {
     Str,
 }
 
-fn str_assign_op(i: &str) -> IResult<Option<StrAssignOp>> {
-    let op = alt((
-        value(StrAssignOp::Bin(BinaryOperator::Add), char('+')),
-        value(StrAssignOp::Bin(BinaryOperator::Sub), char('-')),
-        value(StrAssignOp::Bin(BinaryOperator::Mul), char('*')),
-        value(StrAssignOp::Bin(BinaryOperator::Div), char('/')),
-        value(StrAssignOp::Bin(BinaryOperator::Rem), char('%')),
-        value(StrAssignOp::Bin(BinaryOperator::Lhs), tag("<<")),
-        value(StrAssignOp::Bin(BinaryOperator::Rhs), tag(">>")),
-        value(StrAssignOp::Bin(BinaryOperator::BitXor), char('^')),
-        value(StrAssignOp::Bin(BinaryOperator::BitOr), char('|')),
-        value(StrAssignOp::Bin(BinaryOperator::BitAnd), char('&')),
-        value(StrAssignOp::Str, char('\'')),
-    ));
-
-    context("StrAssignOp", terminated(opt(op), char('=')))(i)
-}
-
-fn assign_op(i: &str) -> IResult<Option<BinaryOperator>> {
-    let op = alt((
-        value(BinaryOperator::Add, char('+')),
-        value(BinaryOperator::Sub, char('-')),
-        value(BinaryOperator::Mul, char('*')),
-        value(BinaryOperator::Div, char('/')),
-        value(BinaryOperator::Rem, char('%')),
-        value(BinaryOperator::Lhs, tag("<<")),
-        value(BinaryOperator::Rhs, tag(">>")),
-        value(BinaryOperator::BitXor, char('^')),
-        value(BinaryOperator::BitOr, char('|')),
-        value(BinaryOperator::BitAnd, char('&')),
-    ));
-
-    context("AssignOp", terminated(opt(op), char('=')))(i)
-}
-
 pub fn call_jump_line<'c, 'a>(
     ctx: &'c ParserContext,
     is_form: bool,
@@ -795,69 +760,6 @@ pub fn sortchara_line<'c, 'a>(
                 vec![Expr::Var(var), Expr::int(forward)],
             ),
         ))
-    }
-}
-
-pub fn assign_line<'c, 'a>(
-    ctx: &'c ParserContext,
-    ident: &'c str,
-) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
-    move |mut i| {
-        let var_name = ctx.replace(ident);
-
-        if !is_ident(&var_name) {
-            log::error!("Expanded variable name in assign line is incorrect `{var_name}`");
-            return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
-        }
-
-        i = i.trim_end_matches(' ');
-
-        let (i, func_extern) = var_func_extern(ctx, i)?;
-        let (i, args) = variable_arg(ctx, &var_name)(i)?;
-
-        let var = Variable {
-            var: ctx.interner.get_or_intern(var_name),
-            func_extern,
-            args,
-        };
-
-        let i = i.trim_start_matches(' ');
-
-        if let Some(i) = i.strip_prefix("++") {
-            Ok((
-                i,
-                Stmt::Assign(var, Some(BinaryOperator::Add), Expr::Int(1)),
-            ))
-        } else if let Some(i) = i.strip_prefix("--") {
-            Ok((
-                i,
-                Stmt::Assign(var, Some(BinaryOperator::Sub), Expr::Int(1)),
-            ))
-        } else if ctx.is_str_var(var.var) {
-            let (i, op) = delimited(sp, str_assign_op, opt(char(' ')))(i)?;
-
-            let (i, rhs, op) = match op {
-                Some(StrAssignOp::Bin(op)) => {
-                    let (i, rhs) = expr(ctx)(i)?;
-                    (i, rhs, Some(op))
-                }
-                Some(StrAssignOp::Str) => {
-                    let (i, rhs) = expr(ctx)(i)?;
-                    (i, rhs, None)
-                }
-                None => {
-                    let (i, rhs) = normal_form_str(ctx)(i)?;
-                    (i, rhs, None)
-                }
-            };
-
-            Ok((i, Stmt::Assign(var, op, rhs)))
-        } else {
-            let (i, op) = de_sp(assign_op)(i)?;
-            let (i, rhs) = expr(ctx)(i)?;
-
-            Ok((i, Stmt::Assign(var, op, rhs)))
-        }
     }
 }
 

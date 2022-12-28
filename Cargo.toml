@@ -22,6 +22,7 @@ members = [
 
 [dev-dependencies]
 erars-ast = { path = "./crates/erars-ast" }
+erars-lexer = { path = "./crates/erars-lexer" }
 erars-compiler = { path = "./crates/erars-compiler" }
 erars-ui = { path = "./crates/erars-ui" }
 erars-vm = { path = "./crates/erars-vm" }
@@ -39,12 +40,18 @@ log = "0.4.17"
 serde_yaml = "0.9.13"
 smol_str = "0.1.23"
 mimalloc = { version = "0.1.31", default-features = false }
+rand = "0.8.5"
+regex-automata = "0.2.0"
 
 [profile.dev]
 
 [profile.release-lto]
 inherits = "release"
 lto = true
+
+[[bench]]
+name = "find_inst"
+harness = false
 
 [[bench]]
 name = "parse"
