@@ -862,14 +862,14 @@ impl ParserContext {
     ) -> ParserResult<InstructionCode> {
         loop {
             match pp.next_line(b) {
-                Some(line @ EraLine::InstLine { inst, args: _ }) => {
-                    if ends.iter().find(|e| **e == inst).is_some() {
-                        break Ok(inst);
-                    } else {
-                        out.push(self.parse_stmt(line, pp, b)?);
-                    }
+                Some(EraLine::InstLine { inst, args: _ })
+                    if ends.iter().find(|e| **e == inst).is_some() =>
+                {
+                    break Ok(inst);
                 }
-                Some(_) => error!(pp.span(), "Invalid line in instruction body"),
+                Some(line) => {
+                    out.push(self.parse_stmt(line, pp, b)?);
+                }
                 None => error!(pp.span(), format!("Block doesn't end with {ends:?}")),
             }
         }
@@ -994,6 +994,8 @@ impl ParserContext {
                     },
                     INPUT => normal_command!(BuiltinCommand::Input),
                     INPUTS => normal_command!(BuiltinCommand::InputS),
+                    RESETDATA => normal_command!(BuiltinCommand::ResetData),
+                    RESET_STAIN => normal_command!(BuiltinCommand::ResetStain),
 
                     CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF => {
                         let (name, args) = try_nom!(
