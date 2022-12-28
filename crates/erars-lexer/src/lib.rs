@@ -191,7 +191,7 @@ impl<'s> Preprocessor<'s> {
             re,
             s: no_bom,
 
-            line_pos: 1,
+            line_pos: 0,
             span_begin,
             span_end: span_begin,
         }
@@ -258,6 +258,7 @@ impl<'s> Preprocessor<'s> {
                 let mut start = 0;
 
                 for line in raw.split_terminator('\n') {
+                    self.line_pos += 1;
                     start += line.len();
                     std::ptr::copy_nonoverlapping(
                         line.as_ptr(),
@@ -269,7 +270,9 @@ impl<'s> Preprocessor<'s> {
                 std::str::from_utf8_unchecked(std::slice::from_raw_parts(buf.as_ptr(), start))
             }
         } else {
+            self.line_pos += 1;
             let (line, left) = self.s.split_once('\n').unwrap_or((self.s, ""));
+            eprintln!("Line add: {line}#{}", self.line_pos);
             self.s = left;
             line
         };
