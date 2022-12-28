@@ -970,8 +970,6 @@ dependencies = [
  "log",
  "log-panics",
  "mimalloc",
- "rand",
- "regex-automata",
  "ron",
  "serde",
  "serde_yaml",
@@ -2451,8 +2449,6 @@ version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
- "libc",
- "rand_chacha",
  "rand_core",
 ]
 

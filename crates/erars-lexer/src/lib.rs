@@ -1,8 +1,6 @@
 mod inst;
 mod sharp;
 
-use std::mem::MaybeUninit;
-
 use logos::Logos;
 
 use erars_ast::*;
@@ -387,12 +385,14 @@ impl<'s> Preprocessor<'s> {
         self.span_begin..self.span_end
     }
 
-    pub fn line_pos(&self) -> usize {
-        self.line_pos
+    pub fn script_pos(&self) -> ScriptPosition {
+        ScriptPosition {
+            line: self.line_pos as _,
+        }
     }
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum EraLine<'s> {
     FunctionLine(&'s str),
     SharpLine {
@@ -425,7 +425,7 @@ pub enum EraLine<'s> {
     },
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum ComplexAssign {
     Bin(BinaryOperator),
     Str,

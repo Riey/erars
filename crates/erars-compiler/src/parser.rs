@@ -18,6 +18,7 @@ use std::{
     borrow::Cow,
     cell::{Cell, RefCell},
     collections::BTreeMap,
+    mem,
     sync::Arc,
 };
 use strum::{Display, EnumString};
@@ -852,15 +853,35 @@ impl ParserContext {
         ret
     }
 
+    fn parse_body_until(
+        &self,
+        ends: &[InstructionCode],
+        out: &mut Vec<StmtWithPos>,
+        pp: &mut Preprocessor,
+        b: &Bump,
+    ) -> ParserResult<InstructionCode> {
+        loop {
+            match pp.next_line(b) {
+                Some(line @ EraLine::InstLine { inst, args: _ }) => {
+                    if ends.iter().find(|e| **e == inst).is_some() {
+                        break Ok(inst);
+                    } else {
+                        out.push(self.parse_stmt(line, pp, b)?);
+                    }
+                }
+                Some(_) => error!(pp.span(), "Invalid line in instruction body"),
+                None => error!(pp.span(), format!("Block doesn't end with {ends:?}")),
+            }
+        }
+    }
+
     pub fn parse_stmt(
         &self,
         line: EraLine,
         pp: &mut Preprocessor,
         b: &Bump,
     ) -> ParserResult<StmtWithPos> {
-        let pos = ScriptPosition {
-            line: pp.line_pos() as _,
-        };
+        let pos = pp.script_pos();
         let stmt = match line {
             EraLine::GotoLine(line) => Stmt::Label(self.interner.get_or_intern(line.trim())),
             EraLine::PrintLine {
@@ -954,13 +975,88 @@ impl ParserContext {
             },
             EraLine::InstLine { inst, args } => {
                 use erars_lexer::InstructionCode::*;
+
+                macro_rules! normal_command {
+                    ($com:expr) => {{
+                        let args = try_nom!(pp, self::expr::expr_list(self)(args)).1;
+                        Stmt::Command($com, args)
+                    }};
+                }
                 match inst {
                     PRINT => unreachable!(),
+                    DRAWLINE => Stmt::Command(
+                        BuiltinCommand::DrawLine,
+                        vec![Expr::str(self.interner, args.trim_start())],
+                    ),
+                    ALIGNMENT => match args.trim().parse() {
+                        Ok(align) => Stmt::Alignment(align),
+                        Err(_) => error!(pp.span(), "Invalid alignment"),
+                    },
+                    INPUT => normal_command!(BuiltinCommand::Input),
+                    INPUTS => normal_command!(BuiltinCommand::InputS),
+
+                    CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF => {
+                        let (name, args) = try_nom!(
+                            pp,
+                            self::expr::call_jump_line(
+                                self,
+                                matches!(inst, CALLFORM | CALLFORMF | JUMPFORM)
+                            )(args)
+                        )
+                        .1;
+
+                        Stmt::Call {
+                            name,
+                            args,
+                            is_jump: matches!(inst, JUMP | JUMPFORM),
+                            is_method: matches!(inst, CALLF | CALLFORMF),
+                            try_body: vec![],
+                            catch_body: None,
+                        }
+                    }
+
                     SIF => {
                         let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
                         let Some(body) = pp.next_line(b) else { error!(pp.span(), "No body statement in SIF"); };
                         Stmt::Sif(cond, Box::new(self.parse_stmt(body, pp, b)?))
                     }
+
+                    IF => {
+                        let mut cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+
+                        let mut if_bodys = Vec::new();
+                        let mut body = Vec::new();
+
+                        loop {
+                            match self.parse_body_until(&[ELSE, ELSEIF, ENDIF], &mut body, pp, b)? {
+                                ELSE => {
+                                    if_bodys.push((
+                                        ExprWithPos(cond, pp.script_pos()),
+                                        mem::take(&mut body),
+                                    ));
+                                    self.parse_body_until(&[ENDIF], &mut body, pp, b)?;
+                                    break;
+                                }
+                                ELSEIF => {
+                                    if_bodys.push((
+                                        ExprWithPos(mem::take(&mut cond), pp.script_pos()),
+                                        mem::take(&mut body),
+                                    ));
+                                }
+                                ENDIF => {
+                                    if_bodys.push((
+                                        ExprWithPos(cond, pp.script_pos()),
+                                        mem::take(&mut body),
+                                    ));
+                                    break;
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+
+                        Stmt::If(if_bodys, body)
+                    }
+
                     // TODO
                     inst => todo!("{inst}"),
                 }

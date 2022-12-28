@@ -40,18 +40,12 @@ log = "0.4.17"
 serde_yaml = "0.9.13"
 smol_str = "0.1.23"
 mimalloc = { version = "0.1.31", default-features = false }
-rand = "0.8.5"
-regex-automata = "0.2.0"
 
 [profile.dev]
 
 [profile.release-lto]
 inherits = "release"
 lto = true
-
-[[bench]]
-name = "find_inst"
-harness = false
 
 [[bench]]
 name = "parse"
