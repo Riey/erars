@@ -858,6 +858,9 @@ impl ParserContext {
         pp: &mut Preprocessor,
         b: &Bump,
     ) -> ParserResult<StmtWithPos> {
+        let pos = ScriptPosition {
+            line: pp.line_pos() as _,
+        };
         let stmt = match line {
             EraLine::GotoLine(line) => Stmt::Label(self.interner.get_or_intern(line.trim())),
             EraLine::PrintLine {
@@ -953,6 +956,11 @@ impl ParserContext {
                 use erars_lexer::InstructionCode::*;
                 match inst {
                     PRINT => unreachable!(),
+                    SIF => {
+                        let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+                        let Some(body) = pp.next_line(b) else { error!(pp.span(), "No body statement in SIF"); };
+                        Stmt::Sif(cond, Box::new(self.parse_stmt(body, pp, b)?))
+                    }
                     // TODO
                     inst => todo!("{inst}"),
                 }
@@ -989,19 +997,17 @@ impl ParserContext {
                 is_pre,
                 is_inc,
             } => {
-                todo!("INC")
+                error!(pp.span(), "TODO: VarInc")
             }
             EraLine::SharpLine { .. } | EraLine::FunctionLine(_) => {
-                unreachable!()
+                error!(
+                    pp.span(),
+                    format!("Invalid line `{line:?}` for parsing as statement")
+                )
             }
         };
 
-        Ok(StmtWithPos(
-            stmt,
-            ScriptPosition {
-                line: pp.line_pos() as _,
-            },
-        ))
+        Ok(StmtWithPos(stmt, pos))
     }
 
     fn push_info(
