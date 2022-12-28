@@ -766,7 +766,7 @@ impl HeaderInfo {
         let mut b = Bump::new();
 
         loop {
-            match pp.next_line(&b) {
+            match pp.next_line(&b)? {
                 Some(EraLine::SharpLine {
                     sharp: SharpCode::DEFINE,
                     args,
@@ -861,7 +861,7 @@ impl ParserContext {
         b: &Bump,
     ) -> ParserResult<InstructionCode> {
         loop {
-            match pp.next_line(b) {
+            match pp.next_line(b)? {
                 Some(EraLine::InstLine { inst, args: _ })
                     if ends.iter().find(|e| **e == inst).is_some() =>
                 {
@@ -900,7 +900,7 @@ impl ParserContext {
                     let mut list = Vec::new();
 
                     loop {
-                        match pp.next_line(b) {
+                        match pp.next_line(b)? {
                             Some(EraLine::InstLine {
                                 inst: InstructionCode::DATA,
                                 args,
@@ -917,7 +917,7 @@ impl ParserContext {
                             }) => {
                                 let mut cur_list = Vec::new();
                                 loop {
-                                    match pp.next_line(b) {
+                                    match pp.next_line(b)? {
                                         Some(EraLine::InstLine {
                                             inst: InstructionCode::DATA,
                                             args,
@@ -1065,7 +1065,7 @@ impl ParserContext {
 
                     SIF => {
                         let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
-                        let Some(body) = pp.next_line(b) else { error!(pp.span(), "No body statement in SIF"); };
+                        let Some(body) = pp.next_line(b)? else { error!(pp.span(), "No body statement in SIF"); };
                         Stmt::Sif(cond, Box::new(self.parse_stmt(body, pp, b)?))
                     }
 
@@ -1227,7 +1227,7 @@ impl ParserContext {
     ) -> ParserResult<Vec<CompiledFunction>> {
         let mut out = Vec::with_capacity(1024);
 
-        match pp.next_line(b) {
+        match pp.next_line(b)? {
             Some(EraLine::FunctionLine(mut func_line)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
                 let mut compiler = Compiler::new();
@@ -1238,7 +1238,7 @@ impl ParserContext {
 
                 'inner: loop {
                     b.reset();
-                    match pp.next_line(b) {
+                    match pp.next_line(b)? {
                         Some(EraLine::FunctionLine(f)) => {
                             func_line = f;
 
@@ -1294,7 +1294,7 @@ impl ParserContext {
     pub fn parse(&self, pp: &mut Preprocessor, b: &mut Bump) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();
 
-        match pp.next_line(b) {
+        match pp.next_line(b)? {
             Some(EraLine::FunctionLine(mut func_line)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
                 let mut body = Vec::new();
@@ -1305,7 +1305,7 @@ impl ParserContext {
 
                 'inner: loop {
                     b.reset();
-                    match pp.next_line(b) {
+                    match pp.next_line(b)? {
                         Some(EraLine::FunctionLine(f)) => {
                             func_line = f;
 
@@ -1375,7 +1375,7 @@ impl ParserContext {
         let mut b = Bump::new();
         let mut body = Vec::new();
 
-        while let Some(line) = pp.next_line(&b) {
+        while let Some(line) = pp.next_line(&b)? {
             body.push(self.parse_stmt(line, &mut pp, &b)?);
             b.reset();
         }
@@ -1387,7 +1387,7 @@ impl ParserContext {
         let mut pp = Preprocessor::new(&crate::PP_REGEX, s);
         let b = Bump::new();
 
-        if let Some(line) = pp.next_line(&b) {
+        if let Some(line) = pp.next_line(&b)? {
             self.parse_stmt(line, &mut pp, &b)
         } else {
             error!(pp.span(), "No stmt")

@@ -1,6 +1,9 @@
 mod inst;
 mod sharp;
 
+use std::ops::Range;
+
+use hashbrown::HashSet;
 use logos::Logos;
 
 use erars_ast::*;
@@ -9,6 +12,7 @@ use regex_automata::dfa::Automaton;
 
 pub use bumpalo::Bump;
 pub use inst::InstructionCode;
+use regex_automata::dfa::regex;
 pub use sharp::SharpCode;
 pub use strum::IntoEnumIterator;
 
@@ -160,13 +164,25 @@ pub enum PrintType {
 pub struct PreprocessorRegex {
     inst_dfa: dense::DFA<&'static [u32]>,
     sharp_dfa: dense::DFA<&'static [u32]>,
+    skip_end: regex::Regex,
+    skip_start: regex::Regex,
 }
 
 impl PreprocessorRegex {
     pub fn from_bytes(inst_bytes: &'static [u8], sharp_bytes: &'static [u8]) -> Self {
+        macro_rules! build_re {
+            ($pat:literal) => {
+                regex::Builder::new()
+                    .syntax(regex_automata::SyntaxConfig::new().case_insensitive(true).utf8(false))
+                    .build($pat)
+                    .unwrap()
+            };
+        }
         Self {
             inst_dfa: dense::DFA::from_bytes(inst_bytes).unwrap().0,
             sharp_dfa: dense::DFA::from_bytes(sharp_bytes).unwrap().0,
+            skip_end: build_re!("\\[ *SKIPEND *\\]"),
+            skip_start: build_re!("^\\[ *SKIPSTART *\\]"),
         }
     }
 }
@@ -240,84 +256,104 @@ impl<'s> Preprocessor<'s> {
         }
     }
 
-    fn next_raw_line<'a>(&mut self, b: &'a Bump) -> &'a str
+    fn next_raw_line<'a>(&mut self, b: &'a Bump) -> Result<&'a str, (String, Range<usize>)>
     where
         's: 'a,
     {
-        self.skip_ws();
+        loop {
+            self.skip_ws();
 
-        self.span_begin = self.current_pos();
+            self.span_begin = self.current_pos();
 
-        let line = if let Some(open_brace) = self.s.strip_prefix('{') {
-            let (raw, left) = open_brace.split_once('}').unwrap_or((open_brace, ""));
-            self.s = left;
-            unsafe {
-                let buf =
-                    b.alloc_layout(std::alloc::Layout::from_size_align_unchecked(raw.len(), 1));
+            let line = if let Some(open_brace) = self.s.strip_prefix('{') {
+                let (raw, left) = open_brace.split_once('}').unwrap_or((open_brace, ""));
+                self.s = left;
+                unsafe {
+                    let buf =
+                        b.alloc_layout(std::alloc::Layout::from_size_align_unchecked(raw.len(), 1));
 
-                let mut start = 0;
+                    let mut start = 0;
 
-                for line in raw.split_terminator('\n') {
-                    self.line_pos += 1;
-                    start += line.len();
-                    std::ptr::copy_nonoverlapping(
-                        line.as_ptr(),
-                        buf.as_ptr().add(start),
-                        line.len(),
-                    );
+                    for line in raw.split_terminator('\n') {
+                        self.line_pos += 1;
+                        start += line.len();
+                        std::ptr::copy_nonoverlapping(
+                            line.as_ptr(),
+                            buf.as_ptr().add(start),
+                            line.len(),
+                        );
+                    }
+
+                    std::str::from_utf8_unchecked(std::slice::from_raw_parts(buf.as_ptr(), start))
                 }
+            } else {
+                self.line_pos += 1;
+                let (line, left) = self.s.split_once('\n').unwrap_or((self.s, ""));
+                self.s = left;
+                line
+            };
+            self.span_end = self.current_pos();
 
-                std::str::from_utf8_unchecked(std::slice::from_raw_parts(buf.as_ptr(), start))
+            if line.starts_with('[') {
+                if let Some(m) = self.re.skip_start.find_earliest(line.as_bytes()) {
+                    let line = &line[m.end()..];
+                    let Some(end) = self.re.skip_end.find_earliest(line.as_bytes()) else {
+                        return Err(("N
+                        o SKIPEND".to_string(), self.span()));
+                    };
+                    self.line_pos += line[..end.start()].bytes().filter(|b| *b == b'\n').count();
+                    self.s = &line[end.end()..];
+                } else {
+                    log::warn!("TODO: {line}");
+                    // TODO
+                }
+                continue;
             }
-        } else {
-            self.line_pos += 1;
-            let (line, left) = self.s.split_once('\n').unwrap_or((self.s, ""));
-            self.s = left;
-            line
-        };
 
-        self.span_end = self.current_pos();
-
-        line
+            break Ok(line);
+        }
     }
 
-    pub fn next_line<'a>(&mut self, b: &'a Bump) -> Option<EraLine<'a>>
+    pub fn next_line<'a>(
+        &mut self,
+        b: &'a Bump,
+    ) -> Result<Option<EraLine<'a>>, (String, Range<usize>)>
     where
         's: 'a,
     {
         use num_traits::FromPrimitive;
 
-        let line = self.next_raw_line(b);
+        let line = self.next_raw_line(b)?;
 
         debug_assert!(!line.ends_with('\n'));
 
         if line.is_empty() {
-            None
+            Ok(None)
         } else if let Some(line) = line.strip_prefix('#') {
             if let Some(m) = self.re.sharp_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
                 if let Some(sharp) = SharpCode::from_u32(m.pattern().as_u32()) {
                     let line =
                         unsafe { line.get_unchecked(<&str>::from(sharp).len()..) }.trim_start();
-                    Some(EraLine::SharpLine { sharp, args: line })
+                    Ok(Some(EraLine::SharpLine { sharp, args: line }))
                 } else {
                     unreachable!()
                 }
             } else {
-                panic!("Unknown sharp line: {line}")
+                Err((format!("Unknown sharp line: {line}"), self.span()))
             }
         } else if let Some(line) = line.strip_prefix('@') {
-            Some(EraLine::FunctionLine(line))
+            Ok(Some(EraLine::FunctionLine(line)))
         } else if let Some(line) = line.strip_prefix('$') {
-            Some(EraLine::GotoLine(line))
+            Ok(Some(EraLine::GotoLine(line)))
         } else if let Some(m) = self.re.inst_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
             if let Some(inst) = InstructionCode::from_u32(m.pattern().as_u32()) {
                 if inst == InstructionCode::PRINT {
                     let (flags, ty, line) = unsafe { parse_print(line) };
-                    Some(EraLine::PrintLine {
+                    Ok(Some(EraLine::PrintLine {
                         flags,
                         ty,
                         args: line,
-                    })
+                    }))
                 } else {
                     let line = unsafe { line.get_unchecked(<&str>::from(inst).len()..) };
                     let line = match inst {
@@ -326,7 +362,7 @@ impl<'s> Preprocessor<'s> {
                         }
                         _ => line.trim_start_matches(' '),
                     };
-                    Some(EraLine::InstLine { inst, args: line })
+                    Ok(Some(EraLine::InstLine { inst, args: line }))
                 }
             } else {
                 unreachable!()
@@ -369,25 +405,25 @@ impl<'s> Preprocessor<'s> {
                 None
             };
 
-            Some(EraLine::VarAssign {
+            Ok(Some(EraLine::VarAssign {
                 lhs: left,
                 complex_op,
                 rhs: right,
-            })
+            }))
         } else if let Some(left) = line.strip_prefix("++") {
-            Some(EraLine::VarInc {
+            Ok(Some(EraLine::VarInc {
                 lhs: left,
                 is_pre: true,
                 is_inc: true,
-            })
+            }))
         } else if let Some(left) = line.strip_prefix("--") {
-            Some(EraLine::VarInc {
+            Ok(Some(EraLine::VarInc {
                 lhs: left,
                 is_pre: true,
                 is_inc: false,
-            })
+            }))
         } else {
-            panic!("Unknown line: {line}")
+            Err((format!("Unknown line: {line}"), self.span()))
         }
     }
 

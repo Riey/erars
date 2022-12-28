@@ -1065,6 +1065,7 @@ dependencies = [
  "cow-utils",
  "erars-ast",
  "hashbrown 0.13.1",
+ "log",
  "logos",
  "memchr",
  "num-derive",
