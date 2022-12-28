@@ -289,6 +289,8 @@ impl<'s> Preprocessor<'s> {
 
         let line = self.next_raw_line(b);
 
+        debug_assert!(!line.ends_with('\n'));
+
         if line.is_empty() {
             None
         } else if let Some(line) = line.strip_prefix('#') {
@@ -318,6 +320,12 @@ impl<'s> Preprocessor<'s> {
                     })
                 } else {
                     let line = unsafe { line.get_unchecked(<&str>::from(inst).len()..) };
+                    let line = match inst {
+                        InstructionCode::REUSELASTLINE | InstructionCode::THROW => {
+                            line.strip_prefix(' ').unwrap_or(line)
+                        }
+                        _ => line.trim_start_matches(' '),
+                    };
                     Some(EraLine::InstLine { inst, args: line })
                 }
             } else {
