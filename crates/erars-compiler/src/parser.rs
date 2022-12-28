@@ -2,9 +2,9 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
-    Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, InlineValue, Interner, PrintFlags,
-    ScriptPosition, Stmt, StmtWithPos, StrKey, UnaryOperator, Variable, VariableInfo,
+    get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags,
+    EventType, Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, InlineValue, Interner,
+    PrintFlags, ScriptPosition, Stmt, StmtWithPos, StrKey, UnaryOperator, Variable, VariableInfo,
 };
 use erars_lexer::{
     Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor, PreprocessorRegex,
@@ -982,6 +982,12 @@ impl ParserContext {
                         Stmt::Command($com, args)
                     }};
                 }
+                macro_rules! normal_method {
+                    ($meth:expr) => {{
+                        let args = try_nom!(pp, self::expr::expr_list(self)(args)).1;
+                        Stmt::Method($meth, args)
+                    }};
+                }
                 match inst {
                     PRINT => unreachable!(),
                     DRAWLINE => Stmt::Command(
@@ -999,8 +1005,16 @@ impl ParserContext {
 
                     RETURN => normal_command!(BuiltinCommand::Return),
                     RETURNF => normal_command!(BuiltinCommand::ReturnF),
+                    RESTART => normal_command!(BuiltinCommand::Restart),
+                    CONTINUE => Stmt::Continue,
+                    BREAK => Stmt::Break,
+
+                    CLEARLINE => normal_command!(BuiltinCommand::ClearLine),
                     INPUT => normal_command!(BuiltinCommand::Input),
                     INPUTS => normal_command!(BuiltinCommand::InputS),
+                    WAIT => normal_command!(BuiltinCommand::Wait),
+                    WAITANYKEY => normal_command!(BuiltinCommand::WaitAnykey),
+                    FORCEWAIT => normal_command!(BuiltinCommand::ForceWait),
                     RESETDATA => normal_command!(BuiltinCommand::ResetData),
                     RESET_STAIN => normal_command!(BuiltinCommand::ResetStain),
                     ADDCHARA => normal_command!(BuiltinCommand::AddChara),
@@ -1008,6 +1022,26 @@ impl ParserContext {
                     DELCHARA => normal_command!(BuiltinCommand::DelChara),
                     COPYCHARA => normal_command!(BuiltinCommand::CopyChara),
                     SWAPCHARA => normal_command!(BuiltinCommand::SwapChara),
+                    FONTBOLD => normal_command!(BuiltinCommand::FontBold),
+                    FONTITALIC => normal_command!(BuiltinCommand::FontItalic),
+                    FONTREGULAR => normal_command!(BuiltinCommand::FontRegular),
+                    FONTSTYLE => normal_command!(BuiltinCommand::FontStyle),
+                    SETFONT => normal_command!(BuiltinCommand::SetFont),
+
+                    STRLEN => normal_method!(BuiltinMethod::StrLenS),
+                    STRLENS => normal_method!(BuiltinMethod::StrLenS),
+                    STRLENSU => normal_method!(BuiltinMethod::StrLenSU),
+
+                    VARSET => normal_command!(BuiltinCommand::Varset),
+                    CVARSET => normal_command!(BuiltinCommand::CVarset),
+                    VARSIZE => normal_method!(BuiltinMethod::VarSize),
+
+                    REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
+
+                    GOTO => Stmt::Goto {
+                        label: Expr::str(self.interner, args),
+                        catch_body: None,
+                    },
 
                     CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF => {
                         let (name, args) = try_nom!(
@@ -1069,6 +1103,31 @@ impl ParserContext {
                         }
 
                         Stmt::If(if_bodys, body)
+                    }
+
+                    FOR => {
+                        let (var, arg1, arg2, arg3) =
+                            try_nom!(pp, self::expr::for_line(self)(args)).1;
+
+                        let mut body = Vec::new();
+                        self.parse_body_until(&[NEXT], &mut body, pp, b)?;
+
+                        Stmt::For(var, Box::new((arg1, arg2, arg3)), body)
+                    }
+                    REPEAT => {
+                        let expr = try_nom!(pp, self::expr::expr(self)(args)).1;
+                        let mut body = Vec::new();
+                        self.parse_body_until(&[REND], &mut body, pp, b)?;
+
+                        Stmt::Repeat(expr, body)
+                    }
+                    WHILE => {
+                        let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+
+                        let mut body = Vec::new();
+                        self.parse_body_until(&[WEND], &mut body, pp, b)?;
+
+                        Stmt::While(cond, body)
                     }
 
                     // TODO
