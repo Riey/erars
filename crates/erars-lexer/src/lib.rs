@@ -176,6 +176,7 @@ pub struct Preprocessor<'s> {
     s: &'s str,
 
     line_pos: usize,
+    start_pos: usize,
     span_begin: usize,
     span_end: usize,
 }
@@ -190,13 +191,14 @@ impl<'s> Preprocessor<'s> {
             s: no_bom,
 
             line_pos: 0,
+            start_pos: no_bom.as_ptr() as usize,
             span_begin,
             span_end: span_begin,
         }
     }
 
     fn current_pos(&self) -> usize {
-        self.s.as_ptr() as usize
+        self.s.as_ptr() as usize - self.start_pos
     }
 
     fn skip_ws(&mut self) {
