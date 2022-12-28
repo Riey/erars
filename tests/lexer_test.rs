@@ -1,5 +1,5 @@
 use erars_compiler::PP_REGEX;
-use erars_lexer::{Preprocessor, Bump};
+use erars_lexer::{Bump, Preprocessor};
 
 #[test]
 fn lex_test() {

@@ -14,7 +14,7 @@ use codespan_reporting::{
 };
 use erars_ast::{StrKey, VariableInfo};
 use erars_compiler::{
-    CompiledFunction, EraConfig, HeaderInfo, Lexer, ParserContext, Preprocessor, PP_REGEX, Bump,
+    Bump, CompiledFunction, EraConfig, HeaderInfo, ParserContext, Preprocessor, PP_REGEX,
 };
 use erars_lint::{check_function, ErarsFiles};
 use erars_ui::VirtualConsole;

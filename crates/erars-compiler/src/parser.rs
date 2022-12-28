@@ -1004,6 +1004,41 @@ impl ParserContext {
         ))
     }
 
+    fn push_info(
+        &self,
+        sharp: SharpCode,
+        args: &str,
+        pp: &mut Preprocessor,
+        infos: &mut Vec<FunctionInfo>,
+    ) -> ParserResult<()> {
+        match sharp {
+            SharpCode::DEFINE => {
+                error!(pp.span(), "#DEFINE only avaliable in ERH")
+            }
+            SharpCode::DIM => {
+                let var = try_nom!(pp, self::expr::dim_line(self, false)(args)).1;
+                infos.push(FunctionInfo::Dim(var));
+            }
+            SharpCode::DIMS => {
+                let var = try_nom!(pp, self::expr::dim_line(self, true)(args)).1;
+                self.local_strs.borrow_mut().insert(var.var);
+                infos.push(FunctionInfo::Dim(var));
+            }
+            SharpCode::LOCALSIZE => {
+                let size = try_nom!(pp, self::expr::expr(self)(args)).1;
+                infos.push(FunctionInfo::LocalSize(size));
+            }
+            SharpCode::LOCALSSIZE => {
+                let size = try_nom!(pp, self::expr::expr(self)(args)).1;
+                infos.push(FunctionInfo::LocalSSize(size));
+            }
+            SharpCode::PRI => infos.push(FunctionInfo::EventFlag(EventFlags::Pre)),
+            SharpCode::LATER => infos.push(FunctionInfo::EventFlag(EventFlags::Later)),
+            SharpCode::SINGLE => infos.push(FunctionInfo::EventFlag(EventFlags::Single)),
+        }
+        Ok(())
+    }
+
     pub fn parse_and_compile<'s>(
         &self,
         pp: &mut Preprocessor<'s>,
@@ -1053,7 +1088,7 @@ impl ParserContext {
                             break 'outer;
                         }
                         Some(EraLine::SharpLine { sharp, args }) => {
-                            // TODO
+                            self.push_info(sharp, args, pp, &mut infos)?;
                         }
                         Some(line) => {
                             let stmt = self.parse_stmt(line, pp, b)?;
@@ -1064,7 +1099,7 @@ impl ParserContext {
                     }
                 }
             },
-            Some(other) => {
+            Some(_) => {
                 error!(pp.span(), "First line should be function line");
             }
             None => {
@@ -1118,7 +1153,7 @@ impl ParserContext {
                             break 'outer;
                         }
                         Some(EraLine::SharpLine { sharp, args }) => {
-                            // TODO
+                            self.push_info(sharp, args, pp, &mut infos)?;
                         }
                         Some(line) => {
                             let stmt = self.parse_stmt(line, pp, b)?;

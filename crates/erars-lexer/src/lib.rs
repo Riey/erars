@@ -272,7 +272,6 @@ impl<'s> Preprocessor<'s> {
         } else {
             self.line_pos += 1;
             let (line, left) = self.s.split_once('\n').unwrap_or((self.s, ""));
-            eprintln!("Line add: {line}#{}", self.line_pos);
             self.s = left;
             line
         };
@@ -295,7 +294,8 @@ impl<'s> Preprocessor<'s> {
         } else if let Some(line) = line.strip_prefix('#') {
             if let Some(m) = self.re.sharp_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
                 if let Some(sharp) = SharpCode::from_u32(m.pattern().as_u32()) {
-                    let line = unsafe { line.get_unchecked(<&str>::from(sharp).len()..) }.trim_start();
+                    let line =
+                        unsafe { line.get_unchecked(<&str>::from(sharp).len()..) }.trim_start();
                     Some(EraLine::SharpLine { sharp, args: line })
                 } else {
                     unreachable!()
