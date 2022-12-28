@@ -18,6 +18,9 @@ pub enum SharpCode {
     DIM,
     DIMS,
 
+    FUNCTION,
+    FUNCTIONS,
+
     LOCALSIZE,
     LOCALSSIZE,
 

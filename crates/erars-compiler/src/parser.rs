@@ -1131,7 +1131,7 @@ impl ParserContext {
                     }
 
                     // TODO
-                    inst => todo!("{inst}"),
+                    inst => error!(pp.span(), format!("TODO: {inst}")),
                 }
             }
             EraLine::VarAssign {
@@ -1198,6 +1198,12 @@ impl ParserContext {
                 let var = try_nom!(pp, self::expr::dim_line(self, true)(args)).1;
                 self.local_strs.borrow_mut().insert(var.var);
                 infos.push(FunctionInfo::Dim(var));
+            }
+            SharpCode::FUNCTION => {
+                infos.push(FunctionInfo::Function);
+            }
+            SharpCode::FUNCTIONS => {
+                infos.push(FunctionInfo::FunctionS);
             }
             SharpCode::LOCALSIZE => {
                 let size = try_nom!(pp, self::expr::expr(self)(args)).1;

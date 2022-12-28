@@ -303,7 +303,7 @@ impl<'s> Preprocessor<'s> {
                     unreachable!()
                 }
             } else {
-                panic!("Unknown sharp line")
+                panic!("Unknown sharp line: {line}")
             }
         } else if let Some(line) = line.strip_prefix('@') {
             Some(EraLine::FunctionLine(line))
