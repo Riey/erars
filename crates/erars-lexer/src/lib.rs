@@ -410,6 +410,18 @@ impl<'s> Preprocessor<'s> {
                 complex_op,
                 rhs: right,
             }))
+        } else if let Some(left) = line.trim_end().strip_suffix("++") {
+            Ok(Some(EraLine::VarInc {
+                lhs: left,
+                is_pre: false,
+                is_inc: true,
+            }))
+        } else if let Some(left) = line.trim_end().strip_suffix("--") {
+            Ok(Some(EraLine::VarInc {
+                lhs: left,
+                is_pre: false,
+                is_inc: false,
+            }))
         } else if let Some(left) = line.strip_prefix("++") {
             Ok(Some(EraLine::VarInc {
                 lhs: left,
