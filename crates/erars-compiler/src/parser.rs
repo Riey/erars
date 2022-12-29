@@ -853,24 +853,48 @@ impl ParserContext {
         ret
     }
 
-    fn parse_body_until(
+    fn read_body_until(
         &self,
-        ends: &[InstructionCode],
-        out: &mut Vec<StmtWithPos>,
+        end: InstructionCode,
         pp: &mut Preprocessor,
         b: &Bump,
-    ) -> ParserResult<InstructionCode> {
+    ) -> ParserResult<Vec<StmtWithPos>> {
+        let mut out = Vec::new();
+
         loop {
             match pp.next_line(b)? {
-                Some(EraLine::InstLine { inst, args: _ })
-                    if ends.iter().find(|e| **e == inst).is_some() =>
-                {
-                    break Ok(inst);
+                Some(EraLine::InstLine { inst, args }) if inst == end => {
+                    break Ok(out);
                 }
                 Some(line) => {
                     out.push(self.parse_stmt(line, pp, b)?);
                 }
-                None => error!(pp.span(), format!("Block doesn't end with {ends:?}")),
+                None => {
+                    error!(pp.span(), format!("Block doesn't end with {end}"));
+                }
+            }
+        }
+    }
+
+    fn read_body_until_and_expr(
+        &self,
+        end: InstructionCode,
+        pp: &mut Preprocessor,
+        b: &Bump,
+    ) -> ParserResult<(Expr, Vec<StmtWithPos>)> {
+        let mut out = Vec::new();
+
+        loop {
+            match pp.next_line(b)? {
+                Some(EraLine::InstLine { inst, args }) if inst == end => {
+                    break Ok((try_nom!(pp, self::expr::expr(self)(args)).1, out));
+                }
+                Some(line) => {
+                    out.push(self.parse_stmt(line, pp, b)?);
+                }
+                None => {
+                    error!(pp.span(), format!("Block doesn't end with {end}"));
+                }
             }
         }
     }
@@ -1042,6 +1066,10 @@ impl ParserContext {
                         label: Expr::str(self.interner, args),
                         catch_body: None,
                     },
+                    GOTOFORM => Stmt::Goto {
+                        label: try_nom!(pp, self::expr::normal_form_str(self)(args)).1,
+                        catch_body: None,
+                    },
 
                     CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF => {
                         let (name, args) = try_nom!(
@@ -1070,64 +1098,124 @@ impl ParserContext {
                     }
 
                     IF => {
+                        let mut is_else = false;
+                        let mut cond_pos = pp.script_pos();
                         let mut cond = try_nom!(pp, self::expr::expr(self)(args)).1;
-
-                        let mut if_bodys = Vec::new();
-                        let mut body = Vec::new();
+                        let mut block = Vec::new();
+                        let mut if_elses = Vec::new();
 
                         loop {
-                            match self.parse_body_until(&[ELSE, ELSEIF, ENDIF], &mut body, pp, b)? {
-                                ELSE => {
-                                    if_bodys.push((
-                                        ExprWithPos(cond, pp.script_pos()),
-                                        mem::take(&mut body),
-                                    ));
-                                    self.parse_body_until(&[ENDIF], &mut body, pp, b)?;
+                            match pp.next_line(b)? {
+                                Some(EraLine::InstLine { inst: ELSEIF, args }) => {
+                                    if_elses.push((ExprWithPos(cond, cond_pos), block));
+                                    block = Vec::new();
+                                    cond_pos = pp.script_pos();
+                                    cond = if args.as_bytes().iter().all(|b| *b == b' ') {
+                                        Expr::Int(1)
+                                    } else {
+                                        try_nom!(pp, self::expr::expr(self)(args)).1
+                                    };
+                                }
+                                Some(EraLine::InstLine {
+                                    inst: ELSE,
+                                    args: _,
+                                }) => {
+                                    is_else = true;
+                                    if_elses.push((ExprWithPos(cond, cond_pos), block));
+                                    cond_pos = pp.script_pos();
+                                    cond = Expr::Int(1);
+                                    block = Vec::new();
+                                }
+                                Some(EraLine::InstLine {
+                                    inst: ENDIF,
+                                    args: _,
+                                }) => {
+                                    if !is_else {
+                                        if_elses.push((ExprWithPos(cond, cond_pos), block));
+                                        block = Vec::new();
+                                    }
                                     break;
                                 }
-                                ELSEIF => {
-                                    if_bodys.push((
-                                        ExprWithPos(mem::take(&mut cond), pp.script_pos()),
-                                        mem::take(&mut body),
-                                    ));
+                                Some(line) => {
+                                    block.push(self.parse_stmt(line, pp, b)?);
                                 }
-                                ENDIF => {
-                                    if_bodys.push((
-                                        ExprWithPos(cond, pp.script_pos()),
-                                        mem::take(&mut body),
-                                    ));
-                                    break;
-                                }
-                                _ => unreachable!(),
+                                None => break,
                             }
                         }
 
-                        Stmt::If(if_bodys, body)
+                        Stmt::If(if_elses, block)
+                    }
+
+                    SELECTCASE => {
+                        let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+                        let mut has_else = false;
+                        let mut body = Vec::new();
+                        let mut cases: Vec<(_, Vec<StmtWithPos>)> = Vec::new();
+
+                        loop {
+                            match pp.next_line(b)? {
+                                Some(EraLine::InstLine { inst: CASE, args }) => {
+                                    if let Some((_, case)) = cases.last_mut() {
+                                        *case = mem::take(&mut body);
+                                    }
+                                    let case = try_nom!(pp, self::expr::case_line(self)(args)).1;
+                                    cases.push((case, Vec::new()));
+                                }
+                                Some(EraLine::InstLine {
+                                    inst: CASEELSE,
+                                    args: _,
+                                }) => {
+                                    if let Some((_, case)) = cases.last_mut() {
+                                        *case = mem::take(&mut body);
+                                    }
+                                    has_else = true;
+                                }
+                                Some(EraLine::InstLine {
+                                    inst: ENDSELECT,
+                                    args: _,
+                                }) => break,
+                                Some(line) => {
+                                    body.push(self.parse_stmt(line, pp, b)?);
+                                }
+                                None => error!(pp.span(), "Unexpected EOF after SELECTCASE"),
+                            }
+                        }
+
+                        if has_else {
+                            Stmt::SelectCase(cond, cases, Some(body))
+                        } else {
+                            if let Some(last) = cases.last_mut() {
+                                last.1 = body;
+                            }
+                            Stmt::SelectCase(cond, cases, None)
+                        }
                     }
 
                     FOR => {
                         let (var, arg1, arg2, arg3) =
                             try_nom!(pp, self::expr::for_line(self)(args)).1;
 
-                        let mut body = Vec::new();
-                        self.parse_body_until(&[NEXT], &mut body, pp, b)?;
+                        let body = self.read_body_until(NEXT, pp, b)?;
 
                         Stmt::For(var, Box::new((arg1, arg2, arg3)), body)
                     }
                     REPEAT => {
                         let expr = try_nom!(pp, self::expr::expr(self)(args)).1;
-                        let mut body = Vec::new();
-                        self.parse_body_until(&[REND], &mut body, pp, b)?;
+                        let body = self.read_body_until(REND, pp, b)?;
 
                         Stmt::Repeat(expr, body)
                     }
                     WHILE => {
                         let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
 
-                        let mut body = Vec::new();
-                        self.parse_body_until(&[WEND], &mut body, pp, b)?;
+                        let body = self.read_body_until(WEND, pp, b)?;
 
                         Stmt::While(cond, body)
+                    }
+                    DO => {
+                        let (cond, body) = self.read_body_until_and_expr(LOOP, pp, b)?;
+
+                        Stmt::Do(cond, body)
                     }
 
                     // TODO
