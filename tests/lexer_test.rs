@@ -7,7 +7,7 @@ fn lex_test() {
 
     let mut b = Bump::new();
 
-    while let Some(line) = pp.next_line(&mut b) {
+    while let Some(line) = pp.next_line(&mut b).unwrap() {
         dbg!(line);
     }
 
