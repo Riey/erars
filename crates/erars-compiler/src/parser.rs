@@ -1026,6 +1026,7 @@ impl ParserContext {
                         Ok(ty) => Stmt::Begin(ty),
                         Err(_) => error!(pp.span(), "Invalid alignment"),
                     },
+                    TIMES => try_nom!(pp, self::expr::times_line(self)(args)).1,
 
                     RETURN => normal_command!(BuiltinCommand::Return),
                     RETURNF => normal_command!(BuiltinCommand::ReturnF),

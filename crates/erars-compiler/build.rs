@@ -1,3 +1,5 @@
+use std::iter;
+
 use erars_lexer::{InstructionCode, IntoEnumIterator, SharpCode};
 use regex_automata::dfa::dense;
 
@@ -14,7 +16,7 @@ fn main() {
         })
         .collect::<Vec<_>>();
 
-    let bytes = dense::Builder::new()
+    let (mut bytes, pad) = dense::Builder::new()
         .syntax(
             regex_automata::SyntaxConfig::new()
                 .case_insensitive(true)
@@ -23,8 +25,8 @@ fn main() {
         )
         .build_many(&patterns)
         .unwrap()
-        .to_bytes_little_endian()
-        .0;
+        .to_bytes_little_endian();
+    bytes.extend(iter::repeat(0u8).take(pad));
 
     std::fs::write("./inst_re.dfa", &bytes).unwrap();
 
