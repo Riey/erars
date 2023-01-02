@@ -1344,10 +1344,20 @@ impl ParserContext {
             }
             EraLine::VarInc {
                 lhs,
-                is_pre,
+                is_pre: _,
                 is_inc,
             } => {
-                error!(pp.span(), "TODO: VarInc")
+                let lhs = try_nom!(pp, self::expr::variable(self)(lhs)).1;
+
+                Stmt::Assign(
+                    lhs,
+                    Some(if is_inc {
+                        BinaryOperator::Add
+                    } else {
+                        BinaryOperator::Sub
+                    }),
+                    Expr::Int(1),
+                )
             }
             EraLine::SharpLine { .. } | EraLine::FunctionLine(_) => {
                 error!(
