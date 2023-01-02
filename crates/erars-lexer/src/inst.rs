@@ -13,8 +13,6 @@
     Eq,
 )]
 pub enum InstructionCode {
-    SET, //数値代入文 or 文字列代入文
-    //SETS,//文字列代入文
     CLEARLINE,
     REUSELASTLINE,
 
@@ -52,6 +50,12 @@ pub enum InstructionCode {
     ADDDEFCHARA,
     ADDVOIDCHARA, //変数に何の設定のないキャラを作成
     DELCHARA,     //(キャラ登録番号)のキャラクタを削除。
+    GETCHARA,
+
+    GETNUM,
+    GETEXPLV,
+    GETPALAMLV,
+    GETCONFIG,
 
     PUTFORM, //@SAVEINFO関数でのみ使用可能。PRINTFORMと同様の書式でセーブデータに概要をつける。
     QUIT,    //ゲームを終了
@@ -208,6 +212,8 @@ pub enum InstructionCode {
     ARRAYCOPY,
 
     ENCODETOUNI,
+    SUBSTRINGU,
+    SUBSTRING,
 
     DEBUGPRINT,
     DEBUGPRINTL,

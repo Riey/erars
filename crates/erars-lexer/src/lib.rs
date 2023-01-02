@@ -3,7 +3,6 @@ mod sharp;
 
 use std::ops::Range;
 
-use hashbrown::HashSet;
 use logos::Logos;
 
 use erars_ast::*;

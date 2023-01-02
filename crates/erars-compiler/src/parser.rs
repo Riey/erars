@@ -1012,9 +1012,22 @@ impl ParserContext {
                         Stmt::Method($meth, args)
                     }};
                 }
+                macro_rules! strform_command {
+                    ($com:expr) => {{
+                        let args = try_nom!(pp, self::expr::normal_form_str(self)(args)).1;
+                        Stmt::Command($com, vec![args])
+                    }};
+                }
+                // macro_rules! strform_method {
+                //     ($meth:expr) => {{
+                //         let args = try_nom!(pp, self::expr::normal_form_str(self)(args)).1;
+                //         Stmt::Method($meth, vec![args])
+                //     }};
+                // }
                 match inst {
                     PRINT => unreachable!(),
                     DRAWLINE => Stmt::Command(BuiltinCommand::DrawLine, vec![]),
+                    DRAWLINEFORM => strform_command!(BuiltinCommand::CustomDrawLine),
                     CUSTOMDRAWLINE => Stmt::Command(
                         BuiltinCommand::CustomDrawLine,
                         vec![Expr::str(self.interner, args.trim_start())],
@@ -1031,9 +1044,11 @@ impl ParserContext {
 
                     RETURN => normal_command!(BuiltinCommand::Return),
                     RETURNF => normal_command!(BuiltinCommand::ReturnF),
+                    RETURNFORM => strform_command!(BuiltinCommand::Return),
                     RESTART => normal_command!(BuiltinCommand::Restart),
                     CONTINUE => Stmt::Continue,
                     BREAK => Stmt::Break,
+                    QUIT => Stmt::Command(BuiltinCommand::Quit, Vec::new()),
 
                     CLEARLINE => normal_command!(BuiltinCommand::ClearLine),
                     INPUT => normal_command!(BuiltinCommand::Input),
@@ -1045,6 +1060,7 @@ impl ParserContext {
                     RESET_STAIN => normal_command!(BuiltinCommand::ResetStain),
                     ADDCHARA => normal_command!(BuiltinCommand::AddChara),
                     ADDDEFCHARA => normal_command!(BuiltinCommand::AddDefChara),
+                    GETCHARA => normal_method!(BuiltinMethod::GetChara),
                     DELCHARA => normal_command!(BuiltinCommand::DelChara),
                     SORTCHARA => try_nom!(pp, self::expr::sortchara_line(self)(args)).1,
                     COPYCHARA => normal_command!(BuiltinCommand::CopyChara),
@@ -1058,10 +1074,20 @@ impl ParserContext {
                     STRLEN => normal_method!(BuiltinMethod::StrLenS),
                     STRLENS => normal_method!(BuiltinMethod::StrLenS),
                     STRLENSU => normal_method!(BuiltinMethod::StrLenSU),
+                    ENCODETOUNI => strform_command!(BuiltinCommand::EncodeToUni),
 
                     VARSET => normal_command!(BuiltinCommand::Varset),
                     CVARSET => normal_command!(BuiltinCommand::CVarset),
                     VARSIZE => normal_method!(BuiltinMethod::VarSize),
+                    SUBSTRING => normal_method!(BuiltinMethod::SubString),
+                    SUBSTRINGU => normal_method!(BuiltinMethod::SubStringU),
+
+                    GETNUM => normal_method!(BuiltinMethod::GetNum),
+                    GETEXPLV => normal_method!(BuiltinMethod::GetExpLv),
+                    GETPALAMLV => normal_method!(BuiltinMethod::GetPalamLv),
+                    GETCONFIG => normal_method!(BuiltinMethod::GetConfig),
+
+                    BAR => normal_command!(BuiltinCommand::Bar),
 
                     REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
 
@@ -1284,7 +1310,7 @@ impl ParserContext {
                         log::warn!("{inst} is not yet implemented this line will occur error when executed.");
                         Stmt::Command(
                             BuiltinCommand::Throw,
-                            vec![Expr::str(self.interner, format!("TODO: {inst}"))],
+                            vec![Expr::str(self.interner, format!("[compiler] TODO: {inst}"))],
                         )
                     }
                 }

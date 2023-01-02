@@ -631,12 +631,6 @@ pub fn call_arg_list<'c, 'a>(
     }
 }
 
-#[derive(Clone, Copy)]
-enum StrAssignOp {
-    Bin(BinaryOperator),
-    Str,
-}
-
 pub fn call_jump_line<'c, 'a>(
     ctx: &'c ParserContext,
     is_form: bool,
