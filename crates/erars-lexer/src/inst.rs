@@ -174,9 +174,6 @@ pub enum InstructionCode {
     DO,
     LOOP,
 
-    PRINTDATA,
-    PRINTDATAL,
-    PRINTDATAW,
     ENDDATA,
     DATALIST,
     ENDLIST,
@@ -228,10 +225,6 @@ pub enum InstructionCode {
     //		CHKCHARADATA,
     REFBYNAME,
     REF,
-
-    PRINTDATAD,
-    PRINTDATADL,
-    PRINTDATADW,
 
     HTML_PRINT,
     HTML_TAGSPLIT,
