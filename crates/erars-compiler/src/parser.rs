@@ -1045,6 +1045,7 @@ impl ParserContext {
                     ADDCHARA => normal_command!(BuiltinCommand::AddChara),
                     ADDDEFCHARA => normal_command!(BuiltinCommand::AddDefChara),
                     DELCHARA => normal_command!(BuiltinCommand::DelChara),
+                    SORTCHARA => try_nom!(pp, self::expr::sortchara_line(self)(args)).1,
                     COPYCHARA => normal_command!(BuiltinCommand::CopyChara),
                     SWAPCHARA => normal_command!(BuiltinCommand::SwapChara),
                     FONTBOLD => normal_command!(BuiltinCommand::FontBold),
@@ -1063,32 +1064,90 @@ impl ParserContext {
 
                     REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
 
-                    GOTO => Stmt::Goto {
-                        label: Expr::str(self.interner, args),
-                        catch_body: None,
-                    },
-                    GOTOFORM => Stmt::Goto {
-                        label: try_nom!(pp, self::expr::normal_form_str(self)(args)).1,
-                        catch_body: None,
-                    },
-
-                    CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF => {
+                    CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF | TRYCALL
+                    | TRYCALLFORM | TRYJUMP | TRYJUMPFORM | TRYCCALL | TRYCCALLFORM | TRYCJUMP
+                    | TRYCJUMPFORM | GOTO | GOTOFORM | TRYGOTO | TRYGOTOFORM | TRYCGOTO
+                    | TRYCGOTOFORM => {
                         let (name, args) = try_nom!(
                             pp,
                             self::expr::call_jump_line(
                                 self,
-                                matches!(inst, CALLFORM | CALLFORMF | JUMPFORM)
+                                matches!(
+                                    inst,
+                                    CALLFORM
+                                        | CALLFORMF
+                                        | JUMPFORM
+                                        | TRYCALLFORM
+                                        | TRYCCALLFORM
+                                        | TRYJUMPFORM
+                                        | TRYCJUMPFORM
+                                        | GOTOFORM
+                                        | TRYGOTOFORM
+                                        | TRYCGOTOFORM
+                                )
                             )(args)
                         )
                         .1;
 
-                        Stmt::Call {
-                            name,
-                            args,
-                            is_jump: matches!(inst, JUMP | JUMPFORM),
-                            is_method: matches!(inst, CALLF | CALLFORMF),
-                            try_body: vec![],
-                            catch_body: None,
+                        let is_try = matches!(
+                            inst,
+                            TRYCALL
+                                | TRYCALLFORM
+                                | TRYCCALLFORM
+                                | TRYJUMP
+                                | TRYJUMPFORM
+                                | TRYCJUMPFORM
+                                | TRYGOTO
+                                | TRYCGOTO
+                                | TRYGOTOFORM
+                                | TRYCGOTOFORM
+                        );
+
+                        let is_catch = matches!(
+                            inst,
+                            TRYCCALL
+                                | TRYCCALLFORM
+                                | TRYCJUMP
+                                | TRYCJUMPFORM
+                                | TRYCGOTO
+                                | TRYCGOTOFORM
+                        );
+
+                        let (try_body, catch_body) = if is_catch {
+                            let try_body = self.read_body_until(CATCH, pp, b)?;
+                            let catch_body = self.read_body_until(ENDCATCH, pp, b)?;
+
+                            (try_body, Some(catch_body))
+                        } else if is_try {
+                            (Vec::new(), Some(Vec::new()))
+                        } else {
+                            (Vec::new(), None)
+                        };
+
+                        if matches!(
+                            inst,
+                            GOTO | GOTOFORM | TRYGOTO | TRYGOTOFORM | TRYCGOTO | TRYCGOTOFORM
+                        ) {
+                            Stmt::Goto {
+                                label: name,
+                                catch_body,
+                            }
+                        } else {
+                            Stmt::Call {
+                                name,
+                                args,
+                                is_jump: matches!(
+                                    inst,
+                                    JUMP | JUMPFORM
+                                        | TRYJUMP
+                                        | TRYJUMPFORM
+                                        | TRYCJUMP
+                                        | TRYCJUMPFORM
+                                ),
+                                is_method: matches!(inst, CALLF | CALLFORMF),
+                                try_body,
+                                catch_body,
+                            }
                         }
                     }
 
@@ -1220,7 +1279,13 @@ impl ParserContext {
                     }
 
                     // TODO
-                    inst => error!(pp.span(), format!("TODO: {inst}")),
+                    inst => {
+                        log::warn!("{inst} is not yet implemented this line will occur error when executed.");
+                        Stmt::Command(
+                            BuiltinCommand::Throw,
+                            vec![Expr::str(self.interner, format!("TODO: {inst}"))],
+                        )
+                    }
                 }
             }
             EraLine::VarAssign {
