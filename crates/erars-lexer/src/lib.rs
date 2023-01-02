@@ -179,7 +179,7 @@ impl<'s> Preprocessor<'s> {
             s,
 
             line_pos: 0,
-            start_len: s.len(),
+            start_len: s.len() + span_begin,
             span_begin,
             span_end: span_begin,
         }
