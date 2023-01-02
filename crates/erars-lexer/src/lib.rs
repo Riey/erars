@@ -81,41 +81,13 @@ fn trim_text(s: &str) -> &str {
     s
 }
 
-unsafe fn parse_print_button(s: &str) -> (PrintFlags, &str) {
-    // skip PRINTPLAIN
-    let s = s.get_unchecked("PRINTBUTTON".len()..);
-
-    let (flags, s) = if let Some(s) = strip_prefix_ignore_case(s, "LC") {
-        (PrintFlags::LEFT_ALIGN, s)
-    } else if let Some(s) = strip_prefix_ignore_case_char(s, 'C') {
-        (PrintFlags::RIGHT_ALIGN, s)
-    } else {
-        (PrintFlags::empty(), s)
-    };
-
-    (flags, trim_text(s))
-}
-
-unsafe fn parse_print_plain(s: &str) -> (PrintType, &str) {
-    // skip PRINTPLAIN
-    let s = s.get_unchecked("PRINTPLAIN".len()..);
-
-    let (ty, s) = if let Some(s) = strip_prefix_ignore_case(s, "FORM") {
-        (PrintType::Form, s)
-    } else {
-        (PrintType::Plain, s)
-    };
-
-    (ty, trim_text(s))
-}
-
 unsafe fn parse_print(mut s: &str) -> (PrintFlags, PrintType, &str) {
     let mut flags = PrintFlags::empty();
 
-    if let Some(ss) = s.strip_prefix("DEBUG") {
-        flags |= PrintFlags::DEBUG;
-        s = ss;
-    }
+    // if let Some(ss) = s.strip_prefix("DEBUG") {
+    //     flags |= PrintFlags::DEBUG;
+    //     s = ss;
+    // }
 
     // skip PRINT
     s = s.get_unchecked("PRINT".len()..);

@@ -593,6 +593,15 @@ pub fn expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a
     }
 }
 
+pub fn expr_or_one<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
+    move |i| {
+        let (i, expr) = opt(expr(ctx))(i)?;
+        Ok((i, expr.unwrap_or(Expr::Int(1))))
+    }
+}
+
 pub fn expr_pair<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, (Expr, Expr)> + 'c {

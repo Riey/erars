@@ -1202,7 +1202,7 @@ impl ParserContext {
                     IF => {
                         let mut is_else = false;
                         let mut cond_pos = pp.script_pos();
-                        let mut cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+                        let mut cond = try_nom!(pp, self::expr::expr_or_one(self)(args)).1;
                         let mut block = Vec::new();
                         let mut if_elses = Vec::new();
 
@@ -1212,11 +1212,7 @@ impl ParserContext {
                                     if_elses.push((ExprWithPos(cond, cond_pos), block));
                                     block = Vec::new();
                                     cond_pos = pp.script_pos();
-                                    cond = if args.as_bytes().iter().all(|b| *b == b' ') {
-                                        Expr::Int(1)
-                                    } else {
-                                        try_nom!(pp, self::expr::expr(self)(args)).1
-                                    };
+                                    cond = try_nom!(pp, self::expr::expr_or_one(self)(args)).1;
                                 }
                                 Some(EraLine::InstLine {
                                     inst: ELSE,

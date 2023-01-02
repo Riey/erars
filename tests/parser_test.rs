@@ -551,6 +551,88 @@ mod body {
     }
 
     #[test]
+    fn test_if_empty_cond() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/if_empty_cond.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    StmtWithPos(
+        If(
+            [
+                (
+                    ExprWithPos(
+                        Int(
+                            1,
+                        ),
+                        ScriptPosition {
+                            line: 1,
+                        },
+                    ),
+                    [
+                        StmtWithPos(
+                            Print(
+                                (empty),
+                                String(
+                                    IF,
+                                ),
+                            ),
+                            ScriptPosition {
+                                line: 2,
+                            },
+                        ),
+                    ],
+                ),
+                (
+                    ExprWithPos(
+                        Int(
+                            1,
+                        ),
+                        ScriptPosition {
+                            line: 3,
+                        },
+                    ),
+                    [
+                        StmtWithPos(
+                            Print(
+                                (empty),
+                                String(
+                                    ELSEIF,
+                                ),
+                            ),
+                            ScriptPosition {
+                                line: 4,
+                            },
+                        ),
+                    ],
+                ),
+            ],
+            [
+                StmtWithPos(
+                    Print(
+                        (empty),
+                        String(
+                            ELSE,
+                        ),
+                    ),
+                    ScriptPosition {
+                        line: 6,
+                    },
+                ),
+            ],
+        ),
+        ScriptPosition {
+            line: 1,
+        },
+    ),
+]
+"
+        );
+    }
+
+    #[test]
     fn test_number() {
         k9::snapshot!(
             do_test(
