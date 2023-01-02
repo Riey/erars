@@ -1014,8 +1014,9 @@ impl ParserContext {
                 }
                 match inst {
                     PRINT => unreachable!(),
-                    DRAWLINE => Stmt::Command(
-                        BuiltinCommand::DrawLine,
+                    DRAWLINE => Stmt::Command(BuiltinCommand::DrawLine, vec![]),
+                    CUSTOMDRAWLINE => Stmt::Command(
+                        BuiltinCommand::CustomDrawLine,
                         vec![Expr::str(self.interner, args.trim_start())],
                     ),
                     ALIGNMENT => match args.trim().parse() {
