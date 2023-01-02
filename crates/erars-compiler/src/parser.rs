@@ -1065,16 +1065,31 @@ impl ParserContext {
                     SORTCHARA => try_nom!(pp, self::expr::sortchara_line(self)(args)).1,
                     COPYCHARA => normal_command!(BuiltinCommand::CopyChara),
                     SWAPCHARA => normal_command!(BuiltinCommand::SwapChara),
+                    PICKUPCHARA => normal_command!(BuiltinCommand::PickupChara),
                     FONTBOLD => normal_command!(BuiltinCommand::FontBold),
                     FONTITALIC => normal_command!(BuiltinCommand::FontItalic),
                     FONTREGULAR => normal_command!(BuiltinCommand::FontRegular),
                     FONTSTYLE => normal_command!(BuiltinCommand::FontStyle),
                     SETFONT => normal_command!(BuiltinCommand::SetFont),
 
+                    SETCOLOR => normal_command!(BuiltinCommand::SetColor),
+                    SETCOLORBYNAME => strform_command!(BuiltinCommand::SetColorByName),
+                    SETBGCOLOR => normal_command!(BuiltinCommand::SetBgColor),
+                    SETBGCOLORBYNAME => strform_command!(BuiltinCommand::SetBgColorByName),
+                    GETCOLOR => normal_method!(BuiltinMethod::GetColor),
+                    GETDEFCOLOR => normal_method!(BuiltinMethod::GetDefColor),
+                    GETBGCOLOR => normal_method!(BuiltinMethod::GetBgColor),
+                    GETDEFBGCOLOR => normal_method!(BuiltinMethod::GetDefBgColor),
+                    GETFOCUSCOLOR => normal_method!(BuiltinMethod::GetFocusColor),
+
                     STRLEN => normal_method!(BuiltinMethod::StrLenS),
                     STRLENS => normal_method!(BuiltinMethod::StrLenS),
                     STRLENSU => normal_method!(BuiltinMethod::StrLenSU),
                     ENCODETOUNI => strform_command!(BuiltinCommand::EncodeToUni),
+
+                    SPLIT => normal_command!(BuiltinCommand::Split),
+
+                    PUTFORM => strform_command!(BuiltinCommand::PutForm),
 
                     VARSET => normal_command!(BuiltinCommand::Varset),
                     CVARSET => normal_command!(BuiltinCommand::CVarset),
