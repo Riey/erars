@@ -3,8 +3,8 @@ mod expr;
 
 use erars_ast::{
     get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos,
-    Function, FunctionHeader, FunctionInfo, InlineValue, Interner, Stmt, StmtWithPos, StrKey,
-    UnaryOperator, VariableInfo, PrintFlags,
+    Function, FunctionHeader, FunctionInfo, InlineValue, Interner, PrintFlags, Stmt, StmtWithPos,
+    StrKey, UnaryOperator, VariableInfo,
 };
 use erars_lexer::{
     Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor, PrintType, SharpCode,
@@ -1021,12 +1021,12 @@ impl ParserContext {
                         Stmt::Command($com, vec![args])
                     }};
                 }
-                // macro_rules! strform_method {
-                //     ($meth:expr) => {{
-                //         let args = try_nom!(pp, self::expr::normal_form_str(self)(args)).1;
-                //         Stmt::Method($meth, vec![args])
-                //     }};
-                // }
+                macro_rules! strform_method {
+                    ($meth:expr) => {{
+                        let args = try_nom!(pp, self::expr::normal_form_str(self)(args)).1;
+                        Stmt::Method($meth, vec![args])
+                    }};
+                }
                 match inst {
                     PRINT => unreachable!(),
                     PRINTBUTTON | PRINTBUTTONC | PRINTBUTTONLC => {
@@ -1040,8 +1040,15 @@ impl ParserContext {
                         let (text, value) = try_nom!(pp, self::expr::expr_pair(self)(args)).1;
                         Stmt::PrintButton { flags, text, value }
                     }
-                    PRINTPLAINFORM => Stmt::Print(PrintFlags::PLAIN, try_nom!(pp, self::expr::normal_form_str(self)(args)).1),
+                    PRINTPLAINFORM => Stmt::Print(
+                        PrintFlags::PLAIN,
+                        try_nom!(pp, self::expr::normal_form_str(self)(args)).1,
+                    ),
                     PRINTPLAIN => Stmt::Print(PrintFlags::PLAIN, Expr::str(self.interner, args)),
+                    DEBUGPRINT | DEBUGPRINTL | DEBUGPRINTFORM | DEBUGPRINTFORML | DEBUGCLEAR => {
+                        // TODO: debug
+                        Stmt::Print(PrintFlags::empty(), Expr::str(self.interner, ""))
+                    }
                     DRAWLINE => Stmt::Command(BuiltinCommand::DrawLine, vec![]),
                     DRAWLINEFORM => strform_command!(BuiltinCommand::CustomDrawLine),
                     CUSTOMDRAWLINE => Stmt::Command(
@@ -1133,6 +1140,8 @@ impl ParserContext {
                     STRLEN => normal_method!(BuiltinMethod::StrLenS),
                     STRLENS => normal_method!(BuiltinMethod::StrLenS),
                     STRLENSU => normal_method!(BuiltinMethod::StrLenSU),
+                    STRLENFORM => strform_method!(BuiltinMethod::StrLenS),
+                    STRLENFORMU => strform_method!(BuiltinMethod::StrLenSU),
                     UNICODE => normal_method!(BuiltinMethod::Unicode),
                     ENCODETOUNI => strform_command!(BuiltinCommand::EncodeToUni),
 
