@@ -266,6 +266,7 @@ pub enum InstructionCode {
     PRINTBUTTONLC,
     PRINTBUTTONC,
     PRINTBUTTON,
+    PRINTPLAINFORM,
     PRINTPLAIN,
     PRINT, //文字を表示する
 

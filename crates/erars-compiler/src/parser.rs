@@ -1040,6 +1040,8 @@ impl ParserContext {
                         let (text, value) = try_nom!(pp, self::expr::expr_pair(self)(args)).1;
                         Stmt::PrintButton { flags, text, value }
                     }
+                    PRINTPLAINFORM => Stmt::Print(PrintFlags::PLAIN, try_nom!(pp, self::expr::normal_form_str(self)(args)).1),
+                    PRINTPLAIN => Stmt::Print(PrintFlags::PLAIN, Expr::str(self.interner, args)),
                     DRAWLINE => Stmt::Command(BuiltinCommand::DrawLine, vec![]),
                     DRAWLINEFORM => strform_command!(BuiltinCommand::CustomDrawLine),
                     CUSTOMDRAWLINE => Stmt::Command(
@@ -1082,6 +1084,7 @@ impl ParserContext {
 
                     GETBIT => normal_method!(BuiltinMethod::GetBit),
                     SETBIT => normal_command!(BuiltinCommand::SetBit),
+                    INVERTBIT => normal_command!(BuiltinCommand::InvertBit),
                     CLEARBIT => normal_command!(BuiltinCommand::ClearBit),
 
                     CLEARLINE => normal_command!(BuiltinCommand::ClearLine),
@@ -1089,6 +1092,7 @@ impl ParserContext {
                     INPUTS => normal_command!(BuiltinCommand::InputS),
                     WAIT => normal_command!(BuiltinCommand::Wait),
                     WAITANYKEY => normal_command!(BuiltinCommand::WaitAnykey),
+                    TWAIT => normal_command!(BuiltinCommand::Twait),
                     FORCEWAIT => normal_command!(BuiltinCommand::ForceWait),
                     RESETDATA => normal_command!(BuiltinCommand::ResetData),
                     RESET_STAIN => normal_command!(BuiltinCommand::ResetStain),
@@ -1110,6 +1114,9 @@ impl ParserContext {
                     SETFONT => normal_command!(BuiltinCommand::SetFont),
                     CHKFONT => normal_method!(BuiltinMethod::ChkFont),
                     GETFONT => normal_method!(BuiltinMethod::GetFont),
+
+                    REDRAW => normal_method!(BuiltinMethod::CurrentRedraw),
+                    THROW => strform_command!(BuiltinCommand::Throw),
 
                     SETCOLOR => normal_command!(BuiltinCommand::SetColor),
                     SETCOLORBYNAME => strform_command!(BuiltinCommand::SetColorByName),
