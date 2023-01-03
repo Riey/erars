@@ -1105,6 +1105,7 @@ impl ParserContext {
                     RESET_STAIN => normal_command!(BuiltinCommand::ResetStain),
                     ADDCHARA => normal_command!(BuiltinCommand::AddChara),
                     ADDDEFCHARA => normal_command!(BuiltinCommand::AddDefChara),
+                    ADDCOPYCHARA => normal_command!(BuiltinCommand::AddCopyChara),
                     GETCHARA => normal_method!(BuiltinMethod::GetChara),
                     FINDCHARA => normal_method!(BuiltinMethod::FindChara),
                     // FINDLASTCHARA => normal_method!(BuiltinMethod::FindLastChara),
@@ -1172,6 +1173,11 @@ impl ParserContext {
                     VARSIZE => normal_method!(BuiltinMethod::VarSize),
                     SUBSTRING => normal_method!(BuiltinMethod::SubString),
                     SUBSTRINGU => normal_method!(BuiltinMethod::SubStringU),
+                    // ARRAYCOPY => normal_command!(BuiltinCommand::ArrayCopy),
+                    // ARRAYREMOVE => normal_command!(BuiltinCommand::ArrayRemove),
+                    ARRAYMOVE => normal_command!(BuiltinCommand::ArrayMove),
+                    ARRAYSHIFT => normal_command!(BuiltinCommand::ArrayShift),
+                    // ARRAYSORT => normal_command!(BuiltinCommand::ArraySort),
 
                     GETNUM => normal_method!(BuiltinMethod::GetNum),
                     GETEXPLV => normal_method!(BuiltinMethod::GetExpLv),
@@ -1179,6 +1185,7 @@ impl ParserContext {
                     GETCONFIG => normal_method!(BuiltinMethod::GetConfig),
 
                     BAR => normal_command!(BuiltinCommand::Bar),
+                    SKIPDISP => normal_command!(BuiltinCommand::SkipDisp),
 
                     REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
 
