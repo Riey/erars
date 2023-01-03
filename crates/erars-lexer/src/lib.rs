@@ -264,14 +264,19 @@ impl<'s> Preprocessor<'s> {
                 self.s = left;
                 line
             };
-            self.span_end = self.current_pos();
+            self.span_end = if !self.s.is_empty() {
+                // skip newline
+                self.current_pos() - 1
+            } else {
+                self.current_pos()
+            };
 
             if line.starts_with('[') {
                 if let Some(m) = self.re.skip_start.find_earliest(line.as_bytes()) {
+                    dbg!(&line[m.start()..m.end()]);
                     let line = &line[m.end()..];
                     let Some(end) = self.re.skip_end.find_earliest(line.as_bytes()) else {
-                        return Err(("N
-                        o SKIPEND".to_string(), self.span()));
+                        return Err(("No SKIPEND".to_string(), self.span()));
                     };
                     self.line_pos += line[..end.start()].bytes().filter(|b| *b == b'\n').count();
                     self.s = &line[end.end()..];
