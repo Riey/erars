@@ -1675,6 +1675,12 @@ fn run_builtin_command(
             drop(ctx.return_func()?);
             return Ok(InstructionWorkflow::Goto(0));
         }
+        BuiltinCommand::Power => {
+            let out = get_arg!(@var args);
+            let l = get_arg!(@i64: args, ctx);
+            let r = get_arg!(@u32: args, ctx);
+            *ctx.ref_int_var_ref(&out)? = l.pow(r);
+        }
         BuiltinCommand::SetBit => {
             let v = get_arg!(@var args);
             let idx = get_arg!(@usize: args, ctx);

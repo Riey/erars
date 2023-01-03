@@ -157,6 +157,12 @@ impl Expr {
     }
 }
 
+impl Default for Expr {
+    fn default() -> Self {
+        Expr::Int(0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SelectCaseCond {
     Single(Expr),

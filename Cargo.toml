@@ -22,6 +22,7 @@ members = [
 
 [dev-dependencies]
 erars-ast = { path = "./crates/erars-ast" }
+erars-lexer = { path = "./crates/erars-lexer" }
 erars-compiler = { path = "./crates/erars-compiler" }
 erars-ui = { path = "./crates/erars-ui" }
 erars-vm = { path = "./crates/erars-vm" }

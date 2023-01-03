@@ -174,6 +174,8 @@ pub enum BuiltinCommand {
     EncodeToUni,
     // different from method
     GetTime,
+    // different from method
+    Power,
 
     Redraw = 60,
     DrawLine,

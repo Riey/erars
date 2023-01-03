@@ -104,6 +104,60 @@ mod body {
             line: 1,
         },
     ),
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: CFLAG,
+                func_extern: None,
+                args: [
+                    BinopExpr(
+                        Int(
+                            71,
+                        ),
+                        Add,
+                        BinopExpr(
+                            Var(
+                                Variable {
+                                    var: TFLAG,
+                                    func_extern: None,
+                                    args: [
+                                        Int(
+                                            92,
+                                        ),
+                                    ],
+                                },
+                            ),
+                            Equal,
+                            Var(
+                                Variable {
+                                    var: ASSI,
+                                    func_extern: None,
+                                    args: [],
+                                },
+                            ),
+                        ),
+                    ),
+                ],
+            },
+            Some(
+                Add,
+            ),
+            Var(
+                Variable {
+                    var: TFLAG,
+                    func_extern: None,
+                    args: [
+                        Int(
+                            10,
+                        ),
+                    ],
+                },
+            ),
+        ),
+        ScriptPosition {
+            line: 2,
+        },
+    ),
 ]
 "
         );
@@ -533,6 +587,88 @@ mod body {
                         (empty),
                         String(
                             A < 1,
+                        ),
+                    ),
+                    ScriptPosition {
+                        line: 6,
+                    },
+                ),
+            ],
+        ),
+        ScriptPosition {
+            line: 1,
+        },
+    ),
+]
+"
+        );
+    }
+
+    #[test]
+    fn test_if_empty_cond() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/if_empty_cond.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    StmtWithPos(
+        If(
+            [
+                (
+                    ExprWithPos(
+                        Int(
+                            1,
+                        ),
+                        ScriptPosition {
+                            line: 1,
+                        },
+                    ),
+                    [
+                        StmtWithPos(
+                            Print(
+                                (empty),
+                                String(
+                                    IF,
+                                ),
+                            ),
+                            ScriptPosition {
+                                line: 2,
+                            },
+                        ),
+                    ],
+                ),
+                (
+                    ExprWithPos(
+                        Int(
+                            1,
+                        ),
+                        ScriptPosition {
+                            line: 3,
+                        },
+                    ),
+                    [
+                        StmtWithPos(
+                            Print(
+                                (empty),
+                                String(
+                                    ELSEIF,
+                                ),
+                            ),
+                            ScriptPosition {
+                                line: 4,
+                            },
+                        ),
+                    ],
+                ),
+            ],
+            [
+                StmtWithPos(
+                    Print(
+                        (empty),
+                        String(
+                            ELSE,
                         ),
                     ),
                     ScriptPosition {
@@ -1114,6 +1250,31 @@ mod body {
         ),
         ScriptPosition {
             line: 6,
+        },
+    ),
+]
+"
+        );
+    }
+
+    #[test]
+    fn test_skip() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/skip.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    StmtWithPos(
+        Print(
+            (empty),
+            String(
+                YES,
+            ),
+        ),
+        ScriptPosition {
+            line: 4,
         },
     ),
 ]

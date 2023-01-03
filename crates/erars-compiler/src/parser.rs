@@ -2,14 +2,15 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, EventFlags, EventType,
-    Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, InlineValue, Interner, PrintFlags,
-    ScriptPosition, Stmt, StmtWithPos, StrKey, UnaryOperator, Variable, VariableInfo,
+    get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, InlineValue, Interner, Stmt, StmtWithPos, StrKey, UnaryOperator, VariableInfo,
 };
-use erars_lexer::{ConfigToken, ErhToken, JumpType, PrintType, Token};
+use erars_lexer::{
+    Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor,
+    PrintType, SharpCode,
+};
 use hashbrown::{HashMap, HashSet};
 use itertools::Itertools;
-use logos::{internal::LexerInternal, Lexer};
+use logos::Lexer;
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
@@ -21,7 +22,7 @@ use std::{
 use strum::{Display, EnumString};
 
 pub use crate::error::{ParserError, ParserResult};
-use crate::CompiledFunction;
+use crate::{compiler::Compiler, CompiledFunction, PP_REGEX};
 pub use expr::normal_form_str;
 
 macro_rules! error_csv {
@@ -40,40 +41,36 @@ macro_rules! csv_parse_int {
 }
 
 macro_rules! error {
-    ($lex:expr, $msg:expr) => {{
-        return Err((String::from($msg), $lex.span()));
+    ($span:expr, $msg:expr) => {{
+        return Err((String::from($msg), $span));
     }};
 }
 
-macro_rules! take_ident {
-    ($ty:ty, $lex:expr) => {
-        match $lex.next() {
-            Some(Token::Ident(ident)) => match ident.parse::<$ty>() {
-                Ok(ret) => ret,
-                Err(_) => error!($lex, format!("Unknown ident: {}", ident)),
-            },
-            other => error!($lex, format!("Expect ident, found: {:?}", other)),
-        }
-    };
-    ($lex:expr) => {
-        match $lex.next() {
-            Some(Token::Ident(ident)) => ident,
-            other => error!($lex, format!("Expect ident, found: {:?}", other)),
-        }
-    };
-}
-
 macro_rules! try_nom {
-    ($lex:expr, $ret:expr) => {
+    (@str $s:expr, $ret:expr) => {
         match $ret {
             Ok(ret) => ret,
             Err(err) => match err {
                 nom::Err::Error(err) | nom::Err::Failure(err) => {
-                    error!($lex, format!("Expression parsing failed: {}", err))
+                    return Err((format!("Expression parsing failed: {}", err), 0..$s.len()));
                 }
                 _ => unreachable!(),
             },
         }
+    };
+    (@span $span:expr, $ret:expr) => {
+        match $ret {
+            Ok(ret) => ret,
+            Err(err) => match err {
+                nom::Err::Error(err) | nom::Err::Failure(err) => {
+                    error!($span, format!("Expression parsing failed: {}", err))
+                }
+                _ => unreachable!(),
+            },
+        }
+    };
+    ($pp:expr, $ret:expr) => {
+        try_nom!(@span $pp.span(), $ret)
     };
 }
 
@@ -238,31 +235,41 @@ impl EraConfig {
                             EraConfigKey::PrintcCount => {
                                 ret.printc_count = match value.parse() {
                                     Ok(l) => l,
-                                    Err(_) => error!(lex, format!("Invalid integer {value}")),
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid integer {value}"))
+                                    }
                                 };
                             }
                             EraConfigKey::MaxLog => {
                                 ret.max_log = match value.parse() {
                                     Ok(l) => l,
-                                    Err(_) => error!(lex, format!("Invalid integer {value}")),
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid integer {value}"))
+                                    }
                                 };
                             }
                             EraConfigKey::PrintcWidth => {
                                 ret.printc_width = match value.parse() {
                                     Ok(l) => l,
-                                    Err(_) => error!(lex, format!("Invalid integer {value}")),
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid integer {value}"))
+                                    }
                                 };
                             }
                             EraConfigKey::Lang => {
                                 ret.lang = match value.parse() {
                                     Ok(l) => l,
-                                    Err(_) => error!(lex, format!("Invalid language {value}")),
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid language {value}"))
+                                    }
                                 };
                             }
                             EraConfigKey::SaveNos => {
                                 ret.save_nos = match value.parse() {
                                     Ok(l) => l,
-                                    Err(_) => error!(lex, format!("Invalid save_nos {value}")),
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid save_nos {value}"))
+                                    }
                                 };
                             }
                             EraConfigKey::FontFamily => {
@@ -271,19 +278,23 @@ impl EraConfig {
                             EraConfigKey::FontSize => {
                                 ret.font_size = match value.parse() {
                                     Ok(l) => l,
-                                    Err(_) => error!(lex, format!("Invalid font_size {value}")),
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid font_size {value}"))
+                                    }
                                 };
                             }
                             EraConfigKey::LineHeight => {
                                 ret.line_height = match value.parse() {
                                     Ok(l) => l,
-                                    Err(_) => error!(lex, format!("Invalid line_height {value}")),
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid line_height {value}"))
+                                    }
                                 };
                             }
                         }
                     }
                 }
-                ConfigToken::Error => error!(lex, format!("Invalid token: {}", lex.slice())),
+                ConfigToken::Error => error!(lex.span(), format!("Invalid token: {}", lex.slice())),
             }
         }
 
@@ -749,25 +760,37 @@ impl HeaderInfo {
 
     pub fn merge_header(&mut self, s: &str) -> ParserResult<()> {
         let ctx = ParserContext::default();
-        let mut lex = Lexer::new(s);
+        let mut pp = Preprocessor::new(&PP_REGEX, s);
+        let mut b = Bump::new();
 
         loop {
-            match lex.next() {
-                Some(ErhToken::Define(def)) => {
-                    let (def, ident) = try_nom!(lex, self::expr::ident(def));
-                    self.macros.insert(ident.to_string(), def.trim().to_string());
+            match pp.next_line(&b)? {
+                Some(EraLine::SharpLine {
+                    sharp: SharpCode::DEFINE,
+                    args,
+                }) => {
+                    let (args, ident) = try_nom!(pp, self::expr::ident(args));
+                    self.macros.insert(ident.to_string(), args.trim().to_string());
                 }
-                Some(ErhToken::Dim(dim)) => {
-                    let var = try_nom!(lex, self::expr::dim_line(&ctx, false)(dim)).1;
+                Some(EraLine::SharpLine {
+                    sharp: SharpCode::DIM,
+                    args: dim,
+                }) => {
+                    let var = try_nom!(pp, self::expr::dim_line(&ctx, false)(dim)).1;
                     self.global_variables.insert(var.var, var.info);
                 }
-                Some(ErhToken::DimS(dims)) => {
-                    let var = try_nom!(lex, self::expr::dim_line(&ctx, true)(dims)).1;
+                Some(EraLine::SharpLine {
+                    sharp: SharpCode::DIMS,
+                    args: dims,
+                }) => {
+                    let var = try_nom!(pp, self::expr::dim_line(&ctx, true)(dims)).1;
                     self.global_variables.insert(var.var, var.info);
                 }
-                Some(ErhToken::Error) => error!(lex, "Invalid token"),
+                Some(_) => error!(pp.span(), "Invalid line"),
                 None => break,
             }
+
+            b.reset();
         }
 
         Ok(())
@@ -784,7 +807,6 @@ pub struct ParserContext {
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
     pub file_path: StrKey,
-    pub line: Cell<u32>,
 }
 
 impl Default for ParserContext {
@@ -805,36 +827,6 @@ impl ParserContext {
             local_strs: RefCell::default(),
             is_arg: Cell::new(false),
             ban_percent: Cell::new(false),
-            line: Cell::new(1),
-        }
-    }
-
-    fn current_pos(&self) -> ScriptPosition {
-        ScriptPosition {
-            line: self.line.get(),
-        }
-    }
-
-    fn next_token<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Option<Token<'s>>> {
-        loop {
-            match lex.next() {
-                Some(Token::Preprocess("[SKIPSTART]")) => loop {
-                    match lex.next() {
-                        Some(Token::Preprocess("[SKIPEND]")) => break,
-                        Some(Token::Newline) => {
-                            self.line.set(self.line.get() + 1);
-                        }
-                        None => error!(lex, "[SKIPSTART]가 [SKIPEND]없이 끝났습니다."),
-                        _ => {}
-                    }
-                },
-                Some(Token::Preprocess(_)) => {}
-                Some(Token::Newline) => {
-                    self.line.set(self.line.get() + 1);
-                }
-                Some(tok) => break Ok(Some(tok)),
-                None => break Ok(None),
-            }
         }
     }
 
@@ -859,333 +851,562 @@ impl ParserContext {
         ret
     }
 
-    pub fn parse_stmt<'s>(
+    fn read_body_until(
         &self,
-        first: Token<'s>,
-        lex: &mut Lexer<'s, Token<'s>>,
+        end: InstructionCode,
+        pp: &mut Preprocessor,
+        b: &Bump,
+    ) -> ParserResult<Vec<StmtWithPos>> {
+        let mut out = Vec::new();
+
+        loop {
+            match pp.next_line(b)? {
+                Some(EraLine::InstLine { inst, args: _ }) if inst == end => {
+                    break Ok(out);
+                }
+                Some(line) => {
+                    out.push(self.parse_stmt(line, pp, b)?);
+                }
+                None => {
+                    error!(pp.span(), format!("Block doesn't end with {end}"));
+                }
+            }
+        }
+    }
+
+    fn read_body_until_and_expr(
+        &self,
+        end: InstructionCode,
+        pp: &mut Preprocessor,
+        b: &Bump,
+    ) -> ParserResult<(Expr, Vec<StmtWithPos>)> {
+        let mut out = Vec::new();
+
+        loop {
+            match pp.next_line(b)? {
+                Some(EraLine::InstLine { inst, args }) if inst == end => {
+                    break Ok((try_nom!(pp, self::expr::expr(self)(args)).1, out));
+                }
+                Some(line) => {
+                    out.push(self.parse_stmt(line, pp, b)?);
+                }
+                None => {
+                    error!(pp.span(), format!("Block doesn't end with {end}"));
+                }
+            }
+        }
+    }
+
+    pub fn parse_stmt(
+        &self,
+        line: EraLine,
+        pp: &mut Preprocessor,
+        b: &Bump,
     ) -> ParserResult<StmtWithPos> {
-        let first_pos = self.current_pos();
+        let pos = pp.script_pos();
+        let stmt = match line {
+            EraLine::GotoLine(line) => Stmt::Label(self.interner.get_or_intern(line.trim())),
+            EraLine::PrintLine {
+                flags,
+                ty,
+                args: form,
+            } => match ty {
+                PrintType::Plain => Stmt::Print(flags, Expr::str(&self.interner, form)),
+                PrintType::Data => {
+                    let form = form.trim();
+                    let cond = if form.is_empty() {
+                        None
+                    } else {
+                        Some(try_nom!(pp, self::expr::expr(self)(form)).1)
+                    };
+                    let mut list = Vec::new();
 
-        let stmt = match first {
-            Token::DirectStmt(stmt) => stmt,
-            Token::Alignment => Stmt::Alignment(take_ident!(Alignment, lex)),
-            Token::Begin => Stmt::Begin(take_ident!(BeginType, lex)),
-            Token::CallEvent => Stmt::CallEvent(take_ident!(EventType, lex)),
-            Token::LabelLine(label) => Stmt::Label(self.interner.get_or_intern(label)),
-            Token::StrFormMethod((method, left)) => {
-                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Method(method, vec![form])
-            }
-            Token::StrFormCommand((com, left)) => {
-                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(left));
-                Stmt::Command(com, vec![form])
-            }
-            Token::CustomDrawLine(custom) => Stmt::Command(
-                BuiltinCommand::CustomDrawLine,
-                vec![Expr::str(self.interner, custom)],
-            ),
-            Token::Times(left) => try_nom!(lex, self::expr::times_line(self)(left)).1,
-            Token::Throw(left) => Stmt::Command(
-                BuiltinCommand::Throw,
-                vec![try_nom!(lex, self::expr::normal_form_str(self)(left)).1],
-            ),
-            Token::HtmlPrint(left) => {
-                // TODO: html
-                Stmt::Print(
-                    PrintFlags::NEWLINE,
-                    Expr::String(self.interner.get_or_intern(left)),
-                )
-            }
-            Token::ReuseLastLine(left) => Stmt::ReuseLastLine(self.interner.get_or_intern(left)),
-            Token::PrintButton((flags, form)) => {
-                let (text, value) = try_nom!(lex, self::expr::expr_pair(self)(form)).1;
-
-                Stmt::PrintButton { flags, text, value }
-            }
-            Token::PrintPlain((ty, form)) => {
-                let text = match ty {
-                    PrintType::Form => try_nom!(lex, self::expr::normal_form_str(self)(form)).1,
-                    PrintType::Plain => Expr::str(&self.interner, form),
-                    _ => unreachable!(),
-                };
-
-                Stmt::Print(PrintFlags::PLAIN, text)
-            }
-            Token::Print((flags, PrintType::Plain, form)) => {
-                Stmt::Print(flags, Expr::str(&self.interner, form))
-            }
-            Token::Print((flags, PrintType::Data, form)) => {
-                let form = form.trim();
-                let cond = if form.is_empty() {
-                    None
-                } else {
-                    Some(try_nom!(lex, self::expr::expr(self)(form)).1)
-                };
-                let mut list = Vec::new();
-
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Data(data)) => list.push(vec![Expr::str(&self.interner, data)]),
-                        Some(Token::DataForm(data)) => list.push(vec![
-                            try_nom!(lex, self::expr::normal_form_str(self)(data)).1,
-                        ]),
-                        Some(Token::DataList) => {
-                            let mut cur_list = Vec::new();
-                            loop {
-                                match self.next_token(lex)? {
-                                    Some(Token::Data(data)) => {
-                                        cur_list.push(Expr::str(&self.interner, data))
+                    loop {
+                        match pp.next_line(b)? {
+                            Some(EraLine::InstLine {
+                                inst: InstructionCode::DATA,
+                                args,
+                            }) => list.push(vec![Expr::str(&self.interner, args)]),
+                            Some(EraLine::InstLine {
+                                inst: InstructionCode::DATAFORM,
+                                args,
+                            }) => list.push(vec![
+                                try_nom!(pp, self::expr::normal_form_str(self)(args)).1,
+                            ]),
+                            Some(EraLine::InstLine {
+                                inst: InstructionCode::DATALIST,
+                                args: _,
+                            }) => {
+                                let mut cur_list = Vec::new();
+                                loop {
+                                    match pp.next_line(b)? {
+                                        Some(EraLine::InstLine {
+                                            inst: InstructionCode::DATA,
+                                            args,
+                                        }) => cur_list.push(Expr::str(&self.interner, args)),
+                                        Some(EraLine::InstLine {
+                                            inst: InstructionCode::DATAFORM,
+                                            args,
+                                        }) => cur_list.push(
+                                            try_nom!(pp, self::expr::normal_form_str(self)(args)).1,
+                                        ),
+                                        Some(EraLine::InstLine {
+                                            inst: InstructionCode::ENDLIST,
+                                            args: _,
+                                        }) => break,
+                                        Some(_) => {
+                                            error!(
+                                                pp.span(),
+                                                "DATALIST에 잘못된 토큰이 들어왔습니다"
+                                            )
+                                        }
+                                        None => {
+                                            error!(pp.span(), "ENDLIST없이 DATALIST가 끝났습니다.")
+                                        }
                                     }
-                                    Some(Token::DataForm(data)) => cur_list.push(
-                                        try_nom!(lex, self::expr::normal_form_str(self)(data)).1,
-                                    ),
-                                    Some(Token::EndList) => break,
-                                    Some(_) => {
-                                        error!(lex, "DATALIST에 잘못된 토큰이 들어왔습니다")
-                                    }
-                                    None => error!(lex, "ENDLIST없이 DATALIST가 끝났습니다."),
                                 }
+                                list.push(cur_list);
                             }
-                            list.push(cur_list);
+                            Some(EraLine::InstLine {
+                                inst: InstructionCode::ENDDATA,
+                                args: _,
+                            }) => break,
+                            Some(_) => error!(pp.span(), "PRINTDATA에 잘못된 토큰이 들어왔습니다"),
+                            None => error!(pp.span(), "ENDDATA없이 PRINTDATA가 끝났습니다."),
                         }
-                        Some(Token::EndData) => break,
-                        Some(_) => error!(lex, "PRINTDATA에 잘못된 토큰이 들어왔습니다"),
-                        None => error!(lex, "ENDDATA없이 PRINTDATA가 끝났습니다."),
                     }
+
+                    Stmt::PrintData(flags, cond, list)
                 }
+                PrintType::Form => {
+                    let (_, form) = try_nom!(pp, self::expr::normal_form_str(self)(form));
+                    Stmt::Print(flags, form)
+                }
+                PrintType::FormS => {
+                    let (_, s) = try_nom!(pp, self::expr::expr(self)(form));
+                    Stmt::PrintFormS(flags, s)
+                }
+                PrintType::S => {
+                    let (_, s) = try_nom!(pp, self::expr::expr(self)(form));
+                    Stmt::Print(flags, s)
+                }
+                PrintType::V => {
+                    let (_, s) = try_nom!(pp, self::expr::expr_list(self)(form));
+                    Stmt::PrintList(flags, s)
+                }
+            },
+            EraLine::InstLine { inst, args } => {
+                use erars_lexer::InstructionCode::*;
 
-                Stmt::PrintData(flags, cond, list)
-            }
-            Token::Print((flags, PrintType::Form, form)) => {
-                let (_, form) = try_nom!(lex, self::expr::normal_form_str(self)(form));
-                Stmt::Print(flags, form)
-            }
-            Token::Print((flags, PrintType::S, form)) => {
-                let (_, s) = try_nom!(lex, self::expr::expr(self)(form));
-                Stmt::Print(flags, s)
-            }
-            Token::Print((flags, PrintType::FormS, form)) => {
-                let (_, s) = try_nom!(lex, self::expr::expr(self)(form));
-                Stmt::PrintFormS(flags, s)
-            }
-            Token::Print((flags, PrintType::V, form)) => {
-                let (_, s) = try_nom!(lex, self::expr::expr_list(self)(form));
-                Stmt::PrintList(flags, s)
-            }
-            Token::CallJump((info, args)) => {
-                let (name, args) =
-                    try_nom!(lex, self::expr::call_jump_line(self, info.is_form)(args)).1;
-                let mut try_body = Vec::new();
-
-                let catch_body = if info.is_catch {
-                    let mut catch_body = Vec::new();
-
-                    loop {
-                        match self.next_token(lex)? {
-                            Some(Token::Catch) => {
-                                break;
-                            }
-                            Some(tok) => try_body.push(self.parse_stmt(tok, lex)?),
-                            None => error!(lex, "CATCH없이 끝났습니다."),
-                        }
-                    }
-
-                    loop {
-                        match self.next_token(lex)? {
-                            Some(Token::EndCatch) => {
-                                break;
-                            }
-                            Some(tok) => catch_body.push(self.parse_stmt(tok, lex)?),
-                            None => error!(lex, "ENDCATCH없이 끝났습니다."),
-                        }
-                    }
-
-                    Some(catch_body)
-                } else if info.is_try {
-                    Some(Vec::new())
-                } else {
-                    None
-                };
-
-                match info.ty {
-                    JumpType::Goto => Stmt::Goto {
-                        label: name,
-                        catch_body,
+                macro_rules! normal_command {
+                    ($com:expr) => {{
+                        let args = try_nom!(pp, self::expr::expr_list(self)(args)).1;
+                        Stmt::Command($com, args)
+                    }};
+                }
+                macro_rules! normal_method {
+                    ($meth:expr) => {{
+                        let args = try_nom!(pp, self::expr::expr_list(self)(args)).1;
+                        Stmt::Method($meth, args)
+                    }};
+                }
+                macro_rules! strform_command {
+                    ($com:expr) => {{
+                        let args = try_nom!(pp, self::expr::normal_form_str(self)(args)).1;
+                        Stmt::Command($com, vec![args])
+                    }};
+                }
+                // macro_rules! strform_method {
+                //     ($meth:expr) => {{
+                //         let args = try_nom!(pp, self::expr::normal_form_str(self)(args)).1;
+                //         Stmt::Method($meth, vec![args])
+                //     }};
+                // }
+                match inst {
+                    PRINT => unreachable!(),
+                    DRAWLINE => Stmt::Command(BuiltinCommand::DrawLine, vec![]),
+                    DRAWLINEFORM => strform_command!(BuiltinCommand::CustomDrawLine),
+                    CUSTOMDRAWLINE => Stmt::Command(
+                        BuiltinCommand::CustomDrawLine,
+                        vec![Expr::str(self.interner, args.trim_start())],
+                    ),
+                    ALIGNMENT => match args.trim().parse() {
+                        Ok(align) => Stmt::Alignment(align),
+                        Err(_) => error!(pp.span(), "Invalid alignment"),
                     },
-                    JumpType::Call | JumpType::Jump => Stmt::Call {
-                        name,
-                        args,
-                        try_body,
-                        catch_body,
-                        is_jump: info.ty == JumpType::Jump,
-                        is_method: info.is_method,
+                    BEGIN => match args.trim().parse() {
+                        Ok(ty) => Stmt::Begin(ty),
+                        Err(_) => error!(pp.span(), "Invalid alignment"),
                     },
-                }
-            }
-            Token::Sif(cond) => {
-                let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
-                let first = match self.next_token(lex)? {
-                    Some(first) => first,
-                    None => error!(lex, "Unexpected EOF after SIF"),
-                };
-                let body = self.parse_stmt(first, lex)?;
+                    TIMES => try_nom!(pp, self::expr::times_line(self)(args)).1,
 
-                Stmt::Sif(cond, Box::new(body))
-            }
-            Token::SelectCase(cond) => {
-                let cond = try_nom!(lex, self::expr::expr(self)(cond)).1;
-                let mut has_else = false;
-                let mut body = Vec::new();
-                let mut cases: Vec<(_, Vec<StmtWithPos>)> = Vec::new();
+                    RETURN => normal_command!(BuiltinCommand::Return),
+                    RETURNF => normal_command!(BuiltinCommand::ReturnF),
+                    RETURNFORM => strform_command!(BuiltinCommand::Return),
+                    RESTART => normal_command!(BuiltinCommand::Restart),
+                    CONTINUE => Stmt::Continue,
+                    BREAK => Stmt::Break,
+                    QUIT => Stmt::Command(BuiltinCommand::Quit, Vec::new()),
 
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Case(case)) => {
-                            if let Some((_, case)) = cases.last_mut() {
-                                *case = mem::take(&mut body);
+                    CSVNAME => normal_method!(BuiltinMethod::CsvName),
+                    CSVCALLNAME => normal_method!(BuiltinMethod::CsvCallName),
+                    CSVMASTERNAME => normal_method!(BuiltinMethod::CsvMasterName),
+                    CSVNICKNAME => normal_method!(BuiltinMethod::CsvNickName),
+                    CSVBASE => normal_method!(BuiltinMethod::CsvBase),
+                    CSVCSTR => normal_method!(BuiltinMethod::CsvCstr),
+                    CSVABL => normal_method!(BuiltinMethod::CsvAbl),
+                    CSVTALENT => normal_method!(BuiltinMethod::CsvTalent),
+                    CSVMARK => normal_method!(BuiltinMethod::CsvMark),
+                    CSVEXP => normal_method!(BuiltinMethod::CsvExp),
+                    CSVEX => normal_method!(BuiltinMethod::CsvEx),
+                    CSVRELATION => normal_method!(BuiltinMethod::CsvRelation),
+                    CSVJUEL => normal_method!(BuiltinMethod::CsvJuel),
+                    CSVEQUIP => normal_method!(BuiltinMethod::CsvEquip),
+                    CSVCFLAG => normal_method!(BuiltinMethod::CsvCflag),
+
+                    GETBIT => normal_method!(BuiltinMethod::GetBit),
+                    SETBIT => normal_command!(BuiltinCommand::SetBit),
+                    CLEARBIT => normal_command!(BuiltinCommand::ClearBit),
+
+                    CLEARLINE => normal_command!(BuiltinCommand::ClearLine),
+                    INPUT => normal_command!(BuiltinCommand::Input),
+                    INPUTS => normal_command!(BuiltinCommand::InputS),
+                    WAIT => normal_command!(BuiltinCommand::Wait),
+                    WAITANYKEY => normal_command!(BuiltinCommand::WaitAnykey),
+                    FORCEWAIT => normal_command!(BuiltinCommand::ForceWait),
+                    RESETDATA => normal_command!(BuiltinCommand::ResetData),
+                    RESET_STAIN => normal_command!(BuiltinCommand::ResetStain),
+                    ADDCHARA => normal_command!(BuiltinCommand::AddChara),
+                    ADDDEFCHARA => normal_command!(BuiltinCommand::AddDefChara),
+                    GETCHARA => normal_method!(BuiltinMethod::GetChara),
+                    FINDCHARA => normal_method!(BuiltinMethod::FindChara),
+                    // FINDLASTCHARA => normal_method!(BuiltinMethod::FindLastChara),
+                    FINDCHARADATA => normal_method!(BuiltinMethod::FindCharaData),
+                    DELCHARA => normal_command!(BuiltinCommand::DelChara),
+                    SORTCHARA => try_nom!(pp, self::expr::sortchara_line(self)(args)).1,
+                    COPYCHARA => normal_command!(BuiltinCommand::CopyChara),
+                    SWAPCHARA => normal_command!(BuiltinCommand::SwapChara),
+                    PICKUPCHARA => normal_command!(BuiltinCommand::PickupChara),
+                    FONTBOLD => normal_command!(BuiltinCommand::FontBold),
+                    FONTITALIC => normal_command!(BuiltinCommand::FontItalic),
+                    FONTREGULAR => normal_command!(BuiltinCommand::FontRegular),
+                    FONTSTYLE => normal_command!(BuiltinCommand::FontStyle),
+                    SETFONT => normal_command!(BuiltinCommand::SetFont),
+                    CHKFONT => normal_method!(BuiltinMethod::ChkFont),
+                    GETFONT => normal_method!(BuiltinMethod::GetFont),
+
+                    SETCOLOR => normal_command!(BuiltinCommand::SetColor),
+                    SETCOLORBYNAME => strform_command!(BuiltinCommand::SetColorByName),
+                    SETBGCOLOR => normal_command!(BuiltinCommand::SetBgColor),
+                    SETBGCOLORBYNAME => strform_command!(BuiltinCommand::SetBgColorByName),
+                    GETCOLOR => normal_method!(BuiltinMethod::GetColor),
+                    GETDEFCOLOR => normal_method!(BuiltinMethod::GetDefColor),
+                    GETBGCOLOR => normal_method!(BuiltinMethod::GetBgColor),
+                    GETDEFBGCOLOR => normal_method!(BuiltinMethod::GetDefBgColor),
+                    GETFOCUSCOLOR => normal_method!(BuiltinMethod::GetFocusColor),
+                    RESETCOLOR => normal_command!(BuiltinCommand::ResetColor),
+                    RESETBGCOLOR => normal_command!(BuiltinCommand::ResetBgColor),
+
+                    STRLEN => normal_method!(BuiltinMethod::StrLenS),
+                    STRLENS => normal_method!(BuiltinMethod::StrLenS),
+                    STRLENSU => normal_method!(BuiltinMethod::StrLenSU),
+                    UNICODE => normal_method!(BuiltinMethod::Unicode),
+                    ENCODETOUNI => strform_command!(BuiltinCommand::EncodeToUni),
+
+                    SPLIT => normal_command!(BuiltinCommand::Split),
+                    SWAP => normal_command!(BuiltinCommand::Swap),
+                    SAVEGLOBAL => normal_command!(BuiltinCommand::SaveGlobal),
+                    LOADGLOBAL => normal_command!(BuiltinCommand::LoadGlobal),
+                    POWER => normal_command!(BuiltinCommand::Power),
+                    MIN => normal_method!(BuiltinMethod::Min),
+                    MAX => normal_method!(BuiltinMethod::Max),
+                    LIMIT => normal_method!(BuiltinMethod::Limit),
+                    ABS => normal_method!(BuiltinMethod::Abs),
+                    LOG => normal_method!(BuiltinMethod::Log),
+                    LOG10 => normal_method!(BuiltinMethod::Log10),
+                    SQRT => normal_method!(BuiltinMethod::Sqrt),
+                    SIGN => normal_method!(BuiltinMethod::Sign),
+
+                    SAVEGAME => normal_command!(BuiltinCommand::SaveGame),
+                    SAVEDATA => normal_command!(BuiltinCommand::SaveData),
+                    LOADDATA => normal_command!(BuiltinCommand::LoadData),
+                    CHKDATA => normal_method!(BuiltinMethod::ChkData),
+                    DELDATA => normal_command!(BuiltinCommand::DelData),
+                    GETTIME => normal_command!(BuiltinCommand::GetTime),
+                    PUTFORM => strform_command!(BuiltinCommand::PutForm),
+
+                    VARSET => normal_command!(BuiltinCommand::Varset),
+                    CVARSET => normal_command!(BuiltinCommand::CVarset),
+                    VARSIZE => normal_method!(BuiltinMethod::VarSize),
+                    SUBSTRING => normal_method!(BuiltinMethod::SubString),
+                    SUBSTRINGU => normal_method!(BuiltinMethod::SubStringU),
+
+                    GETNUM => normal_method!(BuiltinMethod::GetNum),
+                    GETEXPLV => normal_method!(BuiltinMethod::GetExpLv),
+                    GETPALAMLV => normal_method!(BuiltinMethod::GetPalamLv),
+                    GETCONFIG => normal_method!(BuiltinMethod::GetConfig),
+
+                    BAR => normal_command!(BuiltinCommand::Bar),
+
+                    REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
+
+                    CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF | TRYCALL
+                    | TRYCALLFORM | TRYJUMP | TRYJUMPFORM | TRYCCALL | TRYCCALLFORM | TRYCJUMP
+                    | TRYCJUMPFORM | GOTO | GOTOFORM | TRYGOTO | TRYGOTOFORM | TRYCGOTO
+                    | TRYCGOTOFORM => {
+                        let (name, args) = try_nom!(
+                            pp,
+                            self::expr::call_jump_line(
+                                self,
+                                matches!(
+                                    inst,
+                                    CALLFORM
+                                        | CALLFORMF
+                                        | JUMPFORM
+                                        | TRYCALLFORM
+                                        | TRYCCALLFORM
+                                        | TRYJUMPFORM
+                                        | TRYCJUMPFORM
+                                        | GOTOFORM
+                                        | TRYGOTOFORM
+                                        | TRYCGOTOFORM
+                                )
+                            )(args)
+                        )
+                        .1;
+
+                        let is_try = matches!(
+                            inst,
+                            TRYCALL
+                                | TRYCALLFORM
+                                | TRYCCALLFORM
+                                | TRYJUMP
+                                | TRYJUMPFORM
+                                | TRYCJUMPFORM
+                                | TRYGOTO
+                                | TRYCGOTO
+                                | TRYGOTOFORM
+                                | TRYCGOTOFORM
+                        );
+
+                        let is_catch = matches!(
+                            inst,
+                            TRYCCALL
+                                | TRYCCALLFORM
+                                | TRYCJUMP
+                                | TRYCJUMPFORM
+                                | TRYCGOTO
+                                | TRYCGOTOFORM
+                        );
+
+                        let (try_body, catch_body) = if is_catch {
+                            let try_body = self.read_body_until(CATCH, pp, b)?;
+                            let catch_body = self.read_body_until(ENDCATCH, pp, b)?;
+
+                            (try_body, Some(catch_body))
+                        } else if is_try {
+                            (Vec::new(), Some(Vec::new()))
+                        } else {
+                            (Vec::new(), None)
+                        };
+
+                        if matches!(
+                            inst,
+                            GOTO | GOTOFORM | TRYGOTO | TRYGOTOFORM | TRYCGOTO | TRYCGOTOFORM
+                        ) {
+                            Stmt::Goto {
+                                label: name,
+                                catch_body,
                             }
-                            let case = try_nom!(lex, self::expr::case_line(self)(case)).1;
-                            cases.push((case, Vec::new()));
-                        }
-                        Some(Token::CaseElse) => {
-                            if let Some((_, case)) = cases.last_mut() {
-                                *case = mem::take(&mut body);
+                        } else {
+                            Stmt::Call {
+                                name,
+                                args,
+                                is_jump: matches!(
+                                    inst,
+                                    JUMP | JUMPFORM
+                                        | TRYJUMP
+                                        | TRYJUMPFORM
+                                        | TRYCJUMP
+                                        | TRYCJUMPFORM
+                                ),
+                                is_method: matches!(inst, CALLF | CALLFORMF),
+                                try_body,
+                                catch_body,
                             }
-                            has_else = true;
                         }
-                        Some(Token::EndSelect) => break,
-                        Some(tok) => {
-                            body.push(self.parse_stmt(tok, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after SELECTCASE"),
                     }
-                }
 
-                if has_else {
-                    Stmt::SelectCase(cond, cases, Some(body))
-                } else {
-                    if let Some(last) = cases.last_mut() {
-                        last.1 = body;
+                    SIF => {
+                        let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+                        let Some(body) = pp.next_line(b)? else { error!(pp.span(), "No body statement in SIF"); };
+                        Stmt::Sif(cond, Box::new(self.parse_stmt(body, pp, b)?))
                     }
-                    Stmt::SelectCase(cond, cases, None)
-                }
-            }
-            Token::For(left) => {
-                let (var, init, end, step) = try_nom!(lex, self::expr::for_line(self)(left)).1;
-                let mut body = Vec::new();
 
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Next) => {
-                            break Stmt::For(var, Box::new((init, end, step)), body)
-                        }
-                        Some(other) => {
-                            body.push(self.parse_stmt(other, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after FOR"),
-                    }
-                }
-            }
-            Token::While(left) => {
-                let cond = try_nom!(lex, self::expr::expr(self)(left)).1;
-                let mut body = Vec::new();
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Wend) => {
-                            break Stmt::While(cond, body);
-                        }
-                        Some(tok) => {
-                            body.push(self.parse_stmt(tok, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after DO"),
-                    }
-                }
-            }
-            Token::Do => {
-                let mut body = Vec::new();
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Loop(left)) => {
-                            break Stmt::Do(try_nom!(lex, self::expr::expr(self)(left)).1, body);
-                        }
-                        Some(tok) => {
-                            body.push(self.parse_stmt(tok, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after DO"),
-                    }
-                }
-            }
-            Token::Repeat(left) => {
-                let arg = try_nom!(lex, self::expr::expr(self)(left)).1;
-                let mut body = Vec::new();
+                    IF => {
+                        let mut is_else = false;
+                        let mut cond_pos = pp.script_pos();
+                        let mut cond = try_nom!(pp, self::expr::expr_or_one(self)(args)).1;
+                        let mut block = Vec::new();
+                        let mut if_elses = Vec::new();
 
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::Rend) => break Stmt::Repeat(arg, body),
-                        Some(other) => {
-                            body.push(self.parse_stmt(other, lex)?);
-                        }
-                        None => error!(lex, "Unexpected EOF after FOR"),
-                    }
-                }
-            }
-            Token::If(left) => {
-                let mut is_else = false;
-                let mut cond_pos = self.current_pos();
-                let mut cond = try_nom!(lex, self::expr::expr(self)(left)).1;
-                let mut block = Vec::new();
-                let mut if_elses = Vec::new();
-
-                loop {
-                    match self.next_token(lex)? {
-                        Some(Token::ElseIf(left)) => {
-                            let left = left.trim_start_matches(' ');
-
-                            if_elses.push((ExprWithPos(cond, cond_pos), block));
-                            block = Vec::new();
-                            cond_pos = self.current_pos();
-                            cond = if left.is_empty() {
-                                Expr::Int(1)
-                            } else {
-                                try_nom!(lex, self::expr::expr(self)(left)).1
-                            };
-                        }
-                        Some(Token::Else) => {
-                            is_else = true;
-                            if_elses.push((ExprWithPos(cond, cond_pos), block));
-                            cond_pos = self.current_pos();
-                            cond = Expr::Int(1);
-                            block = Vec::new();
-                        }
-                        Some(Token::EndIf) => {
-                            if !is_else {
-                                if_elses.push((ExprWithPos(cond, cond_pos), block));
-                                block = Vec::new();
+                        loop {
+                            match pp.next_line(b)? {
+                                Some(EraLine::InstLine { inst: ELSEIF, args }) => {
+                                    if_elses.push((ExprWithPos(cond, cond_pos), block));
+                                    block = Vec::new();
+                                    cond_pos = pp.script_pos();
+                                    cond = try_nom!(pp, self::expr::expr_or_one(self)(args)).1;
+                                }
+                                Some(EraLine::InstLine {
+                                    inst: ELSE,
+                                    args: _,
+                                }) => {
+                                    is_else = true;
+                                    if_elses.push((ExprWithPos(cond, cond_pos), block));
+                                    cond_pos = pp.script_pos();
+                                    cond = Expr::Int(1);
+                                    block = Vec::new();
+                                }
+                                Some(EraLine::InstLine {
+                                    inst: ENDIF,
+                                    args: _,
+                                }) => {
+                                    if !is_else {
+                                        if_elses.push((ExprWithPos(cond, cond_pos), block));
+                                        block = Vec::new();
+                                    }
+                                    break;
+                                }
+                                Some(line) => {
+                                    block.push(self.parse_stmt(line, pp, b)?);
+                                }
+                                None => break,
                             }
-                            break;
                         }
-                        Some(token) => {
-                            block.push(self.parse_stmt(token, lex)?);
+
+                        Stmt::If(if_elses, block)
+                    }
+
+                    SELECTCASE => {
+                        let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+                        let mut has_else = false;
+                        let mut body = Vec::new();
+                        let mut cases: Vec<(_, Vec<StmtWithPos>)> = Vec::new();
+
+                        loop {
+                            match pp.next_line(b)? {
+                                Some(EraLine::InstLine { inst: CASE, args }) => {
+                                    if let Some((_, case)) = cases.last_mut() {
+                                        *case = mem::take(&mut body);
+                                    }
+                                    let case = try_nom!(pp, self::expr::case_line(self)(args)).1;
+                                    cases.push((case, Vec::new()));
+                                }
+                                Some(EraLine::InstLine {
+                                    inst: CASEELSE,
+                                    args: _,
+                                }) => {
+                                    if let Some((_, case)) = cases.last_mut() {
+                                        *case = mem::take(&mut body);
+                                    }
+                                    has_else = true;
+                                }
+                                Some(EraLine::InstLine {
+                                    inst: ENDSELECT,
+                                    args: _,
+                                }) => break,
+                                Some(line) => {
+                                    body.push(self.parse_stmt(line, pp, b)?);
+                                }
+                                None => error!(pp.span(), "Unexpected EOF after SELECTCASE"),
+                            }
                         }
-                        None => break,
+
+                        if has_else {
+                            Stmt::SelectCase(cond, cases, Some(body))
+                        } else {
+                            if let Some(last) = cases.last_mut() {
+                                last.1 = body;
+                            }
+                            Stmt::SelectCase(cond, cases, None)
+                        }
+                    }
+
+                    FOR => {
+                        let (var, arg1, arg2, arg3) =
+                            try_nom!(pp, self::expr::for_line(self)(args)).1;
+
+                        let body = self.read_body_until(NEXT, pp, b)?;
+
+                        Stmt::For(var, Box::new((arg1, arg2, arg3)), body)
+                    }
+                    REPEAT => {
+                        let expr = try_nom!(pp, self::expr::expr(self)(args)).1;
+                        let body = self.read_body_until(REND, pp, b)?;
+
+                        Stmt::Repeat(expr, body)
+                    }
+                    WHILE => {
+                        let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+
+                        let body = self.read_body_until(WEND, pp, b)?;
+
+                        Stmt::While(cond, body)
+                    }
+                    DO => {
+                        let (cond, body) = self.read_body_until_and_expr(LOOP, pp, b)?;
+
+                        Stmt::Do(cond, body)
+                    }
+
+                    // TODO
+                    inst => {
+                        log::warn!("{inst} is not yet implemented this line will occur error when executed.");
+                        Stmt::Command(
+                            BuiltinCommand::Throw,
+                            vec![Expr::str(self.interner, format!("[compiler] TODO: {inst}"))],
+                        )
                     }
                 }
-
-                Stmt::If(if_elses, block)
             }
-            tok @ (Token::Inc | Token::Dec) => {
-                let ident = self.replace(take_ident!(lex));
-                let left = cut_line(lex);
-                let (left, func_extern) = try_nom!(lex, self::expr::var_func_extern(self, left));
-                let args = try_nom!(lex, self::expr::variable_arg(self, &ident)(left)).1;
-                let var = Variable {
-                    var: self.interner.get_or_intern(ident),
-                    func_extern,
-                    args,
-                };
+            EraLine::VarAssign {
+                lhs,
+                complex_op,
+                rhs,
+            } => {
+                let var = try_nom!(pp, self::expr::variable(self)(lhs)).1;
+
+                match complex_op {
+                    Some(ComplexAssign::Bin(bin_op)) => {
+                        let rhs = try_nom!(pp, self::expr::expr(self)(rhs)).1;
+                        Stmt::Assign(var, Some(bin_op), rhs)
+                    }
+                    Some(ComplexAssign::Str) => {
+                        let rhs = try_nom!(pp, self::expr::expr(self)(rhs)).1;
+                        Stmt::Assign(var, None, rhs)
+                    }
+                    None => {
+                        let rhs = if self.is_str_var(var.var) {
+                            try_nom!(pp, self::expr::form_arg_expr(self)(rhs)).1
+                        } else {
+                            try_nom!(pp, self::expr::expr(self)(rhs)).1
+                        };
+
+                        Stmt::Assign(var, None, rhs)
+                    }
+                }
+            }
+            EraLine::VarInc {
+                lhs,
+                is_pre: _,
+                is_inc,
+            } => {
+                let lhs = try_nom!(pp, self::expr::variable(self)(lhs)).1;
+
                 Stmt::Assign(
-                    var,
-                    Some(if tok == Token::Inc {
+                    lhs,
+                    Some(if is_inc {
                         BinaryOperator::Add
                     } else {
                         BinaryOperator::Sub
@@ -1193,49 +1414,85 @@ impl ParserContext {
                     Expr::Int(1),
                 )
             }
-            Token::Ident(var) => {
-                let i = cut_line(lex);
-                try_nom!(lex, self::expr::assign_line(self, var)(i)).1
+            EraLine::SharpLine { .. } | EraLine::FunctionLine(_) => {
+                error!(
+                    pp.span(),
+                    format!("Invalid line `{line:?}` for parsing as statement")
+                )
             }
-            Token::SortChara(args) => try_nom!(lex, self::expr::sortchara_line(self)(args)).1,
-            Token::NormalExprCommand((com, args)) => {
-                let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
-                Stmt::Command(com, args)
-            }
-            Token::NormalExprMethod((meth, args)) => {
-                let args = try_nom!(lex, self::expr::expr_list(self)(args)).1;
-                Stmt::Method(meth, args)
-            }
-            other => error!(lex, format!("[Stmt] Invalid token: {:?}", other)),
         };
 
-        Ok(StmtWithPos(stmt, first_pos))
+        Ok(StmtWithPos(stmt, pos))
+    }
+
+    fn push_info(
+        &self,
+        sharp: SharpCode,
+        args: &str,
+        pp: &mut Preprocessor,
+        infos: &mut Vec<FunctionInfo>,
+    ) -> ParserResult<()> {
+        match sharp {
+            SharpCode::DEFINE => {
+                error!(pp.span(), "#DEFINE only avaliable in ERH")
+            }
+            SharpCode::DIM => {
+                let var = try_nom!(pp, self::expr::dim_line(self, false)(args)).1;
+                infos.push(FunctionInfo::Dim(var));
+            }
+            SharpCode::DIMS => {
+                let var = try_nom!(pp, self::expr::dim_line(self, true)(args)).1;
+                self.local_strs.borrow_mut().insert(var.var);
+                infos.push(FunctionInfo::Dim(var));
+            }
+            SharpCode::FUNCTION => {
+                infos.push(FunctionInfo::Function);
+            }
+            SharpCode::FUNCTIONS => {
+                infos.push(FunctionInfo::FunctionS);
+            }
+            SharpCode::LOCALSIZE => {
+                let size = try_nom!(pp, self::expr::expr(self)(args)).1;
+                infos.push(FunctionInfo::LocalSize(size));
+            }
+            SharpCode::LOCALSSIZE => {
+                let size = try_nom!(pp, self::expr::expr(self)(args)).1;
+                infos.push(FunctionInfo::LocalSSize(size));
+            }
+            SharpCode::PRI => infos.push(FunctionInfo::EventFlag(EventFlags::Pre)),
+            SharpCode::LATER => infos.push(FunctionInfo::EventFlag(EventFlags::Later)),
+            SharpCode::SINGLE => infos.push(FunctionInfo::EventFlag(EventFlags::Single)),
+        }
+        Ok(())
     }
 
     pub fn parse_and_compile<'s>(
         &self,
-        lex: &mut Lexer<'s, Token<'s>>,
+        pp: &mut Preprocessor<'s>,
+        b: &mut Bump,
     ) -> ParserResult<Vec<CompiledFunction>> {
         let mut out = Vec::with_capacity(1024);
 
-        match self.next_token(lex)? {
-            Some(Token::At(mut left)) => 'outer: loop {
+        match pp.next_line(b)? {
+            Some(EraLine::FunctionLine(mut func_line)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
-                let mut compiler = crate::compiler::Compiler::new();
-                let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+                let mut compiler = Compiler::new();
+                let (label, args) = try_nom!(pp, self::expr::function_line(self)(func_line)).1;
+                let label = self.interner.get_or_intern(label);
 
                 let mut infos = Vec::new();
 
                 'inner: loop {
-                    match self.next_token(lex)? {
-                        Some(Token::At(new_left)) => {
-                            left = new_left;
+                    b.reset();
+                    match pp.next_line(b)? {
+                        Some(EraLine::FunctionLine(f)) => {
+                            func_line = f;
 
                             out.push(CompiledFunction {
                                 header: FunctionHeader {
-                                    name: self.interner.get_or_intern(label),
-                                    args,
                                     file_path: self.file_path,
+                                    name: label,
+                                    args,
                                     infos,
                                 },
                                 goto_labels: compiler.goto_labels,
@@ -1247,89 +1504,62 @@ impl ParserContext {
                         None => {
                             out.push(CompiledFunction {
                                 header: FunctionHeader {
-                                    name: self.interner.get_or_intern(label),
-                                    args,
                                     file_path: self.file_path,
+                                    name: label,
+                                    args,
                                     infos,
                                 },
                                 goto_labels: compiler.goto_labels,
                                 body: compiler.out.into_boxed_slice(),
                             });
-
                             break 'outer;
                         }
-                        Some(Token::Function) => {
-                            infos.push(FunctionInfo::Function);
+                        Some(EraLine::SharpLine { sharp, args }) => {
+                            self.push_info(sharp, args, pp, &mut infos)?;
                         }
-                        Some(Token::FunctionS) => {
-                            infos.push(FunctionInfo::FunctionS);
-                        }
-                        Some(Token::Pri) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
-                        }
-                        Some(Token::Later) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Later));
-                        }
-                        Some(Token::Single) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Single));
-                        }
-                        Some(Token::Dim(left)) => {
-                            let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
-                            infos.push(FunctionInfo::Dim(var));
-                        }
-                        Some(Token::DimS(left)) => {
-                            let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
-                            self.local_strs.borrow_mut().insert(var.var);
-                            infos.push(FunctionInfo::Dim(var));
-                        }
-                        Some(Token::LocalSize(size)) => {
-                            let size = try_nom!(lex, self::expr::expr(self)(size)).1;
-                            infos.push(FunctionInfo::LocalSize(size));
-                        }
-                        Some(Token::LocalSSize(size)) => {
-                            let size = try_nom!(lex, self::expr::expr(self)(size)).1;
-                            infos.push(FunctionInfo::LocalSSize(size));
-                        }
-                        Some(other) => match self.parse_stmt(other, lex) {
-                            Ok(stmt) => match compiler.push_stmt_with_pos(stmt) {
-                                Ok(_) => {}
-                                Err(err) => error!(lex, err.to_string()),
-                            },
-                            Err(err) => {
-                                return Err(err);
+                        Some(line) => {
+                            let stmt = self.parse_stmt(line, pp, b)?;
+                            if let Err(err) = compiler.push_stmt_with_pos(stmt) {
+                                error!(pp.span(), err.to_string());
                             }
-                        },
+                        }
                     }
                 }
             },
-            Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
-            None => {}
-        }
+            Some(_) => {
+                error!(pp.span(), "First line should be function line");
+            }
+            None => {
+                return Ok(Vec::new());
+            }
+        };
 
         Ok(out)
     }
 
-    pub fn parse<'s>(&self, lex: &mut Lexer<'s, Token<'s>>) -> ParserResult<Vec<Function>> {
+    pub fn parse(&self, pp: &mut Preprocessor, b: &mut Bump) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();
 
-        match self.next_token(lex)? {
-            Some(Token::At(mut left)) => 'outer: loop {
+        match pp.next_line(b)? {
+            Some(EraLine::FunctionLine(mut func_line)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
                 let mut body = Vec::new();
-                let (label, args) = try_nom!(lex, self::expr::function_line(self)(left)).1;
+                let (label, args) = try_nom!(pp, self::expr::function_line(self)(func_line)).1;
+                let label = self.interner.get_or_intern(label);
 
                 let mut infos = Vec::new();
 
                 'inner: loop {
-                    match self.next_token(lex)? {
-                        Some(Token::At(new_left)) => {
-                            left = new_left;
+                    b.reset();
+                    match pp.next_line(b)? {
+                        Some(EraLine::FunctionLine(f)) => {
+                            func_line = f;
 
                             out.push(Function {
                                 header: FunctionHeader {
-                                    name: self.interner.get_or_intern(label),
-                                    args,
                                     file_path: self.file_path,
+                                    name: label,
+                                    args,
                                     infos,
                                 },
                                 body,
@@ -1340,60 +1570,32 @@ impl ParserContext {
                         None => {
                             out.push(Function {
                                 header: FunctionHeader {
-                                    name: self.interner.get_or_intern(label),
-                                    args,
                                     file_path: self.file_path,
+                                    name: label,
+                                    args,
                                     infos,
                                 },
                                 body,
                             });
-
                             break 'outer;
                         }
-                        Some(Token::Function) => {
-                            infos.push(FunctionInfo::Function);
+                        Some(EraLine::SharpLine { sharp, args }) => {
+                            self.push_info(sharp, args, pp, &mut infos)?;
                         }
-                        Some(Token::FunctionS) => {
-                            infos.push(FunctionInfo::FunctionS);
+                        Some(line) => {
+                            let stmt = self.parse_stmt(line, pp, b)?;
+                            body.push(stmt);
                         }
-                        Some(Token::Pri) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Pre));
-                        }
-                        Some(Token::Later) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Later));
-                        }
-                        Some(Token::Single) => {
-                            infos.push(FunctionInfo::EventFlag(EventFlags::Single));
-                        }
-                        Some(Token::Dim(left)) => {
-                            let var = try_nom!(lex, self::expr::dim_line(self, false)(left)).1;
-                            infos.push(FunctionInfo::Dim(var));
-                        }
-                        Some(Token::DimS(left)) => {
-                            let var = try_nom!(lex, self::expr::dim_line(self, true)(left)).1;
-                            self.local_strs.borrow_mut().insert(var.var);
-                            infos.push(FunctionInfo::Dim(var));
-                        }
-                        Some(Token::LocalSize(size)) => {
-                            let size = try_nom!(lex, self::expr::expr(self)(size)).1;
-                            infos.push(FunctionInfo::LocalSize(size));
-                        }
-                        Some(Token::LocalSSize(size)) => {
-                            let size = try_nom!(lex, self::expr::expr(self)(size)).1;
-                            infos.push(FunctionInfo::LocalSSize(size));
-                        }
-                        Some(other) => match self.parse_stmt(other, lex) {
-                            Ok(stmt) => body.push(stmt),
-                            Err(err) => {
-                                return Err(err);
-                            }
-                        },
                     }
                 }
             },
-            Some(_) => error!(lex, "함수는 @로 시작해야 합니다."),
-            None => {}
-        }
+            Some(_) => {
+                error!(pp.span(), "First line should be function line");
+            }
+            None => {
+                return Ok(Vec::new());
+            }
+        };
 
         Ok(out)
     }
@@ -1401,7 +1603,9 @@ impl ParserContext {
 
 impl ParserContext {
     pub fn parse_program_str(&self, s: &str) -> ParserResult<Vec<Function>> {
-        self.parse(&mut Lexer::new(s))
+        let mut pp = Preprocessor::new(&crate::PP_REGEX, s);
+        let mut b = Bump::new();
+        self.parse(&mut pp, &mut b)
     }
 
     pub fn parse_function_str(&self, s: &str) -> ParserResult<Function> {
@@ -1409,34 +1613,30 @@ impl ParserContext {
     }
 
     pub fn parse_expr_str(&self, s: &str) -> ParserResult<Expr> {
-        let lex = Lexer::<Token>::new(s);
-        Ok(try_nom!(lex, self::expr::expr(self)(s)).1)
+        Ok(try_nom!(@str s, self::expr::expr(self)(s)).1)
     }
 
     pub fn parse_body_str(&self, s: &str) -> ParserResult<Vec<StmtWithPos>> {
-        let mut lex = Lexer::<Token>::new(s);
+        let mut pp = Preprocessor::new(&crate::PP_REGEX, s);
+        let mut b = Bump::new();
         let mut body = Vec::new();
 
-        loop {
-            match self.next_token(&mut lex)? {
-                Some(tok) => body.push(self.parse_stmt(tok, &mut lex)?),
-                None => break,
-            }
+        while let Some(line) = pp.next_line(&b)? {
+            body.push(self.parse_stmt(line, &mut pp, &b)?);
+            b.reset();
         }
 
         Ok(body)
     }
 
     pub fn parse_stmt_str(&self, s: &str) -> ParserResult<StmtWithPos> {
-        let mut lex = Lexer::new(s);
-        let first = self.next_token(&mut lex)?.unwrap();
-        self.parse_stmt(first, &mut lex)
-    }
-}
+        let mut pp = Preprocessor::new(&crate::PP_REGEX, s);
+        let b = Bump::new();
 
-fn cut_line<'s>(lex: &mut Lexer<'s, Token<'s>>) -> &'s str {
-    let i = lex.remainder();
-    let l = i.split_once('\n').map(|(l, _)| l).unwrap_or(i);
-    lex.bump_unchecked(l.len());
-    l.strip_suffix('\r').unwrap_or(l)
+        if let Some(line) = pp.next_line(&b)? {
+            self.parse_stmt(line, &mut pp, &b)
+        } else {
+            error!(pp.span(), "No stmt")
+        }
+    }
 }
