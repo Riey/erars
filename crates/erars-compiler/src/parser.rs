@@ -1094,6 +1094,7 @@ impl ParserContext {
                     FONTREGULAR => normal_command!(BuiltinCommand::FontRegular),
                     FONTSTYLE => normal_command!(BuiltinCommand::FontStyle),
                     SETFONT => normal_command!(BuiltinCommand::SetFont),
+                    GETFONT => normal_method!(BuiltinMethod::GetFont),
 
                     SETCOLOR => normal_command!(BuiltinCommand::SetColor),
                     SETCOLORBYNAME => strform_command!(BuiltinCommand::SetColorByName),
@@ -1113,6 +1114,11 @@ impl ParserContext {
 
                     SPLIT => normal_command!(BuiltinCommand::Split),
 
+                    SAVEDATA => normal_command!(BuiltinCommand::SaveData),
+                    LOADDATA => normal_command!(BuiltinCommand::LoadData),
+                    CHKDATA => normal_method!(BuiltinMethod::ChkData),
+                    DELDATA => normal_command!(BuiltinCommand::DelData),
+                    GETTIME => normal_command!(BuiltinCommand::GetTime),
                     PUTFORM => strform_command!(BuiltinCommand::PutForm),
 
                     VARSET => normal_command!(BuiltinCommand::Varset),

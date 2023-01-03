@@ -106,6 +106,7 @@ pub enum InstructionCode {
 
     SAVEDATA,
     LOADDATA,
+    CHKDATA,
     DELDATA,
     GETTIME, //2つに代入する必要があるので__METHOD__化できない
 
@@ -156,6 +157,7 @@ pub enum InstructionCode {
     DRAWLINEFORM,
     CLEARTEXTBOX,
 
+    GETFONT,
     SETFONT,
 
     FOR,
@@ -234,7 +236,7 @@ pub enum InstructionCode {
 
     SAVEVAR,
     LOADVAR,
-    //		CHKVARDATA,
+    CHKVARDATA,
     SAVECHARA,
     LOADCHARA,
     //		CHKCHARADATA,
