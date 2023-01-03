@@ -4,7 +4,7 @@ mod expr;
 use erars_ast::{
     get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos,
     Function, FunctionHeader, FunctionInfo, InlineValue, Interner, Stmt, StmtWithPos, StrKey,
-    UnaryOperator, VariableInfo,
+    UnaryOperator, VariableInfo, PrintFlags,
 };
 use erars_lexer::{
     Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor, PrintType, SharpCode,
@@ -631,6 +631,10 @@ impl HeaderInfo {
                     "LOCALS" => {
                         self.default_local_size.default_locals_size = next!();
                     }
+                    // just ignore
+                    "ITEMNAME" | "ABLNAME" | "TALENTNAME" | "EXPNAME" | "MARKNAME"
+                    | "PALAMNAME" | "TRAINNAME" | "BASENAME" | "SOURCENAME" | "EXNAME"
+                    | "EQUIPNAME" | "TEQUIPNAME" | "FLAGNAME" | "TFLAGNAME" | "CFLAGNAME" => {}
                     name => {
                         let name_key = interner.get_or_intern(name);
                         let mut sizes: Vec<u32> = Vec::with_capacity(4);
@@ -1025,6 +1029,17 @@ impl ParserContext {
                 // }
                 match inst {
                     PRINT => unreachable!(),
+                    PRINTBUTTON | PRINTBUTTONC | PRINTBUTTONLC => {
+                        let flags = if inst == PRINTBUTTON {
+                            PrintFlags::empty()
+                        } else if inst == PRINTBUTTONC {
+                            PrintFlags::RIGHT_ALIGN
+                        } else {
+                            PrintFlags::LEFT_ALIGN
+                        };
+                        let (text, value) = try_nom!(pp, self::expr::expr_pair(self)(args)).1;
+                        Stmt::PrintButton { flags, text, value }
+                    }
                     DRAWLINE => Stmt::Command(BuiltinCommand::DrawLine, vec![]),
                     DRAWLINEFORM => strform_command!(BuiltinCommand::CustomDrawLine),
                     CUSTOMDRAWLINE => Stmt::Command(
