@@ -1015,6 +1015,7 @@ dependencies = [
  "erars-ast",
  "erars-lexer",
  "hashbrown 0.13.1",
+ "include_bytes_aligned",
  "itertools",
  "k9",
  "log",
@@ -1615,6 +1616,12 @@ dependencies = [
  "unicode-bidi",
  "unicode-normalization",
 ]
+
+[[package]]
+name = "include_bytes_aligned"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c8a60cb7114d39fab45befc10806ac4c5ff7effd29574bfd397e1e3d3d31baa"
 
 [[package]]
 name = "indexmap"

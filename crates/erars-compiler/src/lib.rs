@@ -4,11 +4,12 @@ mod instruction;
 mod parser;
 
 use once_cell::sync::Lazy;
+use include_bytes_aligned::include_bytes_aligned;
 
 pub static PP_REGEX: Lazy<PreprocessorRegex> = Lazy::new(|| {
     PreprocessorRegex::from_bytes(
-        include_bytes!("../inst_re.dfa"),
-        include_bytes!("../sharp_re.dfa"),
+        include_bytes_aligned!(4, "../inst_re.dfa"),
+        include_bytes_aligned!(4, "../sharp_re.dfa"),
     )
 });
 
