@@ -1061,6 +1061,9 @@ impl ParserContext {
                     ADDCHARA => normal_command!(BuiltinCommand::AddChara),
                     ADDDEFCHARA => normal_command!(BuiltinCommand::AddDefChara),
                     GETCHARA => normal_method!(BuiltinMethod::GetChara),
+                    FINDCHARA => normal_method!(BuiltinMethod::FindChara),
+                    // FINDLASTCHARA => normal_method!(BuiltinMethod::FindLastChara),
+                    FINDCHARADATA => normal_method!(BuiltinMethod::FindCharaData),
                     DELCHARA => normal_command!(BuiltinCommand::DelChara),
                     SORTCHARA => try_nom!(pp, self::expr::sortchara_line(self)(args)).1,
                     COPYCHARA => normal_command!(BuiltinCommand::CopyChara),
@@ -1085,6 +1088,7 @@ impl ParserContext {
                     STRLEN => normal_method!(BuiltinMethod::StrLenS),
                     STRLENS => normal_method!(BuiltinMethod::StrLenS),
                     STRLENSU => normal_method!(BuiltinMethod::StrLenSU),
+                    UNICODE => normal_method!(BuiltinMethod::Unicode),
                     ENCODETOUNI => strform_command!(BuiltinCommand::EncodeToUni),
 
                     SPLIT => normal_command!(BuiltinCommand::Split),

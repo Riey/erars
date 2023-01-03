@@ -51,6 +51,9 @@ pub enum InstructionCode {
     ADDVOIDCHARA, //変数に何の設定のないキャラを作成
     DELCHARA,     //(キャラ登録番号)のキャラクタを削除。
     GETCHARA,
+    FINDCHARA,
+    FINDLASTCHARA,
+    FINDCHARADATA,
 
     GETNUM,
     GETEXPLV,
@@ -93,6 +96,7 @@ pub enum InstructionCode {
     STRLENU,
     STRLENSU,
     STRLENFORMU,
+    UNICODE,
 
     SWAPCHARA,
     COPYCHARA,
