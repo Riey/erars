@@ -166,7 +166,15 @@ pub enum InstructionCode {
     WHILE,
     WEND,
 
-    POWER, //引数が違うのでMETHOD化できない。
+    MIN,
+    MAX,
+    LIMIT,
+    LOG,
+    LOG10,
+    ABS,
+    SQRT,
+    SIGN,
+    POWER,
     SAVEGLOBAL,
     LOADGLOBAL,
     SWAP,
