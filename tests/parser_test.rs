@@ -104,6 +104,60 @@ mod body {
             line: 1,
         },
     ),
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: CFLAG,
+                func_extern: None,
+                args: [
+                    BinopExpr(
+                        Int(
+                            71,
+                        ),
+                        Add,
+                        BinopExpr(
+                            Var(
+                                Variable {
+                                    var: TFLAG,
+                                    func_extern: None,
+                                    args: [
+                                        Int(
+                                            92,
+                                        ),
+                                    ],
+                                },
+                            ),
+                            Equal,
+                            Var(
+                                Variable {
+                                    var: ASSI,
+                                    func_extern: None,
+                                    args: [],
+                                },
+                            ),
+                        ),
+                    ),
+                ],
+            },
+            Some(
+                Add,
+            ),
+            Var(
+                Variable {
+                    var: TFLAG,
+                    func_extern: None,
+                    args: [
+                        Int(
+                            10,
+                        ),
+                    ],
+                },
+            ),
+        ),
+        ScriptPosition {
+            line: 2,
+        },
+    ),
 ]
 "
         );

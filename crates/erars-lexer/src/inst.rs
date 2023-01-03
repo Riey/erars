@@ -131,8 +131,6 @@ pub enum InstructionCode {
     TRYCALLLIST,
     TRYJUMPLIST,
     TRYGOTOLIST,
-    FUNC,
-    ENDFUNC,
     CALLF,
     CALLFORMF,
 

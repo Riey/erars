@@ -343,7 +343,7 @@ impl<'s> Preprocessor<'s> {
             } else {
                 unreachable!()
             }
-        } else if let Some((mut left, right)) = line.split_once('=') {
+        } else if let Some((mut left, right)) = lex_assign_line(line) {
             let complex_op = if let Some(l) = left.strip_suffix('+') {
                 left = l;
                 Some(ComplexAssign::Bin(BinaryOperator::Add))
@@ -423,6 +423,36 @@ impl<'s> Preprocessor<'s> {
         ScriptPosition {
             line: self.line_pos as _,
         }
+    }
+}
+
+fn lex_assign_line(line: &str) -> Option<(&str, &str)> {
+    if line.starts_with('=') {
+        return None;
+    }
+
+    unsafe {
+        let mut iter = memchr::memchr_iter(b'=', line.as_bytes());
+
+        while let Some(pos) = iter.next() {
+            match line.as_bytes().get(pos + 1).copied() {
+                Some(b'=') => {
+                    iter.next();
+                    continue;
+                }
+                Some(_) => match line.as_bytes().get(pos - 1).copied() {
+                    Some(b'!') => {
+                        continue;
+                    }
+                    _ => return Some((line.get_unchecked(..pos), line.get_unchecked(pos + 1..))),
+                },
+                None => {
+                    return Some((line, ""));
+                }
+            }
+        }
+
+        None
     }
 }
 
