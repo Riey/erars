@@ -2,9 +2,7 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    get_interner, Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags,
-    EventType, Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, InlineValue, Interner,
-    PrintFlags, ScriptPosition, Stmt, StmtWithPos, StrKey, UnaryOperator, Variable, VariableInfo,
+    get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, InlineValue, Interner, Stmt, StmtWithPos, StrKey, UnaryOperator, VariableInfo,
 };
 use erars_lexer::{
     Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor, PreprocessorRegex,
@@ -863,7 +861,7 @@ impl ParserContext {
 
         loop {
             match pp.next_line(b)? {
-                Some(EraLine::InstLine { inst, args }) if inst == end => {
+                Some(EraLine::InstLine { inst, args: _ }) if inst == end => {
                     break Ok(out);
                 }
                 Some(line) => {
@@ -1094,6 +1092,7 @@ impl ParserContext {
                     FONTREGULAR => normal_command!(BuiltinCommand::FontRegular),
                     FONTSTYLE => normal_command!(BuiltinCommand::FontStyle),
                     SETFONT => normal_command!(BuiltinCommand::SetFont),
+                    CHKFONT => normal_method!(BuiltinMethod::ChkFont),
                     GETFONT => normal_method!(BuiltinMethod::GetFont),
 
                     SETCOLOR => normal_command!(BuiltinCommand::SetColor),
@@ -1575,7 +1574,7 @@ impl ParserContext {
                     }
                 }
             },
-            Some(other) => {
+            Some(_) => {
                 error!(pp.span(), "First line should be function line");
             }
             None => {

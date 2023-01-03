@@ -158,6 +158,7 @@ pub enum InstructionCode {
     CLEARTEXTBOX,
 
     GETFONT,
+    CHKFONT,
     SETFONT,
 
     FOR,
