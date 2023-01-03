@@ -1,0 +1,13 @@
+{
+#DIMS CONST CARD_SUIT, 5  = "？", 
+	@"%UNICODE(0x2660)%", 
+	@"%UNICODE(0x2663)%", 
+	@"%UNICODE(0x2665)%", 
+	@"%UNICODE(0x2666)%"
+}
+{
+#DIMS CONST CARD_RANK, 14 = "JK", 
+	"Ａ", "２", "３", "４", "５", 
+	"６", "７", "８", "⑨", "10", 
+	"Ｊ", "Ｑ", "Ｋ"
+}

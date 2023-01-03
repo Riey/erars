@@ -238,22 +238,31 @@ impl<'s> Preprocessor<'s> {
             self.span_begin = self.current_pos();
 
             let line = if let Some(open_brace) = self.s.strip_prefix('{') {
-                let (raw, left) = open_brace.split_once('}').unwrap_or((open_brace, ""));
-                self.s = left;
+                let Some(pos) = memchr::memchr(b'}', open_brace.as_bytes()) else {
+                    self.span_end = self.span_begin + 1;
+                    return Err(("No matched `}`".into(), self.span()));
+                };
                 unsafe {
-                    let buf =
-                        b.alloc_layout(std::alloc::Layout::from_size_align_unchecked(raw.len(), 1));
+                    let raw = open_brace.get_unchecked(..pos);
+                    self.s = if pos == open_brace.len() {
+                        ""
+                    } else {
+                        open_brace.get_unchecked(pos + 1..)
+                    };
+                    let buf = b.alloc_layout(
+                        std::alloc::Layout::array::<u8>(raw.len()).unwrap_unchecked(),
+                    );
 
                     let mut start = 0;
 
-                    for line in raw.split_terminator('\n') {
+                    for line in raw.lines() {
                         self.line_pos += 1;
-                        start += line.len();
                         std::ptr::copy_nonoverlapping(
                             line.as_ptr(),
                             buf.as_ptr().add(start),
                             line.len(),
                         );
+                        start += line.len();
                     }
 
                     std::str::from_utf8_unchecked(std::slice::from_raw_parts(buf.as_ptr(), start))
@@ -262,7 +271,7 @@ impl<'s> Preprocessor<'s> {
                 self.line_pos += 1;
                 let (line, left) = self.s.split_once('\n').unwrap_or((self.s, ""));
                 self.s = left;
-                line
+                line.trim_end_matches('\r')
             };
             self.span_end = if !self.s.is_empty() {
                 // skip newline

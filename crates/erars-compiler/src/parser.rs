@@ -2,11 +2,12 @@ mod csv;
 mod expr;
 
 use erars_ast::{
-    get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos, Function, FunctionHeader, FunctionInfo, InlineValue, Interner, Stmt, StmtWithPos, StrKey, UnaryOperator, VariableInfo,
+    get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos,
+    Function, FunctionHeader, FunctionInfo, InlineValue, Interner, Stmt, StmtWithPos, StrKey,
+    UnaryOperator, VariableInfo,
 };
 use erars_lexer::{
-    Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor,
-    PrintType, SharpCode,
+    Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor, PrintType, SharpCode,
 };
 use hashbrown::{HashMap, HashSet};
 use itertools::Itertools;
