@@ -97,8 +97,8 @@ fn check_function_exist_inner(
                     let mut files = files.lock();
                     let file_id = func.file_path();
                     files.add_from_path(file_id);
-                    let diagnostic = Diagnostic::error()
-                        .with_code("E1000")
+                    let diagnostic = Diagnostic::warning()
+                        .with_code("W1000")
                         .with_notes(vec![format!("In function @{fn_name}")])
                         .with_message(format!("Find CALL `{name}` but @{name} is not exists."))
                         .with_labels(vec![Label::primary(
@@ -154,8 +154,8 @@ fn check_variable_exist_inner(
                 let mut files = files.lock();
                 let file_id = func.file_path();
                 files.add_from_path(file_id);
-                let mut diagnostic = Diagnostic::error()
-                    .with_code("E1001")
+                let mut diagnostic = Diagnostic::warning()
+                    .with_code("W1001")
                     .with_notes(vec![format!("In function @{fn_name}")])
                     .with_message(msg)
                     .with_labels(vec![Label::primary(
