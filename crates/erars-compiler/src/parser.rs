@@ -1066,6 +1066,10 @@ impl ParserContext {
                     CSVEQUIP => normal_method!(BuiltinMethod::CsvEquip),
                     CSVCFLAG => normal_method!(BuiltinMethod::CsvCflag),
 
+                    GETBIT => normal_method!(BuiltinMethod::GetBit),
+                    SETBIT => normal_command!(BuiltinCommand::SetBit),
+                    CLEARBIT => normal_command!(BuiltinCommand::ClearBit),
+
                     CLEARLINE => normal_command!(BuiltinCommand::ClearLine),
                     INPUT => normal_command!(BuiltinCommand::Input),
                     INPUTS => normal_command!(BuiltinCommand::InputS),

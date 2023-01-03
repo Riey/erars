@@ -195,6 +195,7 @@ pub enum InstructionCode {
 
     PRINTCPERLINE, //よく考えたら引数の仕様違うや
 
+    GETBIT,
     SETBIT,
     CLEARBIT,
     INVERTBIT,
