@@ -1204,6 +1204,31 @@ mod body {
     }
 
     #[test]
+    fn test_skip() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/skip.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    StmtWithPos(
+        Print(
+            (empty),
+            String(
+                YES,
+            ),
+        ),
+        ScriptPosition {
+            line: 4,
+        },
+    ),
+]
+"
+        );
+    }
+
+    #[test]
     fn test_sortchara() {
         k9::snapshot!(
             do_test(

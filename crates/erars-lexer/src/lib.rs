@@ -273,13 +273,11 @@ impl<'s> Preprocessor<'s> {
 
             if line.starts_with('[') {
                 if let Some(m) = self.re.skip_start.find_earliest(line.as_bytes()) {
-                    dbg!(&line[m.start()..m.end()]);
-                    let line = &line[m.end()..];
-                    let Some(end) = self.re.skip_end.find_earliest(line.as_bytes()) else {
+                    let Some(end) = self.re.skip_end.find_earliest(self.s.as_bytes()) else {
                         return Err(("No SKIPEND".to_string(), self.span()));
                     };
-                    self.line_pos += line[..end.start()].bytes().filter(|b| *b == b'\n').count();
-                    self.s = &line[end.end()..];
+                    self.line_pos += self.s[..end.start()].bytes().filter(|b| *b == b'\n').count();
+                    self.s = &self.s[end.end()..];
                 } else {
                     log::warn!("TODO: {line}");
                     // TODO
