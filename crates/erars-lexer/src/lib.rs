@@ -1,11 +1,13 @@
 mod inst;
 mod sharp;
+mod square;
 
 use std::ops::Range;
 
 use logos::Logos;
 
 use erars_ast::*;
+use num_traits::FromPrimitive;
 use regex_automata::dfa::dense;
 use regex_automata::dfa::Automaton;
 
@@ -13,6 +15,7 @@ pub use bumpalo::Bump;
 pub use inst::InstructionCode;
 use regex_automata::dfa::regex;
 pub use sharp::SharpCode;
+pub use square::SquareCode;
 pub use strum::IntoEnumIterator;
 
 pub fn parse_print_flags(mut s: &str) -> (&str, PrintFlags) {
@@ -135,25 +138,41 @@ pub enum PrintType {
 pub struct PreprocessorRegex {
     inst_dfa: dense::DFA<&'static [u32]>,
     sharp_dfa: dense::DFA<&'static [u32]>,
-    skip_end: regex::Regex,
-    skip_start: regex::Regex,
+    endif_re: regex::Regex<dense::DFA<&'static [u32]>>,
+    skipend_re: regex::Regex<dense::DFA<&'static [u32]>>,
+    square_re: regex::Regex<dense::DFA<&'static [u32]>>,
 }
 
 impl PreprocessorRegex {
-    pub fn from_bytes(inst_bytes: &'static [u8], sharp_bytes: &'static [u8]) -> Self {
-        macro_rules! build_re {
-            ($pat:literal) => {
-                regex::Builder::new()
-                    .syntax(regex_automata::SyntaxConfig::new().case_insensitive(true).utf8(false))
-                    .build($pat)
-                    .unwrap()
-            };
-        }
+    pub fn from_bytes(
+        inst_bytes: &'static [u8],
+        sharp_bytes: &'static [u8],
+        square_fwd: &'static [u8],
+        square_rev: &'static [u8],
+        endif_fwd: &'static [u8],
+        endif_rev: &'static [u8],
+        skipend_fwd: &'static [u8],
+        skipend_rev: &'static [u8],
+    ) -> Self {
+        let fwd = dense::DFA::from_bytes(endif_fwd).unwrap().0;
+        let rev = dense::DFA::from_bytes(endif_rev).unwrap().0;
+
+        let endif_re = regex::Regex::builder().build_from_dfas(fwd, rev);
+        let fwd = dense::DFA::from_bytes(square_fwd).unwrap().0;
+        let rev = dense::DFA::from_bytes(square_rev).unwrap().0;
+
+        let square_re = regex::Regex::builder().build_from_dfas(fwd, rev);
+        let fwd = dense::DFA::from_bytes(skipend_fwd).unwrap().0;
+        let rev = dense::DFA::from_bytes(skipend_rev).unwrap().0;
+
+        let skipend_re = regex::Regex::builder().build_from_dfas(fwd, rev);
+
         Self {
             inst_dfa: dense::DFA::from_bytes(inst_bytes).unwrap().0,
             sharp_dfa: dense::DFA::from_bytes(sharp_bytes).unwrap().0,
-            skip_end: build_re!("\\[ *SKIPEND *\\]"),
-            skip_start: build_re!("^\\[ *SKIPSTART *\\]"),
+            square_re,
+            endif_re,
+            skipend_re,
         }
     }
 }
@@ -281,9 +300,36 @@ impl<'s> Preprocessor<'s> {
             };
 
             if line.starts_with('[') {
-                if let Some(_) = self.re.skip_start.find_earliest(line.as_bytes()) {
-                    let Some(end) = self.re.skip_end.find_earliest(self.s.as_bytes()) else {
-                        return Err(("No SKIPEND".to_string(), self.span()));
+                if let Some(m) = self.re.square_re.find_earliest(line.as_bytes()) {
+                    let left = line.split_at(m.end()).1;
+                    let s = FromPrimitive::from_u32(m.pattern().as_u32()).unwrap();
+
+                    let end = match s {
+                        SquareCode::IF => {
+                            let Some((item, _)) = left.split_once(']') else {
+                                return Err(("No matched `]`".into(), self.span()));
+                            };
+                            let _item = item.trim_end();
+                            // TODO: check item is defined
+
+                            let Some(end) = self.re.endif_re.find_earliest(self.s.as_bytes()) else {
+                                return Err(("No matched [ENDIF]".into(), self.span()));
+                            };
+                            end
+                        }
+                        SquareCode::IF_DEBUG => {
+                            // TODO: check DEBUG
+                            let Some(end) = self.re.endif_re.find_earliest(self.s.as_bytes()) else {
+                                return Err(("No matched [ENDIF]".into(), self.span()));
+                            };
+                            end
+                        }
+                        SquareCode::SKIPSTART => {
+                            let Some(end) = self.re.skipend_re.find_earliest(self.s.as_bytes()) else {
+                                return Err(("No SKIPEND".to_string(), self.span()));
+                            };
+                            end
+                        }
                     };
                     self.line_pos +=
                         memchr::memchr_iter(b'\n', self.s[..end.start()].as_bytes()).count();
@@ -306,8 +352,6 @@ impl<'s> Preprocessor<'s> {
     where
         's: 'a,
     {
-        use num_traits::FromPrimitive;
-
         let line = self.next_raw_line(b)?;
 
         debug_assert!(!line.ends_with('\n'));

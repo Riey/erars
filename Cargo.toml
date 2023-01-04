@@ -43,6 +43,9 @@ mimalloc = { version = "0.1.31", default-features = false }
 
 [profile.dev]
 
+[profile.dev.build-override]
+opt-level = 3
+
 [profile.release-lto]
 inherits = "release"
 lto = true
