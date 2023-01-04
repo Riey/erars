@@ -1178,7 +1178,6 @@ impl ParserContext {
                     ARRAYMOVE => normal_command!(BuiltinCommand::ArrayMove),
                     ARRAYSHIFT => normal_command!(BuiltinCommand::ArrayShift),
                     // ARRAYSORT => normal_command!(BuiltinCommand::ArraySort),
-
                     GETNUM => normal_method!(BuiltinMethod::GetNum),
                     GETEXPLV => normal_method!(BuiltinMethod::GetExpLv),
                     GETPALAMLV => normal_method!(BuiltinMethod::GetPalamLv),

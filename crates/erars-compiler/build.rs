@@ -23,6 +23,7 @@ fn main() {
                 .utf8(false)
                 .multi_line(false),
         )
+        .configure(dense::Config::new().minimize(true))
         .build_many(&patterns)
         .unwrap()
         .to_bytes_little_endian();
@@ -41,6 +42,7 @@ fn main() {
                 .utf8(false)
                 .multi_line(false),
         )
+        .configure(dense::Config::new().minimize(true))
         .build_many(&patterns)
         .unwrap()
         .to_bytes_little_endian()

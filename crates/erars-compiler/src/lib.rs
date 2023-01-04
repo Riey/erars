@@ -3,8 +3,8 @@ mod error;
 mod instruction;
 mod parser;
 
-use once_cell::sync::Lazy;
 use include_bytes_aligned::include_bytes_aligned;
+use once_cell::sync::Lazy;
 
 pub static PP_REGEX: Lazy<PreprocessorRegex> = Lazy::new(|| {
     PreprocessorRegex::from_bytes(
