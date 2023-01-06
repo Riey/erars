@@ -370,6 +370,23 @@ impl HeaderInfo {
         match expr {
             Expr::Int(i) => Ok(Value::Int(*i)),
             Expr::String(s) => Ok(Value::String(s.to_string())),
+            Expr::FormText(form) => {
+                use std::fmt::Write;
+
+                let mut s = String::new();
+
+                write!(s, "{}", form.first).unwrap();
+
+                for (arg, text) in form.other.iter() {
+                    // TODO: padding
+                    match self.const_eval(&arg.expr)? {
+                        Value::Int(expr) => write!(s, "{expr}{text}").unwrap(),
+                        Value::String(expr) => write!(s, "{expr}{text}").unwrap(),
+                    }
+                }
+
+                Ok(s.into())
+            }
             Expr::UnaryopExpr(expr, op) => match op {
                 UnaryOperator::Minus => match self.const_eval(expr)? {
                     Value::Int(i) => Ok(Value::Int(-i)),
