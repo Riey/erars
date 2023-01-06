@@ -217,7 +217,7 @@ impl<'s> Preprocessor<'s> {
                 Some('\n') => {
                     self.line_pos += 1;
                 }
-                Some(';' | '；') => {
+                Some(';') => {
                     if let Some(s) = chars.as_str().split_once('\n') {
                         self.line_pos += 1;
                         chars = s.1.chars();
