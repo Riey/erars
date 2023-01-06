@@ -356,6 +356,21 @@ impl<'s> Preprocessor<'s> {
 
         debug_assert!(!line.ends_with('\n'));
 
+        dbg!(line);
+
+        let line = if let Some(pos) = memchr::memchr(b';', line.as_bytes()) {
+            if line.starts_with("PRINT") && !line.starts_with(&['V', 'S'])
+                || line.starts_with("REUSELASTLINE")
+            {
+                line
+            } else {
+                unsafe { line.get_unchecked(..pos) }
+            }
+        } else {
+            line
+        };
+        dbg!(line);
+
         if line.is_empty() {
             Ok(None)
         } else if let Some(line) = line.strip_prefix('#') {
