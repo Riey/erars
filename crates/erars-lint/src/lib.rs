@@ -97,14 +97,16 @@ fn check_function_exist_inner(
                     let mut files = files.lock();
                     let file_id = func.file_path();
                     files.add_from_path(file_id);
+                    let Ok(range) = files.line_range(file_id, current_line as usize - 1) else {
+                        let file_name = files.name(file_id);
+                        log::error!("Invalid line range for {file_name:?} line index: {current_line}, fn: {name}");
+                        continue;
+                    };
                     let diagnostic = Diagnostic::warning()
                         .with_code("W1000")
                         .with_notes(vec![format!("In function @{fn_name}")])
                         .with_message(format!("Find CALL `{name}` but @{name} is not exists."))
-                        .with_labels(vec![Label::primary(
-                            file_id,
-                            files.line_range(file_id, current_line as usize - 1).unwrap(),
-                        )]);
+                        .with_labels(vec![Label::primary(file_id, range)]);
                     diagnostics.lock().push(diagnostic);
                 }
             }

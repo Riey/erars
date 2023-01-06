@@ -14,10 +14,7 @@ codespan-reporting = "0.11.1"
 rayon = { version = "1.5.3", optional = true }
 hashbrown = { version = "0.13", features = ["ahash", "serde"] }
 parking_lot = "0.12.1"
+log = "0.4.17"
 
 [features]
-multithread = [
-    "rayon",
-    "hashbrown/rayon",
-    "erars-vm/multithread",
-]
+multithread = ["rayon", "hashbrown/rayon", "erars-vm/multithread"]

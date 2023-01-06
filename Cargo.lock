@@ -1090,6 +1090,7 @@ dependencies = [
  "erars-reader",
  "erars-vm",
  "hashbrown 0.13.1",
+ "log",
  "parking_lot",
  "rayon",
 ]
