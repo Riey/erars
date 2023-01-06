@@ -333,6 +333,8 @@ impl<'s> Preprocessor<'s> {
                     };
                     self.line_pos +=
                         memchr::memchr_iter(b'\n', self.s[..end.start()].as_bytes()).count();
+                    // SKIPEND, ENDIF already contains one line feed
+                    self.line_pos += 1;
                     self.s = &self.s[end.end()..];
                 } else {
                     log::warn!("TODO: {line}");

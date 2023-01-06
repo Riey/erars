@@ -1,0 +1,18 @@
+;-------------------------------------------------
+;이중절정＠書き分けできないのでパス
+;-------------------------------------------------
+[SKIPSTART]
+IF NOWEX:이중절정
+	;部位を指定せず簡易的に書く場合、[SKIPSTART]&[SKIPEND]のコメントアウトを外して、[SKIPSTART]とこのコメントの間に書いてください
+	SELECTCASE RAND:3
+		CASE 0
+			CALL HPH_PRINT("「싫어, 가앗! 가버려어엇HPH」", "W")
+		CASE 1
+			CALL HPH_PRINT("「시럿! 아앗! 가버려어어HPH」", "W")
+		CASE 2
+			CALL HPH_PRINT("「그런엇, 안대! 앗, 아아아아～앗HPH」", "W")
+	ENDSELECT
+	RETURN 1
+ENDIF
+[SKIPEND]
+PRINTL AAA

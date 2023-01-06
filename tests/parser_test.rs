@@ -422,6 +422,31 @@ mod body {
     }
 
     #[test]
+    fn test_comment() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/comment.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    StmtWithPos(
+        Print(
+            NEWLINE,
+            String(
+                AAA,
+            ),
+        ),
+        ScriptPosition {
+            line: 18,
+        },
+    ),
+]
+"
+        );
+    }
+
+    #[test]
     fn test_for() {
         k9::snapshot!(
             do_test(

@@ -484,8 +484,7 @@ impl HeaderInfo {
                 let Ok(value) = value.trim().parse() else {
                     return Err(("Invalid value number".into(), span));
                 };
-                self.rename
-                    .insert(interner.get_or_intern(key.trim()), value);
+                self.rename.insert(interner.get_or_intern(key.trim()), value);
             }
         }
 
