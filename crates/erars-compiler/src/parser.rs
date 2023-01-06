@@ -1,10 +1,11 @@
 mod csv;
 mod expr;
 
+use anyhow::{bail, Context};
 use erars_ast::{
     get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos,
-    Function, FunctionHeader, FunctionInfo, InlineValue, Interner, PrintFlags, Stmt, StmtWithPos,
-    StrKey, UnaryOperator, VariableInfo,
+    Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, Stmt, StmtWithPos, StrKey,
+    UnaryOperator, Value, VariableInfo,
 };
 use erars_lexer::{
     Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor, PrintType, SharpCode,
@@ -355,50 +356,106 @@ pub struct HeaderInfo {
 }
 
 impl HeaderInfo {
-    pub fn const_eval_log_error(&self, expr: &Expr) -> InlineValue {
+    pub fn const_eval_log_error(&self, expr: &Expr) -> Value {
         match self.const_eval(expr) {
             Ok(v) => v,
-            Err(expr) => {
-                log::error!("Const evaluation failed for expr {expr:?}");
-                InlineValue::Int(0)
+            Err(err) => {
+                log::error!("Const evaluation failed for expr {expr:?}: {err}");
+                Value::Int(0)
             }
         }
     }
 
-    pub fn const_eval<'e>(&self, expr: &'e Expr) -> Result<InlineValue, &'e Expr> {
+    pub fn const_eval<'e>(&self, expr: &'e Expr) -> anyhow::Result<Value> {
         match expr {
-            Expr::Int(i) => Ok(InlineValue::Int(*i)),
-            Expr::String(s) => Ok(InlineValue::String(*s, 0)),
+            Expr::Int(i) => Ok(Value::Int(*i)),
+            Expr::String(s) => Ok(Value::String(s.to_string())),
             Expr::UnaryopExpr(expr, op) => match op {
                 UnaryOperator::Minus => match self.const_eval(expr)? {
-                    InlineValue::Int(i) => Ok(InlineValue::Int(-i)),
-                    InlineValue::String(_, _) => Err(expr),
+                    Value::Int(i) => Ok(Value::Int(-i)),
+                    _ => bail!("Minus operator can only used for Int value"),
                 },
                 UnaryOperator::Not => match self.const_eval(expr)? {
-                    InlineValue::Int(i) => Ok(InlineValue::Int(!i)),
-                    InlineValue::String(_, _) => Err(expr),
+                    Value::Int(i) => Ok(Value::Int(!i)),
+                    _ => bail!("Not operator can only used for Int value"),
                 },
             },
+            Expr::BinopExpr(lhs, op, rhs) => {
+                let lhs = self.const_eval(lhs)?;
+                let rhs = self.const_eval(rhs)?;
+                let ret = match op {
+                    BinaryOperator::Add => match lhs {
+                        Value::Int(i) => Value::Int(i + rhs.try_into_int()?),
+                        Value::String(s) => Value::String(s + rhs.into_str().as_str()),
+                    },
+                    BinaryOperator::Mul => match lhs {
+                        Value::Int(i) => Value::Int(i * rhs.try_into_int()?),
+                        Value::String(s) => {
+                            Value::String(s.repeat(usize::try_from(rhs.try_into_int()?)?))
+                        }
+                    },
+                    BinaryOperator::Sub => Value::Int(lhs.try_into_int()? - rhs.try_into_int()?),
+                    BinaryOperator::Div => Value::Int(lhs.try_into_int()? / rhs.try_into_int()?),
+                    BinaryOperator::Rem => Value::Int(lhs.try_into_int()? % rhs.try_into_int()?),
+                    BinaryOperator::Less => {
+                        Value::Int((lhs.try_into_int()? < rhs.try_into_int()?).into())
+                    }
+                    BinaryOperator::LessOrEqual => {
+                        Value::Int((lhs.try_into_int()? <= rhs.try_into_int()?).into())
+                    }
+                    BinaryOperator::Greater => {
+                        Value::Int((lhs.try_into_int()? > rhs.try_into_int()?).into())
+                    }
+                    BinaryOperator::GreaterOrEqual => {
+                        Value::Int((lhs.try_into_int()? >= rhs.try_into_int()?).into())
+                    }
+                    BinaryOperator::Equal => Value::Int(i64::from(lhs == rhs)),
+                    BinaryOperator::NotEqual => Value::Int(i64::from(lhs != rhs)),
+                    BinaryOperator::And => Value::Int(i64::from(lhs.as_bool() && rhs.as_bool())),
+                    BinaryOperator::Or => Value::Int(i64::from(lhs.as_bool() || rhs.as_bool())),
+                    BinaryOperator::Xor => Value::Int(i64::from(lhs.as_bool() ^ rhs.as_bool())),
+                    BinaryOperator::BitAnd => Value::Int(lhs.try_into_int()? & rhs.try_into_int()?),
+                    BinaryOperator::BitOr => Value::Int(lhs.try_into_int()? | rhs.try_into_int()?),
+                    BinaryOperator::BitXor => Value::Int(lhs.try_into_int()? ^ rhs.try_into_int()?),
+                    BinaryOperator::Lhs => Value::Int(lhs.try_into_int()? << rhs.try_into_int()?),
+                    BinaryOperator::Rhs => Value::Int(lhs.try_into_int()? >> rhs.try_into_int()?),
+                };
+
+                Ok(ret)
+            }
             Expr::Var(var) => {
                 if let Some(var_info) = match var.func_extern {
                     Some(_func) => {
                         log::warn!("TODO: local const");
-                        return Err(expr);
+                        bail!("TODO local const");
                     }
                     None => self.global_variables.get(&var.var),
                 } {
                     if var_info.is_const {
-                        let Some(init) = var_info.init.get(0) else { return Err(expr); };
-                        let Ok(init) = self.const_eval(init) else { return Err(expr); };
+                        let Some(init) = var_info.init.get(0) else { bail!("No value"); };
+                        let init = self.const_eval(init)?;
                         Ok(init)
                     } else {
-                        Err(expr)
+                        bail!("Variable {} is not const", var.var);
                     }
                 } else {
-                    return Err(expr);
+                    bail!("Variable {} is not exists", var.var);
                 }
             }
-            _ => Err(expr),
+            Expr::BuiltinMethod(meth, args) => match meth {
+                BuiltinMethod::Unicode => {
+                    let arg = args.first().context("No argument for UNICODE method")?;
+                    let arg = self
+                        .const_eval(arg)?
+                        .try_into_int()
+                        .context("Invalid argument for UNICODE method")?;
+                    Ok(Value::String(
+                        char::from_u32(arg as u32).context("Invalid unicode")?.to_string(),
+                    ))
+                }
+                _ => bail!("Method {meth} can't be used in const context"),
+            },
+            _ => bail!("Can't be used in const context"),
         }
     }
 

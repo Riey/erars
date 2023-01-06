@@ -825,7 +825,9 @@ fn function_arg_list<'c, 'a>(
                 variable(ctx),
                 opt(preceded(
                     char_sp('='),
-                    map(expr(ctx), |expr| ctx.header.const_eval_log_error(&expr)),
+                    map(expr(ctx), |expr| {
+                        ctx.header.const_eval_log_error(&expr).into()
+                    }),
                 )),
             )),
         )(i)

@@ -1009,6 +1009,7 @@ dependencies = [
 name = "erars-compiler"
 version = "0.5.0"
 dependencies = [
+ "anyhow",
  "bitflags",
  "derivative",
  "enum-map",
@@ -1026,6 +1027,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "option_set",
+ "pad",
  "paste",
  "regex-automata",
  "serde",

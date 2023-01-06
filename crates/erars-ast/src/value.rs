@@ -20,6 +20,24 @@ impl InlineValue {
     }
 }
 
+impl From<InlineValue> for Value {
+    fn from(value: InlineValue) -> Self {
+        match value {
+            InlineValue::Int(i) => Value::Int(i),
+            InlineValue::String(s, _) => Value::String(s.to_string()),
+        }
+    }
+}
+
+impl From<Value> for InlineValue {
+    fn from(value: Value) -> Self {
+        match value {
+            Value::Int(i) => InlineValue::Int(i),
+            Value::String(s) => InlineValue::String(StrKey::new(&s), 0),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Value {
     Int(i64),

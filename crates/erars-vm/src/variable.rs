@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Result};
 use enum_map::{Enum, EnumMap};
-use erars_ast::{get_interner, EventType, InlineValue, Interner, StrKey, Value, VariableInfo};
+use erars_ast::{get_interner, EventType, Interner, StrKey, Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
@@ -843,10 +843,7 @@ impl VmVariable {
         };
 
         for (idx, init_var) in info.init.iter().enumerate() {
-            match header.const_eval_log_error(init_var) {
-                InlineValue::Int(i) => ret.set(idx as u32, i).unwrap(),
-                InlineValue::String(s, _) => ret.set(idx as u32, s.resolve()).unwrap(),
-            }
+            let _ = ret.set(idx as u32, header.const_eval_log_error(init_var));
         }
 
         ret
