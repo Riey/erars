@@ -125,6 +125,14 @@ unsafe fn parse_print(mut s: &str) -> (PrintFlags, PrintType, &str) {
     (flags, ty, trim_text(s))
 }
 
+fn cut_comment(line: &str) -> &str {
+    if let Some(pos) = memchr::memchr(b';', line.as_bytes()) {
+        unsafe { line.get_unchecked(..pos) }
+    } else {
+        line
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PrintType {
     Plain,
@@ -358,40 +366,17 @@ impl<'s> Preprocessor<'s> {
 
         debug_assert!(!line.ends_with('\n'));
 
-        let line = if let Some(pos) = memchr::memchr(b';', line.as_bytes()) {
-            if line.starts_with("PRINT") && !line.starts_with(&['V', 'S'])
-                || line.starts_with("REUSELASTLINE")
-            {
-                line
-            } else {
-                unsafe { line.get_unchecked(..pos) }
-            }
-        } else {
-            line
-        };
-
         if line.is_empty() {
             Ok(None)
-        } else if let Some(line) = line.strip_prefix('#') {
-            if let Some(m) = self.re.sharp_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
-                if let Some(sharp) = SharpCode::from_u32(m.pattern().as_u32()) {
-                    let line =
-                        unsafe { line.get_unchecked(<&str>::from(sharp).len()..) }.trim_start();
-                    Ok(Some(EraLine::SharpLine { sharp, args: line }))
-                } else {
-                    unreachable!()
-                }
-            } else {
-                Err((format!("Unknown sharp line: {line}"), self.span()))
-            }
-        } else if let Some(line) = line.strip_prefix('@') {
-            Ok(Some(EraLine::FunctionLine(line)))
-        } else if let Some(line) = line.strip_prefix('$') {
-            Ok(Some(EraLine::GotoLine(line)))
         } else if let Some(m) = self.re.inst_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
             if let Some(inst) = InstructionCode::from_u32(m.pattern().as_u32()) {
                 if inst == InstructionCode::PRINT {
                     let (flags, ty, line) = unsafe { parse_print(line) };
+                    let line = if !(ty == PrintType::Plain || ty == PrintType::Form) {
+                        cut_comment(line)
+                    } else {
+                        line
+                    };
                     Ok(Some(EraLine::PrintLine {
                         flags,
                         ty,
@@ -403,82 +388,101 @@ impl<'s> Preprocessor<'s> {
                         InstructionCode::REUSELASTLINE | InstructionCode::THROW => {
                             line.strip_prefix(' ').unwrap_or(line)
                         }
-                        _ => line.trim_start_matches(' '),
+                        _ => cut_comment(line.trim_start_matches(' ')),
                     };
                     Ok(Some(EraLine::InstLine { inst, args: line }))
                 }
             } else {
                 unreachable!()
             }
-        } else if let Some((mut left, right)) = lex_assign_line(line) {
-            let complex_op = if let Some(l) = left.strip_suffix('+') {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::Add))
-            } else if let Some(l) = left.strip_suffix('-') {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::Sub))
-            } else if let Some(l) = left.strip_suffix('*') {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::Mul))
-            } else if let Some(l) = left.strip_suffix('/') {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::Div))
-            } else if let Some(l) = left.strip_suffix('%') {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::Rem))
-            } else if let Some(l) = left.strip_suffix("<<") {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::Lhs))
-            } else if let Some(l) = left.strip_suffix(">>") {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::Rhs))
-            } else if let Some(l) = left.strip_suffix('^') {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::BitXor))
-            } else if let Some(l) = left.strip_suffix('|') {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::BitOr))
-            } else if let Some(l) = left.strip_suffix('&') {
-                left = l;
-                Some(ComplexAssign::Bin(BinaryOperator::BitAnd))
-            } else if let Some(l) = left.strip_suffix('\'') {
-                left = l;
-                Some(ComplexAssign::Str)
-            } else {
-                None
-            };
-
-            Ok(Some(EraLine::VarAssign {
-                lhs: left,
-                complex_op,
-                rhs: right,
-            }))
-        } else if let Some(left) = line.trim_end().strip_suffix("++") {
-            Ok(Some(EraLine::VarInc {
-                lhs: left,
-                is_pre: false,
-                is_inc: true,
-            }))
-        } else if let Some(left) = line.trim_end().strip_suffix("--") {
-            Ok(Some(EraLine::VarInc {
-                lhs: left,
-                is_pre: false,
-                is_inc: false,
-            }))
-        } else if let Some(left) = line.strip_prefix("++") {
-            Ok(Some(EraLine::VarInc {
-                lhs: left,
-                is_pre: true,
-                is_inc: true,
-            }))
-        } else if let Some(left) = line.strip_prefix("--") {
-            Ok(Some(EraLine::VarInc {
-                lhs: left,
-                is_pre: true,
-                is_inc: false,
-            }))
         } else {
-            Err((format!("Unknown line: {line}"), self.span()))
+            let line = cut_comment(line);
+            if let Some(line) = line.strip_prefix('#') {
+                if let Some(m) = self.re.sharp_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
+                    if let Some(sharp) = SharpCode::from_u32(m.pattern().as_u32()) {
+                        let line =
+                            unsafe { line.get_unchecked(<&str>::from(sharp).len()..) }.trim_start();
+                        Ok(Some(EraLine::SharpLine { sharp, args: line }))
+                    } else {
+                        unreachable!()
+                    }
+                } else {
+                    Err((format!("Unknown sharp line: {line}"), self.span()))
+                }
+            } else if let Some(line) = line.strip_prefix('@') {
+                Ok(Some(EraLine::FunctionLine(line)))
+            } else if let Some(line) = line.strip_prefix('$') {
+                Ok(Some(EraLine::GotoLine(line)))
+            } else if let Some((mut left, right)) = lex_assign_line(line) {
+                let complex_op = if let Some(l) = left.strip_suffix('+') {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::Add))
+                } else if let Some(l) = left.strip_suffix('-') {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::Sub))
+                } else if let Some(l) = left.strip_suffix('*') {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::Mul))
+                } else if let Some(l) = left.strip_suffix('/') {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::Div))
+                } else if let Some(l) = left.strip_suffix('%') {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::Rem))
+                } else if let Some(l) = left.strip_suffix("<<") {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::Lhs))
+                } else if let Some(l) = left.strip_suffix(">>") {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::Rhs))
+                } else if let Some(l) = left.strip_suffix('^') {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::BitXor))
+                } else if let Some(l) = left.strip_suffix('|') {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::BitOr))
+                } else if let Some(l) = left.strip_suffix('&') {
+                    left = l;
+                    Some(ComplexAssign::Bin(BinaryOperator::BitAnd))
+                } else if let Some(l) = left.strip_suffix('\'') {
+                    left = l;
+                    Some(ComplexAssign::Str)
+                } else {
+                    None
+                };
+
+                Ok(Some(EraLine::VarAssign {
+                    lhs: left,
+                    complex_op,
+                    rhs: right,
+                }))
+            } else if let Some(left) = line.trim_end().strip_suffix("++") {
+                Ok(Some(EraLine::VarInc {
+                    lhs: left,
+                    is_pre: false,
+                    is_inc: true,
+                }))
+            } else if let Some(left) = line.trim_end().strip_suffix("--") {
+                Ok(Some(EraLine::VarInc {
+                    lhs: left,
+                    is_pre: false,
+                    is_inc: false,
+                }))
+            } else if let Some(left) = line.strip_prefix("++") {
+                Ok(Some(EraLine::VarInc {
+                    lhs: left,
+                    is_pre: true,
+                    is_inc: true,
+                }))
+            } else if let Some(left) = line.strip_prefix("--") {
+                Ok(Some(EraLine::VarInc {
+                    lhs: left,
+                    is_pre: true,
+                    is_inc: false,
+                }))
+            } else {
+                Err((format!("Unknown line: {line}"), self.span()))
+            }
         }
     }
 
