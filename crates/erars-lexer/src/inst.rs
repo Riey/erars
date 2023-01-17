@@ -232,6 +232,8 @@ pub enum InstructionCode {
     ARRAYSORT,
     ARRAYCOPY,
 
+    REPLACE,
+    ESCAPE,
     ENCODETOUNI,
     SUBSTRINGU,
     SUBSTRING,

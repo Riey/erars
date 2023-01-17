@@ -1227,6 +1227,8 @@ impl ParserContext {
                     STRLENFORMU => strform_method!(BuiltinMethod::StrLenSU),
                     UNICODE => normal_method!(BuiltinMethod::Unicode),
                     ENCODETOUNI => strform_command!(BuiltinCommand::EncodeToUni),
+                    REPLACE => normal_method!(BuiltinMethod::Replace),
+                    ESCAPE => normal_method!(BuiltinMethod::Escape),
 
                     SPLIT => normal_command!(BuiltinCommand::Split),
                     SWAP => normal_command!(BuiltinCommand::Swap),
