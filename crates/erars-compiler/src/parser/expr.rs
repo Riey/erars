@@ -602,10 +602,30 @@ pub fn expr_pair<'c, 'a>(
     move |i| pair(de_sp(expr(ctx)), preceded(char(','), de_sp(expr(ctx))))(i)
 }
 
+pub fn expr_or_blank_list<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
+    move |i| {
+        separated_list0(
+            char(','),
+            map(de_sp(opt(expr(ctx))), |expr| {
+                expr.unwrap_or_else(|| Expr::String(ctx.interner.get_or_intern_static("")))
+            }),
+        )(i)
+    }
+}
+
 pub fn expr_list<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Option<Expr>>> + 'c {
-    move |i| separated_list0(char(','), de_sp(opt(expr(ctx))))(i)
+    move |i| map(separated_list0(char(','), de_sp(opt(expr(ctx)))), |list| {
+        if matches!(list.as_slice(), &[None]) {
+            // No arg
+            Vec::new()
+        } else {
+            list
+        }
+    })(i)
 }
 
 pub fn call_arg_list<'c, 'a>(

@@ -510,14 +510,12 @@ mod body {
                     PrintList(
                         NEWLINE,
                         [
-                            Some(
-                                Var(
-                                    Variable {
-                                        var: COUNT,
-                                        func_extern: None,
-                                        args: [],
-                                    },
-                                ),
+                            Var(
+                                Variable {
+                                    var: COUNT,
+                                    func_extern: None,
+                                    args: [],
+                                },
                             ),
                         ],
                     ),
@@ -961,7 +959,7 @@ mod body {
         Print(
             NEWLINE | WAIT,
             FormText(
-                {Method(조사처리, [Some(Var(Variable { var: CALLNAME, func_extern: None, args: [Method(GET_CHARA_M, [None])] })), Some(String(와))])} 같이 온 걸 보니, 단단히 각오하고 온 것 같다,
+                {Method(조사처리, [Some(Var(Variable { var: CALLNAME, func_extern: None, args: [Method(GET_CHARA_M, [])] })), Some(String(와))])} 같이 온 걸 보니, 단단히 각오하고 온 것 같다,
             ),
         ),
         ScriptPosition {
@@ -2301,14 +2299,12 @@ Function {
             PrintList(
                 (empty),
                 [
-                    Some(
-                        Var(
-                            Variable {
-                                var: FOO,
-                                func_extern: None,
-                                args: [],
-                            },
-                        ),
+                    Var(
+                        Variable {
+                            var: FOO,
+                            func_extern: None,
+                            args: [],
+                        },
                     ),
                 ],
             ),
@@ -2988,9 +2984,7 @@ mod program {
                     None,
                     Method(
                         BAR,
-                        [
-                            None,
-                        ],
+                        [],
                     ),
                 ),
                 ScriptPosition {
