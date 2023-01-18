@@ -181,8 +181,7 @@ impl Compiler {
             }
             Expr::Method(name, args) => {
                 let count = self.push_opt_list(args, |idx, out| {
-                    log::error!("TODO: default arg for {name}:{idx}");
-                    out.push(Instruction::load_int(0));
+                    out.push(Instruction::load_default_argument(idx as u32));
                     Ok(())
                 })?;
                 self.push(Instruction::load_str(name));
@@ -570,8 +569,7 @@ impl Compiler {
                 is_method,
             } => {
                 let count = self.push_opt_list(args, |idx, out| {
-                    log::error!("TODO: {name:?}({idx})");
-                    out.push(Instruction::load_int(0));
+                    out.push(Instruction::load_default_argument(idx as u32));
                     Ok(())
                 })?;
                 self.push_expr(name)?;

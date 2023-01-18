@@ -398,6 +398,8 @@ pub(super) fn run_instruction(
         run_builtin_method(meth, func_name, tx, ctx)?;
     } else if let Some(com) = inst.as_builtin_command() {
         return run_builtin_command(com, vm, tx, ctx);
+    } else if let Some(idx) = inst.as_load_default_argument() {
+        bail!("Unimplemented instruction: LoadDefaultArgument({idx})");
     } else {
         if !inst.is_nop() && !inst.is_debug() {
             bail!("Unimplemented instruction: {inst:?}");

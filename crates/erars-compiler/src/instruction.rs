@@ -136,6 +136,8 @@ enum InstructionType {
     UnaryOperator = 57,
     SetAlignment = 58,
 
+    LoadDefaultArgument = 100,
+
     Debug = 255,
 }
 
@@ -178,6 +180,7 @@ define_instruction! {
     (goto, Goto),
     (goto_if_not, GotoIfNot),
     (goto_if, GotoIf),
+    (load_default_argument, LoadDefaultArgument),
 
     @StrKey,
     (load_str, LoadStr),
