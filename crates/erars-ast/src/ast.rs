@@ -179,7 +179,15 @@ pub struct FormExpr {
 
 impl fmt::Debug for FormExpr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.expr)
+        write!(f, "{:?}", self.expr)?;
+        if let Some(padding) = self.padding.as_ref() {
+            write!(f, "(pad: {padding:?})")?;
+        }
+        if let Some(align) = self.align.as_ref() {
+            write!(f, "(align: {align:?})")?;
+        }
+
+        Ok(())
     }
 }
 

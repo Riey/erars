@@ -12,7 +12,7 @@ use nom::{
     combinator::{eof, map, opt, value},
     error::{context, ErrorKind, VerboseError},
     error_position,
-    multi::{separated_list0, separated_list1},
+    multi::{many0, separated_list0, separated_list1},
     number::complete::float,
     sequence::{delimited, pair, preceded, terminated, tuple},
     Parser,
@@ -229,12 +229,14 @@ pub fn form_str<'c, 'a>(
                     let ban_percent = ctx.ban_percent.get();
                     ctx.ban_percent.set(true);
                     let (i, ex) = expr(ctx)(i)?;
-                    let (i, padding) = opt(preceded(char_sp(','), expr(ctx)))(i)?;
+                    let (i, padding) = opt(preceded(char_sp(','), opt(expr(ctx))))(i)?;
                     let (i, align) = if padding.is_some() {
                         opt(preceded(char_sp(','), alignment))(i)?
                     } else {
                         (i, None)
                     };
+                    let padding = padding.flatten();
+                    let (i, _) = opt(many0(char_sp(',')))(i)?;
                     let (i, _) = preceded(sp, char('%'))(i)?;
                     ctx.ban_percent.set(ban_percent);
 
@@ -242,12 +244,14 @@ pub fn form_str<'c, 'a>(
                 }
                 Some(FormType::Brace) => {
                     let (i, ex) = expr(ctx)(i)?;
-                    let (i, padding) = opt(preceded(char_sp(','), expr(ctx)))(i)?;
+                    let (i, padding) = opt(preceded(char_sp(','), opt(expr(ctx))))(i)?;
                     let (i, align) = if padding.is_some() {
                         opt(preceded(char_sp(','), alignment))(i)?
                     } else {
                         (i, None)
                     };
+                    let padding = padding.flatten();
+                    let (i, _) = opt(many0(char_sp(',')))(i)?;
                     let (i, _) = preceded(sp, char('}'))(i)?;
 
                     (i, ex, padding, align)

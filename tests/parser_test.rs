@@ -40,7 +40,7 @@ mod body {
         Print(
             NEWLINE,
             FormText(
-                {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
+                {Var(Variable { var: LOCALS, func_extern: None, args: [] })(pad: Int(12))(align: Center)},
             ),
         ),
         ScriptPosition {
@@ -51,7 +51,7 @@ mod body {
         Print(
             NEWLINE,
             FormText(
-                {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
+                {Var(Variable { var: LOCALS, func_extern: None, args: [] })(pad: Int(12))},
             ),
         ),
         ScriptPosition {
@@ -504,6 +504,17 @@ mod body {
         ),
         ScriptPosition {
             line: 2,
+        },
+    ),
+    StmtWithPos(
+        Print(
+            (empty),
+            FormText(
+                {Var(Variable { var: ARGS, func_extern: None, args: [] })} {Var(Variable { var: ARGS, func_extern: None, args: [] })(align: Right)},
+            ),
+        ),
+        ScriptPosition {
+            line: 3,
         },
     ),
 ]
@@ -1559,7 +1570,6 @@ mod body {
                         2,
                     ),
                 ),
-                None,
             ],
             is_jump: false,
             is_method: false,
@@ -2005,7 +2015,6 @@ Method(
                 2,
             ),
         ),
-        None,
     ],
 )
 "
