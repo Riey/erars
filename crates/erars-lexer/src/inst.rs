@@ -1,3 +1,5 @@
+// Originally copied from Emuera 1824
+
 #[allow(non_camel_case_types)]
 #[derive(
     strum::Display,
@@ -58,6 +60,7 @@ pub enum InstructionCode {
     GETNUM,
     GETEXPLV,
     GETPALAMLV,
+    GETCONFIGS,
     GETCONFIG,
 
     PUTFORM, //@SAVEINFO関数でのみ使用可能。PRINTFORMと同様の書式でセーブデータに概要をつける。
@@ -85,9 +88,9 @@ pub enum InstructionCode {
     JUMP, //関数に移動
     CALLEVENT,
     CALL,       //関数に移動。移動元を記憶し、RETURNで帰る。
-    RETURN, //__INT_EXPRESSION__,//関数の終了。RESULTに整数を格納可能。省略した場合、０。(次の@～～がRETURNと見なされる。)
     RETURNFORM, //__FORM_STR__,//関数の終了。RESULTに整数を格納可能。省略した場合、０。(次の@～～がRETURNと見なされる。)
     RETURNF,
+    RETURN, //__INT_EXPRESSION__,//関数の終了。RESULTに整数を格納可能。省略した場合、０。(次の@～～がRETURNと見なされる。)
     RESTART, //関数の再開。関数の最初に戻る。
 
     STRLEN,
@@ -108,7 +111,9 @@ pub enum InstructionCode {
     LOADDATA,
     CHKDATA,
     DELDATA,
+    GETTIMES,
     GETTIME, //2つに代入する必要があるので__METHOD__化できない
+    LOADTEXT,
 
     TRYJUMP,
     TRYCALL,
@@ -300,7 +305,6 @@ pub enum InstructionCode {
     TOFULL,
     ISNUMERIC,
 
-    GETTIMES,
     GETMILLISECOND,
     GETSECOND,
     CURRENTALIGN,
@@ -310,7 +314,12 @@ pub enum InstructionCode {
     CHKCHARADATA,
     FIND_CHARADATA,
     EXISTCSV,
-    GETCONFIGS,
+
+    GDISPOSE,
+    GCLEAR,
+    GCREATE,
+    SPRITECREATE,
+    SPRITEDISPOSE,
 
     CSVNAME,
     CSVCALLNAME,
