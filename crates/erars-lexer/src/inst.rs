@@ -230,6 +230,7 @@ pub enum InstructionCode {
     ARRAYREMOVE,
     ARRAYMOVE,
     ARRAYSORT,
+    ARRAYMSORT,
     ARRAYCOPY,
 
     REPLACE,
