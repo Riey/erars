@@ -7,9 +7,9 @@ use erars_ast::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{escaped_transform, is_not, tag, take_while, take_while1},
+    bytes::complete::{tag, take_while, take_while1},
     character::complete::*,
-    combinator::{eof, map, opt, success, value},
+    combinator::{eof, map, opt, value},
     error::{context, ErrorKind, VerboseError},
     error_position,
     multi::{separated_list0, separated_list1},
@@ -65,17 +65,32 @@ fn ident_or_macro<'c, 'a>(ctx: &'c ParserContext, i: &'a str) -> IResult<'a, Cow
     Ok((i, ctx.replace(ident)))
 }
 
-fn parse_str<'a>(i: &'a str) -> IResult<'a, String> {
-    escaped_transform(
-        is_not(r#"\""#),
-        '\\',
-        alt((
-            value("\\", char('\\')),
-            value("\"", char('"')),
-            value("\n", char('n')),
-            value("\t", char('t')),
-        )),
-    )(i)
+fn parse_str_inner<'a>(i: &'a str) -> IResult<'a, String> {
+    let mut chars = i.chars();
+    let mut ret = String::new();
+
+    macro_rules! next_ch {
+        () => {
+            match chars.next() {
+                Some(ch) => ch,
+                None => return Err(nom::Err::Error(error_position!(i, ErrorKind::Escaped))),
+            }
+        };
+    }
+
+    loop {
+        match next_ch!() {
+            '\\' => match next_ch!() {
+                'n' => ret.push('\n'),
+                't' => ret.push('\t'),
+                ch => ret.push(ch),
+            },
+            '"' => {
+                break Ok((chars.as_str(), ret));
+            }
+            ch => ret.push(ch),
+        }
+    }
 }
 
 fn alignment<'a>(i: &'a str) -> IResult<'a, Alignment> {
@@ -258,14 +273,7 @@ pub fn form_str<'c, 'a>(
 }
 
 fn string<'a>(i: &'a str) -> IResult<'a, String> {
-    context(
-        "string",
-        delimited(
-            char('\"'),
-            alt((parse_str, success(String::new()))),
-            char('\"'),
-        ),
-    )(i)
+    context("string", preceded(char('\"'), parse_str_inner))(i)
 }
 
 fn paran_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
