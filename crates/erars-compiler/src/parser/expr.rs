@@ -7,7 +7,7 @@ use erars_ast::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while, take_while1},
+    bytes::complete::{tag, take_while, take_while1, tag_no_case},
     character::complete::*,
     combinator::{eof, map, opt, value},
     error::{context, ErrorKind, VerboseError},
@@ -446,14 +446,14 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                 // cond form string
                 preceded(tag("\\@"), form_str_cond_form(ctx)),
                 map(string, |s| Expr::str(&ctx.interner, s)),
-                map(preceded(tag("0x"), hex_digit1), |s| {
+                map(preceded(tag_no_case("0x"), hex_digit1), |s| {
                     Expr::Int(i64::from_str_radix(s, 16).unwrap())
                 }),
-                map(preceded(tag("0o"), oct_digit1), |s| {
+                map(preceded(tag_no_case("0o"), oct_digit1), |s| {
                     Expr::Int(i64::from_str_radix(s, 8).unwrap())
                 }),
                 map(
-                    preceded(tag("0b"), take_while1(|c| matches!(c, '0' | '1'))),
+                    preceded(tag_no_case("0b"), take_while1(|c| matches!(c, '0' | '1'))),
                     |s| Expr::Int(i64::from_str_radix(s, 2).unwrap()),
                 ),
                 map(pair(terminated(i64, char('p')), i64), |(l, r)| {
