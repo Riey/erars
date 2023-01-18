@@ -447,6 +447,14 @@ mod body {
     }
 
     #[test]
+    fn test_empty_arg() {
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/bodys/empty_arg.erb"#,
+            ParserContext::parse_body_str
+        ));
+    }
+
+    #[test]
     fn test_for() {
         k9::snapshot!(
             do_test(
