@@ -1075,7 +1075,7 @@ impl ParserContext {
                     Stmt::Print(flags, s)
                 }
                 PrintType::V => {
-                    let (_, s) = try_nom!(pp, self::expr::expr_list(self)(form));
+                    let (_, s) = try_nom!(pp, self::expr::expr_or_blank_list(self)(form));
                     Stmt::PrintList(flags, s)
                 }
             },

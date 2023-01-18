@@ -24,7 +24,7 @@ pub enum Stmt {
         value: Expr,
     },
     Print(PrintFlags, Expr),
-    PrintList(PrintFlags, Vec<Option<Expr>>),
+    PrintList(PrintFlags, Vec<Expr>),
     PrintFormS(PrintFlags, Expr),
     PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
     ReuseLastLine(StrKey),

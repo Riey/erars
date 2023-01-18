@@ -1,7 +1,7 @@
 use crate::{CompileError, CompileResult, Instruction};
 use erars_ast::{
-    BinaryOperator, BuiltinVariable, Expr, FormExpr, FormText, Function, FunctionHeader,
-    SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable,
+    BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, Expr, FormExpr, FormText,
+    Function, FunctionHeader, SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable,
 };
 use hashbrown::HashMap;
 
@@ -53,12 +53,15 @@ impl Compiler {
     fn push_opt_list(
         &mut self,
         args: impl IntoIterator<IntoIter = impl ExactSizeIterator + IntoIterator<Item = Option<Expr>>>,
-        empty_arg: impl Fn(usize) -> Expr,
+        empty_arg: impl Fn(usize, &mut Vec<Instruction>) -> CompileResult<()>,
     ) -> CompileResult<u32> {
         let args = args.into_iter();
         let len = args.len();
         for (idx, arg) in args.into_iter().enumerate() {
-            self.push_expr(arg.unwrap_or_else(|| empty_arg(idx)))?;
+            match arg {
+                Some(arg) => self.push_expr(arg)?,
+                None => empty_arg(idx, &mut self.out)?,
+            }
         }
         Ok(len as u32)
     }
@@ -109,10 +112,7 @@ impl Compiler {
                 self.push(Instruction::builtin_var(var));
             }
             Expr::BuiltinMethod(meth, args) => {
-                let c = self.push_opt_list(args, |idx| {
-                    log::error!("TODO: default arg for {meth}:{idx}");
-                    Expr::Int(0)
-                })?;
+                let c = self.push_opt_list(args, |idx, out| default_arg_method(meth, idx, out))?;
                 self.push(Instruction::load_int(c as i32));
                 self.push(Instruction::builtin_method(meth));
             }
@@ -174,9 +174,10 @@ impl Compiler {
                 self.insert(true_end, Instruction::goto(self.current_no()));
             }
             Expr::Method(name, args) => {
-                let count = self.push_opt_list(args, |idx| {
+                let count = self.push_opt_list(args, |idx, out| {
                     log::error!("TODO: default arg for {name}:{idx}");
-                    Expr::Int(0)
+                    out.push(Instruction::load_int(0));
+                    Ok(())
                 })?;
                 self.push(Instruction::load_str(name));
                 self.push(Instruction::call(count));
@@ -368,7 +369,7 @@ impl Compiler {
                 self.push(Instruction::print(flags));
             }
             Stmt::PrintList(flags, args) => {
-                let count = self.push_opt_list(args, |_| Expr::String(StrKey::new("")))?;
+                let count = self.push_list(args)?;
                 self.push(Instruction::concat_string(count));
                 self.push(Instruction::print(flags));
             }
@@ -561,9 +562,10 @@ impl Compiler {
                 is_jump,
                 is_method,
             } => {
-                let count = self.push_opt_list(args, |idx| {
+                let count = self.push_opt_list(args, |idx, out| {
                     log::error!("TODO: {name:?}({idx})");
-                    Expr::Int(0)
+                    out.push(Instruction::load_int(0));
+                    Ok(())
                 })?;
                 self.push_expr(name)?;
 
@@ -629,18 +631,14 @@ impl Compiler {
                 self.push(Instruction::set_aligment(align));
             }
             Stmt::Command(command, args) => {
-                let count = self.push_opt_list(args, |idx| {
-                    log::error!("TODO: {command}({idx})");
-                    Expr::Int(0)
-                })?;
+                let count =
+                    self.push_opt_list(args, |idx, out| default_arg_command(command, idx, out))?;
                 self.push(Instruction::load_int(count as i32));
                 self.push(Instruction::builtin_command(command));
             }
             Stmt::Method(meth, args) => {
-                let count = self.push_opt_list(args, |idx| {
-                    log::error!("TODO: {meth}({idx})");
-                    Expr::Int(0)
-                })?;
+                let count =
+                    self.push_opt_list(args, |idx, out| default_arg_method(meth, idx, out))?;
                 self.push(Instruction::load_int(count as i32));
                 self.push(Instruction::builtin_method(meth));
                 self.push(Instruction::store_result());
@@ -711,4 +709,24 @@ pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
         goto_labels: compiler.goto_labels,
         body: compiler.out.into_boxed_slice(),
     })
+}
+
+fn default_arg_method(
+    method: BuiltinMethod,
+    idx: usize,
+    out: &mut Vec<Instruction>,
+) -> CompileResult<()> {
+    match method {
+        _ => Err(CompileError::NoArgumentForMethod(method, idx)),
+    }
+}
+
+fn default_arg_command(
+    command: BuiltinCommand,
+    idx: usize,
+    out: &mut Vec<Instruction>,
+) -> CompileResult<()> {
+    match command {
+        _ => Err(CompileError::NoArgumentForCommand(command, idx)),
+    }
 }

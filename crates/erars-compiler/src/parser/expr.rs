@@ -618,14 +618,16 @@ pub fn expr_or_blank_list<'c, 'a>(
 pub fn expr_list<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Option<Expr>>> + 'c {
-    move |i| map(separated_list0(char(','), de_sp(opt(expr(ctx)))), |list| {
-        if matches!(list.as_slice(), &[None]) {
-            // No arg
-            Vec::new()
-        } else {
-            list
-        }
-    })(i)
+    move |i| {
+        map(separated_list0(char(','), de_sp(opt(expr(ctx)))), |list| {
+            if matches!(list.as_slice(), &[None]) {
+                // No arg
+                Vec::new()
+            } else {
+                list
+            }
+        })(i)
+    }
 }
 
 pub fn call_arg_list<'c, 'a>(
