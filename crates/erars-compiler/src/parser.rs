@@ -4,8 +4,8 @@ mod expr;
 use anyhow::{bail, Context};
 use erars_ast::{
     get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos,
-    Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, Stmt, StmtWithPos, StrKey,
-    UnaryOperator, Value, VariableInfo,
+    Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, ScriptPosition, Stmt,
+    StmtWithPos, StrKey, UnaryOperator, Value, VariableInfo,
 };
 use erars_lexer::{
     Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor, PrintType, SharpCode,
@@ -1599,6 +1599,7 @@ impl ParserContext {
         pp: &mut Preprocessor<'s>,
         b: &mut Bump,
     ) -> ParserResult<Vec<CompiledFunction>> {
+        let s = pp.left_text();
         let mut out = Vec::with_capacity(1024);
 
         match pp.next_line(b)? {
@@ -1648,7 +1649,10 @@ impl ParserContext {
                         Some(line) => {
                             let stmt = self.parse_stmt(line, pp, b)?;
                             if let Err(err) = compiler.push_stmt_with_pos(stmt) {
-                                error!(pp.span(), err.to_string());
+                                let line =
+                                    s.lines().nth(compiler.current_pos().line as usize).unwrap();
+                                let diff = line.as_ptr() as usize - s.as_ptr() as usize;
+                                error!(dbg!(diff..diff + line.len()), err.to_string());
                             }
                         }
                     }

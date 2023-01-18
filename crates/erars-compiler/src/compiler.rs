@@ -1,7 +1,9 @@
+use std::ops::Range;
+
 use crate::{CompileError, CompileResult, Instruction};
 use erars_ast::{
     BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, Expr, FormExpr, FormText,
-    Function, FunctionHeader, SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable,
+    Function, FunctionHeader, SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable, ScriptPosition,
 };
 use hashbrown::HashMap;
 
@@ -17,6 +19,7 @@ pub struct Compiler {
     pub goto_labels: HashMap<StrKey, u32>,
     pub continue_marks: Vec<Vec<u32>>,
     pub break_marks: Vec<Vec<u32>>,
+    current_pos: ScriptPosition,
 }
 
 impl Compiler {
@@ -26,7 +29,12 @@ impl Compiler {
             goto_labels: HashMap::new(),
             continue_marks: Vec::new(),
             break_marks: Vec::new(),
+            current_pos: ScriptPosition::default(),
         }
+    }
+
+    pub fn current_pos(&self) -> ScriptPosition {
+        self.current_pos
     }
 
     fn push(&mut self, inst: Instruction) {
@@ -346,6 +354,7 @@ impl Compiler {
     #[inline]
     pub fn push_stmt_with_pos(&mut self, stmt: StmtWithPos) -> CompileResult<()> {
         self.push(Instruction::report_position(stmt.1));
+        self.current_pos = stmt.1;
         self.push_stmt(stmt.0)
     }
 

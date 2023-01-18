@@ -212,6 +212,10 @@ impl<'s> Preprocessor<'s> {
         }
     }
 
+    pub fn left_text(&self) -> &'s str {
+        self.s
+    }
+
     fn current_pos(&self) -> usize {
         self.start_len - self.s.len()
     }

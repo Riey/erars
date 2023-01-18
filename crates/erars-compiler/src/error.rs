@@ -1,6 +1,6 @@
 use std::fmt;
 
-use erars_ast::{BuiltinCommand, BuiltinMethod};
+use erars_ast::{BuiltinCommand, BuiltinMethod, ScriptPosition};
 
 pub type ParserResult<T> = Result<T, ParserError>;
 pub type CompileResult<T> = Result<T, CompileError>;
