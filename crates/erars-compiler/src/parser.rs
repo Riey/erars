@@ -461,7 +461,10 @@ impl HeaderInfo {
             }
             Expr::BuiltinMethod(meth, args) => match meth {
                 BuiltinMethod::Unicode => {
-                    let arg = args.first().context("No argument for UNICODE method")?;
+                    let arg = args
+                        .first()
+                        .and_then(|v| v.as_ref())
+                        .context("No argument for UNICODE method")?;
                     let arg = self
                         .const_eval(arg)?
                         .try_into_int()
@@ -1094,13 +1097,13 @@ impl ParserContext {
                 macro_rules! strform_command {
                     ($com:expr) => {{
                         let args = try_nom!(pp, self::expr::normal_form_str(self)(args)).1;
-                        Stmt::Command($com, vec![args])
+                        Stmt::Command($com, vec![Some(args)])
                     }};
                 }
                 macro_rules! strform_method {
                     ($meth:expr) => {{
                         let args = try_nom!(pp, self::expr::normal_form_str(self)(args)).1;
-                        Stmt::Method($meth, vec![args])
+                        Stmt::Method($meth, vec![Some(args)])
                     }};
                 }
                 match inst {
@@ -1129,7 +1132,7 @@ impl ParserContext {
                     DRAWLINEFORM => strform_command!(BuiltinCommand::CustomDrawLine),
                     CUSTOMDRAWLINE => Stmt::Command(
                         BuiltinCommand::CustomDrawLine,
-                        vec![Expr::str(self.interner, args.trim_start())],
+                        vec![Some(Expr::str(self.interner, args.trim_start()))],
                     ),
                     ALIGNMENT => match args.trim().parse() {
                         Ok(align) => Stmt::Alignment(align),
@@ -1487,7 +1490,10 @@ impl ParserContext {
                         log::warn!("{inst} is not yet implemented this line will occur error when executed.");
                         Stmt::Command(
                             BuiltinCommand::Throw,
-                            vec![Expr::str(self.interner, format!("[compiler] TODO: {inst}"))],
+                            vec![Some(Expr::str(
+                                self.interner,
+                                format!("[compiler] TODO: {inst}"),
+                            ))],
                         )
                     }
                 }

@@ -24,7 +24,7 @@ pub enum Stmt {
         value: Expr,
     },
     Print(PrintFlags, Expr),
-    PrintList(PrintFlags, Vec<Expr>),
+    PrintList(PrintFlags, Vec<Option<Expr>>),
     PrintFormS(PrintFlags, Expr),
     PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
     ReuseLastLine(StrKey),
@@ -38,7 +38,7 @@ pub enum Stmt {
     },
     Call {
         name: Expr,
-        args: Vec<Expr>,
+        args: Vec<Option<Expr>>,
         is_jump: bool,
         is_method: bool,
 
@@ -53,8 +53,8 @@ pub enum Stmt {
     For(Variable, Box<(Expr, Expr, Expr)>, Vec<StmtWithPos>),
     Continue,
     Break,
-    Command(BuiltinCommand, Vec<Expr>),
-    Method(BuiltinMethod, Vec<Expr>),
+    Command(BuiltinCommand, Vec<Option<Expr>>),
+    Method(BuiltinMethod, Vec<Option<Expr>>),
     Alignment(Alignment),
 }
 
@@ -108,8 +108,8 @@ pub enum Expr {
     FormText(FormText),
     Var(Variable),
     BuiltinVar(BuiltinVariable, Vec<Self>),
-    Method(StrKey, Vec<Self>),
-    BuiltinMethod(BuiltinMethod, Vec<Self>),
+    Method(StrKey, Vec<Option<Self>>),
+    BuiltinMethod(BuiltinMethod, Vec<Option<Self>>),
     UnaryopExpr(Box<Self>, UnaryOperator),
     /// ++/-- var ++/--
     IncOpExpr {

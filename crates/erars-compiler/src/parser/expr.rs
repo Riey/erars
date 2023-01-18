@@ -302,10 +302,7 @@ fn ident_or_method_expr<'c, 'a>(
             let a = ctx.is_arg.get();
             ctx.ban_percent.set(false);
             ctx.is_arg.set(false);
-            let (i, args) = terminated(
-                separated_list0(char_sp(','), expr(ctx)),
-                pair(opt(char_sp(',')), char_sp(')')),
-            )(i)?;
+            let (i, args) = terminated(expr_list(ctx), char_sp(')'))(i)?;
             ctx.ban_percent.set(p);
             ctx.is_arg.set(a);
 
@@ -607,30 +604,19 @@ pub fn expr_pair<'c, 'a>(
 
 pub fn expr_list<'c, 'a>(
     ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
-    move |i| separated_list0(char(','), de_sp(expr(ctx)))(i)
-}
-
-pub fn opt_expr_list<'c, 'a>(
-    ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
-    move |i| {
-        separated_list0(
-            char(','),
-            de_sp(map(opt(expr(ctx)), |v| v.unwrap_or(Expr::Int(0)))),
-        )(i)
-    }
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<Option<Expr>>> + 'c {
+    move |i| separated_list0(char(','), de_sp(opt(expr(ctx))))(i)
 }
 
 pub fn call_arg_list<'c, 'a>(
     ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, Vec<Expr>> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, Vec<Option<Expr>>> + 'c {
     move |i| {
         preceded(
             sp,
             alt((
-                de_char_sp('(', opt_expr_list(ctx), ')'),
-                preceded(char_sp(','), opt_expr_list(ctx)),
+                de_char_sp('(', expr_list(ctx), ')'),
+                preceded(char_sp(','), expr_list(ctx)),
                 value(Vec::new(), eof),
             )),
         )(i)
@@ -640,7 +626,7 @@ pub fn call_arg_list<'c, 'a>(
 pub fn call_jump_line<'c, 'a>(
     ctx: &'c ParserContext,
     is_form: bool,
-) -> impl FnMut(&'a str) -> IResult<'a, (Expr, Vec<Expr>)> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, (Expr, Vec<Option<Expr>>)> + 'c {
     move |i| {
         context("call_jump_line", move |i| {
             let (i, name) = if is_form {
@@ -694,16 +680,16 @@ pub fn for_line<'c, 'a>(
         let (i, mut exprs) = expr_list(ctx)(i)?;
         match exprs.len() {
             3 => {
-                let end = exprs.pop().unwrap();
-                let init = exprs.pop().unwrap();
-                let var = exprs.pop().unwrap().into_var().unwrap();
+                let end = exprs.pop().unwrap().expect("Empty for");
+                let init = exprs.pop().unwrap().expect("Empty for");
+                let var = exprs.pop().unwrap().expect("Empty for").into_var().unwrap();
                 Ok((i, (var, init, end, Expr::int(1))))
             }
             4 => {
-                let step = exprs.pop().unwrap();
-                let end = exprs.pop().unwrap();
-                let init = exprs.pop().unwrap();
-                let var = exprs.pop().unwrap().into_var().unwrap();
+                let step = exprs.pop().unwrap().expect("Empty for");
+                let end = exprs.pop().unwrap().expect("Empty for");
+                let init = exprs.pop().unwrap().expect("Empty for");
+                let var = exprs.pop().unwrap().expect("Empty for").into_var().unwrap();
                 Ok((i, (var, init, end, step)))
             }
             other => {
@@ -759,7 +745,7 @@ pub fn sortchara_line<'c, 'a>(
             i,
             Stmt::Command(
                 BuiltinCommand::SortChara,
-                vec![Expr::Var(var), Expr::int(forward)],
+                vec![Some(Expr::Var(var)), Some(Expr::int(forward))],
             ),
         ))
     }

@@ -50,6 +50,19 @@ impl Compiler {
             .unwrap_or_else(|| unreachable!("Invalid mark {}", mark)) = inst;
     }
 
+    fn push_opt_list(
+        &mut self,
+        args: impl IntoIterator<IntoIter = impl ExactSizeIterator + IntoIterator<Item = Option<Expr>>>,
+        empty_arg: impl Fn(usize) -> Expr,
+    ) -> CompileResult<u32> {
+        let args = args.into_iter();
+        let len = args.len();
+        for (idx, arg) in args.into_iter().enumerate() {
+            self.push_expr(arg.unwrap_or_else(|| empty_arg(idx)))?;
+        }
+        Ok(len as u32)
+    }
+
     fn push_list(
         &mut self,
         args: impl IntoIterator<IntoIter = impl ExactSizeIterator + IntoIterator<Item = Expr>>,
@@ -96,7 +109,10 @@ impl Compiler {
                 self.push(Instruction::builtin_var(var));
             }
             Expr::BuiltinMethod(meth, args) => {
-                let c = self.push_list(args)?;
+                let c = self.push_opt_list(args, |idx| {
+                    log::error!("TODO: default arg for {meth}:{idx}");
+                    Expr::Int(0)
+                })?;
                 self.push(Instruction::load_int(c as i32));
                 self.push(Instruction::builtin_method(meth));
             }
@@ -158,7 +174,10 @@ impl Compiler {
                 self.insert(true_end, Instruction::goto(self.current_no()));
             }
             Expr::Method(name, args) => {
-                let count = self.push_list(args)?;
+                let count = self.push_opt_list(args, |idx| {
+                    log::error!("TODO: default arg for {name}:{idx}");
+                    Expr::Int(0)
+                })?;
                 self.push(Instruction::load_str(name));
                 self.push(Instruction::call(count));
             }
@@ -349,7 +368,7 @@ impl Compiler {
                 self.push(Instruction::print(flags));
             }
             Stmt::PrintList(flags, args) => {
-                let count = self.push_list(args)?;
+                let count = self.push_opt_list(args, |_| Expr::String(StrKey::new("")))?;
                 self.push(Instruction::concat_string(count));
                 self.push(Instruction::print(flags));
             }
@@ -542,7 +561,10 @@ impl Compiler {
                 is_jump,
                 is_method,
             } => {
-                let count = self.push_list(args)?;
+                let count = self.push_opt_list(args, |idx| {
+                    log::error!("TODO: {name:?}({idx})");
+                    Expr::Int(0)
+                })?;
                 self.push_expr(name)?;
 
                 if let Some(catch) = catch {
@@ -607,12 +629,18 @@ impl Compiler {
                 self.push(Instruction::set_aligment(align));
             }
             Stmt::Command(command, args) => {
-                let count = self.push_list(args)?;
+                let count = self.push_opt_list(args, |idx| {
+                    log::error!("TODO: {command}({idx})");
+                    Expr::Int(0)
+                })?;
                 self.push(Instruction::load_int(count as i32));
                 self.push(Instruction::builtin_command(command));
             }
             Stmt::Method(meth, args) => {
-                let count = self.push_list(args)?;
+                let count = self.push_opt_list(args, |idx| {
+                    log::error!("TODO: {meth}({idx})");
+                    Expr::Int(0)
+                })?;
                 self.push(Instruction::load_int(count as i32));
                 self.push(Instruction::builtin_method(meth));
                 self.push(Instruction::store_result());

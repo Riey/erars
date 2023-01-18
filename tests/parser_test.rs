@@ -231,7 +231,7 @@ mod body {
             },
             None,
             FormText(
-                {Var(Variable { var: LOCAL, func_extern: None, args: [Int(0)] })}.{BuiltinMethod(ToStr, [Var(Variable { var: LOCAL, func_extern: None, args: [Int(1)] }), String(00)])},
+                {Var(Variable { var: LOCAL, func_extern: None, args: [Int(0)] })}.{BuiltinMethod(ToStr, [Some(Var(Variable { var: LOCAL, func_extern: None, args: [Int(1)] })), Some(String(00))])},
             ),
         ),
         ScriptPosition {
@@ -303,16 +303,18 @@ mod body {
                     BuiltinMethod(
                         ToInt,
                         [
-                            Var(
-                                Variable {
-                                    var: CHOICES,
-                                    func_extern: None,
-                                    args: [
-                                        Int(
-                                            1,
-                                        ),
-                                    ],
-                                },
+                            Some(
+                                Var(
+                                    Variable {
+                                        var: CHOICES,
+                                        func_extern: None,
+                                        args: [
+                                            Int(
+                                                1,
+                                            ),
+                                        ],
+                                    },
+                                ),
                             ),
                         ],
                     ),
@@ -336,7 +338,7 @@ mod body {
             },
             None,
             FormText(
-                -{Method(조사처리, [Var(Variable { var: CALLNAME, func_extern: None, args: [BuiltinMethod(ToInt, [Var(Variable { var: CHOICES, func_extern: None, args: [Int(1)] })])] }), String(이)])} 기억하고 있는 아르카나의 목록-,
+                -{Method(조사처리, [Some(Var(Variable { var: CALLNAME, func_extern: None, args: [BuiltinMethod(ToInt, [Some(Var(Variable { var: CHOICES, func_extern: None, args: [Int(1)] }))])] })), Some(String(이))])} 기억하고 있는 아르카나의 목록-,
             ),
         ),
         ScriptPosition {
@@ -362,22 +364,28 @@ mod body {
                 FOO,
             ),
             args: [
-                Int(
-                    123,
+                Some(
+                    Int(
+                        123,
+                    ),
                 ),
-                Var(
-                    Variable {
-                        var: A,
-                        func_extern: None,
-                        args: [
-                            Int(
-                                634,
-                            ),
-                        ],
-                    },
+                Some(
+                    Var(
+                        Variable {
+                            var: A,
+                            func_extern: None,
+                            args: [
+                                Int(
+                                    634,
+                                ),
+                            ],
+                        },
+                    ),
                 ),
-                String(
-                    123,
+                Some(
+                    String(
+                        123,
+                    ),
                 ),
             ],
             is_jump: false,
@@ -407,8 +415,10 @@ mod body {
         Command(
             CustomDrawLine,
             [
-                String(
-                    =,
+                Some(
+                    String(
+                        =,
+                    ),
                 ),
             ],
         ),
@@ -451,7 +461,21 @@ mod body {
         k9::snapshot!(do_test(
             r#"tests/parse_tests/bodys/empty_arg.erb"#,
             ParserContext::parse_body_str
-        ));
+        ), "
+[
+    StmtWithPos(
+        Print(
+            NEWLINE | WAIT | DEFAULT_COLOR,
+            FormText(
+                에이키는 약간 부끄러운 듯이 {Method(조사처리, [Some(Method(SLIT, [None, Some(Int(1))])), Some(String(를))])} 가리켰다,
+            ),
+        ),
+        ScriptPosition {
+            line: 1,
+        },
+    ),
+]
+");
     }
 
     #[test]
@@ -486,12 +510,14 @@ mod body {
                     PrintList(
                         NEWLINE,
                         [
-                            Var(
-                                Variable {
-                                    var: COUNT,
-                                    func_extern: None,
-                                    args: [],
-                                },
+                            Some(
+                                Var(
+                                    Variable {
+                                        var: COUNT,
+                                        func_extern: None,
+                                        args: [],
+                                    },
+                                ),
                             ),
                         ],
                     ),
@@ -935,7 +961,7 @@ mod body {
         Print(
             NEWLINE | WAIT,
             FormText(
-                {Method(조사처리, [Var(Variable { var: CALLNAME, func_extern: None, args: [Method(GET_CHARA_M, [])] }), String(와)])} 같이 온 걸 보니, 단단히 각오하고 온 것 같다,
+                {Method(조사처리, [Some(Var(Variable { var: CALLNAME, func_extern: None, args: [Method(GET_CHARA_M, [None])] })), Some(String(와))])} 같이 온 걸 보니, 단단히 각오하고 온 것 같다,
             ),
         ),
         ScriptPosition {
@@ -1328,15 +1354,19 @@ mod body {
         Command(
             SortChara,
             [
-                Var(
-                    Variable {
-                        var: NO,
-                        func_extern: None,
-                        args: [],
-                    },
+                Some(
+                    Var(
+                        Variable {
+                            var: NO,
+                            func_extern: None,
+                            args: [],
+                        },
+                    ),
                 ),
-                Int(
-                    1,
+                Some(
+                    Int(
+                        1,
+                    ),
                 ),
             ],
         ),
@@ -1348,15 +1378,19 @@ mod body {
         Command(
             SortChara,
             [
-                Var(
-                    Variable {
-                        var: NO,
-                        func_extern: None,
-                        args: [],
-                    },
+                Some(
+                    Var(
+                        Variable {
+                            var: NO,
+                            func_extern: None,
+                            args: [],
+                        },
+                    ),
                 ),
-                Int(
-                    0,
+                Some(
+                    Int(
+                        0,
+                    ),
                 ),
             ],
         ),
@@ -1368,15 +1402,19 @@ mod body {
         Command(
             SortChara,
             [
-                Var(
-                    Variable {
-                        var: NAME,
-                        func_extern: None,
-                        args: [],
-                    },
+                Some(
+                    Var(
+                        Variable {
+                            var: NAME,
+                            func_extern: None,
+                            args: [],
+                        },
+                    ),
                 ),
-                Int(
-                    1,
+                Some(
+                    Int(
+                        1,
+                    ),
                 ),
             ],
         ),
@@ -1388,15 +1426,19 @@ mod body {
         Command(
             SortChara,
             [
-                Var(
-                    Variable {
-                        var: NAME,
-                        func_extern: None,
-                        args: [],
-                    },
+                Some(
+                    Var(
+                        Variable {
+                            var: NAME,
+                            func_extern: None,
+                            args: [],
+                        },
+                    ),
                 ),
-                Int(
-                    1,
+                Some(
+                    Int(
+                        1,
+                    ),
                 ),
             ],
         ),
@@ -1408,15 +1450,19 @@ mod body {
         Command(
             SortChara,
             [
-                Var(
-                    Variable {
-                        var: NAME,
-                        func_extern: None,
-                        args: [],
-                    },
+                Some(
+                    Var(
+                        Variable {
+                            var: NAME,
+                            func_extern: None,
+                            args: [],
+                        },
+                    ),
                 ),
-                Int(
-                    1,
+                Some(
+                    Int(
+                        1,
+                    ),
                 ),
             ],
         ),
@@ -1473,15 +1519,17 @@ mod body {
                 CALLFUNC,
             ),
             args: [
-                Int(
-                    1,
+                Some(
+                    Int(
+                        1,
+                    ),
                 ),
-                Int(
-                    2,
+                Some(
+                    Int(
+                        2,
+                    ),
                 ),
-                Int(
-                    0,
-                ),
+                None,
             ],
             is_jump: false,
             is_method: false,
@@ -1684,22 +1732,28 @@ Int(
 Method(
     FOO,
     [
-        Int(
-            123,
+        Some(
+            Int(
+                123,
+            ),
         ),
-        String(
-            BAR,
+        Some(
+            String(
+                BAR,
+            ),
         ),
-        Var(
-            Variable {
-                var: LOCAL,
-                func_extern: None,
-                args: [
-                    Int(
-                        123,
-                    ),
-                ],
-            },
+        Some(
+            Var(
+                Variable {
+                    var: LOCAL,
+                    func_extern: None,
+                    args: [
+                        Int(
+                            123,
+                        ),
+                    ],
+                },
+            ),
         ),
     ],
 )
@@ -1808,18 +1862,26 @@ Int(
 Method(
     test,
     [
-        String(
-            ,
+        Some(
+            String(
+                ,
+            ),
         ),
-        String(
-            123,
+        Some(
+            String(
+                123,
+            ),
         ),
-        String(
-            
-            ,
+        Some(
+            String(
+                
+                ,
+            ),
         ),
-        String(
-            \,
+        Some(
+            String(
+                \,
+            ),
         ),
     ],
 )
@@ -1838,12 +1900,17 @@ Method(
 Method(
     METHOD,
     [
-        Int(
-            1,
+        Some(
+            Int(
+                1,
+            ),
         ),
-        Int(
-            2,
+        Some(
+            Int(
+                2,
+            ),
         ),
+        None,
     ],
 )
 "
@@ -2153,15 +2220,17 @@ Function {
                     BAZ,
                 ),
                 args: [
-                    CondExpr(
-                        Int(
-                            1,
-                        ),
-                        FormText(
-                            『촉촉한 상남자』,
-                        ),
-                        FormText(
-                            『가랑비 공주』,
+                    Some(
+                        CondExpr(
+                            Int(
+                                1,
+                            ),
+                            FormText(
+                                『촉촉한 상남자』,
+                            ),
+                            FormText(
+                                『가랑비 공주』,
+                            ),
                         ),
                     ),
                 ],
@@ -2232,12 +2301,14 @@ Function {
             PrintList(
                 (empty),
                 [
-                    Var(
-                        Variable {
-                            var: FOO,
-                            func_extern: None,
-                            args: [],
-                        },
+                    Some(
+                        Var(
+                            Variable {
+                                var: FOO,
+                                func_extern: None,
+                                args: [],
+                            },
+                        ),
                     ),
                 ],
             ),
@@ -2385,59 +2456,65 @@ Function {
                 BuiltinMethod(
                     Limit,
                     [
-                        BinopExpr(
-                            Var(
-                                Variable {
-                                    var: JUEL,
-                                    func_extern: None,
-                                    args: [
-                                        Var(
-                                            Variable {
-                                                var: ARG,
-                                                func_extern: None,
-                                                args: [],
-                                            },
-                                        ),
-                                        Var(
-                                            Variable {
-                                                var: ARG,
-                                                func_extern: None,
-                                                args: [
-                                                    Int(
-                                                        1,
-                                                    ),
-                                                ],
-                                            },
-                                        ),
-                                    ],
-                                },
-                            ),
-                            Add,
-                            Var(
-                                Variable {
-                                    var: ARG,
-                                    func_extern: None,
-                                    args: [
-                                        Int(
-                                            2,
-                                        ),
-                                    ],
-                                },
-                            ),
-                        ),
-                        Int(
-                            0,
-                        ),
-                        BinopExpr(
-                            UnaryopExpr(
-                                Int(
-                                    62,
+                        Some(
+                            BinopExpr(
+                                Var(
+                                    Variable {
+                                        var: JUEL,
+                                        func_extern: None,
+                                        args: [
+                                            Var(
+                                                Variable {
+                                                    var: ARG,
+                                                    func_extern: None,
+                                                    args: [],
+                                                },
+                                            ),
+                                            Var(
+                                                Variable {
+                                                    var: ARG,
+                                                    func_extern: None,
+                                                    args: [
+                                                        Int(
+                                                            1,
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
+                                        ],
+                                    },
                                 ),
-                                Minus,
+                                Add,
+                                Var(
+                                    Variable {
+                                        var: ARG,
+                                        func_extern: None,
+                                        args: [
+                                            Int(
+                                                2,
+                                            ),
+                                        ],
+                                    },
+                                ),
                             ),
-                            Sub,
+                        ),
+                        Some(
                             Int(
-                                1,
+                                0,
+                            ),
+                        ),
+                        Some(
+                            BinopExpr(
+                                UnaryopExpr(
+                                    Int(
+                                        62,
+                                    ),
+                                    Minus,
+                                ),
+                                Sub,
+                                Int(
+                                    1,
+                                ),
                             ),
                         ),
                     ],
@@ -2513,7 +2590,7 @@ Function {
                 },
                 None,
                 FormText(
-                    {BuiltinVar(PalamName, [Var(Variable { var: ARG, func_extern: None, args: [Int(1)] })])}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [] }), NotEqual, Var(Variable { var: TARGET, func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: CALLNAME, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(BuiltinMethod(Sign, [Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] })]), Equal, Int(1)), FormText(＋), FormText(－))} {BuiltinMethod(Abs, [Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] })])},
+                    {BuiltinVar(PalamName, [Var(Variable { var: ARG, func_extern: None, args: [Int(1)] })])}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [] }), NotEqual, Var(Variable { var: TARGET, func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: CALLNAME, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(BuiltinMethod(Sign, [Some(Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] }))]), Equal, Int(1)), FormText(＋), FormText(－))} {BuiltinMethod(Abs, [Some(Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] }))])},
                 ),
             ),
             ScriptPosition {
@@ -2572,16 +2649,18 @@ Function {
                                 BuiltinMethod(
                                     Abs,
                                     [
-                                        Var(
-                                            Variable {
-                                                var: LOCAL,
-                                                func_extern: None,
-                                                args: [
-                                                    Int(
-                                                        2,
-                                                    ),
-                                                ],
-                                            },
+                                        Some(
+                                            Var(
+                                                Variable {
+                                                    var: LOCAL,
+                                                    func_extern: None,
+                                                    args: [
+                                                        Int(
+                                                            2,
+                                                        ),
+                                                    ],
+                                                },
+                                            ),
                                         ),
                                     ],
                                 ),
@@ -2637,8 +2716,10 @@ Function {
                                                     Command(
                                                         Return,
                                                         [
-                                                            Int(
-                                                                1,
+                                                            Some(
+                                                                Int(
+                                                                    1,
+                                                                ),
                                                             ),
                                                         ],
                                                     ),
@@ -2676,8 +2757,10 @@ Function {
                                                     Command(
                                                         Return,
                                                         [
-                                                            Int(
-                                                                1,
+                                                            Some(
+                                                                Int(
+                                                                    1,
+                                                                ),
                                                             ),
                                                         ],
                                                     ),
@@ -2694,8 +2777,10 @@ Function {
                                                 Command(
                                                     Return,
                                                     [
-                                                        Int(
-                                                            0,
+                                                        Some(
+                                                            Int(
+                                                                0,
+                                                            ),
                                                         ),
                                                     ],
                                                 ),
@@ -2824,8 +2909,10 @@ mod program {
                         FOO_{Int(123)},
                     ),
                     args: [
-                        Int(
-                            345,
+                        Some(
+                            Int(
+                                345,
+                            ),
                         ),
                     ],
                     is_jump: false,
@@ -2901,7 +2988,9 @@ mod program {
                     None,
                     Method(
                         BAR,
-                        [],
+                        [
+                            None,
+                        ],
                     ),
                 ),
                 ScriptPosition {
@@ -2924,8 +3013,10 @@ mod program {
                 Command(
                     ReturnF,
                     [
-                        Int(
-                            123,
+                        Some(
+                            Int(
+                                123,
+                            ),
                         ),
                     ],
                 ),
