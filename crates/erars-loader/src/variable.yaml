@@ -5,6 +5,10 @@
   # is_savedata: false
   # size: [1000]
 
+WINDOW_TITLE:
+  size: []
+  is_str: true
+
 PALAMLV:
   size: [100]
   is_savedata: true
