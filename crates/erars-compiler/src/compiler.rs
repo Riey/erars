@@ -721,11 +721,30 @@ pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
 fn default_arg_method(
     method: BuiltinMethod,
     idx: usize,
-    _out: &mut Vec<Instruction>,
+    out: &mut Vec<Instruction>,
 ) -> CompileResult<()> {
     match method {
-        _ => Err(CompileError::NoArgumentForMethod(method, idx)),
+        BuiltinMethod::FindElement | BuiltinMethod::FindLastElement => {
+            match idx {
+                2 => {
+                    out.push(Instruction::load_int(0));
+                    return Ok(());
+                }
+                3 => {
+                    let (l, r) = unsafe {
+                        std::mem::transmute(i64::MAX)
+                    };
+                    out.push(Instruction::load_int(l));
+                    out.push(Instruction::load_int_suffix(r));
+                    return Ok(());
+                }
+                _ => {}
+            }
+        }
+        _ => {}
     }
+
+    Err(CompileError::NoArgumentForMethod(method, idx))
 }
 
 fn default_arg_command(

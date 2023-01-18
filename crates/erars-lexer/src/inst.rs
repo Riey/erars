@@ -257,7 +257,7 @@ pub enum InstructionCode {
     CHKVARDATA,
     SAVECHARA,
     LOADCHARA,
-    //		CHKCHARADATA,
+    CHKCHARADATA,
     REFBYNAME,
     REF,
 
@@ -311,7 +311,6 @@ pub enum InstructionCode {
     CURRENTREDRAW,
 
     RAND,
-    CHKCHARADATA,
     FIND_CHARADATA,
     EXISTCSV,
 
