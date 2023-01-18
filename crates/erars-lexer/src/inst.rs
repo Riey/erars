@@ -113,6 +113,7 @@ pub enum InstructionCode {
     DELDATA,
     GETTIMES,
     GETTIME, //2つに代入する必要があるので__METHOD__化できない
+    SAVETEXT,
     LOADTEXT,
 
     TRYJUMP,
@@ -317,6 +318,7 @@ pub enum InstructionCode {
     GDISPOSE,
     GCLEAR,
     GCREATE,
+    GDRAWSPRITE,
     SPRITECREATE,
     SPRITEDISPOSE,
 
