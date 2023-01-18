@@ -37,6 +37,9 @@ struct Args {
 
     #[clap(long, help = "Load bytecode")]
     load: bool,
+
+    #[clap(long, help = "Turn off ERB lint")]
+    lint_off: bool,
 }
 
 fn load_font_data(source: fontdb::Source) -> egui::FontData {
@@ -134,7 +137,7 @@ fn main() {
                     let ret = if args.load {
                         unsafe { load_script(&args.target_path, system, config) }
                     } else {
-                        run_script(&args.target_path, system, config, false)
+                        run_script(&args.target_path, system, config, false, args.lint_off)
                     };
                     match ret {
                         Ok((vm, mut ctx, mut tx)) => {

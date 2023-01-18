@@ -42,6 +42,9 @@ struct Args {
 
     #[clap(long, help = "Just measure memory usage")]
     measure_memory: bool,
+
+    #[clap(long, help = "Turn off ERB lint")]
+    lint_off: bool,
 }
 
 fn main() {
@@ -90,7 +93,7 @@ fn main() {
             let (vm, mut ctx, mut tx) = if args.load {
                 unsafe { load_script(&args.target_path, system, config).unwrap() }
             } else {
-                run_script(&args.target_path, system, config, true).unwrap()
+                run_script(&args.target_path, system, config, true, !args.lint_off).unwrap()
             };
 
             if args.measure_memory {

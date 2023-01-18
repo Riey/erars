@@ -108,6 +108,7 @@ pub fn run_script(
     mut system: Box<dyn SystemFunctions>,
     config: EraConfig,
     error_to_stderr: bool,
+    lint: bool,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     erars_ast::init_interner();
 
@@ -368,9 +369,11 @@ pub fn run_script(
         let mut diagnostics = diagnostics.into_inner();
         let mut files = files.into_inner();
 
-        diagnostics.extend(check_function(&function_dic, &ctx.var, &mut files));
+        if lint {
+            diagnostics.extend(check_function(&function_dic, &ctx.var, &mut files));
+            check_time!("Check codes", ctx.system);
+        }
 
-        check_time!("Check codes", ctx.system);
 
         if !diagnostics.is_empty() {
             let config = Config::default();
