@@ -627,13 +627,13 @@ pub fn expr_list<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Option<Expr>>> + 'c {
     move |i| {
-        map(separated_list0(char(','), de_sp(opt(expr(ctx)))), |list| {
-            if matches!(list.as_slice(), &[None]) {
-                // No arg
-                Vec::new()
-            } else {
-                list
+        map(separated_list0(char(','), de_sp(opt(expr(ctx)))), |mut list| {
+            // remove trailing empty arg
+            if let Some(Some(item)) = list.pop() {
+                list.push(Some(item));
             }
+
+            list
         })(i)
     }
 }

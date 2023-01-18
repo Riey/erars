@@ -474,6 +474,38 @@ mod body {
             line: 1,
         },
     ),
+    StmtWithPos(
+        Assign(
+            Variable {
+                var: LOCALS,
+                func_extern: None,
+                args: [],
+            },
+            None,
+            BuiltinMethod(
+                CsvCstr,
+                [
+                    Some(
+                        Int(
+                            0,
+                        ),
+                    ),
+                    Some(
+                        Var(
+                            Variable {
+                                var: LOCAL,
+                                func_extern: None,
+                                args: [],
+                            },
+                        ),
+                    ),
+                ],
+            ),
+        ),
+        ScriptPosition {
+            line: 2,
+        },
+    ),
 ]
 ");
     }
