@@ -401,7 +401,11 @@ pub fn renamed_ident<'c, 'a>(
         let (i, key) = take_while(|c| c != ']')(i)?;
         let key = ctx.interner.get_or_intern(key.trim());
         if let Some(value) = ctx.header.rename.get(&key) {
-            Ok((i, Expr::Int(*value)))
+            let Ok((_, value)) = expr(ctx)(value) else {
+                return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
+            };
+
+            Ok((i, value))
         } else {
             Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)))
         }
