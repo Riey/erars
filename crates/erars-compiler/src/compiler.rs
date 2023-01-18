@@ -1,9 +1,7 @@
-use std::ops::Range;
-
 use crate::{CompileError, CompileResult, Instruction};
 use erars_ast::{
     BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, Expr, FormExpr, FormText,
-    Function, FunctionHeader, SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable, ScriptPosition,
+    Function, FunctionHeader, ScriptPosition, SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable,
 };
 use hashbrown::HashMap;
 
@@ -723,7 +721,7 @@ pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
 fn default_arg_method(
     method: BuiltinMethod,
     idx: usize,
-    out: &mut Vec<Instruction>,
+    _out: &mut Vec<Instruction>,
 ) -> CompileResult<()> {
     match method {
         _ => Err(CompileError::NoArgumentForMethod(method, idx)),
@@ -733,7 +731,7 @@ fn default_arg_method(
 fn default_arg_command(
     command: BuiltinCommand,
     idx: usize,
-    out: &mut Vec<Instruction>,
+    _out: &mut Vec<Instruction>,
 ) -> CompileResult<()> {
     match command {
         _ => Err(CompileError::NoArgumentForCommand(command, idx)),

@@ -164,15 +164,14 @@ impl PreprocessorRegex {
     ) -> Self {
         let fwd = dense::DFA::from_bytes(endif_fwd).unwrap().0;
         let rev = dense::DFA::from_bytes(endif_rev).unwrap().0;
-
         let endif_re = regex::Regex::builder().build_from_dfas(fwd, rev);
+
         let fwd = dense::DFA::from_bytes(square_fwd).unwrap().0;
         let rev = dense::DFA::from_bytes(square_rev).unwrap().0;
-
         let square_re = regex::Regex::builder().build_from_dfas(fwd, rev);
+
         let fwd = dense::DFA::from_bytes(skipend_fwd).unwrap().0;
         let rev = dense::DFA::from_bytes(skipend_rev).unwrap().0;
-
         let skipend_re = regex::Regex::builder().build_from_dfas(fwd, rev);
 
         Self {
@@ -269,34 +268,46 @@ impl<'s> Preprocessor<'s> {
             self.span_begin = self.current_pos();
 
             let line = if let Some(open_brace) = self.s.strip_prefix('{') {
-                let Some(pos) = memchr::memchr(b'}', open_brace.as_bytes()) else {
-                    self.span_end = self.span_begin + 1;
-                    return Err(("No matched `}`".into(), self.span()));
-                };
-                unsafe {
-                    let raw = open_brace.get_unchecked(..pos);
-                    self.s = if pos == open_brace.len() {
-                        ""
+                let mut lines = Vec::new();
+                let mut all_bytes = 0;
+
+                for line in open_brace.lines() {
+                    if let Some(left) = line.trim_start().strip_prefix('}') {
+                        self.s = unsafe {
+                            open_brace.get_unchecked(
+                                left.as_ptr() as usize - open_brace.as_ptr() as usize..,
+                            )
+                        };
+                        break;
                     } else {
-                        open_brace.get_unchecked(pos + 1..)
-                    };
-                    let buf = b.alloc_layout(
-                        std::alloc::Layout::array::<u8>(raw.len()).unwrap_unchecked(),
-                    );
-
-                    let mut start = 0;
-
-                    for line in raw.lines() {
-                        self.line_pos += 1;
-                        std::ptr::copy_nonoverlapping(
-                            line.as_ptr(),
-                            buf.as_ptr().add(start),
-                            line.len(),
-                        );
-                        start += line.len();
+                        all_bytes += line.len();
+                        lines.push(line);
                     }
+                }
 
-                    std::str::from_utf8_unchecked(std::slice::from_raw_parts(buf.as_ptr(), start))
+                if lines.is_empty() {
+                    ""
+                } else {
+                    unsafe {
+                        let buf = b.alloc_layout(
+                            std::alloc::Layout::array::<u8>(all_bytes).unwrap_unchecked(),
+                        );
+                        let mut start = 0;
+                        for line in lines {
+                            self.line_pos += 1;
+                            std::ptr::copy_nonoverlapping(
+                                line.as_ptr(),
+                                buf.as_ptr().add(start),
+                                line.len(),
+                            );
+                            start += line.len();
+                        }
+                        std::str::from_utf8_unchecked(std::slice::from_raw_parts(
+                            buf.as_ptr(),
+                            start,
+                        ))
+                        .trim()
+                    }
                 }
             } else {
                 self.line_pos += 1;

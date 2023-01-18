@@ -1652,7 +1652,7 @@ impl ParserContext {
                                 let line =
                                     s.lines().nth(compiler.current_pos().line as usize).unwrap();
                                 let diff = line.as_ptr() as usize - s.as_ptr() as usize;
-                                error!(dbg!(diff..diff + line.len()), err.to_string());
+                                error!(diff..diff + line.len(), err.to_string());
                             }
                         }
                     }

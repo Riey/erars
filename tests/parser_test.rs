@@ -1760,6 +1760,66 @@ Method(
     }
 
     #[test]
+    fn test_multiline() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/multiline.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    StmtWithPos(
+        Call {
+            name: String(
+                ASK_M,
+            ),
+            args: [
+                Some(
+                    String(
+                        もどる,
+                    ),
+                ),
+                Some(
+                    Int(
+                        1,
+                    ),
+                ),
+                Some(
+                    String(
+                        丁半博打について聞く,
+                    ),
+                ),
+                Some(
+                    Int(
+                        1,
+                    ),
+                ),
+                Some(
+                    String(
+                        チンチロリンについて聞く,
+                    ),
+                ),
+                Some(
+                    Int(
+                        1,
+                    ),
+                ),
+            ],
+            is_jump: false,
+            is_method: false,
+            try_body: [],
+            catch_body: None,
+        },
+        ScriptPosition {
+            line: 4,
+        },
+    ),
+]
+"
+        );
+    }
+
+    #[test]
     fn test_plus() {
         k9::snapshot!(
             do_test(
