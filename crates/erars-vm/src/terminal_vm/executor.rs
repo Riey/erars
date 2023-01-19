@@ -225,8 +225,8 @@ pub(super) fn run_instruction(
             })?;
         }
     } else if let Some(c) = inst.as_try_call().or_else(|| inst.as_try_jump()) {
-        let func = ctx.pop_strkey()?;
         let args = ctx.take_value_list(c)?;
+        let func = ctx.pop_strkey()?;
 
         match vm.try_call(func, &args, tx, ctx)? {
             Some(Workflow::Return) => {
@@ -241,8 +241,8 @@ pub(super) fn run_instruction(
             }
         }
     } else if let Some(c) = inst.as_jump().or_else(|| inst.as_call()) {
-        let func = ctx.pop_strkey()?;
         let args = ctx.take_value_list(c)?;
+        let func = ctx.pop_strkey()?;
 
         match vm.call(func, &args, tx, ctx)? {
             Workflow::Return => {
@@ -399,7 +399,35 @@ pub(super) fn run_instruction(
     } else if let Some(com) = inst.as_builtin_command() {
         return run_builtin_command(com, vm, tx, ctx);
     } else if let Some(idx) = inst.as_load_default_argument() {
-        bail!("Unimplemented instruction: LoadDefaultArgument({idx})");
+        let name = match ctx
+            .stack()
+            .iter()
+            .rev()
+            .nth(idx as usize)
+            .context("Invalid index for LoadDefaultArgument")?
+        {
+            LocalValue::InternedStr(name) => *name,
+            LocalValue::Value(Value::String(name)) => ctx.var.interner().get_or_intern(name),
+            _ => bail!("LoadDefaultArgument need function name"),
+        };
+
+        let body = vm.dic.get_func(name)?;
+
+        let arg = body
+            .args()
+            .get(idx as usize)
+            .context("LoadDefaultArgument argument is out of range")?;
+
+        match arg.2.as_ref() {
+            Some(default_value) => match default_value {
+                InlineValue::Int(i) => ctx.push(*i),
+                InlineValue::String(s, _) => ctx.push_strkey(*s),
+            },
+            None => match ctx.var.get_maybe_local_var(func_name, arg.0)?.0.is_str {
+                true => ctx.push(String::new()),
+                false => ctx.push(0i64),
+            },
+        }
     } else {
         if !inst.is_nop() && !inst.is_debug() {
             bail!("Unimplemented instruction: {inst:?}");

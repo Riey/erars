@@ -180,11 +180,11 @@ impl Compiler {
                 self.insert(true_end, Instruction::goto(self.current_no()));
             }
             Expr::Method(name, args) => {
+                self.push(Instruction::load_str(name));
                 let count = self.push_opt_list(args, |idx, out| {
                     out.push(Instruction::load_default_argument(idx as u32));
                     Ok(())
                 })?;
-                self.push(Instruction::load_str(name));
                 self.push(Instruction::call(count));
             }
             Expr::Var(var) => {
@@ -568,11 +568,11 @@ impl Compiler {
                 is_jump,
                 is_method,
             } => {
+                self.push_expr(name)?;
                 let count = self.push_opt_list(args, |idx, out| {
                     out.push(Instruction::load_default_argument(idx as u32));
                     Ok(())
                 })?;
-                self.push_expr(name)?;
 
                 if let Some(catch) = catch {
                     if is_jump {
