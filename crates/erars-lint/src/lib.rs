@@ -79,41 +79,6 @@ impl<'a> files::Files<'a> for ErarsFiles {
 
 // TODO: const assign pass
 
-fn check_function_exist_inner(
-    fn_name: StrKey,
-    func: &FunctionBody,
-    dic: &FunctionDic,
-    files: &Mutex<&mut ErarsFiles>,
-    diagnostics: &Mutex<Vec<Diagnostic>>,
-) {
-    let mut current_line = 1;
-    for (i, inst) in func.body().iter().enumerate() {
-        if let Some(pos) = inst.as_report_position() {
-            current_line = pos.line;
-        } else if inst.is_call() {
-            // can only check with literal str
-            if let Some(name) = func.body()[i - 1].as_load_str() {
-                if !dic.normal.contains_key(&name) {
-                    let mut files = files.lock();
-                    let file_id = func.file_path();
-                    files.add_from_path(file_id);
-                    let Ok(range) = files.line_range(file_id, current_line as usize - 1) else {
-                        let file_name = files.name(file_id);
-                        log::error!("Invalid line range for {file_name:?} line index: {current_line}, fn: {name}");
-                        continue;
-                    };
-                    let diagnostic = Diagnostic::warning()
-                        .with_code("W1000")
-                        .with_notes(vec![format!("In function @{fn_name}")])
-                        .with_message(format!("Find CALL `{name}` but @{name} is not exists."))
-                        .with_labels(vec![Label::primary(file_id, range)]);
-                    diagnostics.lock().push(diagnostic);
-                }
-            }
-        }
-    }
-}
-
 fn check_variable_exist_inner(
     fn_name: StrKey,
     func: &FunctionBody,
@@ -194,14 +159,12 @@ pub fn check_function(
     let diagnostic = Mutex::new(Vec::new());
 
     normal.for_each(|(fn_name, func)| {
-        check_function_exist_inner(*fn_name, func, dic, &files, &diagnostic);
         check_variable_exist_inner(*fn_name, func, var, &files, &diagnostic);
     });
 
     dic.event.iter().for_each(|(k, v)| {
         let fn_name = var.interner().get_or_intern(<&str>::from(k));
         v.events.iter().for_each(|func| {
-            check_function_exist_inner(fn_name, func, dic, &files, &diagnostic);
             check_variable_exist_inner(fn_name, func, var, &files, &diagnostic);
         });
     });
