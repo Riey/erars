@@ -1270,6 +1270,8 @@ impl ParserContext {
                     BAR => normal_command!(BuiltinCommand::Bar),
                     SKIPDISP => normal_command!(BuiltinCommand::SkipDisp),
 
+                    HTML_PRINT => normal_command!(BuiltinCommand::HtmlPrint),
+
                     REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
 
                     CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF | TRYCALL

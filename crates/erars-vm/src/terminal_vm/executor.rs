@@ -1690,6 +1690,8 @@ fn run_builtin_command(
     match com {
         BuiltinCommand::HtmlPrint => {
             log::warn!("TODO: HTML_PRINT");
+            let s = get_arg!(@String: args, ctx);
+            tx.print_line(s);
         }
         BuiltinCommand::UpCheck => {
             let palam = ctx.var.known_key(Var::Palam);
