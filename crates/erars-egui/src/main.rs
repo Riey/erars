@@ -122,6 +122,7 @@ fn main() {
 
             let emoji_font = db.query(&fontdb::Query {
                 families: &[
+                    fontdb::Family::Name("Noto Color Emoji"),
                     fontdb::Family::Name("Noto Emoji"),
                     fontdb::Family::Name("Segoe UI Emoji"),
                 ],

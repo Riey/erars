@@ -1143,7 +1143,7 @@ impl ParserContext {
 
                     RETURN => normal_command!(BuiltinCommand::Return),
                     RETURNF => normal_command!(BuiltinCommand::ReturnF),
-                    RETURNFORM => strform_command!(BuiltinCommand::Return),
+                    RETURNFORM => try_nom!(pp, self::expr::returnform_line(self)(args)).1,
                     RESTART => normal_command!(BuiltinCommand::Restart),
                     CONTINUE => Stmt::Continue,
                     BREAK => Stmt::Break,

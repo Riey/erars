@@ -2,8 +2,9 @@ use std::borrow::Cow;
 
 use super::ParserContext;
 use erars_ast::{
-    var_name_alias, Alignment, BinaryOperator, BuiltinCommand, Expr, FormText, InlineValue,
-    LocalVariable, NotNan, SelectCaseCond, Stmt, StrKey, UnaryOperator, Variable, VariableInfo,
+    var_name_alias, Alignment, BinaryOperator, BuiltinCommand, BuiltinMethod, Expr, FormText,
+    InlineValue, LocalVariable, NotNan, SelectCaseCond, Stmt, StrKey, UnaryOperator, Variable,
+    VariableInfo,
 };
 use nom::{
     branch::alt,
@@ -848,6 +849,21 @@ pub fn form_arg_expr<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| (de_sp(form_str(FormStrType::Arg, ctx)))(i)
+}
+
+pub fn returnform_line<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
+    move |i| {
+        let (i, args) = separated_list0(
+            char(','),
+            opt(map(form_arg_expr(ctx), |f| {
+                Expr::BuiltinMethod(BuiltinMethod::ToInt, vec![Some(f)])
+            })),
+        )(i)?;
+
+        Ok((i, Stmt::Command(BuiltinCommand::Return, args)))
+    }
 }
 
 fn function_arg_list<'c, 'a>(
