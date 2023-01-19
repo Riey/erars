@@ -820,6 +820,14 @@ fn run_builtin_method(
     }
 
     match meth {
+        BuiltinMethod::SpriteCreated => {
+            log::warn!("SpriteCreated");
+            ctx.push(0);
+        }
+        BuiltinMethod::GCreated => {
+            log::warn!("GCreated");
+            ctx.push(0);
+        }
         BuiltinMethod::CsvName => {
             csv_method!(name);
         }

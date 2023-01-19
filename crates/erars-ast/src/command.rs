@@ -115,6 +115,9 @@ pub enum BuiltinMethod {
     CsvJuel,
     CsvEquip,
     CsvCflag,
+
+    SpriteCreated = 200,
+    GCreated = 250,
 }
 
 #[derive(Display, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr)]
