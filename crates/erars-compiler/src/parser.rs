@@ -4,8 +4,8 @@ mod expr;
 use anyhow::{bail, Context};
 use erars_ast::{
     get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos,
-    Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, Stmt,
-    StmtWithPos, StrKey, UnaryOperator, Value, VariableInfo,
+    Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, Stmt, StmtWithPos, StrKey,
+    UnaryOperator, Value, VariableInfo,
 };
 use erars_lexer::{
     Bump, ComplexAssign, ConfigToken, EraLine, InstructionCode, Preprocessor, PrintType, SharpCode,

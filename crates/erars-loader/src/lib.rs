@@ -374,7 +374,6 @@ pub fn run_script(
             check_time!("Check codes", ctx.system);
         }
 
-
         if !diagnostics.is_empty() {
             let config = Config::default();
             let writer = StandardStream::stderr(ColorChoice::Always);

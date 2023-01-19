@@ -722,23 +722,19 @@ fn default_arg_method(
     out: &mut Vec<Instruction>,
 ) -> CompileResult<()> {
     match method {
-        BuiltinMethod::FindElement | BuiltinMethod::FindLastElement => {
-            match idx {
-                2 => {
-                    out.push(Instruction::load_int(0));
-                    return Ok(());
-                }
-                3 => {
-                    let (l, r) = unsafe {
-                        std::mem::transmute(i64::MAX)
-                    };
-                    out.push(Instruction::load_int(l));
-                    out.push(Instruction::load_int_suffix(r));
-                    return Ok(());
-                }
-                _ => {}
+        BuiltinMethod::FindElement | BuiltinMethod::FindLastElement => match idx {
+            2 => {
+                out.push(Instruction::load_int(0));
+                return Ok(());
             }
-        }
+            3 => {
+                let (l, r) = unsafe { std::mem::transmute(i64::MAX) };
+                out.push(Instruction::load_int(l));
+                out.push(Instruction::load_int_suffix(r));
+                return Ok(());
+            }
+            _ => {}
+        },
         _ => {}
     }
 

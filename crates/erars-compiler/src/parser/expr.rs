@@ -7,7 +7,7 @@ use erars_ast::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{tag, take_while, take_while1, tag_no_case},
+    bytes::complete::{tag, tag_no_case, take_while, take_while1},
     character::complete::*,
     combinator::{eof, map, opt, value},
     error::{context, ErrorKind, VerboseError},
@@ -117,6 +117,8 @@ pub enum FormStrType {
     SecondCond,
     /// no comma, blank
     Arg,
+    /// no comma, blank, paran
+    CallArg,
     /// no "
     Str,
 }
@@ -161,7 +163,10 @@ fn parse_form_normal_str<'a>(
                         )));
                     }
                 },
-                Some(',') if ty == FormStrType::Arg => {
+                Some('(') if ty == FormStrType::CallArg => {
+                    break None;
+                }
+                Some(',') if ty == FormStrType::Arg || ty == FormStrType::CallArg => {
                     break None;
                 }
                 Some('"') if ty == FormStrType::Str => {
@@ -635,14 +640,17 @@ pub fn expr_list<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Vec<Option<Expr>>> + 'c {
     move |i| {
-        map(separated_list0(char(','), de_sp(opt(expr(ctx)))), |mut list| {
-            // remove trailing empty arg
-            if let Some(Some(item)) = list.pop() {
-                list.push(Some(item));
-            }
+        map(
+            separated_list0(char(','), de_sp(opt(expr(ctx)))),
+            |mut list| {
+                // remove trailing empty arg
+                if let Some(Some(item)) = list.pop() {
+                    list.push(Some(item));
+                }
 
-            list
-        })(i)
+                list
+            },
+        )(i)
     }
 }
 
@@ -668,7 +676,7 @@ pub fn call_jump_line<'c, 'a>(
     move |i| {
         context("call_jump_line", move |i| {
             let (i, name) = if is_form {
-                form_arg_expr(ctx)(i)?
+                call_form_arg_expr(ctx)(i)?
             } else {
                 let (i, function) = ident(i)?;
                 let function = ctx.replace(function);
@@ -828,6 +836,12 @@ pub fn dim_line<'c, 'a>(
             },
         ))
     }
+}
+
+pub fn call_form_arg_expr<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
+    move |i| (de_sp(form_str(FormStrType::CallArg, ctx)))(i)
 }
 
 pub fn form_arg_expr<'c, 'a>(

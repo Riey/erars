@@ -397,6 +397,38 @@ mod body {
             line: 1,
         },
     ),
+    StmtWithPos(
+        Call {
+            name: String(
+                BAR,
+            ),
+            args: [],
+            is_jump: false,
+            is_method: false,
+            try_body: [],
+            catch_body: None,
+        },
+        ScriptPosition {
+            line: 2,
+        },
+    ),
+    StmtWithPos(
+        Call {
+            name: FormText(
+                BAZ,
+            ),
+            args: [],
+            is_jump: false,
+            is_method: false,
+            try_body: [],
+            catch_body: Some(
+                [],
+            ),
+        },
+        ScriptPosition {
+            line: 3,
+        },
+    ),
 ]
 "
         );
