@@ -53,6 +53,7 @@ impl Default for Value {
 impl Value {
     pub const ZERO: Value = Value::Int(0);
     pub const ONE: Value = Value::Int(1);
+    pub const EMPTY: Value = Value::String(String::new());
 
     pub fn into_int_err(self) -> Result<i64, String> {
         match self {

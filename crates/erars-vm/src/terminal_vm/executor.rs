@@ -397,7 +397,7 @@ pub(super) fn run_instruction(
     } else if let Some(meth) = inst.as_builtin_method() {
         run_builtin_method(meth, func_name, tx, ctx)?;
     } else if let Some(com) = inst.as_builtin_command() {
-        return run_builtin_command(com, vm, tx, ctx);
+        return run_builtin_command(com, func_name, vm, tx, ctx);
     } else if let Some(idx) = inst.as_load_default_argument() {
         let name = match ctx
             .stack()
@@ -1680,6 +1680,7 @@ fn run_builtin_method(
 
 fn run_builtin_command(
     com: BuiltinCommand,
+    func_name: StrKey,
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
@@ -1859,13 +1860,25 @@ fn run_builtin_command(
             }
         }
         BuiltinCommand::ReturnF => {
-            let ret = get_arg!(@value args, ctx);
+            let ret = get_arg!(@opt @value args, ctx);
 
             if args.next().is_some() {
                 bail!("RETURNF는 한개의 값만 반환할 수 있습니다.");
             }
 
             drop(ctx.return_func()?);
+
+            let ret = match ret {
+                Some(ret) => ret,
+                None => {
+                    let func = vm.dic.get_func(func_name)?;
+                    if func.is_function {
+                        Value::ZERO
+                    } else {
+                        Value::EMPTY
+                    }
+                }
+            };
 
             ctx.push(ret);
 
