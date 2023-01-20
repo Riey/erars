@@ -745,7 +745,7 @@ fn get_single_var(
 
 fn range_end_opt<T>(arr: &mut [T], start: usize, end: Option<usize>) -> Result<&mut [T]> {
     match end {
-        Some(end) => arr.get_mut(start..end),
+        Some(end) => arr.get_mut(start..end.min(arr.len())),
         _ => arr.get_mut(start..),
     }
     .ok_or_else(|| anyhow!("Array index out of bound"))
