@@ -813,7 +813,19 @@ pub fn dim_line<'c, 'a>(
             opt(value((), de_sp(tag("CHARADATA")))),
             opt(value((), de_sp(tag("SAVEDATA")))),
             de_sp(ident),
-            opt(preceded(char_sp(','), separated_list0(char_sp(','), u32))),
+            opt(preceded(
+                char_sp(','),
+                separated_list0(
+                    char_sp(','),
+                    map(expr(ctx), |expr| {
+                        ctx.header
+                            .const_eval_log_error(&expr)
+                            .into_int_err()
+                            .map(|i| i as u32)
+                            .unwrap()
+                    }),
+                ),
+            )),
             opt(preceded(
                 char_sp('='),
                 separated_list0(char_sp(','), expr(ctx)),
