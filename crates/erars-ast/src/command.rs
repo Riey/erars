@@ -167,8 +167,6 @@ pub enum BuiltinCommand {
     SetBit,
     ClearBit,
     InvertBit,
-    ArrayShift,
-    ArrayMove,
     Varset,
     CVarset,
     Split,
@@ -217,4 +215,10 @@ pub enum BuiltinCommand {
     Randomize = 110,
     DumpRand,
     InitRand,
+
+    ArrayShift = 200,
+    ArrayRemove,
+    ArraySort,
+    ArrayCopy,
+    ArrayMove,
 }

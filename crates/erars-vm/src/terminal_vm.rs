@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::*;
 use crate::{context::FunctionIdentifier, variable::StrKeyLike};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
     InlineValue, PrintFlags, StrKey, UnaryOperator, Value,
@@ -299,9 +299,7 @@ fn array_shift<T: Clone>(
     start: usize,
     count: usize,
 ) -> anyhow::Result<()> {
-    if start >= arr.len() {
-        bail!("ARRAYSHIFT start value exceed");
-    }
+    ensure!(start < arr.len(), "ARRAYSHIFT start value exceed");
 
     let arr = &mut arr[start..];
 
@@ -323,4 +321,24 @@ fn shift_test() {
     arr.fill(1);
     array_shift(&mut arr, 0, 1, 10).unwrap();
     k9::assert_equal!(arr, [1, 0, 0, 0]);
+}
+
+fn array_remove<T: Clone + Default>(
+    arr: &mut [T],
+    start: usize,
+    count: usize,
+) -> anyhow::Result<()> {
+    ensure!(start < arr.len(), "ARRAYREMOVE start value exceed");
+
+    let arr = &mut arr[start..];
+
+    if count < arr.len() {
+        let diff = arr.len() - count;
+        arr.rotate_left(count);
+        arr[diff..].fill(T::default());
+    } else {
+        arr.fill(T::default());
+    }
+
+    Ok(())
 }

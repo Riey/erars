@@ -1752,6 +1752,7 @@ fn run_builtin_command(
                 ctx.var.read_int(Var::Target, &[])?.try_into()?
             };
             let (info, var) = ctx.var.get_maybe_local_var(v.func_name, v.name)?;
+            ensure!(info.size.len() == 1, "ARRAYREMOVE only supports 1D array");
             let var = var.as_vm_var(target);
 
             if info.is_str {
@@ -1764,6 +1765,31 @@ fn run_builtin_command(
                 array_shift(var, empty_value, start as usize, count as usize)?;
             }
         }
+        BuiltinCommand::ArrayRemove => {
+            let v = get_arg!(@var args);
+            let start = get_arg!(@usize: args, ctx);
+            let count = get_arg!(@i64: args, ctx).try_into().unwrap_or(usize::MAX);
+
+            let target = if let Some(idx) = v.idxs.first().copied() {
+                idx
+            } else {
+                ctx.var.read_int(Var::Target, &[])?.try_into()?
+            };
+            let (info, var) = ctx.var.get_maybe_local_var(v.func_name, v.name)?;
+
+            ensure!(info.size.len() == 1, "ARRAYREMOVE only supports 1D array");
+            let var = var.as_vm_var(target);
+
+            if info.is_str {
+                let var = var.as_str()?;
+                array_remove(var, start, count)?;
+            } else {
+                let var = var.as_int()?;
+                array_remove(var, start, count)?;
+            }
+        }
+        BuiltinCommand::ArrayCopy => todo!(),
+        BuiltinCommand::ArraySort => todo!(),
         BuiltinCommand::ArrayMove => {
             bail!("TODO: ARRAYMOVE");
         }
