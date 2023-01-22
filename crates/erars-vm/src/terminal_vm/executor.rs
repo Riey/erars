@@ -1789,7 +1789,45 @@ fn run_builtin_command(
             }
         }
         BuiltinCommand::ArrayCopy => todo!(),
-        BuiltinCommand::ArraySort => todo!(),
+        BuiltinCommand::ArraySort => {
+            let v = get_arg!(@var args);
+            let is_forward = get_arg!(@opt @bool: args, ctx);
+            let start = get_arg!(@opt @usize: args, ctx);
+            let count = get_arg!(@opt @usize: args, ctx);
+
+            let target = if let Some(idx) = v.idxs.first().copied() {
+                idx
+            } else {
+                ctx.var.read_int(Var::Target, &[])?.try_into()?
+            };
+            let (info, var) = ctx.var.get_maybe_local_var(v.func_name, v.name)?;
+            ensure!(info.size.len() == 1, "ARRAYSORT only supports 1D array");
+            let var = var.as_vm_var(target);
+
+            let start = start.unwrap_or(0);
+            let is_forward = is_forward.unwrap_or(true);
+            let end = count.unwrap_or(usize::MAX).saturating_add(start);
+
+            ensure!(start <= end, "start must be less than or equal to end");
+
+            if info.is_str {
+                let var = var.as_str()?;
+                let arr = var.get_mut(start..end).context("ARRAYSORT out of range")?;
+                if is_forward {
+                    arr.sort();
+                } else {
+                    arr.sort_by(|a, b| b.cmp(a));
+                }
+            } else {
+                let var = var.as_int()?;
+                let arr = var.get_mut(start..end).context("ARRAYSORT out of range")?;
+                if is_forward {
+                    arr.sort();
+                } else {
+                    arr.sort_by(|a, b| b.cmp(a));
+                }
+            }
+        }
         BuiltinCommand::ArrayMove => {
             bail!("TODO: ARRAYMOVE");
         }

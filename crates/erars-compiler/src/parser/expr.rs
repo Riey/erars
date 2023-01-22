@@ -755,15 +755,63 @@ pub fn times_line<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IRes
     }
 }
 
+fn forward_or_back<'a>(i: &'a str) -> IResult<'a, Option<bool>> {
+    opt(alt((
+        value(false, de_sp(tag("BACK"))),
+        value(true, de_sp(tag("FORWARD"))),
+    )))(i)
+}
+
+pub fn arraysort_line<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
+    move |i| {
+        let (mut i, var) = variable(ctx)(i)?;
+
+        let mut forward = true;
+        let mut start = None;
+        let mut end = None;
+
+        if let Some(i_) = i.trim_start().strip_prefix(',') {
+            i = i_;
+            let (i_, forward_) = forward_or_back(i)?;
+            i = i_;
+            forward = forward_.unwrap_or(true);
+            if let Some(i_) = i.trim_start().strip_prefix(',') {
+                i = i_;
+                let (i_, start_) = opt(expr(ctx))(i)?;
+                start = start_;
+                i = i_;
+
+                if let Some(i_) = i.trim_start().strip_prefix(',') {
+                    i = i_;
+                    let (i_, end_) = opt(expr(ctx))(i)?;
+                    i = i_;
+                    end = end_;
+                }
+            }
+        }
+
+        Ok((
+            i,
+            Stmt::Command(
+                BuiltinCommand::ArraySort,
+                vec![
+                    Some(Expr::Var(var)),
+                    Some(Expr::int(forward)),
+                    start.map(Expr::from),
+                    end.map(Expr::from),
+                ],
+            ),
+        ))
+    }
+}
+
 pub fn sortchara_line<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Stmt> + 'c {
     move |i| {
-        let mut forward_parser = opt(alt((
-            value(false, de_sp(tag("BACK"))),
-            value(true, de_sp(tag("FORWARD"))),
-        )));
-        let (i, forward) = forward_parser(i)?;
+        let (i, forward) = forward_or_back(i)?;
 
         let (i, var) = if forward.is_none() {
             opt(variable(ctx))(i)?
@@ -772,10 +820,7 @@ pub fn sortchara_line<'c, 'a>(
         };
 
         let (i, forward) = if forward.is_none() {
-            opt(alt((
-                value(false, tag("BACK")),
-                value(true, tag("FORWARD")),
-            )))(i)?
+            forward_or_back(i)?
         } else {
             (i, forward)
         };
