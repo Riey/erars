@@ -611,6 +611,104 @@ impl VariableStorage {
         }
     }
 
+    pub fn get_maybe_local_var2(
+        &mut self,
+        func1: impl StrKeyLike,
+        var1: impl StrKeyLike,
+        func2: impl StrKeyLike,
+        var2: impl StrKeyLike,
+    ) -> Result<[(&mut VariableInfo, &mut UniformVariable); 2]> {
+        let func1_name = func1.get_key(self);
+        let func2_name = func2.get_key(self);
+        let var1 = var1.get_key(self);
+        let var2 = var2.get_key(self);
+
+        match (
+            self.is_local_var(func1_name, var1),
+            self.is_local_var(func2_name, var2),
+        ) {
+            (true, true) if func1_name == func2_name => {
+                let [(info1, var1), (info2, var2)] = self
+                    .local_variables
+                    .get_mut(&func1_name)
+                    .unwrap()
+                    .get_many_mut([&var1, &var2])
+                    .ok_or_else(|| anyhow!("Variable {var1:?} and {var2:?} are not exist"))?;
+
+                let var1 = var1.get_or_insert_with(|| {
+                    UniformVariable::with_character_len(&self.header, info1, self.character_len)
+                });
+                let var2 = var2.get_or_insert_with(|| {
+                    UniformVariable::with_character_len(&self.header, info2, self.character_len)
+                });
+
+                Ok([(info1, var1), (info2, var2)])
+            }
+            (true, true) => {
+                let [dic1, dic2] =
+                    self.local_variables.get_many_mut([&func1_name, &func2_name]).unwrap();
+
+                let (info1, var1) = dic1
+                    .get_mut(&var1)
+                    .ok_or_else(|| anyhow!("Variable {var1:?} is not exist"))?;
+
+                let (info2, var2) = dic2
+                    .get_mut(&var2)
+                    .ok_or_else(|| anyhow!("Variable {var2:?} is not exist"))?;
+
+                let var1 = var1.get_or_insert_with(|| {
+                    UniformVariable::with_character_len(&self.header, info1, self.character_len)
+                });
+                let var2 = var2.get_or_insert_with(|| {
+                    UniformVariable::with_character_len(&self.header, info2, self.character_len)
+                });
+
+                Ok([(info1, var1), (info2, var2)])
+            }
+            (false, false) => {
+                let [(info1, var1), (info2, var2)] = self
+                    .variables
+                    .get_many_mut([&var1, &var2])
+                    .ok_or_else(|| anyhow!("Variable {var1:?} and {var2:?} are not exist"))?;
+
+                Ok([(info1, var1), (info2, var2)])
+            }
+            (var1_is_local, _) => {
+                let (local_var, global_var, func_name) = if var1_is_local {
+                    (var1, var2, func1_name)
+                } else {
+                    (var2, var1, func2_name)
+                };
+
+                let (local_info, local_var) = self
+                    .local_variables
+                    .get_mut(&func_name)
+                    .unwrap()
+                    .get_mut(&local_var)
+                    .ok_or_else(|| anyhow!("Variable {local_var:?} is not exist"))?;
+
+                let local_var = local_var.get_or_insert_with(|| {
+                    UniformVariable::with_character_len(
+                        &self.header,
+                        local_info,
+                        self.character_len,
+                    )
+                });
+
+                let (info, var) = self
+                    .variables
+                    .get_mut(&global_var)
+                    .ok_or_else(|| anyhow!("Variable {global_var:?} is not exist"))?;
+
+                if var1_is_local {
+                    Ok([(local_info, local_var), (info, var)])
+                } else {
+                    Ok([(info, var), (local_info, local_var)])
+                }
+            }
+        }
+    }
+
     pub fn get_maybe_local_var(
         &mut self,
         func: impl StrKeyLike,

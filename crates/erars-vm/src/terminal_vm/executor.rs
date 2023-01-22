@@ -1788,7 +1788,54 @@ fn run_builtin_command(
                 array_remove(var, start, count)?;
             }
         }
-        BuiltinCommand::ArrayCopy => todo!(),
+        BuiltinCommand::ArrayCopy => {
+            let original = get_arg!(@var args);
+            let target = get_arg!(@var args);
+
+            let target_val = ctx.var.read_int(Var::Target, &[])?.try_into()?;
+            let original_target = if let Some(idx) = original.idxs.first().copied() {
+                idx
+            } else {
+                target_val
+            };
+            let target_target = if let Some(idx) = target.idxs.first().copied() {
+                idx
+            } else {
+                target_val
+            };
+
+            let [(original_info, original_var), (target_info, target_var)] =
+                ctx.var.get_maybe_local_var2(
+                    original.func_name,
+                    original.name,
+                    target.func_name,
+                    target.name,
+                )?;
+
+            ensure!(
+                original_info.size.len() == target_info.size.len(),
+                "ARRAYCOPY size mismatch"
+            );
+            ensure!(
+                original_info.is_str == target_info.is_str,
+                "ARRAYCOPY type mismatch"
+            );
+
+            let original_var = original_var.as_vm_var(original_target);
+            let target_var = target_var.as_vm_var(target_target);
+
+            if original_info.is_str {
+                let original_var = original_var.as_str()?;
+                let target_var = target_var.as_str()?;
+                let count = original_var.len().min(target_var.len());
+                target_var[..count].clone_from_slice(&original_var[..count]);
+            } else {
+                let original_var = original_var.as_int()?;
+                let target_var = target_var.as_int()?;
+                let count = original_var.len().min(target_var.len());
+                target_var[..count].copy_from_slice(&original_var[..count]);
+            }
+        }
         BuiltinCommand::ArraySort => {
             let v = get_arg!(@var args);
             let is_forward = get_arg!(@bool: args, ctx);

@@ -757,7 +757,7 @@ fn default_arg_command(
             out.push(Instruction::load_int_suffix(r));
             return Ok(());
         }
-        _ => {},
+        _ => {}
     }
 
     Err(CompileError::NoArgumentForCommand(command, idx))
