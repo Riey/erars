@@ -744,9 +744,21 @@ fn default_arg_method(
 fn default_arg_command(
     command: BuiltinCommand,
     idx: usize,
-    _out: &mut Vec<Instruction>,
+    out: &mut Vec<Instruction>,
 ) -> CompileResult<()> {
     match command {
-        _ => Err(CompileError::NoArgumentForCommand(command, idx)),
+        BuiltinCommand::ArraySort if idx == 2 => {
+            out.push(Instruction::load_int(0));
+            return Ok(());
+        }
+        BuiltinCommand::ArraySort if idx == 3 => {
+            let (l, r) = unsafe { std::mem::transmute(i64::MAX) };
+            out.push(Instruction::load_int(l));
+            out.push(Instruction::load_int_suffix(r));
+            return Ok(());
+        }
+        _ => {},
     }
+
+    Err(CompileError::NoArgumentForCommand(command, idx))
 }

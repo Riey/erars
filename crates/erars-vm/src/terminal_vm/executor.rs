@@ -1791,7 +1791,7 @@ fn run_builtin_command(
         BuiltinCommand::ArrayCopy => todo!(),
         BuiltinCommand::ArraySort => {
             let v = get_arg!(@var args);
-            let is_forward = get_arg!(@opt @bool: args, ctx);
+            let is_forward = get_arg!(@bool: args, ctx);
             let start = get_arg!(@opt @usize: args, ctx);
             let count = get_arg!(@opt @usize: args, ctx);
 
@@ -1805,8 +1805,10 @@ fn run_builtin_command(
             let var = var.as_vm_var(target);
 
             let start = start.unwrap_or(0);
-            let is_forward = is_forward.unwrap_or(true);
-            let end = count.unwrap_or(usize::MAX).saturating_add(start);
+            let end = count
+                .unwrap_or(usize::MAX)
+                .saturating_add(start)
+                .min(info.size[0] as usize);
 
             ensure!(start <= end, "start must be less than or equal to end");
 
