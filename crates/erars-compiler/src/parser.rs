@@ -1250,6 +1250,8 @@ impl ParserContext {
                     CHKDATA => normal_method!(BuiltinMethod::ChkData),
                     DELDATA => normal_command!(BuiltinCommand::DelData),
                     GETTIME => normal_command!(BuiltinCommand::GetTime),
+                    GETSECOND => normal_method!(BuiltinMethod::GetSecond),
+                    GETMILLISECOND => normal_method!(BuiltinMethod::GetMillisecond),
                     PUTFORM => strform_command!(BuiltinCommand::PutForm),
 
                     VARSET => normal_command!(BuiltinCommand::Varset),
