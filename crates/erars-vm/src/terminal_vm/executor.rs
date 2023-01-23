@@ -1639,6 +1639,9 @@ fn run_builtin_method(
 
             let ret = if let Some(ret) = info.size.get(dim) {
                 *ret
+            } else if info.size.is_empty() && dim == 0 {
+                // 0D var has size 1
+                1
             } else {
                 bail!("VARSIZE exceed dimension of variable {name} dim is {dim} but variable's dimension is {var_dim}", name = var.name, var_dim = info.size.len());
             };
