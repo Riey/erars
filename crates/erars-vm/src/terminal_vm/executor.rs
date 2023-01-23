@@ -1633,9 +1633,10 @@ fn run_builtin_method(
 
         BuiltinMethod::VarSize => {
             check_arg_count!(1, 2);
-            let var = get_arg!(@var args);
+            let var = get_arg!(@key args, ctx);
             let dim = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
-            let info = ctx.var.get_maybe_local_var(var.func_name, var.name)?.0;
+
+            let info = ctx.var.get_maybe_local_var(func_name, var)?.0;
 
             let ret = if let Some(ret) = info.size.get(dim) {
                 *ret
@@ -1643,7 +1644,7 @@ fn run_builtin_method(
                 // 0D var has size 1
                 1
             } else {
-                bail!("VARSIZE exceed dimension of variable {name} dim is {dim} but variable's dimension is {var_dim}", name = var.name, var_dim = info.size.len());
+                bail!("VARSIZE exceed dimension of variable {name} dim is {dim} but variable's dimension is {var_dim}", name = var, var_dim = info.size.len());
             };
 
             ctx.push(ret);
