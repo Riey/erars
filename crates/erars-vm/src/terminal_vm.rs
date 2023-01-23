@@ -164,17 +164,7 @@ impl TerminalVm {
                 })
             });
 
-            if info.is_str {
-                var.as_str()?[idx] = match arg {
-                    Some(Value::String(s)) => s,
-                    _ => String::new(),
-                };
-            } else {
-                var.as_int()?[idx] = match arg {
-                    Some(Value::Int(s)) => s,
-                    _ => 0,
-                };
-            }
+            var.set_or_default(idx as u32, arg)?;
         }
 
         ctx.new_func(label, body.file_path);

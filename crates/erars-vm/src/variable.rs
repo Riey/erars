@@ -962,6 +962,24 @@ impl VmVariable {
         }
     }
 
+    pub fn set_or_default(&mut self, idx: u32, value: Option<Value>) -> Result<()> {
+        match value {
+            Some(v) => self.set(idx, v)?,
+            None => match self {
+                Self::Int(i) => {
+                    *i.get_mut(idx as usize)
+                        .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = 0;
+                }
+                Self::Str(i) => {
+                    *i.get_mut(idx as usize)
+                        .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = String::new();
+                }
+            },
+        }
+
+        Ok(())
+    }
+
     pub fn set(&mut self, idx: u32, value: impl Into<Value>) -> Result<()> {
         match (self, value.into()) {
             (Self::Int(i), Value::Int(n)) => {
