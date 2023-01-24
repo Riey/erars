@@ -1,0 +1,10 @@
+@SYSTEM_TITLE
+#DIM VAR, 10
+CALL TEST(VAR)
+PRINTVL VAR:0, VAR:1, VAR:2
+
+@TEST(refVar)
+#DIM REF refVar
+PRINTFORML {VARSIZE("refVar")}
+refVar:0 = 1
+refVar:1 = 1

@@ -886,6 +886,14 @@ pub fn dim_line<'c, 'a>(
             size.unwrap_or_else(|| init.as_ref().map(|v| vec![v.len() as u32]).unwrap_or_default());
         info.init = init.unwrap_or_default();
 
+        if info.is_ref {
+            // REF variable is 0D int dynamic var
+            info.is_dynamic = true;
+            info.is_savedata = false;
+            info.size = Vec::new();
+            info.is_str = false;
+        }
+
         Ok((
             i,
             LocalVariable {

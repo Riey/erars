@@ -100,6 +100,31 @@ impl VmContext {
         }
     }
 
+    pub fn make_var_ref(
+        &mut self,
+        func: impl StrKeyLike,
+        var_name: impl StrKeyLike,
+        idxs: ArgVec,
+    ) -> VariableRef {
+        let mut func_name = func.get_key(&self.var);
+        let mut var_name = var_name.get_key(&self.var);
+
+        if let Ok((info, var)) = self.var.get_local_var(func_name, var_name) {
+            if info.is_ref {
+                let (name, func): (u32, u32) =
+                    unsafe { std::mem::transmute(var.assume_normal().as_int().unwrap()[0]) };
+                var_name = StrKey::from_u32(name);
+                func_name = StrKey::from_u32(func);
+            }
+        }
+
+        VariableRef {
+            name: var_name,
+            func_name,
+            idxs,
+        }
+    }
+
     pub fn reduce_local_value(&mut self, value: LocalValue) -> Result<Value> {
         match value {
             LocalValue::Value(v) => Ok(v),
@@ -240,11 +265,7 @@ impl VmContext {
     }
 
     pub fn push_var_ref(&mut self, name: StrKey, func_name: StrKey, idxs: ArgVec) {
-        let var_ref = VariableRef {
-            func_name,
-            name,
-            idxs,
-        };
+        let var_ref = self.make_var_ref(func_name, name, idxs);
         self.stack.push(LocalValue::VarRef(var_ref));
     }
 

@@ -17,7 +17,8 @@ use erars_ui::VirtualConsole;
 use strum::{Display, IntoStaticStr};
 
 use crate::{
-    context::FunctionIdentifier, SerializableGlobalVariableStorage, SerializableVariableStorage,
+    context::FunctionIdentifier,
+    SerializableGlobalVariableStorage, SerializableVariableStorage,
 };
 
 macro_rules! set_var {
