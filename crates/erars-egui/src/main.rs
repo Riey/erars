@@ -106,6 +106,7 @@ fn main() {
                 .query(&fontdb::Query {
                     families: &[
                         fontdb::Family::Name(&config.font_family),
+                        fontdb::Family::Name("GulimChe"),
                         fontdb::Family::Name("D2Coding"),
                     ],
                     ..Default::default()
