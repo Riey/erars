@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use crate::*;
 use crate::{context::FunctionIdentifier, variable::StrKeyLike};
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
     InlineValue, PrintFlags, StrKey, UnaryOperator, Value,
@@ -143,7 +143,7 @@ impl TerminalVm {
     fn call_internal(
         &self,
         label: FunctionIdentifier,
-        args: &[Value],
+        args: &[LocalValue],
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
         body: &FunctionBody,
@@ -151,21 +151,55 @@ impl TerminalVm {
         log::trace!("CALL {label}({args:?})",);
 
         let mut args = args.iter().cloned();
+        let mut pending_vars = Vec::new();
 
         for FunctionArgDef(var_idx, arg_indices, default_value) in body.args().iter() {
             let (info, var) = ctx.var.get_maybe_local_var(label, *var_idx)?;
-            let var = var.assume_normal();
-            let idx = info.calculate_single_idx(arg_indices).1 as usize;
+            if info.is_ref {
+                ensure!(arg_indices.is_empty(), "Can't use index for ref var");
+                ensure!(
+                    default_value.is_none(),
+                    "Can't use default value for ref var"
+                );
 
-            let arg = args.next().or_else(|| {
-                default_value.clone().map(|v| match v {
-                    InlineValue::Int(i) => Value::Int(i),
-                    InlineValue::String(s, _) => Value::String(s.resolve().into()),
-                })
-            });
+                let arg = args.next().context("Empty args for ref var")?;
 
-            var.set_or_default(idx as u32, arg)?;
+                match arg {
+                    LocalValue::VarRef(var_ref) => {
+                        var.assume_normal().as_int()?[0] = unsafe {
+                            std::mem::transmute((var_ref.name.to_u32(), var_ref.func_name.to_u32()))
+                        };
+                    }
+                    _ => bail!("Invalid arg for ref var"),
+                }
+            } else {
+                let var = var.assume_normal();
+                let idx = info.calculate_single_idx(arg_indices).1;
+
+                let arg = match args.next() {
+                    Some(LocalValue::VarRef(var_ref)) => {
+                        pending_vars.push((var_idx, idx, var_ref));
+                        continue;
+                    }
+                    Some(LocalValue::Value(v)) => Some(v),
+                    Some(LocalValue::InternedStr(s)) => Some(Value::String(s.to_string())),
+                    None => default_value.clone().map(|v| match v {
+                        InlineValue::Int(i) => Value::Int(i),
+                        InlineValue::String(s, _) => Value::String(s.resolve().into()),
+                    }),
+                };
+
+                var.set_or_default(idx, arg)?;
+            }
         }
+
+        for (src_var, idx, var_ref) in pending_vars {
+            let src = ctx.read_var_ref(&var_ref)?;
+            let (_info, var) = ctx.var.get_maybe_local_var(label, *src_var)?;
+            var.assume_normal().set(idx, src)?;
+        }
+
+        ensure!(args.next().is_none(), "Too many args");
 
         ctx.new_func(label, body.file_path);
 
@@ -180,7 +214,7 @@ impl TerminalVm {
     fn call(
         &self,
         label: impl StrKeyLike,
-        args: &[Value],
+        args: &[LocalValue],
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
     ) -> Result<Workflow> {
@@ -198,7 +232,7 @@ impl TerminalVm {
     pub fn try_call(
         &self,
         label: impl StrKeyLike,
-        args: &[Value],
+        args: &[LocalValue],
         tx: &mut VirtualConsole,
         ctx: &mut VmContext,
     ) -> Result<Option<Workflow>> {

@@ -1,5 +1,6 @@
 use anyhow::{ensure, Context};
 use erars_compiler::EraConfigKey;
+use tinyvec::ArrayVec;
 
 use crate::{context::VariableRef, variable::KnownVariableNames as Var};
 
@@ -225,7 +226,7 @@ pub(super) fn run_instruction(
             })?;
         }
     } else if let Some(c) = inst.as_try_call().or_else(|| inst.as_try_jump()) {
-        let args = ctx.take_value_list(c)?;
+        let args = ctx.take_list(c).collect::<Vec<_>>();
         let func = ctx.pop_strkey()?;
 
         match vm.try_call(func, &args, tx, ctx)? {
@@ -241,7 +242,7 @@ pub(super) fn run_instruction(
             }
         }
     } else if let Some(c) = inst.as_jump().or_else(|| inst.as_call()) {
-        let args = ctx.take_value_list(c)?;
+        let args = ctx.take_list(c).collect::<Vec<_>>();
         let func = ctx.pop_strkey()?;
 
         match vm.call(func, &args, tx, ctx)? {
@@ -1636,7 +1637,8 @@ fn run_builtin_method(
             let var = get_arg!(@key args, ctx);
             let dim = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
 
-            let info = ctx.var.get_maybe_local_var(func_name, var)?.0;
+            let var_ref = ctx.make_var_ref(func_name, var, ArrayVec::new());
+            let info = ctx.resolve_var_ref_raw(&var_ref)?.0;
 
             let ret = if let Some(ret) = info.size.get(dim) {
                 *ret
