@@ -77,7 +77,7 @@ impl TerminalVm {
                 }
                 Ok(EvalFormString(form)) => {
                     let parser_ctx = ParserContext::new(
-                        ctx.header_info.clone(),
+                        &*ctx.header_info,
                         ctx.var.interner().get_or_intern_static("FORMS.ERB"),
                     );
                     let expr = erars_compiler::normal_form_str(&parser_ctx)(&form).unwrap().1;

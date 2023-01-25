@@ -12,7 +12,7 @@ use erars_ast::StrKey;
 use erars_compiler::{HeaderInfo, ParserContext, ParserResult};
 use serde::de::DeserializeOwned;
 
-pub fn get_ctx(file_path: impl AsRef<str>) -> ParserContext {
+pub fn get_ctx(file_path: impl AsRef<str>) -> ParserContext<'static> {
     let mut info = HeaderInfo {
         global_variables: serde_yaml::from_str(include_str!(
             "../crates/erars-loader/src/variable.yaml"
@@ -36,9 +36,9 @@ pub fn get_ctx(file_path: impl AsRef<str>) -> ParserContext {
 }
 
 #[track_caller]
-pub fn do_test<T: std::fmt::Debug + Eq + DeserializeOwned>(
+pub fn do_test<'p, T: std::fmt::Debug + Eq + DeserializeOwned>(
     path: &str,
-    f: fn(&ParserContext, &str) -> ParserResult<T>,
+    f: fn(&ParserContext<'p>, &str) -> ParserResult<T>,
 ) -> T {
     erars_ast::init_interner();
     let source = std::fs::read_to_string(path).unwrap();

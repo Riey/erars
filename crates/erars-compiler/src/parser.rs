@@ -840,7 +840,7 @@ impl HeaderInfo {
     }
 
     pub fn merge_header(&mut self, s: &str) -> ParserResult<()> {
-        let ctx = ParserContext::default();
+        let mut ctx = ParserContext::new(self, StrKey::new("DEFAULT.ERB"));
         let mut pp = Preprocessor::new(&PP_REGEX, s);
         let mut b = Bump::new();
 
@@ -851,21 +851,33 @@ impl HeaderInfo {
                     args,
                 }) => {
                     let (args, ident) = try_nom!(pp, self::expr::ident(args));
-                    self.macros.insert(ident.to_string(), args.trim().to_string());
+                    ctx.header
+                        .try_mut()
+                        .unwrap()
+                        .macros
+                        .insert(ident.to_string(), args.trim().to_string());
                 }
                 Some(EraLine::SharpLine {
                     sharp: SharpCode::DIM,
                     args: dim,
                 }) => {
                     let var = try_nom!(pp, self::expr::dim_line(&ctx, false)(dim)).1;
-                    self.global_variables.insert(var.var, var.info);
+                    ctx.header
+                        .try_mut()
+                        .unwrap()
+                        .global_variables
+                        .insert(var.var, var.info);
                 }
                 Some(EraLine::SharpLine {
                     sharp: SharpCode::DIMS,
                     args: dims,
                 }) => {
                     let var = try_nom!(pp, self::expr::dim_line(&ctx, true)(dims)).1;
-                    self.global_variables.insert(var.var, var.info);
+                    ctx.header
+                        .try_mut()
+                        .unwrap()
+                        .global_variables
+                        .insert(var.var, var.info);
                 }
                 Some(_) => error!(pp.span(), "Invalid line"),
                 None => break,
@@ -879,31 +891,78 @@ impl HeaderInfo {
 }
 
 #[derive(Debug)]
-pub struct ParserContext {
+pub enum HeaderInfoRef<'p> {
+    Ref(&'p HeaderInfo),
+    Mut(&'p mut HeaderInfo),
+    Arc(Arc<HeaderInfo>),
+}
+
+impl<'p> HeaderInfoRef<'p> {
+    pub fn try_mut(&mut self) -> Option<&mut HeaderInfo> {
+        match self {
+            HeaderInfoRef::Ref(_) => None,
+            HeaderInfoRef::Mut(r) => Some(r),
+            HeaderInfoRef::Arc(_) => None,
+        }
+    }
+
+    pub fn try_as_arc(&self) -> Option<Arc<HeaderInfo>> {
+        match self {
+            HeaderInfoRef::Ref(_) => None,
+            HeaderInfoRef::Mut(_) => None,
+            HeaderInfoRef::Arc(a) => Some(a.clone()),
+        }
+    }
+}
+
+impl<'p> From<&'p HeaderInfo> for HeaderInfoRef<'p> {
+    fn from(r: &'p HeaderInfo) -> Self {
+        Self::Ref(r)
+    }
+}
+
+impl<'p> From<&'p mut HeaderInfo> for HeaderInfoRef<'p> {
+    fn from(r: &'p mut HeaderInfo) -> Self {
+        Self::Mut(r)
+    }
+}
+
+impl From<Arc<HeaderInfo>> for HeaderInfoRef<'static> {
+    fn from(a: Arc<HeaderInfo>) -> Self {
+        Self::Arc(a)
+    }
+}
+
+impl<'p> AsRef<HeaderInfo> for HeaderInfoRef<'p> {
+    fn as_ref(&self) -> &HeaderInfo {
+        match self {
+            HeaderInfoRef::Ref(r) => r,
+            HeaderInfoRef::Mut(r) => r,
+            HeaderInfoRef::Arc(a) => a.as_ref(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ParserContext<'p> {
     pub interner: &'static Interner,
     pub locals_key: StrKey,
     pub args_key: StrKey,
-    pub header: Arc<HeaderInfo>,
+    pub header: HeaderInfoRef<'p>,
     pub local_strs: RefCell<HashSet<StrKey>>,
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
     pub file_path: StrKey,
 }
 
-impl Default for ParserContext {
-    fn default() -> Self {
-        Self::new(Arc::default(), StrKey::new("DEFAULT.ERB"))
-    }
-}
-
-impl ParserContext {
-    pub fn new(header: Arc<HeaderInfo>, file_path: StrKey) -> Self {
+impl<'p> ParserContext<'p> {
+    pub fn new(header: impl Into<HeaderInfoRef<'p>>, file_path: StrKey) -> Self {
         let interner = get_interner();
         Self {
             interner,
             locals_key: interner.get_or_intern_static("LOCALS"),
             args_key: interner.get_or_intern_static("ARGS"),
-            header,
+            header: header.into(),
             file_path,
             local_strs: RefCell::default(),
             is_arg: Cell::new(false),
@@ -915,7 +974,7 @@ impl ParserContext {
         if key == self.locals_key || key == self.args_key || self.local_strs.borrow().contains(&key)
         {
             true
-        } else if let Some(v) = self.header.global_variables.get(&key) {
+        } else if let Some(v) = self.header.as_ref().global_variables.get(&key) {
             v.is_str
         } else {
             false
@@ -925,7 +984,7 @@ impl ParserContext {
     pub fn replace<'s>(&self, s: &'s str) -> Cow<'s, str> {
         let mut ret = Cow::Borrowed(s);
 
-        while let Some(new) = self.header.macros.get(ret.as_ref()) {
+        while let Some(new) = self.header.as_ref().macros.get(ret.as_ref()) {
             ret = Cow::Owned(new.clone());
         }
 
@@ -1734,7 +1793,7 @@ impl ParserContext {
     }
 }
 
-impl ParserContext {
+impl<'p> ParserContext<'p> {
     pub fn parse_program_str(&self, s: &str) -> ParserResult<Vec<Function>> {
         let mut pp = Preprocessor::new(&crate::PP_REGEX, s);
         let mut b = Bump::new();

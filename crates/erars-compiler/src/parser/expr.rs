@@ -406,7 +406,7 @@ pub fn renamed_ident<'c, 'a>(
     move |i| {
         let (i, key) = take_while(|c| c != ']')(i)?;
         let key = ctx.interner.get_or_intern(key.trim());
-        if let Some(value) = ctx.header.rename.get(&key) {
+        if let Some(value) = ctx.header.as_ref().rename.get(&key) {
             let Ok((_, value)) = expr(ctx)(value) else {
                 return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
             };
@@ -864,7 +864,9 @@ pub fn dim_line<'c, 'a>(
                     char_sp(','),
                     map(expr(ctx), |expr| {
                         ctx.header
-                            .const_eval_log_error(&expr)
+                            .as_ref()
+                            .const_eval(&expr)
+                            .unwrap()
                             .into_int_err()
                             .map(|i| i as u32)
                             .unwrap()
@@ -942,7 +944,7 @@ fn function_arg_list<'c, 'a>(
                 opt(preceded(
                     char_sp('='),
                     map(expr(ctx), |expr| {
-                        ctx.header.const_eval_log_error(&expr).into()
+                        ctx.header.as_ref().const_eval_log_error(&expr).into()
                     }),
                 )),
             )),
@@ -975,6 +977,7 @@ pub fn variable_arg<'c, 'a>(
     move |mut i| {
         let var_names = ctx
             .header
+            .as_ref()
             .var_names
             .get(&ctx.interner.get_or_intern(var_name_alias(var)));
         let is_arg = ctx.is_arg.get();

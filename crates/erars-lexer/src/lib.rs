@@ -411,8 +411,10 @@ impl<'s> Preprocessor<'s> {
                 unreachable!()
             }
         } else {
-            let line = cut_comment(line);
-            if let Some(line) = line.strip_prefix('#') {
+            let line = cut_comment(line).trim_start();
+            if line.is_empty() {
+                Ok(None)
+            } else if let Some(line) = line.strip_prefix('#') {
                 if let Some(m) = self.re.sharp_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
                     if let Some(sharp) = SharpCode::from_u32(m.pattern().as_u32()) {
                         let line =

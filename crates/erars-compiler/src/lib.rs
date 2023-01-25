@@ -26,5 +26,5 @@ pub use instruction::Instruction;
 pub use logos::Lexer;
 pub use parser::{
     normal_form_str, CharacterTemplate, DefaultLocalVarSize, EraConfig, EraConfigKey, HeaderInfo,
-    Language, ParserContext, ReplaceInfo,
+    HeaderInfoRef, Language, ParserContext, ReplaceInfo,
 };

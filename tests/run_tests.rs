@@ -26,7 +26,7 @@ fn run_test() {
     erars_ast::init_interner();
 
     let erb_files = glob::glob("tests/run_tests/**/*.erb").unwrap();
-    let header = test_util::get_ctx("").header;
+    let header = test_util::get_ctx("").header.try_as_arc().unwrap();
 
     for erb_file in erb_files {
         let mut ctx = VmContext::new(
