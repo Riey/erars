@@ -1773,9 +1773,11 @@ fn run_builtin_command(
     let mut args = ctx.take_list(c).collect::<Vec<_>>().into_iter();
 
     match com {
+        BuiltinCommand::SpriteCreate => {
+            log::warn!("SPRITECREATE");
+        }
         BuiltinCommand::HtmlPrint => {
             let s = get_arg!(@String: args, ctx);
-            log::warn!("TODO: HTML_PRINT({s})");
             let dom = html5ever::parse_document(RcDom::default(), Default::default())
                 .from_utf8()
                 .read_from(&mut s.as_bytes())?;
