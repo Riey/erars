@@ -139,7 +139,7 @@ fn main() {
                     let ret = if args.load {
                         unsafe { load_script(&args.target_path, system, config) }
                     } else {
-                        run_script(&args.target_path, system, config, false, args.lint_off)
+                        run_script(&args.target_path, system, config, false, !args.lint_off)
                     };
                     match ret {
                         Ok((vm, mut ctx, mut tx)) => {
