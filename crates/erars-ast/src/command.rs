@@ -189,9 +189,6 @@ pub enum BuiltinCommand {
     SetColorByName,
     SetBgColorByName,
 
-    #[strum(serialize = "HTML_PRINT")]
-    HtmlPrint,
-
     FontBold,
     FontItalic,
     FontRegular,
@@ -221,4 +218,8 @@ pub enum BuiltinCommand {
     ArraySort,
     ArrayCopy,
     ArrayMove,
+
+    #[strum(serialize = "HTML_PRINT")]
+    HtmlPrint = 300,
+    SpriteCreate,
 }

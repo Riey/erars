@@ -1332,6 +1332,8 @@ impl<'p> ParserContext<'p> {
                     SKIPDISP => normal_command!(BuiltinCommand::SkipDisp),
 
                     HTML_PRINT => normal_command!(BuiltinCommand::HtmlPrint),
+                    SPRITECREATED => normal_method!(BuiltinMethod::SpriteCreated),
+                    SPRITECREATE => normal_command!(BuiltinCommand::SpriteCreate),
 
                     REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
 
