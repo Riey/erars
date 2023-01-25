@@ -1,6 +1,11 @@
 use anyhow::{ensure, Context};
+use erars_ast::Alignment;
 use erars_compiler::EraConfigKey;
+use html5ever::tendril::TendrilSink;
+use rcdom::{NodeData, RcDom};
 use tinyvec::ArrayVec;
+
+use markup5ever_rcdom as rcdom;
 
 use crate::{context::VariableRef, variable::KnownVariableNames as Var};
 
@@ -330,8 +335,6 @@ pub(super) fn run_instruction(
     } else if let Some(align) = inst.as_set_aligment() {
         tx.set_align(align);
     } else if let Some(align) = inst.as_pad_str() {
-        use erars_ast::Alignment;
-
         let size = ctx.pop_int()?;
         let text = match ctx.pop_value()? {
             Value::String(s) => s,
@@ -1684,6 +1687,81 @@ fn run_builtin_method(
     Ok(())
 }
 
+fn html_print(node: &rcdom::Handle, tx: &mut VirtualConsole) {
+    let mut newline = false;
+    let init_align = tx.align();
+    let mut align = init_align;
+    match &node.data {
+        NodeData::Text { contents } => {
+            tx.print(contents.borrow().as_ref().to_owned());
+        }
+        NodeData::Element { name, attrs, .. } => {
+            for attr in attrs.borrow().iter() {
+                match &*attr.name.local {
+                    "align" => {
+                        align = match &*attr.value {
+                            "left" => Alignment::Left,
+                            "center" => Alignment::Center,
+                            "right" => Alignment::Right,
+                            other => {
+                                log::warn!("TODO: HTML attribute align={other}");
+                                continue;
+                            }
+                        };
+                    }
+                    _ => {}
+                }
+            }
+
+            match &*name.local {
+                "br" => {
+                    newline = true;
+                }
+                "p" => {
+                    newline = true;
+                }
+                "html" | "body" | "head" => {}
+                "img" => {
+                    match attrs.borrow().iter().find_map(|attr| {
+                        if &*attr.name.local == "src" {
+                            Some(&attr.value)
+                        } else {
+                            None
+                        }
+                    }) {
+                        Some(img_src) => {
+                            // TODO print img
+                            tx.print(format!("<img src={img_src}>"));
+                        }
+                        None => {
+                            tx.print("<img>".into());
+                        }
+                    }
+                }
+                other => {
+                    log::warn!("TODO: HTML element {other}");
+                }
+            }
+        }
+        NodeData::Document => {}
+        NodeData::Doctype { .. } => {}
+        NodeData::Comment { .. } => {}
+        NodeData::ProcessingInstruction { .. } => {}
+    }
+
+    tx.set_align(align);
+
+    for child in node.children.borrow().iter() {
+        html_print(child, tx);
+    }
+
+    tx.set_align(init_align);
+
+    if newline {
+        tx.new_line();
+    }
+}
+
 fn run_builtin_command(
     com: BuiltinCommand,
     func_name: StrKey,
@@ -1696,9 +1774,13 @@ fn run_builtin_command(
 
     match com {
         BuiltinCommand::HtmlPrint => {
-            log::warn!("TODO: HTML_PRINT");
             let s = get_arg!(@String: args, ctx);
-            tx.print_line(s);
+            log::warn!("TODO: HTML_PRINT({s})");
+            let dom = html5ever::parse_document(RcDom::default(), Default::default())
+                .from_utf8()
+                .read_from(&mut s.as_bytes())?;
+
+            html_print(&dom.document, tx);
         }
         BuiltinCommand::UpCheck => {
             let palam = ctx.var.known_key(Var::Palam);
