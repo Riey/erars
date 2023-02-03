@@ -30,7 +30,7 @@ ITEMNAME:
   is_const: true
 
 FLAGNAME:
-  size: [1000]
+  size: [10000]
   is_str: true
   is_const: true
 
@@ -45,22 +45,22 @@ EXPNAME:
   is_const: true
 
 CFLAGNAME:
-  size: [1000]
+  size: [10000]
   is_str: true
   is_const: true
 
 CSTRNAME:
-  size: [1000]
+  size: [100]
   is_str: true
   is_const: true
 
 STRNAME:
-  size: [1000]
+  size: [20000]
   is_str: true
   is_const: true
 
 TSTRNAME:
-  size: [1000]
+  size: [100]
   is_str: true
   is_const: true
 
