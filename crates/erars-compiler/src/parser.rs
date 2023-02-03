@@ -733,6 +733,23 @@ impl HeaderInfo {
                                         log::error!("Variable size for {name} is not matched! Expected: {info_len} Actual: {size_len}", size_len = sizes.len());
                                     } else {
                                         info.size.copy_from_slice(&sizes[..info_len]);
+                                        let is_item_name = name == "ITEMNAME";
+                                        let is_item_price = name == "ITEMPRICE";
+
+                                        if is_item_name || is_item_price {
+                                            let other = if is_item_name {
+                                                interner.get_or_intern_static("ITEMPRICE")
+                                            } else {
+                                                interner.get_or_intern_static("ITEMNAME")
+                                            };
+
+                                            // length should be same
+                                            self.global_variables
+                                                .get_mut(&other)
+                                                .unwrap()
+                                                .size
+                                                .copy_from_slice(&sizes[..info_len]);
+                                        }
                                     }
                                 }
                                 None => {

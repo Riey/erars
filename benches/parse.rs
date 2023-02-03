@@ -17,7 +17,7 @@ fn gen_bench(count: usize) -> String {
     ret
 }
 
-fn make_ctx() -> ParserContext {
+fn make_ctx() -> ParserContext<'static> {
     erars_ast::init_interner();
 
     ParserContext::new(
