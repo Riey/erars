@@ -907,6 +907,10 @@ impl VariableStorage {
             let arr = self.get_var(*var_name)?.1.assume_normal().as_str()?;
             if let Some(var_name_var) = header.var_name_var.get(&var) {
                 for (idx, name) in var_name_var.iter() {
+                    if *idx as usize >= arr.len() {
+                        log::error!("Index out of range: `{}` {} is out range of {}", var_name, idx, arr.len());
+                        continue;
+                    }
                     arr[*idx as usize] = name.to_string();
                 }
             }

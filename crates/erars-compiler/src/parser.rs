@@ -683,6 +683,27 @@ impl HeaderInfo {
         Ok(())
     }
 
+    fn change_var_size(&mut self, name: &str, sizes: Vec<u32>) -> ParserResult<()> {
+        let name_key = get_interner().get_or_intern(name);
+
+        match self.global_variables.get_mut(&name_key) {
+            Some(info) => {
+                let info_len = info.size.len();
+                if info.size.len() != sizes.len() {
+                    log::error!("Variable size for {name} is not matched! Expected: {info_len} Actual: {size_len}", size_len = sizes.len());
+                    return Ok(());
+                }
+
+                info.size.copy_from_slice(&sizes[..info_len]);
+            }
+            None => {
+                log::warn!("Variable {name} is not exists but defined in variablesize.csv");
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn merge_variable_size_csv(&mut self, s: &str) -> ParserResult<()> {
         let interner = get_interner();
 
@@ -726,38 +747,43 @@ impl HeaderInfo {
                         }
 
                         if !forbidden {
-                            match self.global_variables.get_mut(&name_key) {
-                                Some(info) => {
-                                    let info_len = info.size.len();
-                                    if info.size.len() != sizes.len() {
-                                        log::error!("Variable size for {name} is not matched! Expected: {info_len} Actual: {size_len}", size_len = sizes.len());
-                                    } else {
-                                        info.size.copy_from_slice(&sizes[..info_len]);
-                                        let is_item_name = name == "ITEMNAME";
-                                        let is_item_price = name == "ITEMPRICE";
+                            const PAIRS: &[(&str, &str)] = &[
+                                ("ABLNAME", "ABL"),
+                                ("BASENAME", "BASE"),
+                                ("TALENTNAME", "TALENT"),
+                                ("FLAGNAME", "FLAG"),
+                                ("EXNAME", "EX"),
+                                ("EXPNAME", "EXP"),
+                                ("CFLAGNAME", "CFLAG"),
+                                ("CSTRNAME", "CSTR"),
+                                ("STRNAME", "STR"),
+                                ("TSTRNAME", "TSTR"),
+                                ("EQUIPNAME", "EQUIP"),
+                                ("TEQUIPNAME", "TEQUIP"),
+                                ("TRAINNAME", "TRAIN"),
+                                ("PALAMNAME", "PALAM"),
+                                ("SOURCENAME", "SOURCE"),
+                                ("STAINNAME", "STAIN"),
+                                ("TCVARNAME", "TCVAR"),
+                                ("GLOBALNAME", "GLOBAL"),
+                                ("GLOBALSNAME", "GLOBALS"),
+                                ("MARKNAME", "MARK"),
+                                ("SAVESTRNAME", "SAVESTR"),
 
-                                        if is_item_name || is_item_price {
-                                            let other = if is_item_name {
-                                                interner.get_or_intern_static("ITEMPRICE")
-                                            } else {
-                                                interner.get_or_intern_static("ITEMNAME")
-                                            };
+                                ("ITEMNAME", "ITEMPRICE"),
+                                ("ITEMPRICE", "ITEM"),
+                                ("ITEM", "ITEMNAME"),
+                            ];
 
-                                            // length should be same
-                                            self.global_variables
-                                                .get_mut(&other)
-                                                .unwrap()
-                                                .size
-                                                .copy_from_slice(&sizes[..info_len]);
-                                        }
-                                    }
-                                }
-                                None => {
-                                    log::warn!(
-                                        "Variable {name} is not exists but defined in variablesize.csv"
-                                    );
+                            for pair in PAIRS {
+                                if name == pair.0 {
+                                    self.change_var_size(pair.1, sizes.clone())?;
+                                } else if name == pair.1 {
+                                    self.change_var_size(pair.0, sizes.clone())?;
                                 }
                             }
+                            
+                            self.change_var_size(name, sizes)?;
                         }
                     }
                 }
