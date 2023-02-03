@@ -4,10 +4,10 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 use enum_map::{Enum, EnumMap};
 use erars_ast::{get_interner, EventType, Interner, StrKey, Value, VariableInfo};
-use erars_compiler::{CharacterTemplate, HeaderInfo, ReplaceInfo};
+use erars_compiler::{CharacterTemplate, HeaderInfo};
 use hashbrown::HashMap;
 use rand::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -177,7 +177,7 @@ impl VariableStorage {
         header: &HeaderInfo,
     ) -> Result<()> {
         self.load_variables(sav.variables, sav.local_variables, true);
-        self.init_replace(&header.replace)?;
+        self.init(header)?;
 
         Ok(())
     }
@@ -191,7 +191,7 @@ impl VariableStorage {
         self.rng = SeedableRng::from_seed(sav.rand_seed);
 
         self.load_variables(sav.variables, sav.local_variables, false);
-        self.init_replace(&header.replace)?;
+        self.init(header)?;
 
         Ok(())
     }
@@ -724,6 +724,8 @@ impl VariableStorage {
     pub fn reset_var(&mut self, var: impl StrKeyLike) -> Result<()> {
         let (info, var) = self.get_var(var)?;
 
+        ensure!(!info.is_const, "Cannot reset const variable");
+
         if info.is_str {
             match var {
                 UniformVariable::Character(c) => {
@@ -793,12 +795,12 @@ impl VariableStorage {
         }
     }
 
-    pub fn reset_data(&mut self, replace: &ReplaceInfo) -> Result<()> {
+    pub fn reset_data(&mut self, header: &HeaderInfo) -> Result<()> {
         self.character_len = 0;
         for var in self.variables.values_mut() {
-            var.1 = UniformVariable::new(&self.header, &var.0);
+            var.1 = UniformVariable::new(header, &var.0);
         }
-        self.init_replace(replace)?;
+        self.init(header)?;
 
         Ok(())
     }
@@ -859,11 +861,11 @@ impl VariableStorage {
         }
     }
 
-    pub fn init_replace(&mut self, replace: &ReplaceInfo) -> Result<()> {
+    pub fn init(&mut self, header: &HeaderInfo) -> Result<()> {
         macro_rules! set {
             ($name:expr, $field:ident) => {
                 let var = self.get_var($name)?.1.assume_normal().as_int()?;
-                let arr = &replace.$field;
+                let arr = &header.replace.$field;
 
                 var[..arr.len()].copy_from_slice(arr);
             };
@@ -872,8 +874,48 @@ impl VariableStorage {
         set!(KnownVariableNames::PalamLv, palamlv_init);
         set!(KnownVariableNames::ExpLv, explv_init);
 
-        self.get_var("RELATION")?.0.default_int = replace.relation_init;
-        *self.ref_int("PBAND", &[])? = replace.pband_init;
+        self.get_var("RELATION")?.0.default_int = header.replace.relation_init;
+        *self.ref_int("PBAND", &[])? = header.replace.pband_init;
+
+        const NAMES: &[(&str, &str)] = &[
+            ("ABLNAME", "ABL"),
+            ("BASENAME", "BASE"),
+            ("TALENTNAME", "TALENT"),
+            ("ITEMNAME", "ITEM"),
+            ("FLAGNAME", "FLAG"),
+            ("EXNAME", "EX"),
+            ("EXPNAME", "EXP"),
+            ("CFLAGNAME", "CFLAG"),
+            ("CSTRNAME", "CSTR"),
+            ("STRNAME", "STR"),
+            ("TSTRNAME", "TSTR"),
+            ("EQUIPNAME", "EQUIP"),
+            ("TEQUIPNAME", "TEQUIP"),
+            ("TRAINNAME", "TRAIN"),
+            ("PALAMNAME", "PALAM"),
+            ("SOURCENAME", "SOURCE"),
+            ("STAINNAME", "STAIN"),
+            ("TCVARNAME", "TCVAR"),
+            ("GLOBALNAME", "GLOBAL"),
+            ("GLOBALSNAME", "GLOBALS"),
+            ("MARKNAME", "MARK"),
+            ("SAVESTRNAME", "SAVESTR"),
+        ];
+
+        for (var_name, var) in NAMES {
+            let var = self.interner().get_or_intern_static(var);
+            let arr = self.get_var(*var_name)?.1.assume_normal().as_str()?;
+            if let Some(var_name_var) = header.var_name_var.get(&var) {
+                for (idx, name) in var_name_var.iter() {
+                    arr[*idx as usize] = name.to_string();
+                }
+            }
+        }
+
+        let price = self.get_var("ITEMPRICE")?.1.assume_normal().as_int()?;
+        for (idx, value) in header.item_price.iter() {
+            price[*idx as usize] = *value as i64;
+        }
 
         Ok(())
     }

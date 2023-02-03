@@ -9,31 +9,6 @@ use strum::{Display, EnumString, IntoStaticStr};
 #[strum(serialize_all = "UPPERCASE")]
 #[repr(u32)]
 pub enum BuiltinVariable {
-    AblName,
-    BaseName,
-    TalentName,
-    ItemName,
-    FlagName,
-    ExName,
-    ExpName,
-    CflagName,
-    CstrName,
-    StrName,
-    TstrName,
-    EquipName,
-    TequipName,
-    TrainName,
-    PalamName,
-    SourceName,
-    StainName,
-    TcvarName,
-    GlobalName,
-    GlobalsName,
-    MarkName,
-    SaveStrName,
-
-    ItemPrice,
-
     CharaNum,
     LineCount,
 

@@ -5,6 +5,121 @@
   # is_savedata: false
   # size: [1000]
 
+ITEMPRICE:
+  size: [1000]
+  is_const: true
+
+ABLNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+BASENAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+TALENTNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+ITEMNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+FLAGNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+EXNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+EXPNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+CFLAGNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+CSTRNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+STRNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+TSTRNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+EQUIPNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+TEQUIPNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+TRAINNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+PALAMNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+SOURCENAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+STAINNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+TCVARNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+GLOBALNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+GLOBALSNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+MARKNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+SAVESTRNAME:
+  size: [1000]
+  is_str: true
+  is_const: true
+
+
 WINDOW_TITLE:
   size: []
   is_str: true

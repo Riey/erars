@@ -371,26 +371,6 @@ pub(super) fn run_instruction(
 
             CharaNum => (ctx.var.character_len() as i64).into(),
             LineCount => (tx.line_count() as i64).into(),
-            ItemPrice => {
-                let arg = args[0] as u32;
-                ctx.header_info.item_price.get(&arg).copied().unwrap_or(0).into()
-            }
-
-            AblName | BaseName | TalentName | TrainName | ItemName | FlagName | ExName
-            | ExpName | MarkName | CflagName | CstrName | StrName | TstrName | EquipName
-            | TequipName | PalamName | SourceName | StainName | TcvarName | GlobalName
-            | GlobalsName | SaveStrName => {
-                let name = <&str>::from(var).strip_suffix("NAME").unwrap();
-                let name = ctx.var.interner().get_or_intern(name);
-                let arg = args[0] as u32;
-                Value::String(
-                    ctx.header_info
-                        .var_name_var
-                        .get(&name)
-                        .and_then(|d| Some(ctx.var.interner().resolve(d.get(&arg)?).to_string()))
-                        .unwrap_or_default(),
-                )
-            }
             Rand => {
                 let max = args[0];
                 Value::Int(ctx.var.rng().gen_range(0..max) as i64)
@@ -2443,7 +2423,7 @@ fn run_builtin_command(
             ctx.var.del_chara(idx.try_into()?);
         }
         BuiltinCommand::ResetData => {
-            ctx.var.reset_data(&ctx.header_info.replace)?;
+            ctx.var.reset_data(&ctx.header_info)?;
         }
         BuiltinCommand::SaveData => {
             let idx = get_arg!(@u32: args, ctx);

@@ -74,10 +74,7 @@ impl VmContext {
     }
 
     fn init_variable(&mut self) -> Result<()> {
-        let info = self.header_info.clone();
-        let replace = &info.replace;
-
-        self.var.init_replace(replace)?;
+        self.var.init(&self.header_info)?;
 
         Ok(())
     }

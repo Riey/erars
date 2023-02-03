@@ -707,10 +707,6 @@ impl HeaderInfo {
                     "LOCALS" => {
                         self.default_local_size.default_locals_size = next!();
                     }
-                    // just ignore
-                    "ITEMNAME" | "ABLNAME" | "TALENTNAME" | "EXPNAME" | "MARKNAME"
-                    | "PALAMNAME" | "TRAINNAME" | "BASENAME" | "SOURCENAME" | "EXNAME"
-                    | "EQUIPNAME" | "TEQUIPNAME" | "FLAGNAME" | "TFLAGNAME" | "CFLAGNAME" => {}
                     name => {
                         let name_key = interner.get_or_intern(name);
                         let mut sizes: Vec<u32> = Vec::with_capacity(4);

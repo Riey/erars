@@ -2724,7 +2724,7 @@ Function {
                 },
                 None,
                 FormText(
-                    {BuiltinVar(PalamName, [Var(Variable { var: ARG, func_extern: None, args: [Int(1)] })])}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [] }), NotEqual, Var(Variable { var: TARGET, func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: CALLNAME, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(BuiltinMethod(Sign, [Some(Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] }))]), Equal, Int(1)), FormText(＋), FormText(－))} {BuiltinMethod(Abs, [Some(Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] }))])},
+                    {Var(Variable { var: PALAMNAME, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [Int(1)] })] })}의 구슬{CondExpr(BinopExpr(BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [Int(4)] }), Sub, BinopExpr(Var(Variable { var: ARG, func_extern: None, args: [] }), NotEqual, Var(Variable { var: TARGET, func_extern: None, args: [] }))), LessOrEqual, Int(0)), FormText(({Var(Variable { var: CALLNAME, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] })] })})), FormText())} {CondExpr(BinopExpr(BuiltinMethod(Sign, [Some(Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] }))]), Equal, Int(1)), FormText(＋), FormText(－))} {BuiltinMethod(Abs, [Some(Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] }))])},
                 ),
             ),
             ScriptPosition {
