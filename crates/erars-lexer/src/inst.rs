@@ -158,6 +158,7 @@ pub enum InstructionCode {
     FONTREGULAR,
     SORTCHARA,
     FONTSTYLE,
+    GETSTYLE,
     ALIGNMENT,
     CUSTOMDRAWLINE,
     DRAWLINEFORM,

@@ -1450,6 +1450,9 @@ fn run_builtin_method(
             check_arg_count!(0);
             ctx.push(tx.hl_color() as i64);
         }
+        BuiltinMethod::GetStyle => {
+            ctx.push(tx.style().bits() as i64);
+        }
         BuiltinMethod::GetChara => {
             check_arg_count!(1, 2);
 
@@ -2105,9 +2108,6 @@ fn run_builtin_command(
             let style: u32 = get_arg!(@i64: args, ctx).try_into()?;
             let style = FontStyle::from_bits_truncate(style);
             tx.set_style(style);
-        }
-        BuiltinCommand::GetStyle => {
-            ctx.push(tx.style().bits() as i64);
         }
         BuiltinCommand::SetFont => {
             let font = get_arg!(@String: args, ctx);

@@ -1299,6 +1299,7 @@ impl<'p> ParserContext<'p> {
                     FONTITALIC => normal_command!(BuiltinCommand::FontItalic),
                     FONTREGULAR => normal_command!(BuiltinCommand::FontRegular),
                     FONTSTYLE => normal_command!(BuiltinCommand::FontStyle),
+                    GETSTYLE => normal_method!(BuiltinMethod::GetStyle),
                     SETFONT => normal_command!(BuiltinCommand::SetFont),
                     CHKFONT => normal_method!(BuiltinMethod::ChkFont),
                     GETFONT => normal_method!(BuiltinMethod::GetFont),

@@ -77,6 +77,7 @@ pub enum BuiltinMethod {
     GetBgColor,
     GetDefBgColor,
     GetFocusColor,
+    GetStyle,
     GetFont,
     GetChara,
     GetBit,
@@ -89,7 +90,7 @@ pub enum BuiltinMethod {
     CurrentRedraw,
     ChkFont,
 
-    Rand = 80,
+    Rand = 90,
     ChkData,
     ChkCharaData,
     FindChara,
@@ -193,7 +194,6 @@ pub enum BuiltinCommand {
     FontItalic,
     FontRegular,
     FontStyle,
-    GetStyle,
     SetFont,
 
     Bar = 89,
