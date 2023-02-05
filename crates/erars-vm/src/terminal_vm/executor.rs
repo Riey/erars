@@ -1347,9 +1347,7 @@ fn run_builtin_method(
             let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
             let length = get_arg!(@opt @usize: args, ctx);
 
-            log::debug!("SubStringU: {} {} {:?}", text, start, length);
-
-            let mut chars = text.chars().skip(start);
+            let chars = text.chars().skip(start);
 
             let mut ret = String::new();
 
