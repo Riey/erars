@@ -1347,20 +1347,18 @@ fn run_builtin_method(
             let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
             let length = get_arg!(@opt @usize: args, ctx);
 
+            log::debug!("SubStringU: {} {} {:?}", text, start, length);
+
             let mut chars = text.chars().skip(start);
 
             let mut ret = String::new();
 
             match length {
                 Some(length) => {
-                    for _ in 0..length {
-                        ret.push(chars.next().unwrap());
-                    }
+                    ret.extend(chars.take(length));
                 }
                 None => {
-                    for ch in chars {
-                        ret.push(ch);
-                    }
+                    ret.extend(chars);
                 }
             };
 

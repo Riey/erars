@@ -769,7 +769,6 @@ impl HeaderInfo {
                                 ("GLOBALSNAME", "GLOBALS"),
                                 ("MARKNAME", "MARK"),
                                 ("SAVESTRNAME", "SAVESTR"),
-
                                 ("ITEMNAME", "ITEMPRICE"),
                                 ("ITEMPRICE", "ITEM"),
                                 ("ITEM", "ITEMNAME"),
@@ -782,7 +781,7 @@ impl HeaderInfo {
                                     self.change_var_size(pair.0, sizes.clone())?;
                                 }
                             }
-                            
+
                             self.change_var_size(name, sizes)?;
                         }
                     }

@@ -30,7 +30,8 @@ pub fn get_ctx(file_path: impl AsRef<str>) -> ParserContext<'static> {
     info.merge_chara_csv(include_str!("../CSV/CHARA3.CSV")).unwrap();
     info.merge_replace_csv(include_str!("../CSV/_Replace.CSV")).unwrap();
     info.merge_rename_csv(include_str!("../CSV/_Rename.CSV")).unwrap();
-    info.merge_variable_size_csv(include_str!("../CSV/VariableSize.CSV")).unwrap();
+    info.merge_variable_size_csv(include_str!("../CSV/VariableSize.CSV"))
+        .unwrap();
     info.merge_header("#DEFINE TRUE 1").unwrap();
 
     ParserContext::new(Arc::new(info), StrKey::new(file_path.as_ref()))
