@@ -56,7 +56,7 @@ fn main() {
         None
     } else {
         Some(
-            Logger::try_with_str(&args.log_level)
+            Logger::try_with_str(format!("warn,erars={}", &args.log_level))
                 .unwrap()
                 .rotate(
                     Criterion::AgeOrSize(Age::Day, 1024 * 1024),
