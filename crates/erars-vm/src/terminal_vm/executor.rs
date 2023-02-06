@@ -1616,10 +1616,10 @@ fn run_builtin_method(
 
         BuiltinMethod::VarSize => {
             check_arg_count!(1, 2);
-            let var = get_arg!(@key args, ctx);
+            let var = get_arg!(@String: args, ctx).to_uppercase();
             let dim = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
 
-            let var_ref = ctx.make_var_ref(func_name, var, ArrayVec::new());
+            let var_ref = ctx.make_var_ref(func_name, &var, ArrayVec::new());
             let info = ctx.resolve_var_ref_raw(&var_ref)?.0;
 
             let ret = if let Some(ret) = info.size.get(dim) {

@@ -1,3 +1,4 @@
+use cow_utils::CowUtils;
 use std::borrow::Cow;
 
 use super::ParserContext;
@@ -60,10 +61,8 @@ pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
     take_while1(is_ident_char)(i)
 }
 
-fn ident_or_macro<'c, 'a>(ctx: &'c ParserContext, i: &'a str) -> IResult<'a, Cow<'a, str>> {
-    let (i, ident) = ident(i)?;
-
-    Ok((i, ctx.replace(ident)))
+pub fn ident_no_case<'a>(i: &'a str) -> IResult<'a, Cow<'a, str>> {
+    map(ident, |s: &'a str| s.cow_to_uppercase())(i)
 }
 
 fn parse_str_inner<'a>(i: &'a str) -> IResult<'a, String> {
@@ -303,7 +302,7 @@ fn paran_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<
 }
 
 pub fn var_func_extern<'a>(ctx: &ParserContext, i: &'a str) -> IResult<'a, Option<StrKey>> {
-    opt(map(preceded(char('@'), ident), |s| {
+    opt(map(preceded(char('@'), ident_no_case), |s| {
         ctx.interner.get_or_intern(s)
     }))(i)
 }
@@ -312,7 +311,8 @@ fn ident_or_method_expr<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
-        let (i, ident) = ident_or_macro(ctx, i)?;
+        let (i, ident) = ident_no_case(i)?;
+        let ident = ctx.replace(&ident);
         let i = i.trim_start_matches(' ');
 
         if let Some(i) = i.strip_prefix('(') {
@@ -679,8 +679,8 @@ pub fn call_jump_line<'c, 'a>(
             let (i, name) = if is_form {
                 call_form_arg_expr(ctx)(i)?
             } else {
-                let (i, function) = ident(i)?;
-                let function = ctx.replace(function);
+                let (i, function) = ident_no_case(i)?;
+                let function = ctx.replace(&function);
 
                 if !is_ident(function.as_ref()) {
                     panic!("CALL/JUMP문은 식별자를 받아야합니다");
@@ -852,12 +852,12 @@ pub fn dim_line<'c, 'a>(
         info.is_str = is_str;
 
         let (i, (is_const, is_dynamic, is_ref, is_chara, is_save, var, size, init)) = tuple((
-            opt(value((), de_sp(tag("CONST")))),
-            opt(value((), de_sp(tag("DYNAMIC")))),
-            opt(value((), de_sp(tag("REF")))),
-            opt(value((), de_sp(tag("CHARADATA")))),
-            opt(value((), de_sp(tag("SAVEDATA")))),
-            de_sp(ident),
+            opt(value((), de_sp(tag_no_case("CONST")))),
+            opt(value((), de_sp(tag_no_case("DYNAMIC")))),
+            opt(value((), de_sp(tag_no_case("REF")))),
+            opt(value((), de_sp(tag_no_case("CHARADATA")))),
+            opt(value((), de_sp(tag_no_case("SAVEDATA")))),
+            de_sp(ident_no_case),
             opt(preceded(
                 char_sp(','),
                 separated_list0(
@@ -954,10 +954,10 @@ fn function_arg_list<'c, 'a>(
 
 pub fn function_line<'c, 'a>(
     ctx: &'c ParserContext,
-) -> impl FnMut(&'a str) -> IResult<'a, (&'a str, Vec<(Variable, Option<InlineValue>)>)> + 'c {
+) -> impl FnMut(&'a str) -> IResult<'a, (Cow<'a, str>, Vec<(Variable, Option<InlineValue>)>)> + 'c {
     move |i| {
         pair(
-            ident,
+            ident_no_case,
             preceded(
                 sp,
                 alt((
@@ -984,20 +984,17 @@ pub fn variable_arg<'c, 'a>(
         ctx.is_arg.set(true);
         let mut args = Vec::new();
         while let Ok((i_, _)) = char_sp(':')(i) {
-            let (i_, expr) = single_expr(ctx)(i_)?;
-            let arg = if let Expr::Var(ref arg_var) = expr {
-                if arg_var.func_extern.is_some() {
-                    expr
-                } else {
-                    if let Some(v) = var_names.and_then(|names| names.get(&arg_var.var)) {
-                        Expr::int(*v)
-                    } else {
-                        expr
-                    }
+            if i_.chars().next().map_or(false, is_ident_char) {
+                let (i_, name) = ident(i_)?;
+                let name = ctx.interner.get_or_intern(name);
+                if let Some(v) = var_names.and_then(|names| names.get(&name)) {
+                    args.push(Expr::int(*v));
+                    i = i_;
+                    continue;
                 }
-            } else {
-                expr
-            };
+            }
+
+            let (i_, arg) = single_expr(ctx)(i_)?;
 
             args.push(arg);
             i = i_;
@@ -1012,14 +1009,14 @@ pub fn variable<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Variable> + 'c {
     move |i| {
-        let (i, name) = de_sp(ident)(i)?;
+        let (i, name) = de_sp(ident_no_case)(i)?;
 
-        if !is_ident(name) {
+        if !is_ident(&name) {
             panic!("Variable error");
         }
 
         let (i, func_extern) = var_func_extern(ctx, i)?;
-        let (i, args) = variable_arg(ctx, name)(i)?;
+        let (i, args) = variable_arg(ctx, &name)(i)?;
 
         Ok((
             i,
