@@ -1992,7 +1992,7 @@ Int(
             ),
             r#"
 Method(
-    test,
+    TEST,
     [
         Some(
             String(
