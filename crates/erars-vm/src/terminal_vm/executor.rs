@@ -805,11 +805,11 @@ fn run_builtin_method(
 
     match meth {
         BuiltinMethod::SpriteCreated => {
-            log::warn!("SpriteCreated");
+            // log::warn!("SpriteCreated");
             ctx.push(0);
         }
         BuiltinMethod::GCreated => {
-            log::warn!("GCreated");
+            // log::warn!("GCreated");
             ctx.push(0);
         }
         BuiltinMethod::CsvName => {
@@ -1753,7 +1753,7 @@ fn run_builtin_command(
 
     match com {
         BuiltinCommand::SpriteCreate => {
-            log::warn!("SPRITECREATE");
+            log::trace!("TODO: SPRITECREATE");
         }
         BuiltinCommand::HtmlPrint => {
             let s = get_arg!(@String: args, ctx);

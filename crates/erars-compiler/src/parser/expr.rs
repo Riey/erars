@@ -47,18 +47,33 @@ fn de_sp<'a, T>(p: impl Parser<&'a str, T, Error<'a>>) -> impl FnMut(&'a str) ->
     delimited(sp, p, sp)
 }
 
-fn is_ident_char(c: char) -> bool {
+fn is_ident_head(c: char) -> bool {
+    !matches!(c, '!'..='/' | ':'..='@' | '['..='^' | '{'..='~' | '0'..='9')
+        && !c.is_ascii_control()
+        && !c.is_ascii_whitespace()
+}
+
+fn is_ident_body(c: char) -> bool {
     !matches!(c, '!'..='/' | ':'..='@' | '['..='^' | '{'..='~')
         && !c.is_ascii_control()
         && !c.is_ascii_whitespace()
 }
 
 fn is_ident(i: &str) -> bool {
-    i.chars().next().map_or(false, |i| !matches!(i, '0'..='9')) && i.chars().all(is_ident_char)
+    let mut chars = i.chars();
+    if let Some(c) = chars.next() {
+        is_ident_head(c) && chars.all(is_ident_body)
+    } else {
+        false
+    }
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
-    take_while1(is_ident_char)(i)
+    if i.starts_with(|c| matches!(c, '0'..='9')) {
+        Err(nom::Err::Error(error_position!(i, ErrorKind::AlphaNumeric)))
+    } else {
+        take_while1(is_ident_body)(i)
+    }
 }
 
 pub fn ident_no_case<'a>(i: &'a str) -> IResult<'a, Cow<'a, str>> {
@@ -95,9 +110,9 @@ fn parse_str_inner<'a>(i: &'a str) -> IResult<'a, String> {
 
 fn alignment<'a>(i: &'a str) -> IResult<'a, Alignment> {
     alt((
-        value(Alignment::Left, tag("LEFT")),
-        value(Alignment::Center, tag("CENTER")),
-        value(Alignment::Right, tag("RIGHT")),
+        value(Alignment::Left, tag_no_case("LEFT")),
+        value(Alignment::Center, tag_no_case("CENTER")),
+        value(Alignment::Right, tag_no_case("RIGHT")),
     ))(i)
 }
 
@@ -449,8 +464,8 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
         let (i, expr) = context(
             "single_expr",
             de_sp(alt((
-                value(Expr::Int(i64::MAX), tag("__INT_MAX__")),
-                value(Expr::Int(i64::MIN), tag("__INT_MIN__")),
+                value(Expr::Int(i64::MAX), tag_no_case("__INT_MAX__")),
+                value(Expr::Int(i64::MIN), tag_no_case("__INT_MIN__")),
                 context(
                     "Renamed Ident",
                     delimited(tag("[["), renamed_ident(ctx), tag("]]")),
@@ -702,11 +717,11 @@ fn case_cond<'c, 'a>(
     move |i| {
         alt((
             map(
-                tuple((expr(ctx), de_sp(tag("TO")), expr(ctx))),
+                tuple((expr(ctx), de_sp(tag_no_case("TO")), expr(ctx))),
                 |(l, _, r)| SelectCaseCond::To(l, r),
             ),
             map(
-                preceded(de_sp(tag("IS")), pair(de_sp(binop), expr(ctx))),
+                preceded(de_sp(tag_no_case("IS")), pair(de_sp(binop), expr(ctx))),
                 |(op, expr)| SelectCaseCond::Is(op, expr),
             ),
             map(expr(ctx), SelectCaseCond::Single),
@@ -757,8 +772,8 @@ pub fn times_line<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IRes
 
 fn forward_or_back<'a>(i: &'a str) -> IResult<'a, Option<bool>> {
     opt(alt((
-        value(false, de_sp(tag("BACK"))),
-        value(true, de_sp(tag("FORWARD"))),
+        value(false, de_sp(tag_no_case("BACK"))),
+        value(true, de_sp(tag_no_case("FORWARD"))),
     )))(i)
 }
 
@@ -984,13 +999,15 @@ pub fn variable_arg<'c, 'a>(
         ctx.is_arg.set(true);
         let mut args = Vec::new();
         while let Ok((i_, _)) = char_sp(':')(i) {
-            if i_.chars().next().map_or(false, is_ident_char) {
-                let (i_, name) = ident(i_)?;
-                let name = ctx.interner.get_or_intern(name);
-                if let Some(v) = var_names.and_then(|names| names.get(&name)) {
-                    args.push(Expr::int(*v));
-                    i = i_;
-                    continue;
+            if let Some(var_names) = var_names {
+                if i_.chars().next().map_or(false, is_ident_head) {
+                    let (i_, name) = ident(i_)?;
+                    let name = ctx.interner.get_or_intern(name);
+                    if let Some(v) = var_names.get(&name) {
+                        args.push(Expr::int(*v));
+                        i = i_;
+                        continue;
+                    }
                 }
             }
 
