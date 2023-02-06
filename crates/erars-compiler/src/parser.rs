@@ -2,7 +2,6 @@ mod csv;
 mod expr;
 
 use anyhow::{bail, Context};
-use cow_utils::CowUtils;
 use erars_ast::{
     get_interner, BinaryOperator, BuiltinCommand, BuiltinMethod, EventFlags, Expr, ExprWithPos,
     Function, FunctionHeader, FunctionInfo, Interner, PrintFlags, Stmt, StmtWithPos, StrKey,
@@ -1605,8 +1604,7 @@ impl<'p> ParserContext<'p> {
                 complex_op,
                 rhs,
             } => {
-                let lhs = lhs.cow_to_uppercase();
-                let var = try_nom!(pp, self::expr::variable(self)(&lhs)).1;
+                let var = try_nom!(pp, self::expr::variable(self)(lhs)).1;
 
                 match complex_op {
                     Some(ComplexAssign::Bin(bin_op)) => {
@@ -1633,8 +1631,7 @@ impl<'p> ParserContext<'p> {
                 is_pre: _,
                 is_inc,
             } => {
-                let lhs = lhs.cow_to_uppercase();
-                let lhs = try_nom!(pp, self::expr::variable(self)(&lhs)).1;
+                let lhs = try_nom!(pp, self::expr::variable(self)(lhs)).1;
 
                 Stmt::Assign(
                     lhs,
