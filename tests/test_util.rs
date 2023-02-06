@@ -25,6 +25,8 @@ pub fn get_ctx(file_path: impl AsRef<str>) -> ParserContext<'static> {
     info.merge_name_csv("BASE", include_str!("../CSV/BASE.CSV")).unwrap();
     info.merge_name_csv("TRAIN", include_str!("../CSV/TRAIN.CSV"))
         .unwrap();
+    info.merge_name_csv("TFLAG", include_str!("../CSV/TFLAG.CSV"))
+        .unwrap();
 
     info.merge_item_csv(include_str!("../CSV/ITEM.CSV")).unwrap();
     info.merge_chara_csv(include_str!("../CSV/CHARA3.CSV")).unwrap();
