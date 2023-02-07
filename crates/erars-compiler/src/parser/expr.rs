@@ -47,32 +47,11 @@ fn de_sp<'a, T>(p: impl Parser<&'a str, T, Error<'a>>) -> impl FnMut(&'a str) ->
     delimited(sp, p, sp)
 }
 
-fn is_ident_head(c: char) -> bool {
-    !matches!(c, '!'..='/' | ':'..='@' | '['..='^' | '{'..='~' | '0'..='9')
-        && !c.is_ascii_control()
-        && !c.is_ascii_whitespace()
-}
-
-fn is_ident_body(c: char) -> bool {
-    !matches!(c, '!'..='/' | ':'..='@' | '['..='^' | '{'..='~')
-        && !c.is_ascii_control()
-        && !c.is_ascii_whitespace()
-}
-
-fn is_ident(i: &str) -> bool {
-    let mut chars = i.chars();
-    if let Some(c) = chars.next() {
-        is_ident_head(c) && chars.all(is_ident_body)
-    } else {
-        false
-    }
-}
-
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
     if i.starts_with(|c| matches!(c, '0'..='9')) {
         Err(nom::Err::Error(error_position!(i, ErrorKind::AlphaNumeric)))
     } else {
-        take_while1(is_ident_body)(i)
+        take_while1(erars_lexer::utils::is_ident_body)(i)
     }
 }
 
@@ -380,7 +359,7 @@ fn ident_or_method_expr<'c, 'a>(
                     }
                 }
                 Cow::Owned(m) => {
-                    if !ctx.is_arg.get() && is_ident(&m) {
+                    if !ctx.is_arg.get() && erars_lexer::utils::is_ident(&m) {
                         let (i, args) = variable_arg(ctx, &m)(i)?;
                         if let Ok(var) = m.parse() {
                             Ok((i, Expr::BuiltinVar(var, args)))
@@ -697,7 +676,7 @@ pub fn call_jump_line<'c, 'a>(
                 let (i, function) = ident_no_case(i)?;
                 let function = ctx.replace(&function);
 
-                if !is_ident(function.as_ref()) {
+                if !erars_lexer::utils::is_ident(function.as_ref()) {
                     panic!("CALL/JUMP문은 식별자를 받아야합니다");
                 }
 
@@ -1000,7 +979,7 @@ pub fn variable_arg<'c, 'a>(
         let mut args = Vec::new();
         while let Ok((i_, _)) = char_sp(':')(i) {
             if let Some(var_names) = var_names {
-                if i_.chars().next().map_or(false, is_ident_head) {
+                if i_.chars().next().map_or(false, erars_lexer::utils::is_ident_head) {
                     let (i_, name) = ident(i_)?;
                     let name = ctx.interner.get_or_intern(name);
                     if let Some(v) = var_names.get(&name) {
@@ -1028,7 +1007,7 @@ pub fn variable<'c, 'a>(
     move |i| {
         let (i, name) = de_sp(ident_no_case)(i)?;
 
-        if !is_ident(&name) {
+        if !erars_lexer::utils::is_ident(&name) {
             panic!("Variable error");
         }
 

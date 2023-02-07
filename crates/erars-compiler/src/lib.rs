@@ -8,8 +8,6 @@ use once_cell::sync::Lazy;
 
 pub static PP_REGEX: Lazy<PreprocessorRegex> = Lazy::new(|| {
     PreprocessorRegex::from_bytes(
-        include_bytes_aligned!(4, "../inst.dfa"),
-        include_bytes_aligned!(4, "../sharp.dfa"),
         include_bytes_aligned!(4, "../square.fwd.dfa"),
         include_bytes_aligned!(4, "../square.rev.dfa"),
         include_bytes_aligned!(4, "../endif.fwd.dfa"),

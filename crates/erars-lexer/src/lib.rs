@@ -1,6 +1,7 @@
 mod inst;
 mod sharp;
 mod square;
+pub mod utils;
 
 use std::ops::Range;
 
@@ -9,7 +10,6 @@ use logos::Logos;
 use erars_ast::*;
 use num_traits::FromPrimitive;
 use regex_automata::dfa::dense;
-use regex_automata::dfa::Automaton;
 
 pub use bumpalo::Bump;
 pub use inst::InstructionCode;
@@ -17,121 +17,6 @@ use regex_automata::dfa::regex;
 pub use sharp::SharpCode;
 pub use square::SquareCode;
 pub use strum::IntoEnumIterator;
-
-pub fn parse_print_flags(mut s: &str) -> (&str, PrintFlags) {
-    let mut flags = PrintFlags::empty();
-
-    if let Some(ss) = strip_prefix_ignore_case(s, "SINGLE") {
-        s = ss;
-        flags |= PrintFlags::SINGLE;
-    }
-
-    if let Some(ss) = strip_prefix_ignore_case_char(s, 'C') {
-        flags |= PrintFlags::RIGHT_ALIGN;
-        s = ss;
-    } else if let Some(ss) = strip_prefix_ignore_case(s, "LC") {
-        flags |= PrintFlags::LEFT_ALIGN;
-        s = ss;
-    }
-
-    if let Some(ss) = strip_prefix_ignore_case_char(s, 'D') {
-        flags |= PrintFlags::DEFAULT_COLOR;
-        s = ss;
-    } else if let Some(ss) = strip_prefix_ignore_case_char(s, 'K') {
-        flags |= PrintFlags::FORCE_KANA;
-        s = ss;
-    }
-
-    if let Some(ss) = strip_prefix_ignore_case_char(s, 'L') {
-        flags |= PrintFlags::NEWLINE;
-        s = ss;
-    } else if let Some(ss) = strip_prefix_ignore_case_char(s, 'W') {
-        flags |= PrintFlags::WAIT | PrintFlags::NEWLINE;
-        s = ss;
-    }
-
-    (s, flags)
-}
-
-fn strip_prefix_ignore_case_char(s: &str, pat: char) -> Option<&str> {
-    let mut chars = s.chars();
-    let next = chars.next()?;
-
-    if next.eq_ignore_ascii_case(&pat) {
-        Some(chars.as_str())
-    } else {
-        None
-    }
-}
-
-fn strip_prefix_ignore_case<'s>(s: &'s str, pat: &str) -> Option<&'s str> {
-    if !s.is_char_boundary(pat.len()) {
-        None
-    } else {
-        let (l, r) = s.split_at(pat.len());
-
-        if l.eq_ignore_ascii_case(pat) {
-            Some(r)
-        } else {
-            None
-        }
-    }
-}
-
-fn trim_text(s: &str) -> &str {
-    let s = s.strip_prefix(' ').unwrap_or(s);
-    let s = s.strip_suffix('\r').unwrap_or(s);
-    s
-}
-
-unsafe fn parse_print(mut s: &str) -> (PrintFlags, PrintType, &str) {
-    let mut flags = PrintFlags::empty();
-
-    // if let Some(ss) = s.strip_prefix("DEBUG") {
-    //     flags |= PrintFlags::DEBUG;
-    //     s = ss;
-    // }
-
-    // skip PRINT
-    s = s.get_unchecked("PRINT".len()..);
-
-    if let Some(ss) = strip_prefix_ignore_case(s, "SINGLE") {
-        flags |= PrintFlags::SINGLE;
-        s = ss;
-    }
-
-    let ty = if let Some(ss) = strip_prefix_ignore_case(s, "FORMS") {
-        s = ss;
-        PrintType::FormS
-    } else if let Some(ss) = strip_prefix_ignore_case(s, "FORM") {
-        s = ss;
-        PrintType::Form
-    } else if let Some(ss) = strip_prefix_ignore_case(s, "DATA") {
-        s = ss;
-        PrintType::Data
-    } else if let Some(ss) = strip_prefix_ignore_case_char(s, 'V') {
-        s = ss;
-        PrintType::V
-    } else if let Some(ss) = strip_prefix_ignore_case_char(s, 'S') {
-        s = ss;
-        PrintType::S
-    } else {
-        PrintType::Plain
-    };
-
-    let (s, f) = parse_print_flags(s);
-    flags |= f;
-
-    (flags, ty, trim_text(s))
-}
-
-fn cut_comment(line: &str) -> &str {
-    if let Some(pos) = memchr::memchr(b';', line.as_bytes()) {
-        unsafe { line.get_unchecked(..pos) }
-    } else {
-        line
-    }
-}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PrintType {
@@ -144,8 +29,6 @@ pub enum PrintType {
 }
 
 pub struct PreprocessorRegex {
-    inst_dfa: dense::DFA<&'static [u32]>,
-    sharp_dfa: dense::DFA<&'static [u32]>,
     endif_re: regex::Regex<dense::DFA<&'static [u32]>>,
     skipend_re: regex::Regex<dense::DFA<&'static [u32]>>,
     square_re: regex::Regex<dense::DFA<&'static [u32]>>,
@@ -153,8 +36,6 @@ pub struct PreprocessorRegex {
 
 impl PreprocessorRegex {
     pub fn from_bytes(
-        inst_bytes: &'static [u8],
-        sharp_bytes: &'static [u8],
         square_fwd: &'static [u8],
         square_rev: &'static [u8],
         endif_fwd: &'static [u8],
@@ -175,8 +56,6 @@ impl PreprocessorRegex {
         let skipend_re = regex::Regex::builder().build_from_dfas(fwd, rev);
 
         Self {
-            inst_dfa: dense::DFA::from_bytes(inst_bytes).unwrap().0,
-            sharp_dfa: dense::DFA::from_bytes(sharp_bytes).unwrap().0,
             square_re,
             endif_re,
             skipend_re,
@@ -382,54 +261,65 @@ impl<'s> Preprocessor<'s> {
         debug_assert!(!line.ends_with('\n'));
 
         if line.is_empty() {
-            Ok(None)
-        } else if let Some(m) = self.re.inst_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
-            if let Some(inst) = InstructionCode::from_u32(m.pattern().as_u32()) {
-                if inst == InstructionCode::PRINT {
-                    let (flags, ty, line) = unsafe { parse_print(line) };
-                    let line = if !(ty == PrintType::Plain || ty == PrintType::Form) {
-                        cut_comment(line)
+            return Ok(None);
+        }
+
+        let (ident, args) = utils::cut_ident(line);
+
+        if ident.get(..5).map_or(false, |p| p.eq_ignore_ascii_case("PRINT")) {
+            let (flags, ty) = unsafe { utils::parse_print(ident) };
+            let args = if !(ty == PrintType::Plain || ty == PrintType::Form) {
+                utils::cut_comment(args)
+            } else {
+                args.strip_prefix(' ').unwrap_or(args)
+            };
+            Ok(Some(EraLine::PrintLine { flags, ty, args }))
+        } else if let Some(code) =
+            InstructionCode::iter().find(|code| ident.eq_ignore_ascii_case(<&str>::from(code)))
+        {
+            let args = match code {
+                InstructionCode::REUSELASTLINE | InstructionCode::THROW => {
+                    args.strip_prefix(' ').unwrap_or(args)
+                }
+                _ => utils::cut_comment(args.trim_start_matches(' ')),
+            };
+            Ok(Some(EraLine::InstLine { inst: code, args }))
+        } else {
+            let line = utils::cut_comment(line).trim_start();
+            if ident.is_empty() {
+                if line.is_empty() {
+                    Ok(None)
+                } else if let Some(line) = line.strip_prefix('#') {
+                    let (ident, args) = utils::cut_ident(line);
+                    if let Some(sharp) = SharpCode::iter()
+                        .find(|code| ident.eq_ignore_ascii_case(<&str>::from(code)))
+                    {
+                        Ok(Some(EraLine::SharpLine {
+                            sharp,
+                            args: args.trim_start(),
+                        }))
                     } else {
-                        line
-                    };
-                    Ok(Some(EraLine::PrintLine {
-                        flags,
-                        ty,
-                        args: line,
+                        Err((format!("Unknown sharp line: {line}"), self.span()))
+                    }
+                } else if let Some(line) = line.strip_prefix('@') {
+                    Ok(Some(EraLine::FunctionLine(line)))
+                } else if let Some(line) = line.strip_prefix('$') {
+                    Ok(Some(EraLine::GotoLine(line)))
+                } else if let Some(left) = line.strip_prefix("++") {
+                    Ok(Some(EraLine::VarInc {
+                        lhs: left,
+                        is_pre: true,
+                        is_inc: true,
+                    }))
+                } else if let Some(left) = line.strip_prefix("--") {
+                    Ok(Some(EraLine::VarInc {
+                        lhs: left,
+                        is_pre: true,
+                        is_inc: false,
                     }))
                 } else {
-                    let line = unsafe { line.get_unchecked(<&str>::from(inst).len()..) };
-                    let line = match inst {
-                        InstructionCode::REUSELASTLINE | InstructionCode::THROW => {
-                            line.strip_prefix(' ').unwrap_or(line)
-                        }
-                        _ => cut_comment(line.trim_start_matches(' ')),
-                    };
-                    Ok(Some(EraLine::InstLine { inst, args: line }))
+                    Err((format!("Unknown line: {line}"), self.span()))
                 }
-            } else {
-                unreachable!()
-            }
-        } else {
-            let line = cut_comment(line).trim_start();
-            if line.is_empty() {
-                Ok(None)
-            } else if let Some(line) = line.strip_prefix('#') {
-                if let Some(m) = self.re.sharp_dfa.find_leftmost_fwd(line.as_bytes()).unwrap() {
-                    if let Some(sharp) = SharpCode::from_u32(m.pattern().as_u32()) {
-                        let line =
-                            unsafe { line.get_unchecked(<&str>::from(sharp).len()..) }.trim_start();
-                        Ok(Some(EraLine::SharpLine { sharp, args: line }))
-                    } else {
-                        unreachable!()
-                    }
-                } else {
-                    Err((format!("Unknown sharp line: {line}"), self.span()))
-                }
-            } else if let Some(line) = line.strip_prefix('@') {
-                Ok(Some(EraLine::FunctionLine(line)))
-            } else if let Some(line) = line.strip_prefix('$') {
-                Ok(Some(EraLine::GotoLine(line)))
             } else if let Some((mut left, right)) = lex_assign_line(line) {
                 let complex_op = if let Some(l) = left.strip_suffix('+') {
                     left = l;
@@ -483,18 +373,6 @@ impl<'s> Preprocessor<'s> {
                 Ok(Some(EraLine::VarInc {
                     lhs: left,
                     is_pre: false,
-                    is_inc: false,
-                }))
-            } else if let Some(left) = line.strip_prefix("++") {
-                Ok(Some(EraLine::VarInc {
-                    lhs: left,
-                    is_pre: true,
-                    is_inc: true,
-                }))
-            } else if let Some(left) = line.strip_prefix("--") {
-                Ok(Some(EraLine::VarInc {
-                    lhs: left,
-                    is_pre: true,
                     is_inc: false,
                 }))
             } else {
