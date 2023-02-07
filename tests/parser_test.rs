@@ -970,6 +970,113 @@ mod body {
     }
 
     #[test]
+    fn test_print_button() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/functions/print_button.erb"#,
+                ParserContext::parse_function_str
+            ),
+            "
+Function {
+    header: FunctionHeader {
+        file_path: tests/parse_tests/functions/print_button.erb,
+        name: ASK_YN,
+        args: [
+            (
+                Variable {
+                    var: ARGS,
+                    func_extern: None,
+                    args: [
+                        Int(
+                            0,
+                        ),
+                    ],
+                },
+                Some(
+                    String(
+                        　네　,
+                        0,
+                    ),
+                ),
+            ),
+            (
+                Variable {
+                    var: ARGS,
+                    func_extern: None,
+                    args: [
+                        Int(
+                            1,
+                        ),
+                    ],
+                },
+                Some(
+                    String(
+                        아니오,
+                        0,
+                    ),
+                ),
+            ),
+        ],
+        infos: [],
+    },
+    body: [
+        StmtWithPos(
+            PrintButton {
+                flags: (empty),
+                text: FormText(
+                     [{Var(Variable { var: ARGS, func_extern: None, args: [Int(0)] })}],
+                ),
+                value: Int(
+                    0,
+                ),
+            },
+            ScriptPosition {
+                line: 2,
+            },
+        ),
+        StmtWithPos(
+            Print(
+                NEWLINE,
+                String(
+                    ,
+                ),
+            ),
+            ScriptPosition {
+                line: 3,
+            },
+        ),
+        StmtWithPos(
+            PrintButton {
+                flags: (empty),
+                text: FormText(
+                     [{Var(Variable { var: ARGS, func_extern: None, args: [Int(1)] })}],
+                ),
+                value: Int(
+                    1,
+                ),
+            },
+            ScriptPosition {
+                line: 4,
+            },
+        ),
+        StmtWithPos(
+            Print(
+                NEWLINE,
+                String(
+                    ,
+                ),
+            ),
+            ScriptPosition {
+                line: 5,
+            },
+        ),
+    ],
+}
+"
+        );
+    }
+
+    #[test]
     fn test_print_data() {
         k9::snapshot!(
             do_test(

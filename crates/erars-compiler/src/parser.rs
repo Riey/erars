@@ -1201,7 +1201,6 @@ impl<'p> ParserContext<'p> {
                     }};
                 }
                 match inst {
-                    PRINT => unreachable!(),
                     PRINTBUTTON | PRINTBUTTONC | PRINTBUTTONLC => {
                         let flags = if inst == PRINTBUTTON {
                             PrintFlags::empty()

@@ -279,7 +279,6 @@ pub enum InstructionCode {
     PRINTBUTTON,
     PRINTPLAINFORM,
     PRINTPLAIN,
-    PRINT, //文字を表示する
 
     INPUTMOUSEKEY,
 

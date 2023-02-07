@@ -266,15 +266,7 @@ impl<'s> Preprocessor<'s> {
 
         let (ident, args) = utils::cut_ident(line);
 
-        if ident.get(..5).map_or(false, |p| p.eq_ignore_ascii_case("PRINT")) {
-            let (flags, ty) = unsafe { utils::parse_print(ident) };
-            let args = if !(ty == PrintType::Plain || ty == PrintType::Form) {
-                utils::cut_comment(args)
-            } else {
-                args.strip_prefix(' ').unwrap_or(args)
-            };
-            Ok(Some(EraLine::PrintLine { flags, ty, args }))
-        } else if let Some(code) =
+        if let Some(code) =
             InstructionCode::iter().find(|code| ident.eq_ignore_ascii_case(<&str>::from(code)))
         {
             let args = match code {
@@ -284,6 +276,14 @@ impl<'s> Preprocessor<'s> {
                 _ => utils::cut_comment(args.trim_start_matches(' ')),
             };
             Ok(Some(EraLine::InstLine { inst: code, args }))
+        } else if let Some(left) = utils::strip_prefix_ignore_case(ident, "PRINT") {
+            let (flags, ty) = utils::parse_print_left(left);
+            let args = if !(ty == PrintType::Plain || ty == PrintType::Form) {
+                utils::cut_comment(args)
+            } else {
+                args.strip_prefix(' ').unwrap_or(args)
+            };
+            Ok(Some(EraLine::PrintLine { flags, ty, args }))
         } else {
             let line = utils::cut_comment(line).trim_start();
             if ident.is_empty() {

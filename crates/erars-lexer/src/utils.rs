@@ -96,16 +96,8 @@ pub fn strip_prefix_ignore_case<'s>(s: &'s str, pat: &str) -> Option<&'s str> {
     }
 }
 
-pub unsafe fn parse_print(mut s: &str) -> (PrintFlags, PrintType) {
+pub fn parse_print_left(mut s: &str) -> (PrintFlags, PrintType) {
     let mut flags = PrintFlags::empty();
-
-    // if let Some(ss) = s.strip_prefix("DEBUG") {
-    //     flags |= PrintFlags::DEBUG;
-    //     s = ss;
-    // }
-
-    // skip PRINT
-    s = s.get_unchecked("PRINT".len()..);
 
     if let Some(ss) = strip_prefix_ignore_case(s, "SINGLE") {
         flags |= PrintFlags::SINGLE;
