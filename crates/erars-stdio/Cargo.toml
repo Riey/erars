@@ -13,7 +13,7 @@ erars-loader = { path = "../erars-loader", features = ["multithread"] }
 
 clap = { version = "4", features = ["derive"] }
 log-panics = "2.1.0"
-flexi_logger = "0.24.0"
+flexi_logger = "0.25.1"
 ron = "0.8.0"
 anyhow = "1.0.65"
 log = "0.4.17"
