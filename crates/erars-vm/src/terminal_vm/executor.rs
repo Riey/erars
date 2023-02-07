@@ -383,7 +383,7 @@ pub(super) fn run_instruction(
     } else if let Some(com) = inst.as_builtin_command() {
         return run_builtin_command(com, func_name, vm, tx, ctx);
     } else if let Some(idx) = inst.as_load_default_argument() {
-        let name = match ctx
+        let target_func_name = match ctx
             .stack()
             .iter()
             .rev()
@@ -395,7 +395,7 @@ pub(super) fn run_instruction(
             _ => bail!("LoadDefaultArgument need function name"),
         };
 
-        let body = vm.dic.get_func(name)?;
+        let body = vm.dic.get_func(target_func_name)?;
 
         let arg = body
             .args()
@@ -407,7 +407,7 @@ pub(super) fn run_instruction(
                 InlineValue::Int(i) => ctx.push(*i),
                 InlineValue::String(s, _) => ctx.push_strkey(*s),
             },
-            None => match ctx.var.get_maybe_local_var(func_name, arg.0)?.0.is_str {
+            None => match ctx.var.get_maybe_local_var(target_func_name, arg.0)?.0.is_str {
                 true => ctx.push(String::new()),
                 false => ctx.push(0i64),
             },
