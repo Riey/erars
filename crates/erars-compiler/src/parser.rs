@@ -1472,7 +1472,7 @@ impl<'p> ParserContext<'p> {
                         let mut is_else = false;
                         let mut cond_pos = pp.script_pos();
                         let mut cond = try_nom!(pp, self::expr::expr_or_one(self)(args)).1;
-                        let mut block = Vec::new();
+                        let mut block = Vec::with_capacity(128);
                         let mut if_elses = Vec::new();
 
                         loop {
