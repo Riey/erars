@@ -289,7 +289,7 @@ impl VariableStorage {
 
     pub fn dump_rand(&mut self) {
         let seed_arr = self.rng.get_seed();
-        let seed  = bytemuck::cast_slice(&seed_arr);
+        let seed = bytemuck::cast_slice(&seed_arr);
         let data = self.get_var("RANDDATA").unwrap().1.assume_normal().as_int().unwrap();
         data.copy_from_slice(seed);
     }

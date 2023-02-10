@@ -151,7 +151,6 @@ impl TerminalVm {
         log::debug!("CALL {label}({args:?})",);
 
         let mut args = args.iter().cloned();
-        let mut pending_vars = Vec::new();
 
         for FunctionArgDef(var_idx, arg_indices, default_value) in body.args().iter() {
             let (info, var) = ctx.var.get_maybe_local_var(label, *var_idx)?;
@@ -178,7 +177,12 @@ impl TerminalVm {
 
                 let arg = match args.next() {
                     Some(LocalValue::VarRef(var_ref)) => {
-                        pending_vars.push((var_idx, idx, var_ref));
+                        let src = ctx.read_var_ref(&var_ref)?;
+                        let (_info, var) =
+                            ctx.var.get_maybe_local_var(label, *var_idx).context("Set argument")?;
+                        var.assume_normal()
+                            .set(idx, src)
+                            .with_context(|| format!("Set argument {var_idx}"))?;
                         continue;
                     }
                     Some(LocalValue::Value(v)) => Some(v),
@@ -189,14 +193,8 @@ impl TerminalVm {
                     }),
                 };
 
-                var.set_or_default(idx, arg)?;
+                var.set_or_default(idx, arg).context("Set argument")?;
             }
-        }
-
-        for (src_var, idx, var_ref) in pending_vars {
-            let src = ctx.read_var_ref(&var_ref)?;
-            let (_info, var) = ctx.var.get_maybe_local_var(label, *src_var)?;
-            var.assume_normal().set(idx, src)?;
         }
 
         ensure!(args.next().is_none(), "Too many args");

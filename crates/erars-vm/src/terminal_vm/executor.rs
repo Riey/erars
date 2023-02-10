@@ -2493,13 +2493,13 @@ fn run_builtin_command(
         BuiltinCommand::Randomize => {
             let seed = get_arg!(@i64: args, ctx);
             ctx.var.randomize(seed);
-        },
+        }
         BuiltinCommand::DumpRand => {
             ctx.var.dump_rand();
-        },
+        }
         BuiltinCommand::InitRand => {
             ctx.var.init_rand();
-        },
+        }
     }
 
     Ok(InstructionWorkflow::Normal)
