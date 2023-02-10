@@ -1953,7 +1953,9 @@ fn run_builtin_command(
             let msg = get_arg!(@opt @String: args, ctx);
 
             match msg {
-                Some(msg) => bail!("스크립트에서 예외발생: {msg}"),
+                Some(msg) => {
+                    bail!("스크립트에서 예외발생: {msg}")
+                }
                 None => bail!("스크립트에서 예외발생"),
             }
         }
@@ -2311,6 +2313,9 @@ fn run_builtin_command(
                 }
                 (InputRequestType::Str, Some(Value::String(s))) => {
                     ctx.var.set_results(s);
+                }
+                (InputRequestType::Str, Some(Value::Int(i))) => {
+                    ctx.var.set_results(i.to_string());
                 }
                 (_, _) => {
                     bail!("Invalid input returned");

@@ -287,6 +287,7 @@ impl TerminalVm {
                         );
                     }
 
+                    ctx.system.redraw(tx).ok();
                     break false;
                 }
             }

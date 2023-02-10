@@ -145,15 +145,17 @@ fn main() {
                     } else {
                         run_script(&args.target_path, system, config, false, !args.lint_off)
                     };
-                    match ret {
-                        Ok((vm, mut ctx, mut tx)) => {
-                            vm.start(&mut tx, &mut ctx);
-                        }
+                    let normal = match ret {
+                        Ok((vm, mut ctx, mut tx)) => vm.start(&mut tx, &mut ctx),
                         Err(err) => {
                             log::error!("Game loading failed: {err}");
+                            false
                         }
+                    };
+
+                    if normal {
+                        system_back.send_quit();
                     }
-                    system_back.send_quit();
                 })
                 .unwrap();
             let data = load_font_data(db.face_source(config_font).unwrap().0);
