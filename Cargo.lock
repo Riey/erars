@@ -1077,7 +1077,6 @@ dependencies = [
  "log",
  "log-panics",
  "mimalloc",
- "pollster",
 ]
 
 [[package]]
@@ -1179,7 +1178,6 @@ dependencies = [
  "log-panics",
  "memory-stats",
  "mimalloc",
- "pollster",
  "ron",
  "serde",
  "serde_json",
