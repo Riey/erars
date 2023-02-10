@@ -221,11 +221,11 @@ pub fn run_script(
         check_time!("Load CSV");
 
         for (k, (path, v)) in csv_dic.into_iter() {
+            log::debug!("Merge {k}.CSV");
             match k.as_str() {
                 "ABL" | "MARK" | "BASE" | "CFLAG" | "EQUIP" | "TEQUIP" | "PALAM" | "EXP" | "EX"
-                | "FLAG" | "TFLAG" | "TALENT" | "STAIN" | "SOURCE" | "TSTR" | "CSTR" | "STR"
+                | "FLAG" | "TFLAG" | "TALENT" | "STAIN" | "SOURCE" | "TSTR" | "CSTR"
                 | "SAVESTR" | "GLOBAL" | "GLOBALS" | "TRAIN" | "TCVAR" => {
-                    log::debug!("Merge {k}.CSV");
                     match info.merge_name_csv(&k, &v) {
                         Ok(()) => {}
                         Err((err, span)) => {
@@ -233,9 +233,19 @@ pub fn run_script(
                         }
                     }
                 }
+                "STRNAME" => match info.merge_name_csv("STR", &v) {
+                    Ok(()) => {}
+                    Err((err, span)) => {
+                        report_error!("E0000", "Parse name csv", path, v, err, span);
+                    }
+                },
+                "STR" => match info.merge_str_csv(&v) {
+                    Ok(()) => {}
+                    Err((err, span)) => {
+                        report_error!("E0000", "Parse str csv", path, v, err, span);
+                    }
+                },
                 "GAMEBASE" => {
-                    log::debug!("Merge GAMEBASE.CSV");
-
                     match info.merge_gamebase_csv(&v) {
                         Ok(()) => {}
                         Err((err, span)) => {
@@ -245,16 +255,12 @@ pub fn run_script(
 
                     log::info!("GAMEBASE: {:?}", info.gamebase);
                 }
-                "VARIABLESIZE" => {
-                    log::debug!("Merge VARIABLESIZE.CSV");
-
-                    match info.merge_variable_size_csv(&v) {
-                        Ok(()) => {}
-                        Err((err, span)) => {
-                            report_error!("E0000", "Parse variablesize csv", path, v, err, span);
-                        }
+                "VARIABLESIZE" => match info.merge_variable_size_csv(&v) {
+                    Ok(()) => {}
+                    Err((err, span)) => {
+                        report_error!("E0000", "Parse variablesize csv", path, v, err, span);
                     }
-                }
+                },
                 "_RENAME" => {
                     log::debug!("Merge _RENAME.CSV");
                     match info.merge_rename_csv(&v) {

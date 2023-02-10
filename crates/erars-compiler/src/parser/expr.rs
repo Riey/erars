@@ -845,34 +845,35 @@ pub fn dim_line<'c, 'a>(
         let mut info = VariableInfo::default();
         info.is_str = is_str;
 
-        let (i, (is_const, is_dynamic, is_ref, is_chara, is_save, is_global, var, size, init)) = tuple((
-            opt(value((), de_sp(tag_no_case("CONST")))),
-            opt(value((), de_sp(tag_no_case("DYNAMIC")))),
-            opt(value((), de_sp(tag_no_case("REF")))),
-            opt(value((), de_sp(tag_no_case("CHARADATA")))),
-            opt(value((), de_sp(tag_no_case("SAVEDATA")))),
-            opt(value((), de_sp(tag_no_case("GLOBAL")))),
-            de_sp(ident_no_case),
-            opt(preceded(
-                char_sp(','),
-                separated_list0(
+        let (i, (is_const, is_dynamic, is_ref, is_chara, is_save, is_global, var, size, init)) =
+            tuple((
+                opt(value((), de_sp(tag_no_case("CONST")))),
+                opt(value((), de_sp(tag_no_case("DYNAMIC")))),
+                opt(value((), de_sp(tag_no_case("REF")))),
+                opt(value((), de_sp(tag_no_case("CHARADATA")))),
+                opt(value((), de_sp(tag_no_case("SAVEDATA")))),
+                opt(value((), de_sp(tag_no_case("GLOBAL")))),
+                de_sp(ident_no_case),
+                opt(preceded(
                     char_sp(','),
-                    map(expr(ctx), |expr| {
-                        ctx.header
-                            .as_ref()
-                            .const_eval(&expr)
-                            .unwrap()
-                            .into_int_err()
-                            .map(|i| i as u32)
-                            .unwrap()
-                    }),
-                ),
-            )),
-            opt(preceded(
-                char_sp('='),
-                separated_list0(char_sp(','), expr(ctx)),
-            )),
-        ))(i)?;
+                    separated_list0(
+                        char_sp(','),
+                        map(expr(ctx), |expr| {
+                            ctx.header
+                                .as_ref()
+                                .const_eval(&expr)
+                                .unwrap()
+                                .into_int_err()
+                                .map(|i| i as u32)
+                                .unwrap()
+                        }),
+                    ),
+                )),
+                opt(preceded(
+                    char_sp('='),
+                    separated_list0(char_sp(','), expr(ctx)),
+                )),
+            ))(i)?;
 
         info.is_const = is_const.is_some();
         info.is_dynamic = is_dynamic.is_some();

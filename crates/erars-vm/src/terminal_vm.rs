@@ -148,7 +148,7 @@ impl TerminalVm {
         ctx: &mut VmContext,
         body: &FunctionBody,
     ) -> Result<Workflow> {
-        log::trace!("CALL {label}({args:?})",);
+        log::debug!("CALL {label}({args:?})",);
 
         let mut args = args.iter().cloned();
         let mut pending_vars = Vec::new();

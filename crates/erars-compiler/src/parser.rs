@@ -347,6 +347,7 @@ pub struct HeaderInfo {
     pub gamebase: Gamebase,
     pub rename: HashMap<StrKey, String>,
     pub replace: ReplaceInfo,
+    pub str_templates: HashMap<u32, String>,
     pub character_templates: HashMap<i64, CharacterTemplate>,
     pub item_price: HashMap<u32, u32>,
     pub var_names: HashMap<StrKey, HashMap<StrKey, u32>>,
@@ -636,6 +637,17 @@ impl HeaderInfo {
                     "タイトル" => self.gamebase.title = val.into(),
                     other => log::error!("Unknown gamebase key: {other}"),
                 }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn merge_str_csv(&mut self, s: &str) -> ParserResult<()> {
+        for (mut line, span) in csv::lines(s) {
+            if let Some((n, val)) = line.next_tuple() {
+                let n = csv_parse_int!(n, span);
+                self.str_templates.insert(n, val.into());
             }
         }
 

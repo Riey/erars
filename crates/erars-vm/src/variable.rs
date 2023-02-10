@@ -877,6 +877,11 @@ impl VariableStorage {
         self.get_var("RELATION")?.0.default_int = header.replace.relation_init;
         *self.ref_int("PBAND", &[])? = header.replace.pband_init;
 
+        let str = self.get_var("STR")?.1.assume_normal().as_str()?;
+        for (n, s) in header.str_templates.iter() {
+            str[*n as usize] = s.clone();
+        }
+
         const NAMES: &[(&str, &str)] = &[
             ("ABLNAME", "ABL"),
             ("BASENAME", "BASE"),
