@@ -188,6 +188,12 @@ pub enum EraConfigKey {
 
     #[strum(to_string = "履歴ログの行数")]
     MaxLog,
+
+    #[strum(to_string = "ウィンドウ幅")]
+    WindowWidth,
+
+    #[strum(to_string = "ウィンドウ高さ")]
+    WindowHeight,
 }
 
 #[derive(Clone, Debug, derivative::Derivative, Serialize, Deserialize)]
@@ -208,6 +214,11 @@ pub struct EraConfig {
     pub font_size: u32,
     #[derivative(Default(value = "19"))]
     pub line_height: u32,
+
+    #[derivative(Default(value = "800"))]
+    pub window_width: u32,
+    #[derivative(Default(value = "600"))]
+    pub window_height: u32,
 }
 
 impl EraConfig {
@@ -221,6 +232,8 @@ impl EraConfig {
             EraConfigKey::FontFamily => self.font_family.clone().into(),
             EraConfigKey::FontSize => self.font_size.into(),
             EraConfigKey::LineHeight => self.line_height.into(),
+            EraConfigKey::WindowWidth => self.window_width.into(),
+            EraConfigKey::WindowHeight => self.window_height.into(),
         }
     }
 
@@ -290,6 +303,22 @@ impl EraConfig {
                                     Ok(l) => l,
                                     Err(_) => {
                                         error!(lex.span(), format!("Invalid line_height {value}"))
+                                    }
+                                };
+                            }
+                            EraConfigKey::WindowWidth => {
+                                ret.window_width = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid window_width {value}"))
+                                    }
+                                };
+                            }
+                            EraConfigKey::WindowHeight => {
+                                ret.window_height = match value.parse() {
+                                    Ok(l) => l,
+                                    Err(_) => {
+                                        error!(lex.span(), format!("Invalid window_height {value}"))
                                     }
                                 };
                             }

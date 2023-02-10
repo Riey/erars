@@ -82,20 +82,21 @@ fn main() {
 
     log_panics::init();
 
+    let config = load_config(&args.target_path);
+
     eframe::run_native(
         "erars",
         eframe::NativeOptions {
             renderer: eframe::Renderer::Wgpu,
             drag_and_drop_support: false,
             resizable: true,
-            initial_window_size: Some(egui::vec2(700.0, 500.0)),
+            initial_window_size: Some(egui::vec2(config.window_width as _, config.window_height as _)),
             ..Default::default()
         },
         Box::new(move |ctx| {
             let egui_ctx = ctx.egui_ctx.clone();
             let (system, receiver) =
                 erars_proxy_system::new_proxy(Arc::new(move || egui_ctx.request_repaint()));
-            let config = load_config(&args.target_path);
             let font_size = config.font_size;
             let line_height = config.line_height;
 
