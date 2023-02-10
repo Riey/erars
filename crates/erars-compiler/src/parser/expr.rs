@@ -845,12 +845,13 @@ pub fn dim_line<'c, 'a>(
         let mut info = VariableInfo::default();
         info.is_str = is_str;
 
-        let (i, (is_const, is_dynamic, is_ref, is_chara, is_save, var, size, init)) = tuple((
+        let (i, (is_const, is_dynamic, is_ref, is_chara, is_save, is_global, var, size, init)) = tuple((
             opt(value((), de_sp(tag_no_case("CONST")))),
             opt(value((), de_sp(tag_no_case("DYNAMIC")))),
             opt(value((), de_sp(tag_no_case("REF")))),
             opt(value((), de_sp(tag_no_case("CHARADATA")))),
             opt(value((), de_sp(tag_no_case("SAVEDATA")))),
+            opt(value((), de_sp(tag_no_case("GLOBAL")))),
             de_sp(ident_no_case),
             opt(preceded(
                 char_sp(','),
@@ -878,6 +879,7 @@ pub fn dim_line<'c, 'a>(
         info.is_ref = is_ref.is_some();
         info.is_chara = is_chara.is_some();
         info.is_savedata = is_save.is_some();
+        info.is_global = is_global.is_some();
         info.size =
             size.unwrap_or_else(|| init.as_ref().map(|v| vec![v.len() as u32]).unwrap_or_default());
         info.init = init.unwrap_or_default();
