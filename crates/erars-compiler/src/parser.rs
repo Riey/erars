@@ -1302,7 +1302,7 @@ impl<'p> ParserContext<'p> {
                     CHKFONT => normal_method!(BuiltinMethod::ChkFont),
                     GETFONT => normal_method!(BuiltinMethod::GetFont),
 
-                    REDRAW => normal_method!(BuiltinMethod::CurrentRedraw),
+                    REDRAW => normal_command!(BuiltinCommand::Redraw),
                     THROW => strform_command!(BuiltinCommand::Throw),
 
                     SETCOLOR => normal_command!(BuiltinCommand::SetColor),
