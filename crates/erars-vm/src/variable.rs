@@ -1064,6 +1064,11 @@ impl VmVariable {
                 *i.get_mut(idx as usize)
                     .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = n;
             }
+            // auto convert int to string
+            (Self::Str(i), Value::Int(n)) => {
+                *i.get_mut(idx as usize)
+                    .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = n.to_string();
+            }
             (Self::Str(i), Value::String(s)) => {
                 *i.get_mut(idx as usize)
                     .ok_or_else(|| anyhow!("Variable out of range {}", idx))? = s;
