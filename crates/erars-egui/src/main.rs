@@ -125,6 +125,13 @@ fn main() {
                 ..Default::default()
             });
 
+            let jp_fallback = db.query(&fontdb::Query {
+                families: &[
+                    fontdb::Family::Name("Meiryo"),
+                ],
+                ..Default::default()
+            });
+
             let emoji_font = db.query(&fontdb::Query {
                 families: &[
                     fontdb::Family::Name("Noto Color Emoji"),
@@ -161,6 +168,8 @@ fn main() {
             let data = load_font_data(db.face_source(config_font).unwrap().0);
             let fallback_data =
                 fallback.map(|fallback| load_font_data(db.face_source(fallback).unwrap().0));
+            let jp_fallback_data =
+                jp_fallback.map(|jp_fallback| load_font_data(db.face_source(jp_fallback).unwrap().0));
             let emoji_data =
                 emoji_font.map(|emoji_font| load_font_data(db.face_source(emoji_font).unwrap().0));
 
@@ -194,17 +203,22 @@ fn main() {
             let mut font_def = egui::FontDefinitions::default();
             font_def.families.insert(
                 FontFamily::Monospace,
-                vec!["default".into(), "fallback".into(), "emoji".into()],
+                vec!["default".into(), "fallback".into(), "jp_fallback".into(), "emoji".into()],
             );
             font_def.families.insert(
                 FontFamily::Proportional,
-                vec!["default".into(), "fallback".into(), "emoji".into()],
+                vec!["default".into(), "fallback".into(), "jp_fallback".into(), "emoji".into()],
             );
             font_def.font_data.insert("default".into(), data);
             if let Some(fallback_data) = fallback_data {
                 font_def.font_data.insert("fallback".into(), fallback_data);
             } else {
                 log::warn!("Can't find fallback font");
+            }
+            if let Some(jp_fallback_data) = jp_fallback_data {
+                font_def.font_data.insert("jp_fallback".into(), jp_fallback_data);
+            } else {
+                log::warn!("Can't find jp fallback font");
             }
             if let Some(emoji_data) = emoji_data {
                 font_def.font_data.insert("emoji".into(), emoji_data);
