@@ -142,6 +142,10 @@ SAVEDATA_TEXT:
   is_str: true
   is_savedata: true
 
+RANDDATA:
+  size: [4]
+  is_savedata: true
+
 BOUGHT:
   size: [1000]
 

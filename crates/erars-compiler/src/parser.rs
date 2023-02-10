@@ -1385,6 +1385,10 @@ impl<'p> ParserContext<'p> {
                     SPRITECREATED => normal_method!(BuiltinMethod::SpriteCreated),
                     SPRITECREATE => normal_command!(BuiltinCommand::SpriteCreate),
 
+                    RANDOMIZE => normal_command!(BuiltinCommand::Randomize),
+                    INITRAND => normal_command!(BuiltinCommand::InitRand),
+                    DUMPRAND => normal_command!(BuiltinCommand::DumpRand),
+
                     REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
 
                     CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF | TRYCALL

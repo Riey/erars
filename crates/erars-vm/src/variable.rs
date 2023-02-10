@@ -177,6 +177,7 @@ impl VariableStorage {
         header: &HeaderInfo,
     ) -> Result<()> {
         self.load_variables(sav.variables, sav.local_variables, true);
+        self.init_rand();
         self.init(header)?;
 
         Ok(())
@@ -191,6 +192,7 @@ impl VariableStorage {
         self.rng = SeedableRng::from_seed(sav.rand_seed);
 
         self.load_variables(sav.variables, sav.local_variables, false);
+        self.init_rand();
         self.init(header)?;
 
         Ok(())
@@ -283,6 +285,24 @@ impl VariableStorage {
 
     pub fn rng(&mut self) -> &mut impl rand::Rng {
         &mut self.rng
+    }
+
+    pub fn dump_rand(&mut self) {
+        let seed_arr = self.rng.get_seed();
+        let seed  = bytemuck::cast_slice(&seed_arr);
+        let data = self.get_var("RANDDATA").unwrap().1.assume_normal().as_int().unwrap();
+        data.copy_from_slice(seed);
+    }
+
+    pub fn init_rand(&mut self) {
+        let mut seed_arr = [0u8; 32];
+        let seed = self.get_var("RANDDATA").unwrap().1.assume_normal().as_int().unwrap();
+        seed_arr.copy_from_slice(bytemuck::cast_slice(seed));
+        self.rng = ChaCha20Rng::from_seed(seed_arr);
+    }
+
+    pub fn randomize(&mut self, val: i64) {
+        self.rng = ChaCha20Rng::seed_from_u64(val as u64);
     }
 
     fn upcheck_internal(
@@ -874,6 +894,8 @@ impl VariableStorage {
         set!(KnownVariableNames::PalamLv, palamlv_init);
         set!(KnownVariableNames::ExpLv, explv_init);
 
+        // Init RANDDATA with fresh rng
+        self.dump_rand();
         self.get_var("RELATION")?.0.default_int = header.replace.relation_init;
         *self.ref_int("PBAND", &[])? = header.replace.pband_init;
 
