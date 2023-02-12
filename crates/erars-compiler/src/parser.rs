@@ -1408,6 +1408,7 @@ impl<'p> ParserContext<'p> {
                     GETCONFIG => normal_method!(BuiltinMethod::GetConfig),
                     GETCONFIGS => normal_method!(BuiltinMethod::GetConfigS),
                     
+                    CALLTRAIN => normal_command!(BuiltinCommand::CallTrain),
                     UPCHECK => normal_command!(BuiltinCommand::UpCheck),
                     CUPCHECK => normal_command!(BuiltinCommand::CUpCheck),
 
