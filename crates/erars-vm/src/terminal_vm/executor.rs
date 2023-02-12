@@ -867,7 +867,7 @@ fn run_builtin_method(
             let value = get_arg!(@value args, ctx);
             let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
             let end = get_arg!(@opt @usize: args, ctx);
-            let exact_match = get_arg!(@opt @usize: args, ctx).map_or(false, |i| i != 0);
+            let exact_match = get_arg!(@opt @i64: args, ctx).map_or(false, |i| i != 0);
 
             let (info, var, _) = ctx.resolve_var_ref(&var)?;
 
@@ -901,7 +901,7 @@ fn run_builtin_method(
                 }
             };
 
-            ctx.push(pos.map_or(-1, |p| p as i64));
+            ctx.push(pos.map_or(-1, |p| (p + start) as i64));
         }
         BuiltinMethod::FindChara => {
             check_arg_count!(1, 4);
