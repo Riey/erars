@@ -100,6 +100,7 @@ pub enum BuiltinMethod {
     SaveNos,
     GetConfig,
     GetConfigS,
+    PrintCPerLine,
 
     CsvName = 100,
     CsvCallName,

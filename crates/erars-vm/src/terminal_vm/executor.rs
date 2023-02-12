@@ -1614,6 +1614,16 @@ fn run_builtin_method(
             }
         }
 
+        BuiltinMethod::PrintCPerLine => {
+            check_arg_count!(0);
+            ctx.push(
+                ctx.config
+                    .get_config(EraConfigKey::PrintcCount)
+                    .try_into_int()
+                    .unwrap(),
+            );
+        }
+
         BuiltinMethod::VarSize => {
             check_arg_count!(1, 2);
             let var = get_arg!(@String: args, ctx).to_uppercase();
