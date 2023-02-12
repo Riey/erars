@@ -982,7 +982,8 @@ fn run_builtin_method(
             check_arg_count!(2);
             let x = get_arg!(@i64: args, ctx);
             let y = get_arg!(@i64: args, ctx);
-            ctx.push(x ^ y);
+
+            ctx.push(pow_i64(x, y)?);
         }
         BuiltinMethod::Sqrt => {
             check_arg_count!(1);
@@ -1797,9 +1798,9 @@ fn run_builtin_command(
         }
         BuiltinCommand::Power => {
             let out = get_arg!(@var args);
-            let l = get_arg!(@i64: args, ctx);
-            let r = get_arg!(@u32: args, ctx);
-            *ctx.ref_int_var_ref(&out)? = l.pow(r);
+            let x = get_arg!(@i64: args, ctx);
+            let y = get_arg!(@i64: args, ctx);
+            *ctx.ref_int_var_ref(&out)? = pow_i64(x, y)?;
         }
         BuiltinCommand::SetBit => {
             let v = get_arg!(@var args);
@@ -2525,4 +2526,21 @@ fn get_times(now: time::OffsetDateTime) -> String {
         minute = now.minute(),
         second = now.second()
     )
+}
+
+fn pow_i64(x: i64, y: i64) -> Result<i64> {
+    if let Ok(y) = u32::try_from(y) {
+        x.checked_pow(y).context("pow_i64 overflow")
+    } else if y > 0 {
+        if x == 0 || x == 1 {
+            // never overflowed
+            Ok(x)
+        } else {
+            // overflowed
+            bail!("pow_i64 overflow")
+        }
+    } else {
+        // y is negative
+        Ok(0)
+    }
 }
