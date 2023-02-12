@@ -319,16 +319,19 @@ fn make_bar_str(replace: &ReplaceInfo, var: i64, max: i64, length: i64) -> Strin
 fn array_shift<T: Clone>(
     arr: &mut [T],
     empty_value: T,
+    shift: usize,
     start: usize,
-    count: usize,
+    end: usize,
 ) -> anyhow::Result<()> {
     ensure!(start < arr.len(), "ARRAYSHIFT start value exceed");
 
-    let arr = &mut arr[start..];
+    let end = (start.saturating_add(end)).min(arr.len() - start);
 
-    if count < arr.len() {
-        arr.rotate_right(count);
-        arr[..count].fill(empty_value);
+    let arr = &mut arr[start..end];
+
+    if shift < arr.len() {
+        arr.rotate_right(shift);
+        arr[..shift].fill(empty_value);
     } else {
         arr.fill(empty_value);
     }
@@ -339,11 +342,11 @@ fn array_shift<T: Clone>(
 #[test]
 fn shift_test() {
     let mut arr = [1, 1, 1, 1];
-    array_shift(&mut arr, 0, 1, 2).unwrap();
+    array_shift(&mut arr, 0, 2, 1, usize::MAX).unwrap();
     k9::assert_equal!(arr, [1, 0, 0, 1]);
     arr.fill(1);
-    array_shift(&mut arr, 0, 1, 10).unwrap();
-    k9::assert_equal!(arr, [1, 0, 0, 0]);
+    array_shift(&mut arr, 0, 10, 1, 2).unwrap();
+    k9::assert_equal!(arr, [1, 0, 0, 1]);
 }
 
 fn array_remove<T: Clone + Default>(

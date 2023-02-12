@@ -1811,27 +1811,22 @@ fn run_builtin_command(
         }
         BuiltinCommand::ArrayShift => {
             let v = get_arg!(@var args);
+            let shift_count = get_arg!(@usize: args, ctx);
             let empty_value = get_arg!(@value args, ctx);
-            let start = get_arg!(@u32: args, ctx);
-            let count = get_arg!(@u32: args, ctx);
+            let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+            let count = get_arg!(@opt @usize: args, ctx).unwrap_or(usize::MAX);
+            let end = count.saturating_add(start);
 
-            let target = if let Some(idx) = v.idxs.first().copied() {
-                idx
-            } else {
-                ctx.var.read_int(Var::Target, &[])?.try_into()?
-            };
-            let (info, var) = ctx.var.get_maybe_local_var(v.func_name, v.name)?;
-            ensure!(info.size.len() == 1, "ARRAYREMOVE only supports 1D array");
-            let var = var.as_vm_var(target);
+            let (info, var, _) = ctx.resolve_var_ref(&v)?;
 
             if info.is_str {
                 let var = var.as_str()?;
                 let empty_value = empty_value.try_into()?;
-                array_shift(var, empty_value, start as usize, count as usize)?;
+                array_shift(var, empty_value, shift_count, start, end)?;
             } else {
                 let var = var.as_int()?;
                 let empty_value = empty_value.try_into()?;
-                array_shift(var, empty_value, start as usize, count as usize)?;
+                array_shift(var, empty_value, shift_count, start, end)?;
             }
         }
         BuiltinCommand::ArrayRemove => {
@@ -1839,15 +1834,7 @@ fn run_builtin_command(
             let start = get_arg!(@usize: args, ctx);
             let count = get_arg!(@i64: args, ctx).try_into().unwrap_or(usize::MAX);
 
-            let target = if let Some(idx) = v.idxs.first().copied() {
-                idx
-            } else {
-                ctx.var.read_int(Var::Target, &[])?.try_into()?
-            };
-            let (info, var) = ctx.var.get_maybe_local_var(v.func_name, v.name)?;
-
-            ensure!(info.size.len() == 1, "ARRAYREMOVE only supports 1D array");
-            let var = var.as_vm_var(target);
+            let (info, var, _) = ctx.resolve_var_ref(&v)?;
 
             if info.is_str {
                 let var = var.as_str()?;
@@ -1911,14 +1898,7 @@ fn run_builtin_command(
             let start = get_arg!(@opt @usize: args, ctx);
             let count = get_arg!(@opt @usize: args, ctx);
 
-            let target = if let Some(idx) = v.idxs.first().copied() {
-                idx
-            } else {
-                ctx.var.read_int(Var::Target, &[])?.try_into()?
-            };
-            let (info, var) = ctx.var.get_maybe_local_var(v.func_name, v.name)?;
-            ensure!(info.size.len() == 1, "ARRAYSORT only supports 1D array");
-            let var = var.as_vm_var(target);
+            let (info, var, _) = ctx.resolve_var_ref(&v)?;
 
             let start = start.unwrap_or(0);
             let end = count
