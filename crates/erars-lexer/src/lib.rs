@@ -5,6 +5,7 @@ pub mod utils;
 
 use std::ops::Range;
 
+use cow_utils::CowUtils;
 use logos::Logos;
 
 use erars_ast::*;
@@ -266,9 +267,9 @@ impl<'s> Preprocessor<'s> {
 
         let (ident, args) = utils::cut_ident(line);
 
-        if let Some(code) =
-            InstructionCode::iter().find(|code| ident.eq_ignore_ascii_case(<&str>::from(code)))
-        {
+        let ident_upper = ident.cow_to_ascii_uppercase();
+
+        if let Ok(code) = ident_upper.parse() {
             let args = match code {
                 InstructionCode::REUSELASTLINE | InstructionCode::THROW => {
                     args.strip_prefix(' ').unwrap_or(args)

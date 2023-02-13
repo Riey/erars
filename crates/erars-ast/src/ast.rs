@@ -251,6 +251,7 @@ option_set::option_set! {
 }
 
 #[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, EnumString, Display, Serialize, Deserialize)]
+#[strum(use_phf)]
 #[repr(u32)]
 pub enum BeginType {
     #[strum(to_string = "TITLE")]

@@ -1210,6 +1210,7 @@ impl UniformVariable {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum, IntoStaticStr, Display)]
+#[strum(use_phf)]
 #[strum(serialize_all = "UPPERCASE")]
 pub enum KnownVariableNames {
     No,

@@ -6,6 +6,7 @@
     strum::IntoStaticStr,
     strum::EnumIter,
     strum::EnumCount,
+    strum::EnumString,
     num_derive::FromPrimitive,
     num_derive::ToPrimitive,
     Debug,
@@ -14,6 +15,7 @@
     PartialEq,
     Eq,
 )]
+#[strum(use_phf)]
 pub enum InstructionCode {
     CLEARLINE,
     REUSELASTLINE,
