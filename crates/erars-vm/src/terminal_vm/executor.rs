@@ -507,6 +507,7 @@ fn run_call_train(
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
     commands: Vec<u32>,
+    is_do_train: bool,
 ) -> Result<Workflow> {
     for command in commands {
         try_call!(vm, "SHOW_STATUS", tx, ctx);
@@ -527,7 +528,9 @@ fn run_call_train(
         call_event!(vm, EventType::ComEnd, tx, ctx);
     }
 
-    try_call!(vm, "CALLTRAINEND", tx, ctx);
+    if !is_do_train {
+        try_call!(vm, "CALLTRAINEND", tx, ctx);
+    }
 
     Ok(Workflow::Return)
 }
@@ -558,7 +561,7 @@ pub fn run_begin(
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
 ) -> Result<Workflow> {
-    log::trace!("Begin {ty}");
+    log::info!("Begin {ty}");
 
     match ty {
         BeginType::Title => {
@@ -573,20 +576,28 @@ pub fn run_begin(
             ctx.var.reset_train_data()?;
             call_event!(vm, EventType::Train, tx, ctx);
             let train_key = ctx.var.known_key(Var::Train);
+            let mut comables = vec![
+                0;
+                *ctx.header_info.var_name_var[&train_key].last_key_value().unwrap().0
+                    as usize
+                    + 1
+            ];
 
             loop {
                 let com_no = match ctx.var.read_int(Var::NextCom, &[])? {
                     no if no >= 0 => no,
                     _ => {
+                        comables.fill(ctx.header_info.replace.comable_init);
                         try_call!(vm, "SHOW_STATUS", tx, ctx);
 
                         let mut printc_count = 0;
 
                         for (no, name) in ctx.header_info.clone().var_name_var[&train_key].iter() {
-                            if try_call!(vm, &format!("COM_ABLE{no}"), tx, ctx)
-                                && ctx.var.get_result() != 0
-                                || ctx.header_info.replace.comable_init != 0
-                            {
+                            if try_call!(vm, &format!("COM_ABLE{no}"), tx, ctx) {
+                                comables[*no as usize] = ctx.var.get_result();
+                            }
+
+                            if comables[*no as usize] != 0 {
                                 if ctx.config.printc_count != 0
                                     && printc_count == ctx.config.printc_count
                                 {
@@ -617,11 +628,10 @@ pub fn run_begin(
                             _ => false,
                         };
 
-                        if com_exists {
+                        if com_exists && comables[no as usize] != 0 {
                             no
                         } else {
                             try_call!(vm, "USERCOM", tx, ctx);
-
                             continue;
                         }
                     }
@@ -2397,7 +2407,9 @@ fn run_builtin_command(
             log::error!("FORCEKANA is not implemented!");
         }
         BuiltinCommand::DoTrain => {
-            todo!("DOTRAIN")
+            let com_no = get_arg!(@u32: args, ctx);
+
+            conv_workflow!(run_call_train(vm, tx, ctx, vec![com_no], true)?);
         }
         BuiltinCommand::CallTrain => {
             let count = get_arg!(@usize: args, ctx);
@@ -2408,7 +2420,7 @@ fn run_builtin_command(
                 .map(|c| u32::try_from(*c).context("CallTrain command convert"))
                 .collect::<Result<Vec<u32>>>()?;
 
-            conv_workflow!(run_call_train(vm, tx, ctx, commands)?);
+            conv_workflow!(run_call_train(vm, tx, ctx, commands, false)?);
         }
         BuiltinCommand::DelChara => {
             let idx = get_arg!(@i64: args, ctx);

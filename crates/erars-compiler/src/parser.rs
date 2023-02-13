@@ -1409,7 +1409,8 @@ impl<'p> ParserContext<'p> {
                     GETPALAMLV => normal_method!(BuiltinMethod::GetPalamLv),
                     GETCONFIG => normal_method!(BuiltinMethod::GetConfig),
                     GETCONFIGS => normal_method!(BuiltinMethod::GetConfigS),
-                    
+
+                    DOTRAIN => normal_command!(BuiltinCommand::DoTrain),
                     CALLTRAIN => normal_command!(BuiltinCommand::CallTrain),
                     UPCHECK => normal_command!(BuiltinCommand::UpCheck),
                     CUPCHECK => normal_command!(BuiltinCommand::CUpCheck),
@@ -1419,7 +1420,6 @@ impl<'p> ParserContext<'p> {
                     ENDNOSKIP => normal_command!(BuiltinCommand::EndNoSkip),
 
                     // GCREATE => normal_command!(BuiltinCommand::GCreate),
-
                     BAR => normal_command!(BuiltinCommand::Bar),
 
                     HTML_PRINT => normal_command!(BuiltinCommand::HtmlPrint),
