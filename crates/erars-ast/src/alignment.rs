@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use strum::EnumString;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, EnumString)]
+#[strum(use_phf)]
 #[repr(u32)]
 pub enum Alignment {
     #[strum(to_string = "LEFT")]

@@ -164,6 +164,7 @@ pub struct Gamebase {
 }
 
 #[derive(Clone, Copy, Debug, Display, EnumString)]
+#[strum(use_phf)]
 pub enum EraConfigKey {
     #[strum(to_string = "内部で使用する東アジア言語")]
     Lang,

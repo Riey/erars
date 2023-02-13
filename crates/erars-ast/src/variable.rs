@@ -7,6 +7,7 @@ use strum::{Display, EnumString, IntoStaticStr};
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, IntoStaticStr, Serialize, Deserialize,
 )]
 #[strum(serialize_all = "UPPERCASE")]
+#[strum(use_phf)]
 #[repr(u32)]
 pub enum BuiltinVariable {
     CharaNum,

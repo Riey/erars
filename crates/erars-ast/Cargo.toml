@@ -13,7 +13,7 @@ num-traits = "0.2.15"
 option_set = "0.1.4"
 ordered-float = { version = "3.0.0", features = ["serde"] }
 serde = { version = "1.0.142", features = ["derive"] }
-strum = { version = "0.24.1", features = ["derive"] }
+strum = { version = "0.24.1", features = ["derive", "phf"] }
 anyhow = { version = "1" }
 lasso = { version = "0.6.0", features = ["multi-threaded", "ahasher", "serialize"] }
 
