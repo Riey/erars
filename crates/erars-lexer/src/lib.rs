@@ -463,14 +463,10 @@ pub enum ComplexAssign {
 }
 
 #[derive(Clone, Copy, Debug, Logos)]
+#[logos(skip "\u{FEFF}")]
+#[logos(skip r"[ \t\r\n　]+")]
+#[logos(skip r"[；;][^\n]*")]
 pub enum ConfigToken<'s> {
     #[regex(r"[^:\r\n\u{FEFF}][^:\r\n]*:[^\r\n]*", |lex| lex.slice().split_once(':').unwrap())]
     Line((&'s str, &'s str)),
-
-    #[error]
-    // BOM
-    #[token("\u{FEFF}", logos::skip)]
-    #[regex(r"[ \t\r\n　]+", logos::skip)]
-    #[regex(r"[；;][^\n]*", logos::skip)]
-    Error,
 }

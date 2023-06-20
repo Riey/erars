@@ -38,7 +38,9 @@ mod body {
     ),
     StmtWithPos(
         Print(
-            NEWLINE,
+            PrintFlags(
+                NEWLINE,
+            ),
             FormText(
                 {Var(Variable { var: LOCALS, func_extern: None, args: [] })(pad: Int(12))(align: Center)},
             ),
@@ -49,7 +51,9 @@ mod body {
     ),
     StmtWithPos(
         Print(
-            NEWLINE,
+            PrintFlags(
+                NEWLINE,
+            ),
             FormText(
                 {Var(Variable { var: LOCALS, func_extern: None, args: [] })(pad: Int(12))},
             ),
@@ -474,7 +478,9 @@ mod body {
 [
     StmtWithPos(
         Print(
-            NEWLINE,
+            PrintFlags(
+                NEWLINE,
+            ),
             String(
                 AAA,
             ),
@@ -497,7 +503,9 @@ mod body {
 [
     StmtWithPos(
         Print(
-            NEWLINE | WAIT | DEFAULT_COLOR,
+            PrintFlags(
+                NEWLINE | WAIT | DEFAULT_COLOR,
+            ),
             FormText(
                 에이키는 약간 부끄러운 듯이 {Method(조사처리, [Some(Method(SLIT, [None, Some(Int(1))])), Some(String(를))])} 가리켰다,
             ),
@@ -540,7 +548,9 @@ mod body {
     ),
     StmtWithPos(
         Print(
-            (empty),
+            PrintFlags(
+                0x0,
+            ),
             FormText(
                 {Var(Variable { var: ARGS, func_extern: None, args: [] })} {Var(Variable { var: ARGS, func_extern: None, args: [] })(align: Right)},
             ),
@@ -583,7 +593,9 @@ mod body {
             [
                 StmtWithPos(
                     PrintList(
-                        NEWLINE,
+                        PrintFlags(
+                            NEWLINE,
+                        ),
                         [
                             Var(
                                 Variable {
@@ -620,7 +632,9 @@ mod body {
 [
     StmtWithPos(
         Print(
-            NEWLINE,
+            PrintFlags(
+                NEWLINE,
+            ),
             String(
                 Hello, world!,
             ),
@@ -668,7 +682,9 @@ mod body {
                     [
                         StmtWithPos(
                             Print(
-                                (empty),
+                                PrintFlags(
+                                    0x0,
+                                ),
                                 String(
                                     A > 1,
                                 ),
@@ -701,7 +717,9 @@ mod body {
                     [
                         StmtWithPos(
                             Print(
-                                (empty),
+                                PrintFlags(
+                                    0x0,
+                                ),
                                 String(
                                     A == 1,
                                 ),
@@ -716,7 +734,9 @@ mod body {
             [
                 StmtWithPos(
                     Print(
-                        (empty),
+                        PrintFlags(
+                            0x0,
+                        ),
                         String(
                             A < 1,
                         ),
@@ -760,7 +780,9 @@ mod body {
                     [
                         StmtWithPos(
                             Print(
-                                (empty),
+                                PrintFlags(
+                                    0x0,
+                                ),
                                 String(
                                     IF,
                                 ),
@@ -783,7 +805,9 @@ mod body {
                     [
                         StmtWithPos(
                             Print(
-                                (empty),
+                                PrintFlags(
+                                    0x0,
+                                ),
                                 String(
                                     ELSEIF,
                                 ),
@@ -798,7 +822,9 @@ mod body {
             [
                 StmtWithPos(
                     Print(
-                        (empty),
+                        PrintFlags(
+                            0x0,
+                        ),
                         String(
                             ELSE,
                         ),
@@ -1022,7 +1048,9 @@ Function {
     body: [
         StmtWithPos(
             PrintButton {
-                flags: (empty),
+                flags: PrintFlags(
+                    0x0,
+                ),
                 text: FormText(
                      [{Var(Variable { var: ARGS, func_extern: None, args: [Int(0)] })}],
                 ),
@@ -1036,7 +1064,9 @@ Function {
         ),
         StmtWithPos(
             Print(
-                NEWLINE,
+                PrintFlags(
+                    NEWLINE,
+                ),
                 String(
                     ,
                 ),
@@ -1047,7 +1077,9 @@ Function {
         ),
         StmtWithPos(
             PrintButton {
-                flags: (empty),
+                flags: PrintFlags(
+                    0x0,
+                ),
                 text: FormText(
                      [{Var(Variable { var: ARGS, func_extern: None, args: [Int(1)] })}],
                 ),
@@ -1061,7 +1093,9 @@ Function {
         ),
         StmtWithPos(
             Print(
-                NEWLINE,
+                PrintFlags(
+                    NEWLINE,
+                ),
                 String(
                     ,
                 ),
@@ -1087,7 +1121,9 @@ Function {
 [
     StmtWithPos(
         PrintData(
-            (empty),
+            PrintFlags(
+                0x0,
+            ),
             None,
             [
                 [
@@ -1128,7 +1164,9 @@ Function {
 [
     StmtWithPos(
         Print(
-            NEWLINE,
+            PrintFlags(
+                NEWLINE,
+            ),
             FormText(
                 1 + 1 = {BinopExpr(Int(1), Add, Int(1))},
             ),
@@ -1139,7 +1177,9 @@ Function {
     ),
     StmtWithPos(
         Print(
-            NEWLINE | WAIT,
+            PrintFlags(
+                NEWLINE | WAIT,
+            ),
             FormText(
                 {Method(조사처리, [Some(Var(Variable { var: CALLNAME, func_extern: None, args: [Method(GET_CHARA_M, [])] })), Some(String(와))])} 같이 온 걸 보니, 단단히 각오하고 온 것 같다,
             ),
@@ -1150,7 +1190,9 @@ Function {
     ),
     StmtWithPos(
         Print(
-            NEWLINE,
+            PrintFlags(
+                NEWLINE,
+            ),
             FormText(
                 {Var(Variable { var: CALLNAME, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] })] })}의 교습 관찰 결과 완료  결과：임시 성과치 {Var(Variable { var: LOCAL, func_extern: None, args: [Int(0)] })}에 의한 실제 성과치 {Var(Variable { var: LOCAL, func_extern: None, args: [Int(2)] })} 증가⇒{CondExpr(BinopExpr(Var(Variable { var: LOCAL, func_extern: None, args: [Int(1)] }), Equal, Int(1)), FormText(성공), FormText(실패))}({Var(Variable { var: CFLAG, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] }), Int(693)] })}％) 작업 내용：{Var(Variable { var: CFLAG, func_extern: None, args: [Var(Variable { var: ARG, func_extern: None, args: [] }), Int(690)] })},
             ),
@@ -1161,7 +1203,9 @@ Function {
     ),
     StmtWithPos(
         Print(
-            NEWLINE | WAIT,
+            PrintFlags(
+                NEWLINE | WAIT,
+            ),
             FormText(
                 보지에서 애액을 흘렸{CondExpr(BinopExpr(Var(Variable { var: TEQUIP, func_extern: None, args: [Int(42)] }), Equal, Int(0)), FormText(고, 작은 한숨을 토해냈), String())}다.,
             ),
@@ -1185,7 +1229,9 @@ Function {
 [
     StmtWithPos(
         Print(
-            LEFT_ALIGN,
+            PrintFlags(
+                LEFT_ALIGN,
+            ),
             String(
                 LC,
             ),
@@ -1196,7 +1242,9 @@ Function {
     ),
     StmtWithPos(
         Print(
-            RIGHT_ALIGN,
+            PrintFlags(
+                RIGHT_ALIGN,
+            ),
             String(
                 C,
             ),
@@ -1357,7 +1405,9 @@ Function {
                     [
                         StmtWithPos(
                             Print(
-                                (empty),
+                                PrintFlags(
+                                    0x0,
+                                ),
                                 String(
                                     FOO,
                                 ),
@@ -1382,7 +1432,9 @@ Function {
                     [
                         StmtWithPos(
                             Print(
-                                (empty),
+                                PrintFlags(
+                                    0x0,
+                                ),
                                 String(
                                     BAR,
                                 ),
@@ -1398,7 +1450,9 @@ Function {
                 [
                     StmtWithPos(
                         Print(
-                            (empty),
+                            PrintFlags(
+                                0x0,
+                            ),
                             String(
                                 BAZ,
                             ),
@@ -1435,7 +1489,9 @@ Function {
             ),
             StmtWithPos(
                 Print(
-                    (empty),
+                    PrintFlags(
+                        0x0,
+                    ),
                     String(
                         45,
                     ),
@@ -1466,7 +1522,9 @@ Function {
             ),
             StmtWithPos(
                 Print(
-                    NEWLINE,
+                    PrintFlags(
+                        NEWLINE,
+                    ),
                     FormText(
                         {Var(Variable { var: LOCALS, func_extern: None, args: [] })},
                     ),
@@ -1482,7 +1540,9 @@ Function {
     ),
     StmtWithPos(
         Print(
-            (empty),
+            PrintFlags(
+                0x0,
+            ),
             String(
                 32,
             ),
@@ -1507,7 +1567,9 @@ Function {
 [
     StmtWithPos(
         Print(
-            (empty),
+            PrintFlags(
+                0x0,
+            ),
             String(
                 YES,
             ),
@@ -2343,7 +2405,9 @@ Function {
                     [
                         StmtWithPos(
                             Print(
-                                NEWLINE,
+                                PrintFlags(
+                                    NEWLINE,
+                                ),
                                 String(
                                     CATCH,
                                 ),
@@ -2542,7 +2606,9 @@ Function {
     body: [
         StmtWithPos(
             PrintList(
-                (empty),
+                PrintFlags(
+                    0x0,
+                ),
                 [
                     Var(
                         Variable {
@@ -2585,7 +2651,9 @@ Function {
     body: [
         StmtWithPos(
             Print(
-                NEWLINE,
+                PrintFlags(
+                    NEWLINE,
+                ),
                 String(
                     Hello,
                 ),
@@ -2596,7 +2664,9 @@ Function {
         ),
         StmtWithPos(
             Print(
-                NEWLINE,
+                PrintFlags(
+                    NEWLINE,
+                ),
                 FormText(
                     {Int(123)},
                 ),
@@ -2940,7 +3010,9 @@ Function {
                                             [
                                                 StmtWithPos(
                                                     Print(
-                                                        NEWLINE,
+                                                        PrintFlags(
+                                                            NEWLINE,
+                                                        ),
                                                         Var(
                                                             Variable {
                                                                 var: LOCALS,
@@ -2981,7 +3053,9 @@ Function {
                                             [
                                                 StmtWithPos(
                                                     Print(
-                                                        NEWLINE | WAIT,
+                                                        PrintFlags(
+                                                            NEWLINE | WAIT,
+                                                        ),
                                                         Var(
                                                             Variable {
                                                                 var: LOCALS,
@@ -3186,7 +3260,9 @@ mod program {
         body: [
             StmtWithPos(
                 Print(
-                    (empty),
+                    PrintFlags(
+                        0x0,
+                    ),
                     FormText(
                         FOO_{Var(Variable { var: ARG, func_extern: None, args: [] })},
                     ),
@@ -3289,7 +3365,9 @@ mod program {
         body: [
             StmtWithPos(
                 Print(
-                    (empty),
+                    PrintFlags(
+                        0x0,
+                    ),
                     String(
                         foo,
                     ),
@@ -3310,7 +3388,9 @@ mod program {
         body: [
             StmtWithPos(
                 Print(
-                    (empty),
+                    PrintFlags(
+                        0x0,
+                    ),
                     String(
                         foo,
                     ),
@@ -3331,7 +3411,9 @@ mod program {
         body: [
             StmtWithPos(
                 Print(
-                    (empty),
+                    PrintFlags(
+                        0x0,
+                    ),
                     String(
                         bar,
                     ),

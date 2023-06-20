@@ -235,9 +235,11 @@ impl fmt::Debug for FormText {
     }
 }
 
-option_set::option_set! {
+bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
     #[repr(transparent)]
-    pub struct PrintFlags: UpperSnake + u32 {
+    #[serde(transparent)]
+    pub struct PrintFlags: u32 {
         const NEWLINE = 0x1;
         const WAIT = 0x2;
         const LEFT_ALIGN = 0x4;

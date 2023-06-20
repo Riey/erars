@@ -239,7 +239,7 @@ fn main() {
 
             Box::new(EraApp::new(receiver, line_height))
         }),
-    );
+    ).unwrap();
 }
 
 struct EraApp {
@@ -296,10 +296,10 @@ impl App for EraApp {
         self.draw_console(ctx, frame);
     }
 
-    fn clear_color(&self, _visuals: &egui::Visuals) -> egui::Rgba {
-        egui::Rgba::BLACK
-        // let [r, g, b] = self.console_frame.bg_color.0;
-        // egui::Rgba::from_rgb(r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0)
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        let [r, g, b] = self.console_frame.bg_color.0;
+
+        [r as f32 / 255.0, g as f32 / 255.0, b as f32 / 255.0, 1.0]
     }
 }
 
@@ -308,7 +308,7 @@ impl EraApp {
         let current_input_gen = self.current_req.as_ref().map(|req| req.generation);
         let receiver = &self.receiver;
 
-        if ctx.input().pointer.button_down(egui::PointerButton::Secondary)
+        if ctx.input(|i| i.pointer.button_down(egui::PointerButton::Secondary))
             && self.current_req.as_ref().map_or(true, |req| {
                 matches!(
                     req.ty,
@@ -345,7 +345,6 @@ impl EraApp {
 
             egui::ScrollArea::vertical()
                 .max_width(ui.available_width())
-                .always_show_scroll(true)
                 .stick_to_bottom(true)
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
@@ -415,13 +414,13 @@ impl EraApp {
         match self.current_req.as_ref() {
             Some(req) => match req.ty {
                 InputRequestType::AnyKey => {
-                    if ctx.input().pointer.button_clicked(egui::PointerButton::Primary)
+                    if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
                         || self.skip
-                        || ctx
-                            .input()
-                            .events
-                            .iter()
-                            .any(|e| matches!(e, egui::Event::Key { pressed: true, .. }))
+                        || ctx.input(|i| {
+                            i.events
+                                .iter()
+                                .any(|e| matches!(e, egui::Event::Key { pressed: true, .. }))
+                        })
                     {
                         self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
                         self.input.clear();
@@ -430,9 +429,9 @@ impl EraApp {
                     }
                 }
                 InputRequestType::EnterKey | InputRequestType::ForceEnterKey => {
-                    if ctx.input().pointer.button_clicked(egui::PointerButton::Primary)
+                    if ctx.input(|i| i.pointer.button_clicked(egui::PointerButton::Primary))
                         || self.skip
-                        || ctx.input().key_down(egui::Key::Enter)
+                        || ctx.input(|i| i.key_down(egui::Key::Enter))
                     {
                         self.receiver.res_tx.send(SystemResponse::Empty).unwrap();
                         self.input.clear();
@@ -441,7 +440,7 @@ impl EraApp {
                     }
                 }
                 InputRequestType::Int => {
-                    if ctx.input().key_down(egui::Key::Enter) {
+                    if ctx.input(|i| i.key_down(egui::Key::Enter)) {
                         if let Ok(i) = self.input.parse() {
                             log::info!("Res -> {i}");
                             self.receiver
@@ -454,7 +453,7 @@ impl EraApp {
                     }
                 }
                 InputRequestType::Str => {
-                    if ctx.input().key_down(egui::Key::Enter) {
+                    if ctx.input(|i| i.key_down(egui::Key::Enter)) {
                         log::info!("Res -> \"{}\"", self.input);
                         self.receiver
                             .res_tx
@@ -497,8 +496,10 @@ impl EraApp {
             ConsoleLinePart::Line(text, color) => {
                 let width = ui.available_width();
                 let font_id = &ui.style().text_styles[&egui::TextStyle::Monospace];
-                let char_width =
-                    text.chars().map(|c| ui.fonts().glyph_width(font_id, c)).sum::<f32>();
+                let char_width = text
+                    .chars()
+                    .map(|c| ui.fonts(|f| f.glyph_width(font_id, c)))
+                    .sum::<f32>();
                 let s = text.repeat((width / char_width).floor() as usize);
                 ui.colored_label(to_egui_color(color.color), s);
             }

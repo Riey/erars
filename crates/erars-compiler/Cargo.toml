@@ -11,7 +11,7 @@ regex-automata = "0.2.0"
 [dependencies]
 erars-ast = { path = "../erars-ast" }
 erars-lexer = { path = "../erars-lexer" }
-bitflags = "1.3.2"
+bitflags = "2.3.1"
 pad = "0.1"
 anyhow = "1"
 enum-map = { version = "2.1.0", features = ["serde"] }
@@ -25,7 +25,7 @@ strum = { version = "0.24.0", features = ["derive"] }
 thiserror = "1.0.30"
 utf8-decode = "1.0.1"
 nom = "7.1.1"
-logos = "0.12.1"
+logos = "0.13.0"
 unicode-xid = "0.2.3"
 log = "0.4.17"
 derivative = "2.2.0"

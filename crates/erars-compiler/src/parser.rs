@@ -245,7 +245,7 @@ impl EraConfig {
 
         while let Some(line) = lex.next() {
             match line {
-                ConfigToken::Line((key, value)) => {
+                Ok(ConfigToken::Line((key, value))) => {
                     if let Ok(key) = key.parse() {
                         match key {
                             EraConfigKey::PrintcCount => {
@@ -326,7 +326,7 @@ impl EraConfig {
                         }
                     }
                 }
-                ConfigToken::Error => error!(lex.span(), format!("Invalid token: {}", lex.slice())),
+                Err(_) => error!(lex.span(), format!("Invalid token: {}", lex.slice())),
             }
         }
 

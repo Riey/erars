@@ -5,7 +5,7 @@ edition = "2021"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-bitflags = "1.3.2"
+bitflags = { version = "2.3.1", features = ["serde"] }
 enum-map = { version = "2.4.1", features = ["serde"] }
 hashbrown = { version = "0.13", features = ["ahash", "serde"] }
 num-derive = "0.3.3"
@@ -15,7 +15,7 @@ ordered-float = { version = "3.0.0", features = ["serde"] }
 serde = { version = "1.0.142", features = ["derive"] }
 strum = { version = "0.24.1", features = ["derive", "phf"] }
 anyhow = { version = "1" }
-lasso = { version = "0.6.0", features = ["multi-threaded", "ahasher", "serialize"] }
+lasso = { version = "0.7.2", features = ["multi-threaded", "ahasher", "serialize"] }
 
 [dev-dependencies]
 k9 = "0.11.1"
