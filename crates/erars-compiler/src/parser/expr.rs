@@ -225,6 +225,8 @@ pub fn form_str<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i: &'a str| {
+        let is_arg_init_value = ctx.is_arg.get();
+        ctx.is_arg.set(false);
         let normal_str = parse_form_normal_str(ty);
         let (mut i, (normal, mut ty)) = normal_str(i)?;
 
@@ -278,6 +280,8 @@ pub fn form_str<'c, 'a>(
 
             form.push(expr, padding, align, ctx.interner.get_or_intern(normal));
         }
+
+        ctx.is_arg.set(is_arg_init_value);
 
         Ok((i, Expr::FormText(form)))
     }
