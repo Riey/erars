@@ -955,11 +955,15 @@ impl HeaderInfo {
                     args: dim,
                 }) => {
                     let var = try_nom!(pp, self::expr::dim_line(&ctx, false)(dim)).1;
-                    ctx.header
+                    if let Some(old) = ctx
+                        .header
                         .try_mut()
                         .unwrap()
                         .global_variables
-                        .insert(var.var, var.info);
+                        .insert(var.var, var.info)
+                    {
+                        log::error!("Duplicate var name {} {old:?}", var.var)
+                    }
                 }
                 Some(EraLine::SharpLine {
                     sharp: SharpCode::DIMS,

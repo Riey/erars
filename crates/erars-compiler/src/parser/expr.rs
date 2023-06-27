@@ -877,42 +877,58 @@ pub fn dim_line<'c, 'a>(
         let mut info = VariableInfo::default();
         info.is_str = is_str;
 
-        let (i, (is_const, is_dynamic, is_ref, is_chara, is_save, is_global, var, size, init)) =
-            tuple((
-                opt(value((), de_sp(tag_no_case("CONST")))),
-                opt(value((), de_sp(tag_no_case("DYNAMIC")))),
-                opt(value((), de_sp(tag_no_case("REF")))),
-                opt(value((), de_sp(tag_no_case("CHARADATA")))),
-                opt(value((), de_sp(tag_no_case("SAVEDATA")))),
-                opt(value((), de_sp(tag_no_case("GLOBAL")))),
-                de_sp(ident_no_case),
-                opt(preceded(
-                    char_sp(','),
-                    separated_list0(
-                        char_sp(','),
-                        map(expr(ctx), |expr| {
-                            ctx.header
-                                .as_ref()
-                                .const_eval(&expr)
-                                .unwrap()
-                                .into_int_err()
-                                .map(|i| i as u32)
-                                .unwrap()
-                        }),
-                    ),
-                )),
-                opt(preceded(
-                    char_sp('='),
-                    separated_list0(char_sp(','), expr(ctx)),
-                )),
-            ))(i)?;
+        #[derive(Clone, Copy)]
+        enum DimTag {
+            Const,
+            Dynamic,
+            Ref,
+            Chara,
+            Save,
+            Global,
+        }
 
-        info.is_const = is_const.is_some();
-        info.is_dynamic = is_dynamic.is_some();
-        info.is_ref = is_ref.is_some();
-        info.is_chara = is_chara.is_some();
-        info.is_savedata = is_save.is_some();
-        info.is_global = is_global.is_some();
+        let (i, (tags, var, size, init)) = tuple((
+            many0(alt((
+                value(DimTag::Const, de_sp(tag_no_case("CONST"))),
+                value(DimTag::Dynamic, de_sp(tag_no_case("DYNAMIC"))),
+                value(DimTag::Ref, de_sp(tag_no_case("REF"))),
+                value(DimTag::Chara, de_sp(tag_no_case("CHARADATA"))),
+                value(DimTag::Save, de_sp(tag_no_case("SAVEDATA"))),
+                value(DimTag::Global, de_sp(tag_no_case("GLOBAL"))),
+            ))),
+            de_sp(ident_no_case),
+            opt(preceded(
+                char_sp(','),
+                separated_list0(
+                    char_sp(','),
+                    map(expr(ctx), |expr| {
+                        ctx.header
+                            .as_ref()
+                            .const_eval(&expr)
+                            .unwrap()
+                            .into_int_err()
+                            .map(|i| i as u32)
+                            .unwrap()
+                    }),
+                ),
+            )),
+            opt(preceded(
+                char_sp('='),
+                separated_list0(char_sp(','), expr(ctx)),
+            )),
+        ))(i)?;
+
+        for tag in tags {
+            match tag {
+                DimTag::Const => info.is_const = true,
+                DimTag::Chara => info.is_chara = true,
+                DimTag::Dynamic => info.is_dynamic = true,
+                DimTag::Ref => info.is_ref = true,
+                DimTag::Save => info.is_savedata = true,
+                DimTag::Global => info.is_global = true,
+            }
+        }
+
         info.size =
             size.unwrap_or_else(|| init.as_ref().map(|v| vec![v.len() as u32]).unwrap_or_default());
         info.init = init.unwrap_or_default();
