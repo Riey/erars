@@ -611,7 +611,9 @@ fn issue_73() {
                         ],
                     ),
                     font_family: "",
-                    font_style: NORMAL,
+                    font_style: FontStyle(
+                        0x0,
+                    ),
                 },
             ),
         ],
@@ -644,7 +646,9 @@ fn button_test() {
                         ],
                     ),
                     font_family: "",
-                    font_style: NORMAL,
+                    font_style: FontStyle(
+                        0x0,
+                    ),
                 },
             ),
         ],
@@ -666,7 +670,9 @@ fn button_test() {
                         ],
                     ),
                     font_family: "",
-                    font_style: NORMAL,
+                    font_style: FontStyle(
+                        0x0,
+                    ),
                 },
             ),
         ],
@@ -688,7 +694,9 @@ fn button_test() {
                         ],
                     ),
                     font_family: "",
-                    font_style: NORMAL,
+                    font_style: FontStyle(
+                        0x0,
+                    ),
                 },
             ),
         ],
@@ -710,7 +718,9 @@ fn button_test() {
                         ],
                     ),
                     font_family: "",
-                    font_style: NORMAL,
+                    font_style: FontStyle(
+                        0x0,
+                    ),
                 },
             ),
         ],
@@ -740,7 +750,9 @@ fn button_test() {
                         ],
                     ),
                     font_family: "",
-                    font_style: NORMAL,
+                    font_style: FontStyle(
+                        0x0,
+                    ),
                 },
             ),
             (
@@ -754,7 +766,9 @@ fn button_test() {
                         ],
                     ),
                     font_family: "",
-                    font_style: NORMAL,
+                    font_style: FontStyle(
+                        0x0,
+                    ),
                 },
             ),
         ],
@@ -774,7 +788,9 @@ fn button_test() {
                 ],
             ),
             font_family: "",
-            font_style: NORMAL,
+            font_style: FontStyle(
+                0x0,
+            ),
         },
     ),
 ]
