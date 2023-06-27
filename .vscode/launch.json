@@ -81,11 +81,11 @@
                     "--package=erars"
                 ],
                 "filter": {
-                    "name": "parser_test",
+                    "name": "run_tests",
                     "kind": "test"
                 }
             },
-            "args": ["--", "endif"],
+            // "args": ["--", "endif"],
             "cwd": "${workspaceFolder}"
         }
     ]

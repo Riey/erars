@@ -33,7 +33,7 @@ fn main() {
     std::fs::write("./square.fwd.dfa", &fwd).unwrap();
     std::fs::write("./square.rev.dfa", &rev).unwrap();
 
-    let pattern = "\\n[\\r\\t ]*\\[ *ENDIF *\\]";
+    let pattern = "(^|\\n)[\\r\\t ]*\\[ *ENDIF *\\]";
 
     let re = regex::Builder::new()
         .syntax(syntax.multi_line(true))
@@ -47,7 +47,7 @@ fn main() {
     std::fs::write("./endif.fwd.dfa", &fwd).unwrap();
     std::fs::write("./endif.rev.dfa", &rev).unwrap();
 
-    let pattern = "\\n[\\r\\t ]*\\[ *SKIPEND *\\]";
+    let pattern = "(^|\\n)[\\r\\t ]*\\[ *SKIPEND *\\]";
 
     let re = regex::Builder::new()
         .syntax(syntax.multi_line(true))
