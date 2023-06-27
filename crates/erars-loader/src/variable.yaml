@@ -180,6 +180,11 @@ CFLAG:
   is_chara: true
   is_savedata: true
 
+CDFLAG:
+  size: [100,100]
+  is_chara: true
+  is_savedata: true
+
 EQUIP:
   size: [1000]
   is_chara: true

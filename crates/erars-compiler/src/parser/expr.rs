@@ -252,6 +252,8 @@ pub fn form_str<'c, 'a>(
                     (i, ex, padding, align)
                 }
                 Some(FormType::Brace) => {
+                    let ban_percent = ctx.ban_percent.get();
+                    ctx.ban_percent.set(false);
                     let (i, ex) = expr(ctx)(i)?;
                     let (i, padding) = opt(preceded(char_sp(','), opt(expr(ctx))))(i)?;
                     let (i, align) = if padding.is_some() {
@@ -262,6 +264,7 @@ pub fn form_str<'c, 'a>(
                     let padding = padding.flatten();
                     let (i, _) = opt(many0(char_sp(',')))(i)?;
                     let (i, _) = preceded(sp, char('}'))(i)?;
+                    ctx.ban_percent.set(ban_percent);
 
                     (i, ex, padding, align)
                 }

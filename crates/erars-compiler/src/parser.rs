@@ -1918,7 +1918,7 @@ impl<'p> ParserContext<'p> {
     }
 
     pub fn parse_expr_str(&self, s: &str) -> ParserResult<Expr> {
-        Ok(try_nom!(@str s, self::expr::expr(self)(s)).1)
+        Ok(try_nom!(@str s, self::expr::expr(self)(s.trim_start_matches('\u{feff}'))).1)
     }
 
     pub fn parse_body_str(&self, s: &str) -> ParserResult<Vec<StmtWithPos>> {
