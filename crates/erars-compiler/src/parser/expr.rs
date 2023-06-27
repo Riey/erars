@@ -537,6 +537,17 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                 }
             };
             (i, expr)
+        } else if let Some(i) = i.strip_prefix(':') {
+            match expr {
+                Expr::Var(mut var) => {
+                    let (i, args) = separated_list1(char_sp(':'), single_expr(ctx))(i)?;
+                    var.args.extend(args);
+                    (i, Expr::Var(var))
+                }
+                _ => {
+                    return Err(nom::Err::Error(error_position!(i, ErrorKind::Verify)));
+                }
+            }
         } else {
             (i, expr)
         })
