@@ -986,7 +986,7 @@ pub fn function_line<'c, 'a>(
 ) -> impl FnMut(&'a str) -> IResult<'a, (Cow<'a, str>, Vec<(Variable, Option<InlineValue>)>)> + 'c {
     move |i| {
         pair(
-            ident_no_case,
+            de_sp(ident_no_case),
             preceded(
                 sp,
                 alt((
