@@ -566,6 +566,8 @@ fn binop(i: &str) -> IResult<'_, BinaryOperator> {
         value(BinaryOperator::Xor, tag("^^")),
         value(BinaryOperator::Or, tag("||")),
         value(BinaryOperator::And, tag("&&")),
+        value(BinaryOperator::Nor, tag("!|")),
+        value(BinaryOperator::Nand, tag("!&")),
         value(BinaryOperator::BitXor, char('^')),
         value(BinaryOperator::BitOr, char('|')),
         value(BinaryOperator::BitAnd, char('&')),

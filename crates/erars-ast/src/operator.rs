@@ -42,12 +42,18 @@ pub enum BinaryOperator {
     /// &&
     #[strum(to_string = "&&")]
     And,
+    /// !&
+    #[strum(to_string = "!&")]
+    Nand,
     /// |
     #[strum(to_string = "|")]
     BitOr,
     /// ||
     #[strum(to_string = "||")]
     Or,
+    /// ||
+    #[strum(to_string = "!|")]
+    Nor,
     /// ^
     #[strum(to_string = "^")]
     Xor,
@@ -88,7 +94,7 @@ impl BinaryOperator {
 
         match self {
             BitAnd | BitOr | BitXor => 2,
-            And | Or | Xor => 3,
+            And | Nand | Or | Nor | Xor => 3,
             Equal | NotEqual => 4,
             Less | LessOrEqual | Greater | GreaterOrEqual => 5,
             Lhs | Rhs => 6,

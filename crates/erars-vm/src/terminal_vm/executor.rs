@@ -311,6 +311,8 @@ pub(super) fn run_instruction(
             BinaryOperator::NotEqual => Value::Int(i64::from(lhs != rhs)),
             BinaryOperator::And => Value::Int(i64::from(lhs.as_bool() && rhs.as_bool())),
             BinaryOperator::Or => Value::Int(i64::from(lhs.as_bool() || rhs.as_bool())),
+            BinaryOperator::Nand => Value::Int(i64::from(!(lhs.as_bool() && rhs.as_bool()))),
+            BinaryOperator::Nor => Value::Int(i64::from(!(lhs.as_bool() || rhs.as_bool()))),
             BinaryOperator::Xor => Value::Int(i64::from(lhs.as_bool() ^ rhs.as_bool())),
             BinaryOperator::BitAnd => Value::Int(lhs.try_into_int()? & rhs.try_into_int()?),
             BinaryOperator::BitOr => Value::Int(lhs.try_into_int()? | rhs.try_into_int()?),
