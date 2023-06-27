@@ -33,11 +33,23 @@ macro_rules! error_csv {
     }};
 }
 
+fn try_parse_csv_int64(s: &str) -> Option<i64> {
+    nom::character::complete::i64::<_, nom::error::Error<_>>(s)
+        .ok()
+        .map(|(_, n)| n)
+}
+
+fn try_parse_csv_int(s: &str) -> Option<u32> {
+    nom::character::complete::u32::<_, nom::error::Error<_>>(s)
+        .ok()
+        .map(|(_, n)| n)
+}
+
 macro_rules! csv_parse_int {
     ($s:expr, $span:expr) => {
-        match $s.parse() {
-            Ok(n) => n,
-            Err(_) => error_csv!("Invalid number", $span.clone()),
+        match try_parse_csv_int($s) {
+            Some(n) => n,
+            None => error_csv!("Invalid number", $span.clone()),
         }
     };
 }
@@ -550,9 +562,9 @@ impl HeaderInfo {
 
         macro_rules! insert_template {
             ($var:ident, $val1:expr, $val2:expr, $span:expr) => {{
-                let idx = match $val1.parse::<u32>() {
-                    Ok(idx) => idx,
-                    Err(_) => {
+                let idx = match try_parse_csv_int($val1) {
+                    Some(idx) => idx,
+                    None => {
                         match self
                             .var_names
                             .get(&$var)
@@ -565,18 +577,18 @@ impl HeaderInfo {
                     }
                 };
 
-                let value = match $val2.parse::<i64>() {
-                    Ok(idx) => idx,
-                    _ if $val2.is_empty() => 0,
-                    _ => error_csv!("잘못된 숫자입니다.", $span),
+                let value = match try_parse_csv_int64($val2) {
+                    Some(idx) => idx,
+                    _ => 1,
+                    // _ => error_csv!("잘못된 숫자입니다.", $span),
                 };
 
                 template.$var.insert(idx, value);
             }};
             (@bool $var:ident, $val1:expr, $val2:expr, $span:expr) => {{
-                let idx = match $val1.parse::<u32>() {
-                    Ok(idx) => idx,
-                    Err(_) => {
+                let idx = match try_parse_csv_int($val1) {
+                    Some(idx) => idx,
+                    None => {
                         match self
                             .var_names
                             .get(&$var)
@@ -591,9 +603,9 @@ impl HeaderInfo {
                 template.$var.insert(idx, 1);
             }};
             (@str $var:ident, $val1:expr, $val2:expr, $span:expr) => {{
-                let idx = match $val1.parse::<u32>() {
-                    Ok(idx) => idx,
-                    Err(_) => {
+                let idx = match try_parse_csv_int($val1) {
+                    Some(idx) => idx,
+                    None => {
                         match self
                             .var_names
                             .get(&$var)
@@ -709,12 +721,9 @@ impl HeaderInfo {
 
         for (mut line, span) in csv::lines(s) {
             if let Some((idx, name)) = line.next_tuple() {
-                let idx = match idx.parse() {
-                    Ok(idx) => idx,
-                    _ => error_csv!("Invalid digit", span),
-                };
+                let idx = csv_parse_int!(idx, span);
                 let name = interner.get_or_intern(name);
-                let price = line.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+                let price = line.next().and_then(try_parse_csv_int).unwrap_or(0);
 
                 self.item_price.insert(idx, price);
                 self.var_names.entry(var).or_default().insert(name, idx);
@@ -777,8 +786,8 @@ impl HeaderInfo {
                         let mut forbidden = false;
 
                         for part in line {
-                            match part.parse::<u32>() {
-                                Ok(n) => sizes.push(n),
+                            match try_parse_csv_int(part) {
+                                Some(n) => sizes.push(n),
                                 _ => {
                                     forbidden = true;
                                     log::info!("Don't use {name}");

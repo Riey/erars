@@ -9,3 +9,5 @@
 フラグ,2,2；60日目から休む
 ; test empty
 フラグ,3,
+; test invalid value
+フラグ,4,ㅇㅅㅇ

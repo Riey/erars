@@ -1,3 +1,27 @@
+// pub struct CsvParser<'s> {
+//     s: &'s str,
+// }
+
+// impl<'s> CsvParser<'s> {
+//     pub fn new(s: &'s str) -> Self {
+//         Self { s }
+//     }
+
+//     pub fn next_name(&mut self) -> &'s str {
+//         let (name, _) = self.s.split_once(',').unwrap();
+//         self.s = &self.s[name.len() + 1..];
+
+//         name.trim()
+//     }
+
+//     pub fn next_number(&mut self) -> Option<i32> {
+//         let (number, _) = self.s.split_once(',').unwrap();
+//         self.s = &self.s[number.len() + 1..];
+
+//         number.trim().parse().ok()
+//     }
+// }
+
 pub fn lines<'a>(
     s: &'a str,
 ) -> impl Iterator<Item = (impl Iterator<Item = &'a str>, std::ops::Range<usize>)> {

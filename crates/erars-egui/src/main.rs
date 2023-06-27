@@ -239,7 +239,8 @@ fn main() {
 
             Box::new(EraApp::new(receiver, line_height))
         }),
-    ).unwrap();
+    )
+    .unwrap();
 }
 
 struct EraApp {
