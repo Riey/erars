@@ -5,12 +5,10 @@ mod body {
 
     #[test]
     fn test_alignment() {
-        k9::snapshot!(
-            do_test(
-                r#"tests/parse_tests/bodys/alignment.erb"#,
-                ParserContext::parse_body_str
-            ),
-            "
+        k9::snapshot!(do_test(
+            r#"tests/parse_tests/bodys/alignment.erb"#,
+            ParserContext::parse_body_str
+        ), "
 [
     StmtWithPos(
         Alignment(
@@ -63,8 +61,7 @@ mod body {
         },
     ),
 ]
-"
-        );
+");
     }
 
     #[test]
@@ -845,6 +842,66 @@ mod body {
     }
 
     #[test]
+    fn test_multiline() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/bodys/multiline.erb"#,
+                ParserContext::parse_body_str
+            ),
+            "
+[
+    StmtWithPos(
+        Call {
+            name: String(
+                ASK_M,
+            ),
+            args: [
+                Some(
+                    String(
+                        もどる,
+                    ),
+                ),
+                Some(
+                    Int(
+                        1,
+                    ),
+                ),
+                Some(
+                    String(
+                        丁半博打について聞く,
+                    ),
+                ),
+                Some(
+                    Int(
+                        1,
+                    ),
+                ),
+                Some(
+                    String(
+                        チンチロリンについて聞く,
+                    ),
+                ),
+                Some(
+                    Int(
+                        1,
+                    ),
+                ),
+            ],
+            is_jump: false,
+            is_method: false,
+            try_body: [],
+            catch_body: None,
+        },
+        ScriptPosition {
+            line: 4,
+        },
+    ),
+]
+"
+        );
+    }
+
+    #[test]
     fn test_number() {
         k9::snapshot!(
             do_test(
@@ -991,121 +1048,6 @@ mod body {
         },
     ),
 ]
-"
-        );
-    }
-
-    #[test]
-    fn test_print_button() {
-        k9::snapshot!(
-            do_test(
-                r#"tests/parse_tests/functions/print_button.erb"#,
-                ParserContext::parse_function_str
-            ),
-            "
-Function {
-    header: FunctionHeader {
-        file_path: tests/parse_tests/functions/print_button.erb,
-        name: ASK_YN,
-        args: [
-            (
-                Variable {
-                    var: ARGS,
-                    func_extern: None,
-                    args: [
-                        Int(
-                            0,
-                        ),
-                    ],
-                },
-                Some(
-                    String(
-                        　네　,
-                        0,
-                    ),
-                ),
-            ),
-            (
-                Variable {
-                    var: ARGS,
-                    func_extern: None,
-                    args: [
-                        Int(
-                            1,
-                        ),
-                    ],
-                },
-                Some(
-                    String(
-                        아니오,
-                        0,
-                    ),
-                ),
-            ),
-        ],
-        infos: [],
-    },
-    body: [
-        StmtWithPos(
-            PrintButton {
-                flags: PrintFlags(
-                    0x0,
-                ),
-                text: FormText(
-                     [{Var(Variable { var: ARGS, func_extern: None, args: [Int(0)] })}],
-                ),
-                value: Int(
-                    0,
-                ),
-            },
-            ScriptPosition {
-                line: 2,
-            },
-        ),
-        StmtWithPos(
-            Print(
-                PrintFlags(
-                    NEWLINE,
-                ),
-                String(
-                    ,
-                ),
-            ),
-            ScriptPosition {
-                line: 3,
-            },
-        ),
-        StmtWithPos(
-            PrintButton {
-                flags: PrintFlags(
-                    0x0,
-                ),
-                text: FormText(
-                     [{Var(Variable { var: ARGS, func_extern: None, args: [Int(1)] })}],
-                ),
-                value: Int(
-                    1,
-                ),
-            },
-            ScriptPosition {
-                line: 4,
-            },
-        ),
-        StmtWithPos(
-            Print(
-                PrintFlags(
-                    NEWLINE,
-                ),
-                String(
-                    ,
-                ),
-            ),
-            ScriptPosition {
-                line: 5,
-            },
-        ),
-    ],
-}
 "
         );
     }
@@ -1948,6 +1890,38 @@ Var(
     }
 
     #[test]
+    fn test_inc_expr() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/inc_expr.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            "
+BinopExpr(
+    IncOpExpr {
+        var: Variable {
+            var: LOCAL,
+            func_extern: None,
+            args: [
+                Int(
+                    1,
+                ),
+            ],
+        },
+        is_pre: false,
+        is_inc: true,
+    },
+    Rem,
+    BuiltinMethod(
+        LineIsEmpty,
+        [],
+    ),
+)
+"
+        );
+    }
+
+    #[test]
     fn test_macro() {
         k9::snapshot!(
             do_test(
@@ -1998,66 +1972,6 @@ Method(
         ),
     ],
 )
-"
-        );
-    }
-
-    #[test]
-    fn test_multiline() {
-        k9::snapshot!(
-            do_test(
-                r#"tests/parse_tests/bodys/multiline.erb"#,
-                ParserContext::parse_body_str
-            ),
-            "
-[
-    StmtWithPos(
-        Call {
-            name: String(
-                ASK_M,
-            ),
-            args: [
-                Some(
-                    String(
-                        もどる,
-                    ),
-                ),
-                Some(
-                    Int(
-                        1,
-                    ),
-                ),
-                Some(
-                    String(
-                        丁半博打について聞く,
-                    ),
-                ),
-                Some(
-                    Int(
-                        1,
-                    ),
-                ),
-                Some(
-                    String(
-                        チンチロリンについて聞く,
-                    ),
-                ),
-                Some(
-                    Int(
-                        1,
-                    ),
-                ),
-            ],
-            is_jump: false,
-            is_method: false,
-            try_body: [],
-            catch_body: None,
-        },
-        ScriptPosition {
-            line: 4,
-        },
-    ),
-]
 "
         );
     }
@@ -3122,6 +3036,121 @@ Function {
     ],
 }
 ");
+    }
+
+    #[test]
+    fn test_print_button() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/functions/print_button.erb"#,
+                ParserContext::parse_function_str
+            ),
+            "
+Function {
+    header: FunctionHeader {
+        file_path: tests/parse_tests/functions/print_button.erb,
+        name: ASK_YN,
+        args: [
+            (
+                Variable {
+                    var: ARGS,
+                    func_extern: None,
+                    args: [
+                        Int(
+                            0,
+                        ),
+                    ],
+                },
+                Some(
+                    String(
+                        　네　,
+                        0,
+                    ),
+                ),
+            ),
+            (
+                Variable {
+                    var: ARGS,
+                    func_extern: None,
+                    args: [
+                        Int(
+                            1,
+                        ),
+                    ],
+                },
+                Some(
+                    String(
+                        아니오,
+                        0,
+                    ),
+                ),
+            ),
+        ],
+        infos: [],
+    },
+    body: [
+        StmtWithPos(
+            PrintButton {
+                flags: PrintFlags(
+                    0x0,
+                ),
+                text: FormText(
+                     [{Var(Variable { var: ARGS, func_extern: None, args: [Int(0)] })}],
+                ),
+                value: Int(
+                    0,
+                ),
+            },
+            ScriptPosition {
+                line: 2,
+            },
+        ),
+        StmtWithPos(
+            Print(
+                PrintFlags(
+                    NEWLINE,
+                ),
+                String(
+                    ,
+                ),
+            ),
+            ScriptPosition {
+                line: 3,
+            },
+        ),
+        StmtWithPos(
+            PrintButton {
+                flags: PrintFlags(
+                    0x0,
+                ),
+                text: FormText(
+                     [{Var(Variable { var: ARGS, func_extern: None, args: [Int(1)] })}],
+                ),
+                value: Int(
+                    1,
+                ),
+            },
+            ScriptPosition {
+                line: 4,
+            },
+        ),
+        StmtWithPos(
+            Print(
+                PrintFlags(
+                    NEWLINE,
+                ),
+                String(
+                    ,
+                ),
+            ),
+            ScriptPosition {
+                line: 5,
+            },
+        ),
+    ],
+}
+"
+        );
     }
 
     #[test]

@@ -569,7 +569,7 @@ fn binop(i: &str) -> IResult<'_, BinaryOperator> {
 
 fn bin_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
-        let (mut i, first) = single_expr(ctx)(i)?;
+        let (mut i, first) = de_sp(single_expr(ctx))(i)?;
         let mut stack = Vec::with_capacity(8);
 
         loop {
