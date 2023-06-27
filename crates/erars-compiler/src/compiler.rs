@@ -156,6 +156,7 @@ impl Compiler {
                         self.push(Instruction::load_int(1));
                         self.insert(rhs_end, Instruction::goto(self.current_no()));
                     }
+                    // TODO: short circuit for NOR, NAND
                     _ => {
                         self.push_expr(*lhs)?;
                         self.push_expr(*rhs)?;
@@ -735,10 +736,17 @@ fn default_arg_method(
             }
             _ => {}
         },
+        BuiltinMethod::SubString | BuiltinMethod::SubStringU => match idx {
+            1 => {
+                out.push(Instruction::load_int(0));
+                return Ok(());
+            }
+            _ => {}
+        },
         _ => {}
     }
 
-    Err(CompileError::NoArgumentForMethod(method, idx))
+    Err(CompileError::NoArgumentForMethod(method, idx + 1))
 }
 
 fn default_arg_command(
@@ -760,5 +768,5 @@ fn default_arg_command(
         _ => {}
     }
 
-    Err(CompileError::NoArgumentForCommand(command, idx))
+    Err(CompileError::NoArgumentForCommand(command, idx + 1))
 }
