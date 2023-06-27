@@ -103,6 +103,9 @@ pub enum InstructionCode {
     STRLENFORMU,
     UNICODE,
 
+    TOINT,
+    TOSTR,
+
     SWAPCHARA,
     COPYCHARA,
     ADDCOPYCHARA,

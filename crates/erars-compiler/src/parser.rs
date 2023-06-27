@@ -1393,6 +1393,8 @@ impl<'p> ParserContext<'p> {
                     LOG10 => normal_method!(BuiltinMethod::Log10),
                     SQRT => normal_method!(BuiltinMethod::Sqrt),
                     SIGN => normal_method!(BuiltinMethod::Sign),
+                    TOINT => normal_method!(BuiltinMethod::ToInt),
+                    TOSTR => normal_method!(BuiltinMethod::ToStr),
 
                     SAVEGAME => normal_command!(BuiltinCommand::SaveGame),
                     SAVEDATA => normal_command!(BuiltinCommand::SaveData),

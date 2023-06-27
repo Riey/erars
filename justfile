@@ -27,3 +27,7 @@ run-ym-toriko:
 gen-test name:
     echo "@SYSTEM_TITLE" > tests/run_tests/basic/{{name}}.erb
     touch tests/run_tests/basic/{{name}}.out
+
+gen-specific-test on name:
+    echo "@SYSTEM_TITLE" > tests/run_tests/{{on}}/{{name}}.erb
+    touch tests/run_tests/{{on}}/{{name}}.out
