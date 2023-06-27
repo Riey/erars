@@ -483,8 +483,9 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                     |s| Expr::Int(i64::from_str_radix(s, 2).unwrap()),
                 ),
                 map(pair(terminated(i64, char('p')), i64), |(l, r)| {
-                    Expr::Int(l ^ r)
+                    Expr::Int(l << r)
                 }),
+                map(preceded(tag("1E"), u32), |e| Expr::Int(10i64.pow(e))),
                 map(i64, Expr::Int),
                 ident_or_method_expr(ctx),
                 paran_expr(ctx),
