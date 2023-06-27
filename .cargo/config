@@ -1,2 +1,0 @@
-[target.x86_64-unknown-linux-gnu]
-rustflags = ["--cfg=unsound_local_offset"]

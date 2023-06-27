@@ -482,7 +482,7 @@ impl VirtualConsole {
 }
 
 bitflags::bitflags! {
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
     pub struct FontStyle: u32 {
         const NORMAL = 0x0;
         const BOLD = 0x1;

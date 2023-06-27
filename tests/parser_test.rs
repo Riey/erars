@@ -983,7 +983,7 @@ mod body {
             },
             None,
             Int(
-                3,
+                4,
             ),
         ),
         ScriptPosition {
@@ -1038,7 +1038,7 @@ mod body {
             None,
             UnaryopExpr(
                 Int(
-                    3,
+                    4,
                 ),
                 Minus,
             ),
@@ -1154,6 +1154,19 @@ mod body {
         ),
         ScriptPosition {
             line: 4,
+        },
+    ),
+    StmtWithPos(
+        Print(
+            PrintFlags(
+                NEWLINE,
+            ),
+            FormText(
+                {FormText({BinopExpr(Var(Variable { var: CDFLAG, func_extern: None, args: [Var(Variable { var: CHARA, func_extern: None, args: [] }), Var(Variable { var: 만트라, func_extern: None, args: [] }), Var(Variable { var: MNUM, func_extern: None, args: [] })] }), Div, Int(100))}.{BinopExpr(BinopExpr(Var(Variable { var: CDFLAG, func_extern: None, args: [Var(Variable { var: CHARA, func_extern: None, args: [] }), Var(Variable { var: 만트라, func_extern: None, args: [] }), Var(Variable { var: MNUM, func_extern: None, args: [] })] }), Rem, Int(100)), Div, Int(10))}{BinopExpr(Var(Variable { var: CDFLAG, func_extern: None, args: [Var(Variable { var: CHARA, func_extern: None, args: [] }), Var(Variable { var: 만트라, func_extern: None, args: [] }), Var(Variable { var: MNUM, func_extern: None, args: [] })] }), Rem, Int(1000))})(pad: Int(5))},
+            ),
+        ),
+        ScriptPosition {
+            line: 5,
         },
     ),
 ]
@@ -2732,7 +2745,7 @@ Function {
                             BinopExpr(
                                 UnaryopExpr(
                                     Int(
-                                        62,
+                                        -9223372036854775808,
                                     ),
                                     Minus,
                                 ),
