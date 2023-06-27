@@ -11,7 +11,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, tag_no_case, take_while, take_while1},
     character::complete::*,
-    combinator::{eof, map, opt, value},
+    combinator::{cut, eof, map, opt, value},
     error::{context, ErrorKind, VerboseError},
     error_position,
     multi::{many0, separated_list0, separated_list1},
@@ -45,6 +45,14 @@ fn de_char_sp<'a, T>(
 
 fn de_sp<'a, T>(p: impl Parser<&'a str, T, Error<'a>>) -> impl FnMut(&'a str) -> IResult<'a, T> {
     delimited(sp, p, sp)
+}
+
+fn cut_delimited<'a, T>(
+    pre: &'a str,
+    content: impl Parser<&'a str, T, Error<'a>>,
+    end: &'a str,
+) -> impl FnMut(&'a str) -> IResult<'a, T> {
+    preceded(tag(pre), cut(terminated(content, tag(end))))
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
@@ -447,10 +455,13 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
                 value(Expr::Int(i64::MIN), tag_no_case("__INT_MIN__")),
                 context(
                     "Renamed Ident",
-                    delimited(tag("[["), renamed_ident(ctx), tag("]]")),
+                    cut_delimited("[[", renamed_ident(ctx), "]]"),
                 ),
                 // form string
-                delimited(tag("@\""), form_str(FormStrType::Str, ctx), tag("\"")),
+                context(
+                    "form string",
+                    cut_delimited("@\"", form_str(FormStrType::Str, ctx), "\""),
+                ),
                 // cond form string
                 preceded(tag("\\@"), form_str_cond_form(ctx)),
                 map(string, |s| Expr::str(&ctx.interner, s)),
