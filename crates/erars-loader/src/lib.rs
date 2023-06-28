@@ -341,7 +341,7 @@ pub fn run_script(
                 log::debug!("Parse And Compile {}", erb.display());
 
                 let program = ctx.parse_and_compile(
-                    &mut Preprocessor::new(&PP_REGEX, source.as_str()),
+                    &mut Preprocessor::new(&PP_REGEX, &ctx.header.as_ref().rename, source.as_str()),
                     &mut Bump::new(),
                 );
 

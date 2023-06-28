@@ -6,6 +6,7 @@ pub mod utils;
 use std::ops::Range;
 
 use cow_utils::CowUtils;
+use hashbrown::HashMap;
 use logos::Logos;
 
 use erars_ast::*;
@@ -67,6 +68,7 @@ impl PreprocessorRegex {
 pub struct Preprocessor<'s> {
     re: &'s PreprocessorRegex,
     s: &'s str,
+    rename: &'s HashMap<String, String>,
 
     line_pos: usize,
     start_len: usize,
@@ -75,7 +77,7 @@ pub struct Preprocessor<'s> {
 }
 
 impl<'s> Preprocessor<'s> {
-    pub fn new(re: &'s PreprocessorRegex, s: &'s str) -> Self {
+    pub fn new(re: &'s PreprocessorRegex, rename: &'s HashMap<String, String>, s: &'s str) -> Self {
         let no_bom = s.trim_start_matches('\u{feff}');
         let span_begin = no_bom.as_ptr() as usize - s.as_ptr() as usize;
         let s = no_bom;
@@ -83,6 +85,7 @@ impl<'s> Preprocessor<'s> {
         Self {
             re,
             s,
+            rename,
 
             line_pos: 0,
             start_len: s.len() + span_begin,
@@ -203,7 +206,24 @@ impl<'s> Preprocessor<'s> {
             };
 
             if line.starts_with('[') {
-                if let Some(m) = self.re.square_re.find_earliest(line.as_bytes()) {
+                if let Some(line) = line.strip_prefix("[[").map(|s| s.trim_start()) {
+                    let Some(end_pos) = line.find("]]") else {
+                        return Err(("No matched `]]`".into(), self.span()));
+                    };
+
+                    let (key, left) = line.split_at(end_pos);
+                    let key = key.trim_end();
+
+                    let Some(value) = self.rename.get(key) else {
+                        return Err((format!("No matched rename key `{}`", key), self.span()));
+                    };
+
+                    let s = b.alloc_slice_fill_copy(value.len() + left.len(), 0u8);
+                    s[..value.len()].copy_from_slice(value.as_bytes());
+                    s[value.len()..].copy_from_slice(left.as_bytes());
+
+                    return Ok(unsafe { std::str::from_utf8_unchecked(s) });
+                } else if let Some(m) = self.re.square_re.find_earliest(line.as_bytes()) {
                     let left = line.split_at(m.end()).1;
                     let s = FromPrimitive::from_u32(m.pattern().as_u32()).unwrap();
 
@@ -288,7 +308,7 @@ impl<'s> Preprocessor<'s> {
             Ok(Some(EraLine::PrintLine { flags, ty, args }))
         } else {
             let line = utils::cut_comment(line).trim_start();
-            if ident.is_empty() {
+            if ident.is_empty() && !line.starts_with("[[") {
                 if line.is_empty() {
                     Ok(None)
                 } else if let Some(line) = line.strip_prefix('#') {
@@ -301,7 +321,7 @@ impl<'s> Preprocessor<'s> {
                             args: args.trim_start(),
                         }))
                     } else {
-                        Err((format!("Unknown sharp line: {line}"), self.span()))
+                        Err((format!("[lexer] Unknown sharp line: {line}"), self.span()))
                     }
                 } else if let Some(line) = line.strip_prefix('@') {
                     Ok(Some(EraLine::FunctionLine(line)))
@@ -320,7 +340,7 @@ impl<'s> Preprocessor<'s> {
                         is_inc: false,
                     }))
                 } else {
-                    Err((format!("Unknown line: {line}"), self.span()))
+                    Err((format!("[lexer] Unknown line: {line}"), self.span()))
                 }
             } else if let Some((mut left, right)) = lex_assign_line(line) {
                 let complex_op = if let Some(l) = left.strip_suffix('+') {
@@ -378,7 +398,7 @@ impl<'s> Preprocessor<'s> {
                     is_inc: false,
                 }))
             } else {
-                Err((format!("Unknown line: {line}"), self.span()))
+                Err((format!("[lexer] Unknown line: {line}"), self.span()))
             }
         }
     }

@@ -387,7 +387,7 @@ impl Default for DefaultLocalVarSize {
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
     pub gamebase: Gamebase,
-    pub rename: HashMap<StrKey, String>,
+    pub rename: HashMap<String, String>,
     pub replace: ReplaceInfo,
     pub str_templates: HashMap<u32, String>,
     pub character_templates: HashMap<i64, CharacterTemplate>,
@@ -527,11 +527,9 @@ impl HeaderInfo {
     }
 
     pub fn merge_rename_csv(&mut self, s: &str) -> ParserResult<()> {
-        let interner = get_interner();
-
         for (mut line, _) in csv::lines(s) {
             if let Some((value, key)) = line.next_tuple() {
-                self.rename.insert(interner.get_or_intern(key), value.into());
+                self.rename.insert(key.into(), value.into());
             }
         }
 
@@ -934,7 +932,8 @@ impl HeaderInfo {
 
     pub fn merge_header(&mut self, s: &str) -> ParserResult<()> {
         let mut ctx = ParserContext::new(self, StrKey::new("DEFAULT.ERB"));
-        let mut pp = Preprocessor::new(&PP_REGEX, s);
+        let tmp = HashMap::new();
+        let mut pp = Preprocessor::new(&PP_REGEX, &tmp, s);
         let mut b = Bump::new();
 
         loop {
@@ -1912,7 +1911,7 @@ impl<'p> ParserContext<'p> {
 
 impl<'p> ParserContext<'p> {
     pub fn parse_program_str(&self, s: &str) -> ParserResult<Vec<Function>> {
-        let mut pp = Preprocessor::new(&crate::PP_REGEX, s);
+        let mut pp = Preprocessor::new(&crate::PP_REGEX, &self.header.as_ref().rename, s);
         let mut b = Bump::new();
         self.parse(&mut pp, &mut b)
     }
@@ -1926,7 +1925,7 @@ impl<'p> ParserContext<'p> {
     }
 
     pub fn parse_body_str(&self, s: &str) -> ParserResult<Vec<StmtWithPos>> {
-        let mut pp = Preprocessor::new(&crate::PP_REGEX, s);
+        let mut pp = Preprocessor::new(&crate::PP_REGEX, &self.header.as_ref().rename, s);
         let mut b = Bump::new();
         let mut body = Vec::new();
 
@@ -1939,7 +1938,7 @@ impl<'p> ParserContext<'p> {
     }
 
     pub fn parse_stmt_str(&self, s: &str) -> ParserResult<StmtWithPos> {
-        let mut pp = Preprocessor::new(&crate::PP_REGEX, s);
+        let mut pp = Preprocessor::new(&crate::PP_REGEX, &self.header.as_ref().rename, s);
         let b = Bump::new();
 
         if let Some(line) = pp.next_line(&b)? {

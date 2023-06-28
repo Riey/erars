@@ -414,8 +414,8 @@ pub fn renamed_ident<'c, 'a>(
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
         let (i, key) = take_while(|c| c != ']')(i)?;
-        let key = ctx.interner.get_or_intern(key.trim());
-        if let Some(value) = ctx.header.as_ref().rename.get(&key) {
+        let key = key.trim();
+        if let Some(value) = ctx.header.as_ref().rename.get(key) {
             let Ok((_, value)) = expr(ctx)(value) else {
                 return Err(nom::Err::Failure(error_position!(i, ErrorKind::Verify)));
             };
