@@ -873,81 +873,70 @@ pub fn dim_line<'c, 'a>(
     ctx: &'c ParserContext,
     is_str: bool,
 ) -> impl FnMut(&'a str) -> IResult<'a, LocalVariable> + 'c {
-    move |i| {
+    move |mut i| {
         let mut info = VariableInfo::default();
         info.is_str = is_str;
 
-        #[derive(Clone, Copy)]
-        enum DimTag {
-            Const,
-            Dynamic,
-            Ref,
-            Chara,
-            Save,
-            Global,
-        }
+        loop {
+            match de_sp(ident_no_case)(i) {
+                Ok((i_, tag)) => {
+                    i = i_;
+                    match tag.as_ref() {
+                        "CONST" => info.is_const = true,
+                        "DYNAMIC" => info.is_dynamic = true,
+                        "REF" => info.is_ref = true,
+                        "CHARADATA" => info.is_chara = true,
+                        "SAVEDATA" => info.is_savedata = true,
+                        "GLOBAL" => info.is_global = true,
+                        ident => {
+                            let (i, (size, init)) = pair(
+                                opt(preceded(
+                                    char_sp(','),
+                                    separated_list0(
+                                        char_sp(','),
+                                        map(expr(ctx), |expr| {
+                                            ctx.header
+                                                .as_ref()
+                                                .const_eval(&expr)
+                                                .unwrap()
+                                                .into_int_err()
+                                                .map(|i| i as u32)
+                                                .unwrap()
+                                        }),
+                                    ),
+                                )),
+                                opt(preceded(
+                                    char_sp('='),
+                                    separated_list0(char_sp(','), expr(ctx)),
+                                )),
+                            )(i)?;
 
-        let (i, (tags, var, size, init)) = tuple((
-            many0(alt((
-                value(DimTag::Const, de_sp(tag_no_case("CONST"))),
-                value(DimTag::Dynamic, de_sp(tag_no_case("DYNAMIC"))),
-                value(DimTag::Ref, de_sp(tag_no_case("REF"))),
-                value(DimTag::Chara, de_sp(tag_no_case("CHARADATA"))),
-                value(DimTag::Save, de_sp(tag_no_case("SAVEDATA"))),
-                value(DimTag::Global, de_sp(tag_no_case("GLOBAL"))),
-            ))),
-            de_sp(ident_no_case),
-            opt(preceded(
-                char_sp(','),
-                separated_list0(
-                    char_sp(','),
-                    map(expr(ctx), |expr| {
-                        ctx.header
-                            .as_ref()
-                            .const_eval(&expr)
-                            .unwrap()
-                            .into_int_err()
-                            .map(|i| i as u32)
-                            .unwrap()
-                    }),
-                ),
-            )),
-            opt(preceded(
-                char_sp('='),
-                separated_list0(char_sp(','), expr(ctx)),
-            )),
-        ))(i)?;
+                            info.size = size.unwrap_or_else(|| {
+                                init.as_ref().map(|v| vec![v.len() as u32]).unwrap_or_default()
+                            });
+                            info.init = init.unwrap_or_default();
 
-        for tag in tags {
-            match tag {
-                DimTag::Const => info.is_const = true,
-                DimTag::Chara => info.is_chara = true,
-                DimTag::Dynamic => info.is_dynamic = true,
-                DimTag::Ref => info.is_ref = true,
-                DimTag::Save => info.is_savedata = true,
-                DimTag::Global => info.is_global = true,
+                            if info.is_ref {
+                                // REF variable is 0D int dynamic var
+                                info.is_dynamic = true;
+                                info.is_savedata = false;
+                                info.size = Vec::new();
+                                info.is_str = false;
+                            }
+
+                            break Ok((
+                                i,
+                                LocalVariable {
+                                    var: ctx.interner.get_or_intern(ident),
+                                    info,
+                                },
+                            ));
+                        }
+                    }
+                }
+                Err(e) => return Err(e),
             }
         }
-
-        info.size =
-            size.unwrap_or_else(|| init.as_ref().map(|v| vec![v.len() as u32]).unwrap_or_default());
-        info.init = init.unwrap_or_default();
-
-        if info.is_ref {
-            // REF variable is 0D int dynamic var
-            info.is_dynamic = true;
-            info.is_savedata = false;
-            info.size = Vec::new();
-            info.is_str = false;
-        }
-
-        Ok((
-            i,
-            LocalVariable {
-                var: ctx.interner.get_or_intern(var),
-                info,
-            },
-        ))
     }
 }
 
