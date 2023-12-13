@@ -4,6 +4,7 @@ mod save;
 mod terminal_vm;
 mod variable;
 
+use std::future::Future;
 use erars_ast::{BeginType, Value};
 use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
 use hashbrown::HashMap;
@@ -38,27 +39,31 @@ impl Default for Workflow {
     }
 }
 
-pub trait SystemFunctions {
-    fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>>;
+pub trait SystemFunctions: Send {
+    fn input(&mut self, req: InputRequest) -> impl Future<Output = anyhow::Result<Option<Value>>> + Send;
 
     fn input_redraw(
         &mut self,
         vconsole: &mut VirtualConsole,
         req: InputRequest,
-    ) -> anyhow::Result<Option<Value>> {
-        self.redraw(vconsole)?;
-        self.input(req)
+    ) -> impl Future<Output = anyhow::Result<Option<Value>>> + Send {
+        async move {
+            self.redraw(vconsole).await?;
+            self.input(req).await
+        }
     }
 
-    fn input_int_redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<i64> {
-        let req = InputRequest::normal(vconsole.input_gen(), InputRequestType::Int);
+    fn input_int_redraw(&mut self, vconsole: &mut VirtualConsole) -> impl Future<Output = anyhow::Result<i64>> + Send {
+        async move {
+            let req = InputRequest::normal(vconsole.input_gen(), InputRequestType::Int);
 
-        self.input_redraw(vconsole, req)?
-            .ok_or_else(|| anyhow::anyhow!("Value is empty"))
-            .and_then(Value::try_into_int)
+            self.input_redraw(vconsole, req).await?
+                .ok_or_else(|| anyhow::anyhow!("Value is empty"))
+                .and_then(Value::try_into_int)
+        }
     }
 
-    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()>;
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> impl Future<Output = anyhow::Result<()>> + Send;
 }
 
 #[derive(Clone, Copy)]
@@ -66,11 +71,15 @@ pub struct NullSystemFunctions;
 
 #[allow(unused_variables)]
 impl SystemFunctions for NullSystemFunctions {
-    fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
-        Ok(None)
+    fn input(&mut self, req: InputRequest) -> impl Future<Output = anyhow::Result<Option<Value>>> + Send {
+        async {
+            Ok(None)
+        }
     }
 
-    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
-        Ok(())
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> impl Future<Output = anyhow::Result<()>> + Send {
+        async {
+            Ok(())
+        }
     }
 }

@@ -50,12 +50,12 @@ impl TerminalVm {
         }
     }
 
-    fn run_body(
+    async fn run_body<S: SystemFunctions>(
         &self,
         func_identifier: FunctionIdentifier,
         body: &FunctionBody,
         tx: &mut VirtualConsole,
-        ctx: &mut VmContext,
+        ctx: &mut VmContext<S>,
     ) -> Result<Workflow> {
         let mut cursor = 0;
         let insts = body.body();
@@ -71,7 +71,7 @@ impl TerminalVm {
                 call_stack = ctx.call_stack(),
             );
 
-            match executor::run_instruction(self, func_name, inst, tx, ctx) {
+            match executor::run_instruction(self, func_name, inst, tx, ctx).await {
                 Ok(Normal) => {
                     cursor += 1;
                 }
@@ -84,7 +84,7 @@ impl TerminalVm {
                     let insts = Vec::from(erars_compiler::compile_expr(expr).unwrap());
 
                     for inst in insts {
-                        match executor::run_instruction(self, func_name, inst, tx, ctx)? {
+                        match executor::run_instruction(self, func_name, inst, tx, ctx).await? {
                             InstructionWorkflow::Normal => {}
                             _ => bail!("EvalFromString can't do flow control"),
                         }
@@ -140,12 +140,12 @@ impl TerminalVm {
         Ok(Workflow::Return)
     }
 
-    fn call_internal(
+    async fn call_internal<S: SystemFunctions>(
         &self,
         label: FunctionIdentifier,
         args: &[LocalValue],
         tx: &mut VirtualConsole,
-        ctx: &mut VmContext,
+        ctx: &mut VmContext<S>,
         body: &FunctionBody,
     ) -> Result<Workflow> {
         log::debug!("CALL {label}({args:?})",);
@@ -201,7 +201,7 @@ impl TerminalVm {
 
         ctx.new_func(label, body.file_path);
 
-        let ret = self.run_body(label, body, tx, ctx)?;
+        let ret = self.run_body(label, body, tx, ctx).await?;
 
         ctx.end_func(label);
 
@@ -209,12 +209,12 @@ impl TerminalVm {
     }
 
     #[inline]
-    fn call(
+    async fn call<S: SystemFunctions>(
         &self,
         label: impl StrKeyLike,
         args: &[LocalValue],
         tx: &mut VirtualConsole,
-        ctx: &mut VmContext,
+        ctx: &mut VmContext<S>,
     ) -> Result<Workflow> {
         let label = label.get_key(&ctx.var);
         self.call_internal(
@@ -223,34 +223,35 @@ impl TerminalVm {
             tx,
             ctx,
             self.dic.get_func(label)?,
-        )
+        ).await
     }
 
     #[inline]
-    pub fn try_call(
+    pub async fn try_call<S: SystemFunctions>(
         &self,
         label: impl StrKeyLike,
         args: &[LocalValue],
         tx: &mut VirtualConsole,
-        ctx: &mut VmContext,
+        ctx: &mut VmContext<S>,
     ) -> Result<Option<Workflow>> {
         let label = label.get_key(&ctx.var);
         match self.dic.get_func_opt(label) {
             Some(body) => self
                 .call_internal(FunctionIdentifier::Normal(label), args, tx, ctx, body)
+                .await
                 .map(Some),
             None => Ok(None),
         }
     }
 
-    pub fn call_event(
+    pub async fn call_event<S: SystemFunctions>(
         &self,
         ty: EventType,
         tx: &mut VirtualConsole,
-        ctx: &mut VmContext,
+        ctx: &mut VmContext<S>,
     ) -> Result<Workflow> {
         for body in self.dic.get_event(ty).iter() {
-            match self.run_body(FunctionIdentifier::Event(ty), body, tx, ctx)? {
+            match self.run_body(FunctionIdentifier::Event(ty), body, tx, ctx).await? {
                 Workflow::Return => {}
                 other => return Ok(other),
             }
@@ -260,14 +261,14 @@ impl TerminalVm {
     }
 
     /// Return: Is this normal exit
-    pub fn start(&self, tx: &mut VirtualConsole, ctx: &mut VmContext) -> bool {
+    pub async fn start<S: SystemFunctions>(&self, tx: &mut VirtualConsole, ctx: &mut VmContext<S>) -> bool {
         let mut begin_ty = Some(BeginType::Title);
         loop {
             let current_ty = match begin_ty.take() {
                 Some(ty) => ty,
                 None => break true,
             };
-            match executor::run_begin(self, current_ty, tx, ctx) {
+            match executor::run_begin(self, current_ty, tx, ctx).await {
                 Ok(Workflow::Begin(ty)) => {
                     begin_ty = Some(ty);
                 }
@@ -287,7 +288,7 @@ impl TerminalVm {
                         );
                     }
 
-                    ctx.system.redraw(tx).ok();
+                    ctx.system.redraw(tx).await.ok();
                     break false;
                 }
             }

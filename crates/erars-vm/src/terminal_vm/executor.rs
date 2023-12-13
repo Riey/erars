@@ -44,7 +44,7 @@ macro_rules! try_call {
         try_call!($vm, $name, &[], $tx, $ctx)
     };
     ($vm:expr, $name:expr, $args:expr, $tx:expr, $ctx:expr) => {
-        match $vm.try_call($name, $args, $tx, $ctx)? {
+        match $vm.try_call($name, $args, $tx, $ctx).await? {
             Some(Workflow::Return) => true,
             None => false,
             Some(other) => return Ok(other.into()),
@@ -54,7 +54,7 @@ macro_rules! try_call {
 
 macro_rules! call_event {
     ($vm:expr, $ty:expr, $tx:expr, $ctx:expr) => {
-        conv_workflow!($vm.call_event($ty, $tx, $ctx)?)
+        conv_workflow!($vm.call_event($ty, $tx, $ctx).await?)
     };
 }
 
@@ -102,12 +102,13 @@ macro_rules! get_arg {
     };
 }
 
-pub(super) fn run_instruction(
+#[async_recursion::async_recursion]
+pub(super) async fn run_instruction<S: SystemFunctions + Send>(
     vm: &TerminalVm,
     func_name: StrKey,
     inst: Instruction,
     tx: &mut VirtualConsole,
-    ctx: &mut VmContext,
+    ctx: &mut VmContext<S>,
 ) -> Result<InstructionWorkflow> {
     if let Some(pos) = inst.as_report_position() {
         ctx.update_position(pos);
@@ -168,7 +169,7 @@ pub(super) fn run_instruction(
     } else if inst.is_reuse_lastline() {
         let s = ctx.pop_str()?;
         tx.reuse_last_line(s);
-        ctx.system.redraw(tx)?;
+        ctx.system.redraw(tx).await?;
     } else if let Some(flags) = inst.as_print_button() {
         let value = ctx.pop_value()?;
         let text = ctx.pop_str()?;
@@ -179,7 +180,7 @@ pub(super) fn run_instruction(
         } else {
             tx.print_button(text, value);
         }
-        ctx.system.redraw(tx)?;
+        ctx.system.redraw(tx).await?;
     } else if let Some(flags) = inst.as_print() {
         let s = ctx.pop_str()?;
 
@@ -220,7 +221,7 @@ pub(super) fn run_instruction(
             tx.new_line();
         }
 
-        ctx.system.redraw(tx)?;
+        ctx.system.redraw(tx).await?;
         if flags.contains(PrintFlags::WAIT) {
             let gen = tx.input_gen();
             ctx.system.input(InputRequest {
@@ -228,13 +229,13 @@ pub(super) fn run_instruction(
                 ty: InputRequestType::AnyKey,
                 is_one: false,
                 timeout: None,
-            })?;
+            }).await?;
         }
     } else if let Some(c) = inst.as_try_call().or_else(|| inst.as_try_jump()) {
         let args = ctx.take_list(c).collect::<Vec<_>>();
         let func = ctx.pop_strkey()?;
 
-        match vm.try_call(func, &args, tx, ctx)? {
+        match vm.try_call(func, &args, tx, ctx).await? {
             Some(Workflow::Return) => {
                 if inst.is_try_jump() {
                     return Ok(Workflow::Return.into());
@@ -250,7 +251,7 @@ pub(super) fn run_instruction(
         let args = ctx.take_list(c).collect::<Vec<_>>();
         let func = ctx.pop_strkey()?;
 
-        match vm.call(func, &args, tx, ctx)? {
+        match vm.call(func, &args, tx, ctx).await? {
             Workflow::Return => {
                 if inst.is_jump() {
                     return Ok(Workflow::Return.into());
@@ -381,9 +382,9 @@ pub(super) fn run_instruction(
 
         ctx.push(value);
     } else if let Some(meth) = inst.as_builtin_method() {
-        run_builtin_method(meth, func_name, tx, ctx)?;
+        run_builtin_method(meth, func_name, tx, ctx).await?;
     } else if let Some(com) = inst.as_builtin_command() {
-        return run_builtin_command(com, func_name, vm, tx, ctx);
+        return run_builtin_command(com, func_name, vm, tx, ctx).await;
     } else if let Some(idx) = inst.as_load_default_argument() {
         let target_func_name = match ctx
             .stack()
@@ -423,16 +424,16 @@ pub(super) fn run_instruction(
     Ok(InstructionWorkflow::Normal)
 }
 
-fn run_save_game(
+async fn run_save_game<S: SystemFunctions>(
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
-    ctx: &mut VmContext,
+    ctx: &mut VmContext<S>,
 ) -> Result<Workflow> {
     let mut savs = crate::save::load_local_list(&ctx.sav_dir)?;
     print_sav_data_list(&savs, tx);
 
     loop {
-        match ctx.system.input_int_redraw(tx)? {
+        match ctx.system.input_int_redraw(tx).await? {
             100 => break Ok(Workflow::Return),
             i if i >= 0 && i < SAVE_COUNT as i64 => {
                 let i = i as u32;
@@ -441,7 +442,7 @@ fn run_save_game(
                     tx.print_line("[0] Yes [1] No".into());
 
                     loop {
-                        match ctx.system.input_int_redraw(tx)? {
+                        match ctx.system.input_int_redraw(tx).await? {
                             0 => break true,
                             1 => break false,
                             _ => continue,
@@ -466,12 +467,12 @@ fn run_save_game(
     }
 }
 
-fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Option<u32>> {
+async fn run_load_game<S: SystemFunctions>(tx: &mut VirtualConsole, ctx: &mut VmContext<S>) -> Result<Option<u32>> {
     let mut savs = crate::save::load_local_list(&ctx.sav_dir)?;
     print_sav_data_list(&savs, tx);
 
     loop {
-        match ctx.system.input_int_redraw(tx)? {
+        match ctx.system.input_int_redraw(tx).await? {
             100 => break Ok(None),
             i if i >= 0 && i < SAVE_COUNT as i64 => {
                 if let Some(_) = savs.remove(&(i as u32)) {
@@ -483,10 +484,10 @@ fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Option<
     }
 }
 
-fn run_load_data(
+async fn run_load_data<S: SystemFunctions>(
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
-    ctx: &mut VmContext,
+    ctx: &mut VmContext<S>,
     idx: u32,
 ) -> Result<Workflow> {
     let sav = crate::save::read_save_data(&ctx.sav_dir, idx)?
@@ -504,10 +505,10 @@ fn run_load_data(
     Ok(Workflow::Begin(BeginType::Shop))
 }
 
-fn run_call_train(
+async fn run_call_train<S: SystemFunctions>(
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
-    ctx: &mut VmContext,
+    ctx: &mut VmContext<S>,
     commands: Vec<u32>,
     is_do_train: bool,
 ) -> Result<Workflow> {
@@ -557,11 +558,11 @@ fn print_sav_data_list(savs: &SaveList, tx: &mut VirtualConsole) {
     tx.print_line("[100] Return".into());
 }
 
-pub fn run_begin(
+pub async fn run_begin<S: SystemFunctions>(
     vm: &TerminalVm,
     ty: BeginType,
     tx: &mut VirtualConsole,
-    ctx: &mut VmContext,
+    ctx: &mut VmContext<S>,
 ) -> Result<Workflow> {
     log::info!("Begin {ty}");
 
@@ -617,7 +618,7 @@ pub fn run_begin(
 
                         ctx.var.prepare_train_data()?;
 
-                        let no = ctx.system.input_int_redraw(tx)?;
+                        let no = ctx.system.input_int_redraw(tx).await?;
                         ctx.var.set_result(no);
 
                         let com_exists = match no.try_into() {
@@ -665,7 +666,7 @@ pub fn run_begin(
             try_call!(vm, "SHOW_ABLUP_SELECT", tx, ctx);
 
             loop {
-                let i = ctx.system.input_int_redraw(tx)?;
+                let i = ctx.system.input_int_redraw(tx).await?;
                 ctx.var.set_result(i);
 
                 if matches!(i, 0..=99) {
@@ -687,7 +688,7 @@ pub fn run_begin(
             loop {
                 try_call!(vm, "SHOW_SHOP", tx, ctx);
 
-                let i = ctx.system.input_int_redraw(tx)?;
+                let i = ctx.system.input_int_redraw(tx).await?;
                 ctx.var.set_result(i);
 
                 if i >= 0 && i < ctx.header_info.replace.sell_item_count {
@@ -722,10 +723,10 @@ fn to_time(time: u32) -> i128 {
         .unix_timestamp_nanos()
 }
 
-fn get_single_var(
+fn get_single_var<S: SystemFunctions>(
     func_name: StrKey,
     var_ref: VariableRef,
-    ctx: &mut VmContext,
+    ctx: &mut VmContext<S>,
 ) -> Result<&mut VmVariable> {
     let target = ctx.var.read_int(Var::Target, &[])?;
     let var = ctx.var.get_maybe_local_var(func_name, var_ref.name)?.1;
@@ -747,11 +748,11 @@ fn range_end_opt<T>(arr: &mut [T], start: usize, end: Option<usize>) -> Result<&
     .ok_or_else(|| anyhow!("Array index out of bound"))
 }
 
-fn run_builtin_method(
+async fn run_builtin_method<S: SystemFunctions>(
     meth: BuiltinMethod,
     func_name: StrKey,
     tx: &mut VirtualConsole,
-    ctx: &mut VmContext,
+    ctx: &mut VmContext<S>,
 ) -> Result<()> {
     let c = ctx.pop_int()? as u32;
     let mut args = ctx.take_list(c).collect::<Vec<_>>().into_iter();
@@ -1764,12 +1765,13 @@ fn html_print(node: &rcdom::Handle, tx: &mut VirtualConsole) {
     }
 }
 
-fn run_builtin_command(
+#[async_recursion::async_recursion]
+async fn run_builtin_command<S: SystemFunctions + Send>(
     com: BuiltinCommand,
     func_name: StrKey,
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
-    ctx: &mut VmContext,
+    ctx: &mut VmContext<S>,
 ) -> Result<InstructionWorkflow> {
     let c = ctx.pop_int()? as u32;
     let mut args = ctx.take_list(c).collect::<Vec<_>>().into_iter();
@@ -2208,7 +2210,7 @@ fn run_builtin_command(
                         timeout_msg: None,
                     }),
                 },
-            )?;
+            ).await?;
         }
         BuiltinCommand::Wait | BuiltinCommand::WaitAnykey | BuiltinCommand::ForceWait => {
             let gen = tx.input_gen();
@@ -2224,7 +2226,7 @@ fn run_builtin_command(
                         InputRequestType::AnyKey
                     },
                 ),
-            )?;
+            ).await?;
         }
         BuiltinCommand::SkipDisp => {
             let arg = ctx.pop_int()?;
@@ -2309,7 +2311,7 @@ fn run_builtin_command(
 
             let ty = req.ty;
 
-            let ret = ctx.system.input_redraw(tx, req)?;
+            let ret = ctx.system.input_redraw(tx, req).await?;
 
             match (ty, ret) {
                 (InputRequestType::Int, Some(Value::Int(i))) => {
@@ -2401,7 +2403,7 @@ fn run_builtin_command(
             }
         }
         BuiltinCommand::Redraw => {
-            ctx.system.redraw(tx)?;
+            ctx.system.redraw(tx).await?;
         }
         BuiltinCommand::ClearLine => {
             tx.clear_line(get_arg!(@usize: args, ctx));
@@ -2412,7 +2414,7 @@ fn run_builtin_command(
         BuiltinCommand::DoTrain => {
             let com_no = get_arg!(@u32: args, ctx);
 
-            conv_workflow!(run_call_train(vm, tx, ctx, vec![com_no], true)?);
+            conv_workflow!(run_call_train(vm, tx, ctx, vec![com_no], true).await?);
         }
         BuiltinCommand::CallTrain => {
             let count = get_arg!(@usize: args, ctx);
@@ -2423,7 +2425,7 @@ fn run_builtin_command(
                 .map(|c| u32::try_from(*c).context("CallTrain command convert"))
                 .collect::<Result<Vec<u32>>>()?;
 
-            conv_workflow!(run_call_train(vm, tx, ctx, commands, false)?);
+            conv_workflow!(run_call_train(vm, tx, ctx, commands, false).await?);
         }
         BuiltinCommand::DelChara => {
             let idx = get_arg!(@i64: args, ctx);
@@ -2444,7 +2446,7 @@ fn run_builtin_command(
         BuiltinCommand::LoadData => {
             let idx = get_arg!(@u32: args, ctx);
 
-            conv_workflow!(run_load_data(vm, tx, ctx, idx)?);
+            conv_workflow!(run_load_data(vm, tx, ctx, idx).await?);
         }
         BuiltinCommand::DelData => {
             let idx = get_arg!(@u32: args, ctx);
@@ -2474,11 +2476,11 @@ fn run_builtin_command(
             ctx.set_var_ref(&v2, temp1)?;
         }
         BuiltinCommand::SaveGame => {
-            conv_workflow!(run_save_game(vm, tx, ctx)?);
+            conv_workflow!(run_save_game(vm, tx, ctx).await?);
         }
-        BuiltinCommand::LoadGame => match run_load_game(tx, ctx)? {
+        BuiltinCommand::LoadGame => match run_load_game(tx, ctx).await? {
             Some(idx) => {
-                conv_workflow!(run_load_data(vm, tx, ctx, idx)?);
+                conv_workflow!(run_load_data(vm, tx, ctx, idx).await?);
             }
             None => {}
         },

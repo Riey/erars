@@ -21,7 +21,7 @@ use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, SystemFunctions, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
-pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
+pub fn save_script<S: SystemFunctions>(vm: TerminalVm, ctx: VmContext<S>, target_path: &str) -> anyhow::Result<()> {
     let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);
     erars_bytecode::write_to(&mut out, &vm.dic)?;
     let local_infos: HashMap<StrKey, Vec<(StrKey, &VariableInfo)>> =
@@ -53,11 +53,11 @@ pub fn load_config(target_path: &str) -> EraConfig {
 }
 
 /// SAFETY: Any reference to interner is not exist
-pub unsafe fn load_script(
+pub unsafe fn load_script<S: SystemFunctions>(
     target_path: &str,
-    system: Box<dyn SystemFunctions>,
+    system: S,
     config: EraConfig,
-) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+) -> anyhow::Result<(TerminalVm, VmContext<S>, VirtualConsole)> {
     let start = Instant::now();
 
     log::info!("Load game script");
@@ -103,13 +103,13 @@ pub unsafe fn load_script(
 }
 
 #[allow(unused_assignments)]
-pub fn run_script(
+pub async fn run_script<S: SystemFunctions>(
     target_path: &str,
-    mut system: Box<dyn SystemFunctions>,
+    mut system: S,
     config: EraConfig,
     error_to_stderr: bool,
     lint: bool,
-) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+) -> anyhow::Result<(TerminalVm, VmContext<S>, VirtualConsole)> {
     erars_ast::init_interner();
 
     let interner = erars_ast::get_interner();
@@ -130,13 +130,13 @@ pub fn run_script(
 
             log::info!("[{}]: {}ms", $work, m);
             tx.print_line(format!("[{}]: {}ms", $work, m));
-            $system.redraw(&mut tx)?;
+            $system.redraw(&mut tx).await?;
         };
     }
 
     let mut function_dic = FunctionDic::new();
     let header_info;
-    let mut ctx: VmContext;
+    let mut ctx: VmContext<S>;
 
     {
         check_time!("Initialize");

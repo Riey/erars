@@ -11,11 +11,11 @@ use crate::{ArgVec, SystemFunctions, VariableStorage, VmVariable};
 
 use super::UniformVariable;
 
-pub struct VmContext {
+pub struct VmContext<S: SystemFunctions> {
     pub var: VariableStorage,
     pub header_info: Arc<HeaderInfo>,
     pub config: Arc<EraConfig>,
-    pub system: Box<dyn SystemFunctions>,
+    pub system: S,
     pub sav_dir: PathBuf,
 
     /// For NOSKIP/ENDNOSKIP
@@ -31,11 +31,11 @@ pub struct VmContext {
     call_stack: Vec<Callstack>,
 }
 
-impl VmContext {
+impl<S: SystemFunctions> VmContext<S> {
     pub fn new(
         header_info: Arc<HeaderInfo>,
         config: Arc<EraConfig>,
-        system: Box<dyn SystemFunctions>,
+        system: S,
         sav_dir: PathBuf,
     ) -> Self {
         let mut ret = Self {

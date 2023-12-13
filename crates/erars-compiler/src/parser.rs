@@ -23,7 +23,7 @@ use std::{
 };
 use strum::{Display, EnumString};
 
-pub use crate::error::{ParserError, ParserResult};
+pub use crate::error::ParserResult;
 use crate::{compiler::Compiler, CompiledFunction, PP_REGEX};
 pub use expr::normal_form_str;
 

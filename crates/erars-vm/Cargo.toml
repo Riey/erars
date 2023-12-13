@@ -29,6 +29,9 @@ regex = "1.6.0"
 twoway = "0.2.2"
 derivative = "2.2.0"
 tinyvec = "1.6.0"
+
+async-recursion = "1.0.5"
+
 static_assertions = "1.1.0"
 unicode_hfwidth = "0.2.0"
 rmp-serde = "1.1.1"

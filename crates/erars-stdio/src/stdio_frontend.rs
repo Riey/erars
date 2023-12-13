@@ -5,6 +5,7 @@ use std::{
     collections::VecDeque,
     io::{self, Write},
 };
+use std::future::Future;
 
 pub struct StdioFrontend {
     from: usize,
@@ -85,59 +86,63 @@ impl StdioFrontend {
 }
 
 impl SystemFunctions for StdioFrontend {
-    fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
-        if !self.inputs.is_empty() {
-            if matches!(req.ty, InputRequestType::Int | InputRequestType::Str) {
-                return Ok(self.inputs.pop_front());
-            } else {
-                return Ok(None);
-            }
-        }
-
-        if self.json {
-            let out = io::stdout();
-            let mut out = out.lock();
-            serde_json::to_writer(&mut out, &req)?;
-            writeln!(out)?;
-        }
-
-        loop {
-            self.input.clear();
-            let size = io::stdin().read_line(&mut self.input)?;
-
-            let s = self.input[..size].trim_end_matches(&['\r', '\n']);
-
-            match req.ty {
-                InputRequestType::Int => match s.trim().parse::<i64>() {
-                    Ok(i) => {
-                        log::info!("[stdio] <- {i}");
-                        break Ok(Some(Value::Int(i)));
-                    }
-                    Err(_) => {
-                        continue;
-                    }
-                },
-                InputRequestType::Str => {
-                    log::info!("[stdio] <- \"{s}\"");
-                    break Ok(Some(Value::String(s.into())));
+    fn input(&mut self, req: InputRequest) -> impl Future<Output = anyhow::Result<Option<Value>>> + Send {
+        async move {
+            if !self.inputs.is_empty() {
+                if matches!(req.ty, InputRequestType::Int | InputRequestType::Str) {
+                    return Ok(self.inputs.pop_front());
+                } else {
+                    return Ok(None);
                 }
-                InputRequestType::AnyKey
-                | InputRequestType::EnterKey
-                | InputRequestType::ForceEnterKey => {
-                    log::info!("[stdio] <- \"\"");
-                    break Ok(None);
+            }
+
+            if self.json {
+                let out = io::stdout();
+                let mut out = out.lock();
+                serde_json::to_writer(&mut out, &req)?;
+                writeln!(out)?;
+            }
+
+            loop {
+                self.input.clear();
+                let size = io::stdin().read_line(&mut self.input)?;
+
+                let s = self.input[..size].trim_end_matches(&['\r', '\n']);
+
+                match req.ty {
+                    InputRequestType::Int => match s.trim().parse::<i64>() {
+                        Ok(i) => {
+                            log::info!("[stdio] <- {i}");
+                            break Ok(Some(Value::Int(i)));
+                        }
+                        Err(_) => {
+                            continue;
+                        }
+                    },
+                    InputRequestType::Str => {
+                        log::info!("[stdio] <- \"{s}\"");
+                        break Ok(Some(Value::String(s.into())));
+                    }
+                    InputRequestType::AnyKey
+                    | InputRequestType::EnterKey
+                    | InputRequestType::ForceEnterKey => {
+                        log::info!("[stdio] <- \"\"");
+                        break Ok(None);
+                    }
                 }
             }
         }
     }
 
-    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
-        if !vconsole.need_rebuild && self.from == vconsole.line_count() && vconsole.line_is_empty()
-        {
-            // skip redraw
-            return Ok(());
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> impl Future<Output = anyhow::Result<()>> + Send {
+        async move {
+            if !vconsole.need_rebuild && self.from == vconsole.line_count() && vconsole.line_is_empty()
+            {
+                // skip redraw
+                return Ok(());
+            }
+            self.draw(vconsole, &mut io::stdout().lock())
         }
-        self.draw(vconsole, &mut io::stdout().lock())
     }
 }
 

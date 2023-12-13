@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -34,10 +35,10 @@ pub struct ProxySystem {
 }
 
 impl ProxySystem {
-    fn wait_response(&self, req: SystemRequest) -> anyhow::Result<SystemResponse> {
-        self.req_tx.send(req).context("Send SystemRequest")?;
+    async fn wait_response(&self, req: SystemRequest) -> anyhow::Result<SystemResponse> {
+        self.req_tx.send_async(req).await.context("Send SystemRequest")?;
         (self.notify)();
-        self.res_rx.recv().context("Recv SystemResponse")
+        self.res_rx.recv_async().await.context("Recv SystemResponse")
     }
 
     pub fn send_quit(&self) {
@@ -47,18 +48,23 @@ impl ProxySystem {
 }
 
 impl SystemFunctions for ProxySystem {
-    fn input(&mut self, req: InputRequest) -> anyhow::Result<Option<Value>> {
-        match self.wait_response(SystemRequest::Input(req))? {
-            SystemResponse::Empty => Ok(None),
-            SystemResponse::Input(value) => Ok(Some(value)),
+    fn input(&mut self, req: InputRequest) -> impl Future<Output = anyhow::Result<Option<Value>>> + Send {
+        async move {
+            match self.wait_response(SystemRequest::Input(req)).await? {
+                SystemResponse::Empty => Ok(None),
+                SystemResponse::Input(value) => Ok(Some(value)),
+            }
         }
     }
 
-    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
-        self.req_tx
-            .send(SystemRequest::Redraw(ConsoleFrame::from_vconsole(vconsole)))
-            .context("Send SystemRequest")?;
-        Ok(())
+    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> impl Future<Output = anyhow::Result<()>> + Send {
+        async move {
+            self.req_tx
+                .send_async(SystemRequest::Redraw(ConsoleFrame::from_vconsole(vconsole)))
+                .await
+                .context("Send SystemRequest")?;
+            Ok(())
+        }
     }
 }
 

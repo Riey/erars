@@ -83,7 +83,7 @@ fn main() {
         None => VecDeque::new(),
     };
 
-    let system = Box::new(stdio_frontend::StdioFrontend::new(args.json, inputs));
+    let system = stdio_frontend::StdioFrontend::new(args.json, inputs);
 
     std::thread::Builder::new()
         .stack_size(8 * 1024 * 1024)
@@ -93,7 +93,7 @@ fn main() {
             let (vm, mut ctx, mut tx) = if args.load {
                 unsafe { load_script(&args.target_path, system, config).unwrap() }
             } else {
-                run_script(&args.target_path, system, config, true, !args.lint_off).unwrap()
+                pollster::block_on(run_script(&args.target_path, system, config, true, !args.lint_off)).unwrap()
             };
 
             if args.measure_memory {
@@ -107,7 +107,7 @@ fn main() {
             } else if args.save {
                 save_script(vm, ctx, &args.target_path).unwrap();
             } else {
-                vm.start(&mut tx, &mut ctx);
+                pollster::block_on(vm.start(&mut tx, &mut ctx));
             }
         })
         .unwrap()
