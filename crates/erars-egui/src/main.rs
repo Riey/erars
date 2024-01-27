@@ -88,12 +88,13 @@ fn main() {
         "erars",
         eframe::NativeOptions {
             renderer: eframe::Renderer::Wgpu,
-            drag_and_drop_support: false,
-            resizable: true,
-            initial_window_size: Some(egui::vec2(
-                config.window_width as _,
-                config.window_height as _,
-            )),
+            default_theme: eframe::Theme::Dark,
+            viewport: egui::ViewportBuilder::default()
+                .with_inner_size(egui::vec2(
+                    config.window_width as _,
+                    config.window_height as _,
+                ))
+                .with_drag_and_drop(true),
             ..Default::default()
         },
         Box::new(move |ctx| {
@@ -272,7 +273,7 @@ impl App for EraApp {
         while let Ok(req) = self.receiver.req_rx.try_recv() {
             match req {
                 SystemRequest::Quit => {
-                    frame.close();
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
                 SystemRequest::Input(req) => {
                     log::info!("Req <- {:?}", req.ty);
@@ -305,7 +306,7 @@ impl App for EraApp {
 }
 
 impl EraApp {
-    fn draw_console(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    fn draw_console(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         let current_input_gen = self.current_req.as_ref().map(|req| req.generation);
         let receiver = &self.receiver;
 
@@ -323,7 +324,7 @@ impl EraApp {
         egui::TopBottomPanel::top("setting").show(ctx, |ui| {
             ui.menu_button("Setting", |ui| {
                 if ui.button("Exit").clicked() {
-                    frame.close();
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
         });
@@ -558,7 +559,7 @@ impl Widget for EraButton {
                 self.color
             };
 
-            text.paint_with_color_override(ui.painter(), text_pos, color);
+            ui.painter().galley_with_override_text_color(text_pos, text, color);
         }
 
         response

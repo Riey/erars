@@ -236,7 +236,7 @@ impl FunctionDic {
     }
 
     pub fn insert_event(&mut self, event: Event, body: FunctionBody) {
-        let mut collection = &mut self.event[event.ty];
+        let collection = &mut self.event[event.ty];
         match event.flags {
             EventFlags::Single => {
                 collection.events.clear();

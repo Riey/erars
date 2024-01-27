@@ -12,9 +12,9 @@ erars-vm = { path = "../erars-vm" }
 erars-loader = { path = "../erars-loader", features = ["multithread"] }
 erars-proxy-system = { path = "../erars-proxy-system" }
 
-egui = "0.23.0"
-eframe = { version = "0.23.0", default-features = false, features = ["wgpu"] }
-fontdb = { version = "0.15.0", features = ["fontconfig"] }
+egui = "0.25.0"
+eframe = { version = "0.25.0", default-features = false, features = ["wgpu"] }
+fontdb = { version = "0.16.0", features = ["fontconfig"] }
 clap = { version = "4", features = ["derive"] }
 flexi_logger = "0.27.2"
 log-panics = "2.1.0"
