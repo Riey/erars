@@ -127,7 +127,7 @@ impl Compiler {
                 if let Ok(i) = i.try_into() {
                     self.push(Instruction::load_int(i))
                 } else {
-                    #[cfg(target_engian = "big")]
+                    #[cfg(target_endian = "big")]
                     compile_error!("Big endian not supported");
                     let (l, r): (i32, i32) = unsafe { std::mem::transmute(i) };
                     self.push(Instruction::load_int(l));

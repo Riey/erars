@@ -115,7 +115,7 @@ pub(super) fn run_instruction(
         ctx.push(i as i64);
     } else if let Some(r) = inst.as_load_int_suffix() {
         let l = ctx.pop_int()? as i32;
-        #[cfg(target_engian = "big")]
+        #[cfg(target_endian = "big")]
         compile_error!("Big endian not supported");
         let i: i64 = unsafe { std::mem::transmute((l, r)) };
         ctx.push(i);
