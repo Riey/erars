@@ -9,7 +9,7 @@ members = [
     "./crates/erars-ast",
     "./crates/erars-bytecode",
     "./crates/erars-compiler",
-    "./crates/erars-egui",
+    "./crates/erars-iced",
     "./crates/erars-proxy-system",
     "./crates/erars-reader",
     "./crates/erars-lexer",
@@ -19,6 +19,9 @@ members = [
     "./crates/erars-ui",
     "./crates/erars-vm",
 ]
+
+[workspace.dependencies]
+flume = "0.11.0"
 
 [dev-dependencies]
 erars-ast = { path = "./crates/erars-ast" }

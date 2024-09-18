@@ -88,6 +88,7 @@ impl ConsoleFrame {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum SystemRequest {
     Redraw(ConsoleFrame),
     Input(InputRequest),

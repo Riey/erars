@@ -5,9 +5,11 @@ edition = "2021"
 license = "GPL-3.0-or-later"
 
 [dependencies]
-anyhow = "1.0.66"
 erars-ast = { path = "../erars-ast" }
 erars-compiler = { path = "../erars-compiler" }
 erars-ui = { path = "../erars-ui" }
 erars-vm = { path = "../erars-vm" }
-flume = "0.10.14"
+
+flume.workspace = true
+
+anyhow = "1.0.66"

@@ -1,5 +1,5 @@
 [package]
-name = "erars-egui"
+name = "erars-iced"
 version = "0.5.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
@@ -12,11 +12,31 @@ erars-vm = { path = "../erars-vm" }
 erars-loader = { path = "../erars-loader", features = ["multithread"] }
 erars-proxy-system = { path = "../erars-proxy-system" }
 
-egui = "0.25.0"
-eframe = { version = "0.25.0", default-features = false, features = ["wgpu"] }
-fontdb = { version = "0.16.0", features = ["fontconfig"] }
+flume.workspace = true
+
+futures-util = "0.3"
+fontdb = { version = "0.22.0", features = ["fontconfig"] }
 clap = { version = "4", features = ["derive"] }
-flexi_logger = "0.27.2"
+flexi_logger = "0.29.0"
 log-panics = "2.1.0"
 log = "0.4.17"
 mimalloc = { version = "0.1.31", default-features = false }
+
+iced_futures = "0.13.0"
+
+[dependencies.iced]
+version = "0.13.0"
+default-features = false
+features = ["wgpu"]
+
+[dependencies.cosmic-text]
+version = "0.12.1"
+features = ["monospace_fallback", "shape-run-cache"]
+
+[profile.dev.package.swash]
+opt-level = 3
+debug = false
+
+[profile.dev.package.cosmic-text]
+opt-level = 3
+debug = false
