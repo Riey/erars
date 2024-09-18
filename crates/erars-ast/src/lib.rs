@@ -52,7 +52,7 @@ impl StrKey {
 
     #[inline]
     pub fn to_u32(self) -> u32 {
-        unsafe { std::mem::transmute(self) }
+        self.0.into_inner().get()
     }
 
     pub fn resolve(self) -> &'static str {
