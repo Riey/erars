@@ -21,6 +21,7 @@ static mut GLOBAL_INTERNER: Option<Interner> = None;
 static INIT_ONCE: std::sync::Once = std::sync::Once::new();
 
 pub fn get_interner() -> &'static Interner {
+    #[allow(static_mut_refs)]
     let opt: &'static Option<Interner> = unsafe { &GLOBAL_INTERNER };
     match opt {
         Some(ref i) => i,

@@ -5,16 +5,17 @@ edition = "2021"
 license = "GPL-3.0-or-later"
 
 [dependencies]
+strum.workspace = true
+hashbrown.workspace = true
+serde.workspace = true
+anyhow.workspace = true
+enum-map.workspace = true
+
 bitflags = { version = "2.3.1", features = ["serde"] }
-enum-map = { version = "2.4.1", features = ["serde"] }
-hashbrown = { version = "0.13", features = ["ahash", "serde"] }
 num-derive = "0.3.3"
 num-traits = "0.2.15"
 option_set = "0.1.4"
 ordered-float = { version = "3.0.0", features = ["serde"] }
-serde = { version = "1.0.142", features = ["derive"] }
-strum = { version = "0.24.1", features = ["derive", "phf"] }
-anyhow = { version = "1" }
 lasso = { version = "0.7.3", features = ["multi-threaded", "ahasher", "serialize"] }
 
 [dev-dependencies]

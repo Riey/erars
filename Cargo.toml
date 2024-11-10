@@ -22,6 +22,14 @@ members = [
 
 [workspace.dependencies]
 flume = "0.11.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+strum = { version = "0.26", features = ["derive", "phf"] }
+thiserror = "1"
+anyhow = "1"
+logos = { version = "0.14", features = ["logos-derive"] }
+hashbrown = { version = "0.15", features = ["serde"] }
+enum-map = { version = "2", features = ["serde"] }
 
 [dev-dependencies]
 erars-ast = { path = "./crates/erars-ast" }
@@ -29,6 +37,8 @@ erars-lexer = { path = "./crates/erars-lexer" }
 erars-compiler = { path = "./crates/erars-compiler" }
 erars-ui = { path = "./crates/erars-ui" }
 erars-vm = { path = "./crates/erars-vm" }
+
+serde.workspace = true
 
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"
@@ -38,7 +48,6 @@ glob = "0.3.0"
 flexi_logger = "0.25.1"
 log-panics = "2.1.0"
 ron = "0.8.0"
-serde = "1.0.145"
 log = "0.4.17"
 serde_yaml = "0.9.13"
 smol_str = "0.2.0"
@@ -62,6 +71,14 @@ opt-level = 1
 [profile.dev.build-override]
 opt-level = 1
 
+[profile.dev.package.swash]
+opt-level = 3
+debug = false
+
+[profile.dev.package.cosmic-text]
+opt-level = 3
+debug = false
+
 [profile.release-lto]
 inherits = "release"
 lto = true
@@ -73,5 +90,3 @@ harness = false
 [[bench]]
 name = "save"
 harness = false
-
-[features]

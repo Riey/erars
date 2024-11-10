@@ -152,7 +152,11 @@ impl VariableStorage {
 
         self.local_variables.iter_mut().for_each(|(fn_name, vars)| {
             let Some(mut sav_vars) = local_variables.remove(fn_name) else {
-                vars.values_mut().for_each(|v| if v.0.is_global == is_global { v.1 = None; });
+                vars.values_mut().for_each(|v| {
+                    if v.0.is_global == is_global {
+                        v.1 = None;
+                    }
+                });
                 return;
             };
 
@@ -648,12 +652,14 @@ impl VariableStorage {
             self.is_local_var(func2_name, var2),
         ) {
             (true, true) if func1_name == func2_name => {
-                let [(info1, var1), (info2, var2)] = self
+                let [Some((info1, var1)), Some((info2, var2))] = self
                     .local_variables
                     .get_mut(&func1_name)
                     .unwrap()
                     .get_many_mut([&var1, &var2])
-                    .ok_or_else(|| anyhow!("Variable {var1:?} and {var2:?} are not exist"))?;
+                else {
+                    bail!("Variable {var1:?} and {var2:?} are not exist")
+                };
 
                 let var1 = var1.get_or_insert_with(|| {
                     UniformVariable::with_character_len(&self.header, info1, self.character_len)
@@ -665,8 +671,11 @@ impl VariableStorage {
                 Ok([(info1, var1), (info2, var2)])
             }
             (true, true) => {
-                let [dic1, dic2] =
-                    self.local_variables.get_many_mut([&func1_name, &func2_name]).unwrap();
+                let [Some(dic1), Some(dic2)] =
+                    self.local_variables.get_many_mut([&func1_name, &func2_name])
+                else {
+                    bail!("No function name")
+                };
 
                 let (info1, var1) = dic1
                     .get_mut(&var1)
@@ -686,10 +695,11 @@ impl VariableStorage {
                 Ok([(info1, var1), (info2, var2)])
             }
             (false, false) => {
-                let [(info1, var1), (info2, var2)] = self
-                    .variables
-                    .get_many_mut([&var1, &var2])
-                    .ok_or_else(|| anyhow!("Variable {var1:?} and {var2:?} are not exist"))?;
+                let [Some((info1, var1)), Some((info2, var2))] =
+                    self.variables.get_many_mut([&var1, &var2])
+                else {
+                    bail!("Variable {var1:?} and {var2:?} are not exist")
+                };
 
                 Ok([(info1, var1), (info2, var2)])
             }
@@ -787,8 +797,8 @@ impl VariableStorage {
         (&mut VariableInfo, &mut UniformVariable),
     )> {
         match self.variables.get_many_mut([&v1.get_key(self), &v2.get_key(self)]) {
-            Some([(ll, lr), (rl, rr)]) => Ok(((ll, lr), (rl, rr))),
-            None => {
+            [Some((ll, lr)), Some((rl, rr))] => Ok(((ll, lr), (rl, rr))),
+            _ => {
                 bail!("Variable {v1:?} or {v2:?} is not exists");
             }
         }
@@ -808,8 +818,8 @@ impl VariableStorage {
             .variables
             .get_many_mut([&v1.get_key(self), &v2.get_key(self), &v3.get_key(self)])
         {
-            Some([(l1, r1), (l2, r2), (l3, r3)]) => Ok(((l1, r1), (l2, r2), (l3, r3))),
-            None => {
+            [Some((l1, r1)), Some((l2, r2)), Some((l3, r3))] => Ok(((l1, r1), (l2, r2), (l3, r3))),
+            _ => {
                 bail!("Variable {v1:?} or {v2:?} or {v3:?} is not exists");
             }
         }

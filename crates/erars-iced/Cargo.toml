@@ -32,11 +32,3 @@ features = ["wgpu"]
 [dependencies.cosmic-text]
 version = "0.12.1"
 features = ["monospace_fallback", "shape-run-cache"]
-
-[profile.dev.package.swash]
-opt-level = 3
-debug = false
-
-[profile.dev.package.cosmic-text]
-opt-level = 3
-debug = false

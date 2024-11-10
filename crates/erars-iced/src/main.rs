@@ -247,10 +247,12 @@ impl EraApp {
 
                 match req.ty {
                     InputRequestType::Int => {
-                        let Ok(i) = input.parse() else {
-                            unreachable!();
-                        };
-                        self.send_input(Value::Int(i));
+                        if !input.is_empty() {
+                            let Ok(i) = input.parse() else {
+                                unreachable!("input: `{input}`");
+                            };
+                            self.send_input(Value::Int(i));
+                        }
                     }
                     _ => {
                         self.send_input(Value::String(input));
