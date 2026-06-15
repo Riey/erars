@@ -168,6 +168,7 @@ mod tests {
 
     #[test]
     fn rasterizes_a_glyph() {
+        let _gpu = crate::test_support::gpu_lock();
         let Some((device, queue)) = headless_device() else {
             eprintln!("no GPU adapter; skipping");
             return;

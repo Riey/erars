@@ -24,6 +24,15 @@ run-ym-log:
 run-ym-toriko:
     cargo run --release --bin erars-stdio -- --use-input=toriko.ron ../eraTHYMKR
 
+# Headless GPU alignment tests (no display server needed)
+test-align:
+    cargo test -p erars-renderer headless -- --nocapture
+
+# Render a game's first screen to a PPM headlessly (no display), e.g. over SSH.
+# Usage: just headless-shot /path/to/game /tmp/out.ppm
+headless-shot game="." out="/tmp/erars-shot.ppm":
+    cargo run -p erars-renderer -- --quite --headless-shot {{out}} {{game}}
+
 gen-test name:
     echo "@SYSTEM_TITLE" > tests/run_tests/basic/{{name}}.erb
     touch tests/run_tests/basic/{{name}}.out

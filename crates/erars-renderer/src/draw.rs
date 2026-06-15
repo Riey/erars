@@ -61,6 +61,7 @@ mod tests {
 
     #[test]
     fn produces_one_instance_per_visible_glyph() {
+        let _gpu = crate::test_support::gpu_lock();
         let Some((device, queue)) = headless() else {
             eprintln!("no GPU; skipping");
             return;

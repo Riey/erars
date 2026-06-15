@@ -6,6 +6,10 @@ mod draw;
 mod font;
 mod gpu;
 mod grid;
+#[allow(dead_code)]
+mod headless;
+#[cfg(test)]
+mod test_support;
 mod text;
 
 use std::{path::Path, sync::Arc};
@@ -73,6 +77,71 @@ struct Args {
     load: bool,
     #[clap(long, help = "Turn off ERB lint")]
     lint_off: bool,
+    #[clap(
+        long,
+        value_name = "PATH.ppm",
+        help = "Headless: render the first screen to a PPM image and exit (no display needed)"
+    )]
+    headless_shot: Option<String>,
+}
+
+/// Spawn the VM runtime thread driving `system`.
+fn spawn_vm(
+    target_path: String,
+    load: bool,
+    lint: bool,
+    system: erars_proxy_system::ProxySystem,
+    config: erars_compiler::EraConfig,
+) {
+    std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .name("erars-runtime".into())
+        .spawn(move || {
+            let system_back = system.clone();
+            let system = Box::new(system);
+            let ret = if load {
+                unsafe { load_script(&target_path, system, config) }
+            } else {
+                run_script(&target_path, system, config, false, lint)
+            };
+            let normal = match ret {
+                Ok((vm, mut ctx, mut tx)) => vm.start(&mut tx, &mut ctx),
+                Err(err) => {
+                    log::error!("Game loading failed: {err}");
+                    false
+                }
+            };
+            if normal {
+                system_back.send_quit();
+            }
+        })
+        .unwrap();
+}
+
+/// Headless capture: run the game until it first waits for input, then render
+/// the current screen to a PPM file and exit. No window/display required.
+fn headless_shot(
+    mut font: font::FontCtx,
+    receiver: erars_proxy_system::ProxyReceiver,
+    (w, h): (u32, u32),
+    path: &str,
+) {
+    use erars_proxy_system::SystemRequest;
+    let mut frame = erars_proxy_system::ConsoleFrame::default();
+    // Drain requests until the game blocks for input (screen is settled).
+    loop {
+        match receiver.req_rx.recv() {
+            Ok(SystemRequest::Redraw(f)) => frame = f,
+            Ok(SystemRequest::Input(_)) | Ok(SystemRequest::Quit) | Err(_) => break,
+        }
+    }
+    match headless::render_lines(&mut font, &frame.lines, w, h) {
+        Some(img) => match headless::write_ppm(path, &img) {
+            Ok(()) => println!("Wrote {path} ({w}x{h})"),
+            Err(e) => eprintln!("Failed to write {path}: {e}"),
+        },
+        None => eprintln!("No GPU adapter available for headless rendering"),
+    }
 }
 
 fn main() {
@@ -101,12 +170,6 @@ fn main() {
     log_panics::init();
 
     let config = load_config(&args.target_path);
-    let event_loop = EventLoop::<Wake>::with_user_event().build().unwrap();
-    let proxy = event_loop.create_proxy();
-
-    let (system, receiver) = erars_proxy_system::new_proxy(Arc::new(move || {
-        let _ = proxy.send_event(Wake);
-    }));
 
     let font_size = config.font_size;
     let line_height = config.line_height;
@@ -116,34 +179,27 @@ fn main() {
     // the first that is actually installed so one font renders both Latin and
     // CJK on the same 1:2 grid.
     let font_candidates = font_candidates(config.lang, &config.font_family);
-
+    let build_font = move || {
+        let refs: Vec<&str> = font_candidates.iter().map(String::as_str).collect();
+        font::FontCtx::with_candidates(&refs, font_size, line_height)
+    };
     let target_path = args.target_path.clone();
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .name("erars-runtime".into())
-        .spawn(move || {
-            let system_back = system.clone();
-            let system = Box::new(system);
-            let ret = if args.load {
-                unsafe { load_script(&target_path, system, config) }
-            } else {
-                run_script(&target_path, system, config, false, !args.lint_off)
-            };
-            let normal = match ret {
-                Ok((vm, mut ctx, mut tx)) => vm.start(&mut tx, &mut ctx),
-                Err(err) => {
-                    log::error!("Game loading failed: {err}");
-                    false
-                }
-            };
-            if normal {
-                system_back.send_quit();
-            }
-        })
-        .unwrap();
 
-    let candidate_refs: Vec<&str> = font_candidates.iter().map(String::as_str).collect();
-    let font = font::FontCtx::with_candidates(&candidate_refs, font_size, line_height);
-    let mut app = App::new(font, receiver, init_size);
+    // Headless capture mode: no window, no display server required.
+    if let Some(path) = args.headless_shot.clone() {
+        let (system, receiver) = erars_proxy_system::new_proxy(Arc::new(|| {}));
+        spawn_vm(target_path, args.load, !args.lint_off, system, config);
+        headless_shot(build_font(), receiver, init_size, &path);
+        return;
+    }
+
+    let event_loop = EventLoop::<Wake>::with_user_event().build().unwrap();
+    let proxy = event_loop.create_proxy();
+    let (system, receiver) = erars_proxy_system::new_proxy(Arc::new(move || {
+        let _ = proxy.send_event(Wake);
+    }));
+    spawn_vm(target_path, args.load, !args.lint_off, system, config);
+
+    let mut app = App::new(build_font(), receiver, init_size);
     event_loop.run_app(&mut app).unwrap();
 }
