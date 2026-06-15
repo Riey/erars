@@ -9,7 +9,7 @@ members = [
     "./crates/erars-ast",
     "./crates/erars-bytecode",
     "./crates/erars-compiler",
-    "./crates/erars-iced",
+    "./crates/erars-renderer",
     "./crates/erars-proxy-system",
     "./crates/erars-reader",
     "./crates/erars-lexer",

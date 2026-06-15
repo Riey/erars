@@ -215,7 +215,7 @@ pub fn run_script(
             .collect::<HashMap<_, _>>();
 
         let chara_csv_dic = csv_dic
-            .drain_filter(|k, _v| k.starts_with("CHARA"))
+            .extract_if(|k, _v| k.starts_with("CHARA"))
             .collect::<HashMap<_, _>>();
 
         check_time!("Load CSV");

@@ -1,0 +1,32 @@
+[package]
+name = "erars-renderer"
+version = "0.5.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+[dependencies]
+erars-ast = { path = "../erars-ast" }
+erars-compiler = { path = "../erars-compiler" }
+erars-ui = { path = "../erars-ui" }
+erars-vm = { path = "../erars-vm" }
+erars-loader = { path = "../erars-loader", features = ["multithread"] }
+erars-proxy-system = { path = "../erars-proxy-system" }
+
+flume.workspace = true
+clap = { version = "4", features = ["derive"] }
+flexi_logger = "0.29.0"
+log-panics = "2.1.0"
+log = "0.4.17"
+mimalloc = { version = "0.1.31", default-features = false }
+
+winit = "0.30"
+wgpu = "0.19"
+pollster = "0.3"
+bytemuck = { version = "1", features = ["derive"] }
+etagere = "0.2"
+unicode-width = "0.1"
+sys-locale = "0.3"
+
+[dependencies.cosmic-text]
+version = "0.12.1"
+features = ["monospace_fallback", "shape-run-cache"]
