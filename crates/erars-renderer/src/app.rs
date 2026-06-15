@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cosmic_text::SwashCache;
 use erars_ast::Value;
@@ -37,6 +38,19 @@ pub struct App {
     cursor: (f32, f32),
     buttons_cache: Vec<ButtonRegion>,
     init_size: (u32, u32),
+
+    /// When the current input request times out (TINPUT), and the value to
+    /// send on expiry.
+    timeout_deadline: Option<Instant>,
+    timeout_value: Value,
+}
+
+/// Current wall-clock time as Unix nanoseconds, matching `Timeout::timeout`.
+fn current_unix_nanos() -> i128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as i128)
+        .unwrap_or(0)
 }
 
 impl App {
@@ -57,6 +71,8 @@ impl App {
             cursor: (0.0, 0.0),
             buttons_cache: Vec::new(),
             init_size,
+            timeout_deadline: None,
+            timeout_value: Value::Int(0),
         }
     }
 
@@ -64,6 +80,7 @@ impl App {
         let _ = self.receiver.res_tx.send(resp);
         self.current_req = None;
         self.input.clear();
+        self.timeout_deadline = None;
     }
 
     /// Drain all pending VM requests, then request a redraw.
@@ -76,6 +93,14 @@ impl App {
                     self.stick_bottom = true;
                 }
                 SystemRequest::Input(req) => {
+                    if let Some(t) = req.timeout.as_ref() {
+                        let remaining_ns = (t.timeout - current_unix_nanos()).max(0) as u128;
+                        self.timeout_deadline =
+                            Some(Instant::now() + Duration::from_nanos(remaining_ns as u64));
+                        self.timeout_value = t.default_value.clone();
+                    } else {
+                        self.timeout_deadline = None;
+                    }
                     self.current_req = Some(req);
                 }
             }
@@ -224,6 +249,19 @@ impl ApplicationHandler<Wake> for App {
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, _: Wake) {
         self.drain_requests(event_loop);
+    }
+
+    fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
+        let Some(deadline) = self.timeout_deadline else {
+            return;
+        };
+        if Instant::now() >= deadline {
+            let v = self.timeout_value.clone();
+            self.send(SystemResponse::Input(v));
+        } else {
+            // Wake again at the deadline so the timeout can fire on time.
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(deadline));
+        }
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
