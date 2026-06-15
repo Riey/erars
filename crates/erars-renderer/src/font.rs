@@ -51,10 +51,23 @@ const WINDOWS_FALLBACK_FONTS: &[&str] = &[
 
 impl FontCtx {
     pub fn new(default_family: &str, font_size: u32, line_height: u32) -> Self {
+        Self::with_candidates(&[default_family], font_size, line_height)
+    }
+
+    /// Build with an ordered list of candidate default families. The first
+    /// candidate that is actually present in the font db becomes the default
+    /// font used for all unstyled text — so a single coherent monospace renders
+    /// both half-width Latin and full-width CJK in an exact 1:2 ratio. This is
+    /// what keeps the grid looking right; mixing a Latin-mono cell width with a
+    /// CJK glyph from a different font produces ragged columns.
+    pub fn with_candidates(families: &[&str], font_size: u32, line_height: u32) -> Self {
         let mut db = fontdb::Database::new();
         db.load_system_fonts();
         db.load_font_data(BUNDLED_FONT.to_vec());
         load_windows_fallback_fonts(&mut db);
+
+        let default_family = resolve_default_family(&db, families);
+        log::info!("Renderer default font family: {default_family:?}");
 
         let locale = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
         let font_system = FontSystem::new_with_locale_and_db(locale, db);
@@ -64,7 +77,7 @@ impl FontCtx {
             cell_w: 0.0,
             cell_h: 0.0,
             font_size: 0.0,
-            default_family: default_family.to_string(),
+            default_family,
             logical_font_size: font_size as f32,
             logical_line_height: line_height as f32,
             scale: 1.0,
@@ -91,6 +104,31 @@ impl FontCtx {
         let family = self.default_family.clone();
         self.cell_w = measure_cell_w(&mut self.font_system, &family, self.font_size);
     }
+}
+
+/// Pick the first candidate family that exists in `db`. Empty candidates are
+/// skipped. Falls back to the first non-empty candidate (so cosmic-text can do
+/// its own fallback), or `""` (→ generic Monospace) if there are none.
+fn resolve_default_family(db: &fontdb::Database, families: &[&str]) -> String {
+    for fam in families {
+        if !fam.is_empty() && family_exists(db, fam) {
+            return (*fam).to_string();
+        }
+    }
+    families
+        .iter()
+        .find(|f| !f.is_empty())
+        .map(|f| f.to_string())
+        .unwrap_or_default()
+}
+
+/// Whether any face in `db` advertises `name` as a family (case-insensitive).
+fn family_exists(db: &fontdb::Database, name: &str) -> bool {
+    db.faces().any(|face| {
+        face.families
+            .iter()
+            .any(|(fam, _)| fam.eq_ignore_ascii_case(name))
+    })
 }
 
 /// Load known Windows CJK fallback fonts into `db` from any available Windows
@@ -148,6 +186,22 @@ fn measure_cell_w(font_system: &mut FontSystem, family: &str, font_size: f32) ->
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_prefers_first_installed_candidate() {
+        let mut db = fontdb::Database::new();
+        db.load_font_data(BUNDLED_FONT.to_vec()); // "Noto Sans Mono"
+
+        // Skips a missing candidate, picks the installed one.
+        assert_eq!(
+            resolve_default_family(&db, &["No Such Font", "Noto Sans Mono"]),
+            "Noto Sans Mono"
+        );
+        // None installed: keep the first non-empty so cosmic-text can fall back.
+        assert_eq!(resolve_default_family(&db, &["No Such Font"]), "No Such Font");
+        // Empty candidates collapse to "" (→ generic Monospace).
+        assert_eq!(resolve_default_family(&db, &[""]), "");
+    }
 
     #[test]
     fn cell_metrics_are_positive() {
