@@ -1,4 +1,6 @@
 #[allow(dead_code)]
+mod atlas;
+#[allow(dead_code)]
 mod font;
 #[allow(dead_code)]
 mod grid;
