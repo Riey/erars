@@ -305,4 +305,58 @@ mod tests {
             rel * 100.0
         );
     }
+
+    /// The core terminal property: a full-width CJK glyph occupies exactly two
+    /// cells and lines up with Latin columns. Renders 8 half-width digits over
+    /// 4 full-width ideographs (both = 8 cells) and asserts their ink ends at
+    /// the same x. This is what the mixed-font / advance-leak bugs broke.
+    /// Skips if no coherent CJK monospace is installed (the bundled font is
+    /// Latin-only).
+    #[test]
+    fn cjk_fills_two_cells_aligned_with_latin() {
+        let _gpu = crate::test_support::gpu_lock();
+        // Prefer a coherent CJK monospace so Latin and CJK share 1:2 metrics.
+        let mut font = FontCtx::with_candidates(
+            &[
+                "Sarasa Mono K",
+                "Sarasa Mono J",
+                "Noto Sans Mono CJK KR",
+                "Noto Sans Mono CJK JP",
+                "Noto Sans Mono CJK SC",
+                "GulimChe",
+                "MS Gothic",
+            ],
+            18,
+            19,
+        );
+        let ch = font.cell_h as u32;
+        let w = 400u32;
+        let h = ch * 2 + 6;
+        let latin = line("00000000"); // 8 half-width cells
+        let cjk = line("永永永永"); // 4 full-width = 8 cells
+
+        let Some(img) = render_lines(&mut font, &[latin, cjk], w, h) else {
+            eprintln!("no GPU adapter; skipping");
+            return;
+        };
+        let p_latin = img.column_ink(0, ch);
+        let p_cjk = img.column_ink(ch, ch * 2);
+        if p_cjk.iter().sum::<f32>() < 1.0 {
+            eprintln!("no CJK glyph available (Latin-only fonts); skipping");
+            return;
+        }
+
+        let edge = |prof: &[f32]| {
+            let thr = prof.iter().cloned().fold(0.0f32, f32::max) * 0.15;
+            Rendered::ink_right_edge(prof, thr) as f32
+        };
+        let right_latin = edge(&p_latin);
+        let right_cjk = edge(&p_cjk);
+        assert!(
+            (right_latin - right_cjk).abs() <= font.cell_w,
+            "8 Latin cells end at x={right_latin} but 4 CJK end at x={right_cjk} \
+             (cell_w={}) — CJK is not exactly 2 cells / not aligned to the grid",
+            font.cell_w
+        );
+    }
 }
