@@ -88,14 +88,21 @@ impl CellShaper {
                 let cluster_str = &text[cluster_start..cluster_end.min(text.len())];
                 let cells = cluster_str.width().max(1);
 
+                // Anchor the whole cluster at its cell origin. We deliberately
+                // ignore cosmic-text's absolute layout x (which accumulates the
+                // font's own, possibly proportional, advances) so the grid pitch
+                // is exactly `cell_w` regardless of the resolved fallback font —
+                // this is what keeps text columns aligned. Only the offset of a
+                // glyph *within* its cluster (combining marks) is preserved.
                 let cell_x = col as f32 * cell_w;
+                let base_x = g[i].physical((0.0, 0.0), 1.0).x as f32;
                 for glyph in &g[i..j] {
                     let physical = glyph.physical((0.0, 0.0), 1.0);
                     glyphs.push(PlacedGlyph {
                         col,
                         cell_span: cells,
                         cache_key: physical.cache_key,
-                        x_px: cell_x + physical.x as f32,
+                        x_px: cell_x + (physical.x as f32 - base_x),
                         y_px: baseline,
                         color,
                     });
@@ -168,5 +175,28 @@ mod tests {
         let run = CellShaper::shape_run(&mut ctx, "ab", &style(), 5);
         assert_eq!(run.cols, 2);
         assert_eq!(run.glyphs[0].col, 5);
+    }
+
+    /// Alignment guarantee: each single-glyph cluster sits exactly on its grid
+    /// column (`col * cell_w`), so the font's advances never shift columns.
+    /// Runs with whatever fallback fonts FontCtx loads (incl. proportional
+    /// Windows CJK fonts), which is the case the grid must survive.
+    #[test]
+    fn glyphs_land_exactly_on_grid() {
+        let mut ctx = FontCtx::new("", 18, 19);
+        let cell_w = ctx.cell_w;
+        for text in ["abcdef", "한글한글", "a한b글c", "2022年10月08日"] {
+            let run = CellShaper::shape_run(&mut ctx, text, &style(), 0);
+            for g in &run.glyphs {
+                let expected = g.col as f32 * cell_w;
+                assert!(
+                    (g.x_px - expected).abs() < 0.01,
+                    "{text:?}: glyph at col {} has x_px={} expected {}",
+                    g.col,
+                    g.x_px,
+                    expected
+                );
+            }
+        }
     }
 }
