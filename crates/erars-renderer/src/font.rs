@@ -26,29 +26,6 @@ pub struct FontCtx {
 /// Bundled Latin monospace fallback, always available regardless of OS.
 const BUNDLED_FONT: &[u8] = include_bytes!("../assets/NotoSansMono-Regular.ttf");
 
-/// Directories that may hold Windows CJK fallback fonts (MS Gothic, Malgun, …).
-/// On real Windows these are also covered by `load_system_fonts`; the extra
-/// entries let a Linux user with a mounted Windows partition reuse them.
-const WINDOWS_FONT_DIRS: &[&str] = &[
-    r"C:\Windows\Fonts",
-    "/win/Windows/Fonts",
-    "/mnt/c/Windows/Fonts",
-    "/c/Windows/Fonts",
-];
-
-/// Fallback font file names to pull from a Windows fonts directory. cosmic-text
-/// then chooses among them per glyph via its built-in script fallback. Matched
-/// case-insensitively. Covers Japanese (gothic/Yu Gothic/Meiryo), Korean
-/// (Malgun/Gulim) and Simplified Chinese (SimSun).
-const WINDOWS_FALLBACK_FONTS: &[&str] = &[
-    "msgothic.ttc",
-    "yugothr.ttc",
-    "meiryo.ttc",
-    "malgun.ttf",
-    "gulim.ttc",
-    "simsun.ttc",
-];
-
 impl FontCtx {
     pub fn new(default_family: &str, font_size: u32, line_height: u32) -> Self {
         Self::with_candidates(&[default_family], font_size, line_height)
@@ -64,7 +41,12 @@ impl FontCtx {
         let mut db = fontdb::Database::new();
         db.load_system_fonts();
         db.load_font_data(BUNDLED_FONT.to_vec());
-        load_windows_fallback_fonts(&mut db);
+        // Optional opt-in: an extra font directory (e.g. a mounted Windows
+        // Fonts folder). Not loaded unless the user sets it — no magic paths.
+        if let Some(dir) = std::env::var_os("ERARS_FONT_DIR") {
+            log::info!("Loading extra fonts from ERARS_FONT_DIR={dir:?}");
+            db.load_fonts_dir(dir);
+        }
 
         let default_family = resolve_default_family(&db, families);
         log::info!("Renderer default font family: {default_family:?}");
@@ -129,33 +111,6 @@ fn family_exists(db: &fontdb::Database, name: &str) -> bool {
             .iter()
             .any(|(fam, _)| fam.eq_ignore_ascii_case(name))
     })
-}
-
-/// Load known Windows CJK fallback fonts into `db` from any available Windows
-/// fonts directory. The directory can be overridden with `ERARS_FONT_DIR`
-/// (loaded in full). Missing directories/files are silently skipped.
-fn load_windows_fallback_fonts(db: &mut fontdb::Database) {
-    if let Some(dir) = std::env::var_os("ERARS_FONT_DIR") {
-        log::info!("Loading fonts from ERARS_FONT_DIR={:?}", dir);
-        db.load_fonts_dir(dir);
-    }
-
-    for dir in WINDOWS_FONT_DIRS {
-        let path = std::path::Path::new(dir);
-        let Ok(entries) = std::fs::read_dir(path) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name();
-            let lower = name.to_string_lossy().to_ascii_lowercase();
-            if WINDOWS_FALLBACK_FONTS.contains(&lower.as_str()) {
-                match db.load_font_file(entry.path()) {
-                    Ok(()) => log::info!("Loaded fallback font {}", entry.path().display()),
-                    Err(e) => log::warn!("Failed to load {}: {e}", entry.path().display()),
-                }
-            }
-        }
-    }
 }
 
 /// Measure the advance of a representative ASCII glyph ("0") at this size.
