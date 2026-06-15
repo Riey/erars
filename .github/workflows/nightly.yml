@@ -26,15 +26,15 @@ jobs:
           ${{ runner.os }}-cargo-target-release-lto
     - name: Build
       run: |
-        cargo build --profile=release-lto -p erars-stdio -p erars-egui --verbose
+        cargo build --profile=release-lto -p erars-stdio -p erars-renderer --verbose
     - uses: actions/upload-artifact@v3
       with:
         name: erars-stdio.exe
         path: target/release-lto/erars-stdio.exe
     - uses: actions/upload-artifact@v3
       with:
-        name: erars-egui.exe
-        path: target/release-lto/erars-egui.exe
+        name: erars-renderer.exe
+        path: target/release-lto/erars-renderer.exe
         
   release-linux:
     runs-on: ubuntu-latest
@@ -54,12 +54,12 @@ jobs:
           ${{ runner.os }}-cargo-target-release-lto
     - name: Build
       run: |
-        cargo build --profile=release-lto -p erars-stdio -p erars-egui --verbose
+        cargo build --profile=release-lto -p erars-stdio -p erars-renderer --verbose
     - uses: actions/upload-artifact@v3
       with:
         name: erars-stdio
         path: target/release-lto/erars-stdio
     - uses: actions/upload-artifact@v3
       with:
-        name: erars-egui
-        path: target/release-lto/erars-egui
+        name: erars-renderer
+        path: target/release-lto/erars-renderer

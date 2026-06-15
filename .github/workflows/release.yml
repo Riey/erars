@@ -22,6 +22,6 @@ jobs:
           files: |
             erars-stdio.exe/erars-stdio.exe
             erars-stdio/erars-stdio
-            erars-egui.exe/erars-egui.exe
-            erars-egui/erars-egui
+            erars-renderer.exe/erars-renderer.exe
+            erars-renderer/erars-renderer
         
