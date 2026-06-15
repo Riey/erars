@@ -1,17 +1,26 @@
 use cosmic_text::{fontdb, Attrs, Buffer, Family, FontSystem, Metrics, Shaping};
 
-/// Owns the cosmic-text FontSystem plus the bundled fallback, and the
-/// fixed cell size derived from the default monospace font.
+/// Owns the cosmic-text FontSystem plus the bundled fallback, and the cell
+/// size derived from the default monospace font.
+///
+/// All public pixel fields ([`cell_w`](Self::cell_w), [`cell_h`](Self::cell_h),
+/// [`font_size`](Self::font_size)) are in *physical* pixels: logical sizes from
+/// the config multiplied by the display scale factor. This keeps glyphs crisp
+/// on HiDPI/Retina displays, where the surface is also sized in physical px.
 pub struct FontCtx {
     pub font_system: FontSystem,
-    /// Width of one grid cell in pixels (advance of an ASCII glyph).
+    /// Width of one grid cell in physical pixels (advance of an ASCII glyph).
     pub cell_w: f32,
-    /// Height of one grid cell in pixels (config line_height).
+    /// Height of one grid cell in physical pixels (config line_height).
     pub cell_h: f32,
-    /// Font pixel size.
+    /// Font size in physical pixels.
     pub font_size: f32,
     /// Default family name string.
     pub default_family: String,
+
+    logical_font_size: f32,
+    logical_line_height: f32,
+    scale: f32,
 }
 
 /// Bundled Latin monospace fallback, always available regardless of OS.
@@ -24,24 +33,47 @@ impl FontCtx {
         db.load_font_data(BUNDLED_FONT.to_vec());
 
         let locale = sys_locale::get_locale().unwrap_or_else(|| String::from("en-US"));
-        let mut font_system = FontSystem::new_with_locale_and_db(locale, db);
+        let font_system = FontSystem::new_with_locale_and_db(locale, db);
 
-        let font_size = font_size as f32;
-        let cell_w = measure_cell_w(&mut font_system, default_family, font_size);
-
-        Self {
+        let mut ctx = Self {
             font_system,
-            cell_w,
-            cell_h: line_height as f32,
-            font_size,
+            cell_w: 0.0,
+            cell_h: 0.0,
+            font_size: 0.0,
             default_family: default_family.to_string(),
+            logical_font_size: font_size as f32,
+            logical_line_height: line_height as f32,
+            scale: 1.0,
+        };
+        ctx.recompute();
+        ctx
+    }
+
+    /// Update the display scale factor and recompute physical metrics.
+    /// Returns true if the scale actually changed.
+    pub fn set_scale(&mut self, scale: f32) -> bool {
+        let scale = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+        if (scale - self.scale).abs() < f32::EPSILON {
+            return false;
         }
+        self.scale = scale;
+        self.recompute();
+        true
+    }
+
+    fn recompute(&mut self) {
+        self.font_size = self.logical_font_size * self.scale;
+        self.cell_h = self.logical_line_height * self.scale;
+        let family = self.default_family.clone();
+        self.cell_w = measure_cell_w(&mut self.font_system, &family, self.font_size);
     }
 }
 
 /// Measure the advance of a representative ASCII glyph ("0") at this size.
 fn measure_cell_w(font_system: &mut FontSystem, family: &str, font_size: f32) -> f32 {
     let mut buffer = Buffer::new(font_system, Metrics::new(font_size, font_size));
+    // A buffer needs a layout area or `layout_runs` yields nothing.
+    buffer.set_size(font_system, Some(font_size * 8.0), Some(font_size * 2.0));
     let attrs = if family.is_empty() {
         Attrs::new().family(Family::Monospace)
     } else {
@@ -73,4 +105,5 @@ mod tests {
         assert_eq!(ctx.cell_h, 19.0);
         assert_eq!(ctx.font_size, 18.0);
     }
+
 }

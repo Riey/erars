@@ -53,7 +53,12 @@ impl CellShaper {
         let font_size = ctx.font_size;
         let cell_w = ctx.cell_w;
         let metrics = Metrics::new(font_size, ctx.cell_h);
-        let family = style.font_family.as_str();
+        // Empty style family means "use the configured default font".
+        let family = if style.font_family.is_empty() {
+            ctx.default_family.as_str()
+        } else {
+            style.font_family.as_str()
+        };
         let attrs = if family.is_empty() {
             Attrs::new().family(Family::Monospace)
         } else {
