@@ -86,7 +86,12 @@ impl CellShaper {
                 }
                 let cluster_end = g[i..j].iter().map(|x| x.end).max().unwrap_or(cluster_start);
                 let cluster_str = &text[cluster_start..cluster_end.min(text.len())];
-                let cells = cluster_str.width().max(1);
+                // ERA games are CJK: East-Asian "Ambiguous" characters (…, ※,
+                // Greek/Cyrillic, box-drawing, …) are rendered full-width by CJK
+                // monospace fonts, so use the CJK width table (ambiguous = 2).
+                // Using the narrow table would allot 1 cell and the wide glyph
+                // would overflow into its neighbour (e.g. merged ellipsis dots).
+                let cells = cluster_str.width_cjk().max(1);
 
                 // Anchor the whole cluster at its cell origin. We deliberately
                 // ignore cosmic-text's absolute layout x (which accumulates the
@@ -159,6 +164,16 @@ mod tests {
         let run = CellShaper::shape_run(&mut ctx, "한글", &style(), 0);
         assert_eq!(run.cols, 4);
         assert_eq!(cols_of("한글"), vec![0, 2]);
+    }
+
+    #[test]
+    fn ambiguous_width_chars_are_two_cells() {
+        // U+2026 HORIZONTAL ELLIPSIS is East-Asian "Ambiguous": CJK fonts draw
+        // it full-width, so it must occupy two cells (else the dots overlap).
+        let mut ctx = FontCtx::new("", 18, 19);
+        assert_eq!(CellShaper::shape_run(&mut ctx, "…", &style(), 0).cols, 2);
+        assert_eq!(CellShaper::shape_run(&mut ctx, "……", &style(), 0).cols, 4);
+        assert_eq!(cols_of("……"), vec![0, 2]);
     }
 
     #[test]

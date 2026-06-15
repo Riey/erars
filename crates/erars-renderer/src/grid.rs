@@ -97,7 +97,7 @@ impl Grid {
                     }
                     ConsoleLinePart::Line(s, style) => {
                         let char_cells =
-                            unicode_width::UnicodeWidthStr::width(s.as_str()).max(1);
+                            unicode_width::UnicodeWidthStr::width_cjk(s.as_str()).max(1);
                         let count = Self::fill_count(grid_cols, char_cells);
                         let filled = s.repeat(count);
                         let run = CellShaper::shape_run(ctx, &filled, style, 0);
