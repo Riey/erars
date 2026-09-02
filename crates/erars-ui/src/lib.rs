@@ -28,9 +28,19 @@ impl Default for Color {
     }
 }
 
+/// `0xRRGGBB`, Emuera's `Color.ToArgb() & 0xFFFFFF` — the packing of every
+/// colour integer the VM reads or writes (GETCOLOR, GETDEFCOLOR, GETCONFIG,
+/// SETCOLOR's single-int form).
 impl From<Color> for u32 {
     fn from(Color([r, g, b]): Color) -> Self {
-        u32::from_le_bytes([r, g, b, 0])
+        (u32::from(r) << 16) | (u32::from(g) << 8) | u32::from(b)
+    }
+}
+
+/// Inverse of `u32::from(Color)`; bits above 23 are ignored.
+impl From<u32> for Color {
+    fn from(c: u32) -> Self {
+        Color([(c >> 16) as u8, (c >> 8) as u8, c as u8])
     }
 }
 

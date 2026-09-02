@@ -196,8 +196,7 @@ pub(super) fn run_instruction(
 
         let prev_color = if flags.contains(PrintFlags::DEFAULT_COLOR) {
             let c = tx.color();
-            // TODO: respect config
-            tx.set_color(0xFF, 0xFF, 0xFF);
+            tx.reset_color();
             Some(c)
         } else {
             None
@@ -214,7 +213,7 @@ pub(super) fn run_instruction(
         }
 
         if let Some(prev_color) = prev_color {
-            let [r, g, b, _] = prev_color.to_le_bytes();
+            let erars_ui::Color([r, g, b]) = erars_ui::Color::from(prev_color);
             tx.set_color(r, g, b);
         }
 
@@ -1395,11 +1394,11 @@ fn run_builtin_method(
 
         BuiltinMethod::GetDefColor => {
             check_arg_count!(0);
-            ctx.push(0xFFFFFFu32);
+            ctx.push(u32::from(tx.default_color()));
         }
         BuiltinMethod::GetDefBgColor => {
             check_arg_count!(0);
-            ctx.push(0i64);
+            ctx.push(u32::from(erars_ui::Color(ctx.config.bg_color)));
         }
         BuiltinMethod::GetFont => {
             check_arg_count!(0);
@@ -2095,7 +2094,7 @@ fn run_builtin_command(
                     (c as u8, g as u8, b as u8)
                 }
                 None => {
-                    let [r, g, b, _] = (c as u32).to_le_bytes();
+                    let erars_ui::Color([r, g, b]) = erars_ui::Color::from(c as u32);
                     (r, g, b)
                 }
             };
@@ -2133,7 +2132,7 @@ fn run_builtin_command(
                     (c as u8, g as u8, b as u8)
                 }
                 None => {
-                    let [r, g, b, _] = (c as u32).to_le_bytes();
+                    let erars_ui::Color([r, g, b]) = erars_ui::Color::from(c as u32);
                     (r, g, b)
                 }
             };
@@ -2141,10 +2140,11 @@ fn run_builtin_command(
             tx.set_bg_color(r, g, b);
         }
         BuiltinCommand::ResetColor => {
-            tx.set_color(0xFF, 0xFF, 0xFF);
+            tx.reset_color();
         }
         BuiltinCommand::ResetBgColor => {
-            tx.set_bg_color(0, 0, 0);
+            let [r, g, b] = ctx.config.bg_color;
+            tx.set_bg_color(r, g, b);
         }
         BuiltinCommand::Twait => {
             let time = get_arg!(@u32: args, ctx);
