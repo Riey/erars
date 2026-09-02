@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::sync::Arc;
 
 use erars_compiler::{compile, EraConfig, ParserContext};
@@ -7,17 +8,16 @@ use flexi_logger::*;
 
 mod test_util;
 
-/// Temporary copy of the console-config mapping; T4 replaces this file and
-/// uses `erars_vm::console_config`.
-fn console_config(config: &EraConfig) -> erars_ui::ConsoleConfig {
-    erars_ui::ConsoleConfig {
-        printc_width: config.printc_width,
-        max_log: config.max_log,
-        encoding: config.lang.encoding(),
-        fore_color: erars_ui::Color(config.fore_color),
-        bg_color: erars_ui::Color(config.bg_color),
-        focus_color: erars_ui::Color(config.focus_color),
-    }
+/// `<fixture dir>/emuera.config` when present, otherwise the repo-root
+/// `emuera.config` (KOREAN). `tests/run_tests/jp/emuera.config` switches
+/// that directory to JAPANESE.
+fn fixture_config(erb_file: &Path) -> EraConfig {
+    let local = erb_file.parent().unwrap().join("emuera.config");
+    let text = match std::fs::read_to_string(&local) {
+        Ok(text) => text,
+        Err(_) => include_str!("../emuera.config").to_owned(),
+    };
+    EraConfig::from_text(&text).unwrap()
 }
 
 #[test]
@@ -42,13 +42,13 @@ fn run_test() {
     let header = test_util::get_ctx("").header.try_as_arc().unwrap();
 
     for erb_file in erb_files {
+        let erb_file = erb_file.unwrap();
         let mut ctx = VmContext::new(
             header.clone(),
-            Arc::new(EraConfig::from_text(include_str!("../emuera.config")).unwrap()),
+            Arc::new(fixture_config(&erb_file)),
             Box::new(NullSystemFunctions),
             "sav".into(),
         );
-        let erb_file = erb_file.unwrap();
         let out_file = erb_file.parent().unwrap().join(format!(
             "{}.out",
             erb_file.file_stem().unwrap().to_str().unwrap()

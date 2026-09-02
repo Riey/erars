@@ -18,21 +18,8 @@ use erars_compiler::{
 };
 use erars_lint::{check_function, ErarsFiles};
 use erars_ui::VirtualConsole;
-use erars_vm::{FunctionDic, SystemFunctions, TerminalVm, VmContext};
+use erars_vm::{console_config, FunctionDic, SystemFunctions, TerminalVm, VmContext};
 use hashbrown::HashMap;
-
-/// Console construction parameters from `emuera.config`. Temporary copy —
-/// the next task provides `erars_vm::console_config` and deletes this one.
-fn console_config(config: &EraConfig) -> erars_ui::ConsoleConfig {
-    erars_ui::ConsoleConfig {
-        printc_width: config.printc_width,
-        max_log: config.max_log,
-        encoding: config.lang.encoding(),
-        fore_color: erars_ui::Color(config.fore_color),
-        bg_color: erars_ui::Color(config.bg_color),
-        focus_color: erars_ui::Color(config.focus_color),
-    }
-}
 
 pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
     let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);

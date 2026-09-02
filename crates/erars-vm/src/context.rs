@@ -58,19 +58,10 @@ impl VmContext {
         ret
     }
 
+    /// The game language's legacy encoding (`Language::encoding`) — the
+    /// same encoding the console's `WidthTable` was built from.
     pub fn encoding(&self) -> &'static encoding_rs::Encoding {
-        use erars_compiler::Language;
-
-        match self.config.lang {
-            // 949
-            Language::Korean => encoding_rs::EUC_KR,
-            // 932
-            Language::Japanese => encoding_rs::SHIFT_JIS,
-            // 936
-            Language::ChineseHans => encoding_rs::GBK,
-            // 950
-            Language::ChineseHant => encoding_rs::BIG5,
-        }
+        self.config.lang.encoding()
     }
 
     fn init_variable(&mut self) -> Result<()> {

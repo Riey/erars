@@ -5,7 +5,7 @@ mod terminal_vm;
 mod variable;
 
 use erars_ast::{BeginType, Value};
-use erars_ui::{InputRequest, InputRequestType, VirtualConsole};
+use erars_ui::{Color, ConsoleConfig, InputRequest, InputRequestType, VirtualConsole};
 use hashbrown::HashMap;
 use itertools::Either;
 use pad::PadStr;
@@ -24,6 +24,21 @@ pub use crate::{
 };
 
 pub use erars_compiler::{EraConfig, HeaderInfo, Instruction, Language};
+
+/// Console construction parameters derived from `emuera.config`
+/// (spec Component 2): the PRINTC field width, the backlog size, the
+/// game encoding that decides half/full cells, and the three colours.
+/// Used by `erars-loader`, `tests/run_tests.rs` and the renderer tests.
+pub fn console_config(cfg: &EraConfig) -> ConsoleConfig {
+    ConsoleConfig {
+        printc_width: cfg.printc_width,
+        max_log: cfg.max_log,
+        encoding: cfg.lang.encoding(),
+        fore_color: Color(cfg.fore_color),
+        bg_color: Color(cfg.bg_color),
+        focus_color: Color(cfg.focus_color),
+    }
+}
 
 #[derive(Display, Debug, Clone)]
 pub enum Workflow {
@@ -72,5 +87,36 @@ impl SystemFunctions for NullSystemFunctions {
 
     fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod console_config_tests {
+    use super::*;
+
+    #[test]
+    fn console_config_uses_language_encoding_and_colours() {
+        let cfg = EraConfig {
+            lang: Language::Japanese,
+            printc_width: 25,
+            max_log: 7,
+            fore_color: [1, 2, 3],
+            bg_color: [4, 5, 6],
+            focus_color: [7, 8, 9],
+            ..Default::default()
+        };
+        let c = console_config(&cfg);
+        assert_eq!(c.encoding, encoding_rs::SHIFT_JIS);
+        assert_eq!(c.printc_width, 25);
+        assert_eq!(c.max_log, 7);
+        assert_eq!(c.fore_color, Color([1, 2, 3]));
+        assert_eq!(c.bg_color, Color([4, 5, 6]));
+        assert_eq!(c.focus_color, Color([7, 8, 9]));
+
+        let kr = EraConfig {
+            lang: Language::Korean,
+            ..Default::default()
+        };
+        assert_eq!(console_config(&kr).encoding, encoding_rs::EUC_KR);
     }
 }
