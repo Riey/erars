@@ -52,6 +52,23 @@ impl Rendered {
     }
 }
 
+/// The default adapter/device without a surface. `None` when this machine has
+/// no wgpu adapter (tests skip or fail through `test_support::gpu_device`).
+pub fn request_device() -> Option<(wgpu::Device, wgpu::Queue)> {
+    let instance = wgpu::Instance::default();
+    let adapter =
+        pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
+    pollster::block_on(adapter.request_device(
+        &wgpu::DeviceDescriptor {
+            label: Some("erars-headless"),
+            required_features: wgpu::Features::empty(),
+            required_limits: wgpu::Limits::downlevel_defaults(),
+        },
+        None,
+    ))
+    .ok()
+}
+
 /// Render `lines` to an RGBA buffer of `width`x`height` on a headless GPU.
 /// Returns `None` if no GPU adapter is available (so tests can skip).
 pub fn render_lines(
