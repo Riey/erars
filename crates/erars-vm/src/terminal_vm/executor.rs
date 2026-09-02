@@ -9,8 +9,6 @@ use markup5ever_rcdom as rcdom;
 
 use crate::{context::VariableRef, variable::KnownVariableNames as Var};
 
-use super::cells;
-
 use super::*;
 
 const BASE_TIME: time::OffsetDateTime = time::PrimitiveDateTime::new(

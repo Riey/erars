@@ -129,7 +129,10 @@ pub struct ShapedGlyph {
 /// A grapheme cluster boxed into `cells × half_w` px.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cluster {
-    /// 0, 1 or 2 (a 0-cell cluster only occurs at the start of a string).
+    /// The sum of `char_cells` over the grapheme, saturating at 255 — usually
+    /// 1 or 2, but flag pairs and ZWJ emoji are wider. A 0-cell cluster only
+    /// occurs at the start of a string (elsewhere it is merged into its
+    /// predecessor).
     pub cells: u8,
     /// The cluster's source characters.
     pub text: SmolStr,
@@ -252,7 +255,10 @@ fn expand_tabs<'a>(text: &'a str, widths: &WidthTable) -> Cow<'a, str> {
     if !text.contains('\t') {
         return Cow::Borrowed(text);
     }
-    let mut out = String::with_capacity(text.len() + TAB_CELLS);
+    // Every `\t` becomes at most `TAB_CELLS` spaces (one of which replaces the
+    // tab itself), so this never has to grow.
+    let tabs = text.chars().filter(|&c| c == '\t').count();
+    let mut out = String::with_capacity(text.len() + tabs * (TAB_CELLS - 1));
     let mut col = 0usize;
     for c in text.chars() {
         if c == '\t' {
@@ -375,6 +381,9 @@ impl Shaper {
             let upem = face.units_per_em() as u32;
             let s = &expanded[span.start..span.end];
 
+            // No script and no `guess_segment_properties`: every run is drawn
+            // LTR on the cell grid with the default (common) script, so
+            // shaping never reorders or joins across the grid (spec Component 4).
             buf.push_str(s);
             buf.set_direction(Direction::LeftToRight);
             buf.set_cluster_level(BufferClusterLevel::MonotoneGraphemes);
@@ -396,6 +405,10 @@ impl Shaper {
                     } else {
                         s.len()
                     };
+                    debug_assert!(
+                        s.is_char_boundary(cstart) && s.is_char_boundary(cend),
+                        "cluster {cstart}..{cend} is not on a char boundary of {s:?}"
+                    );
                     let ctext = &s[cstart..cend];
                     let run: Vec<RawGlyph> = (i..j)
                         .map(|k| RawGlyph {
@@ -409,7 +422,10 @@ impl Shaper {
 
                     match work.last_mut() {
                         // 0-cell cluster (combining-only / ignorable): draw it
-                        // inside the previous cluster's box.
+                        // inside the previous cluster's box. `place` starts a
+                        // fresh pen, so the merged glyphs' offsets are relative
+                        // to that box, not to the base glyph — this is box
+                        // packing, not OpenType mark placement.
                         Some((ptext, pcells, pglyphs)) if cells == 0 => {
                             let w = *pcells as u32 * m.half_w;
                             place(pglyphs, span.font, span.flags, upem, &m, &run, w);

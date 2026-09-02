@@ -196,7 +196,9 @@ fn rule_string(shaper: &mut Shaper, style: &TextStyle, s: &str, g: &Geometry) ->
     if unit == 0 {
         return None;
     }
-    let reps = (g.drawable_w + unit - 1) / unit; // ceil; 0 when drawable_w == 0
+    // ceil(drawable_w / unit) without the `drawable_w + unit` overflow;
+    // 0 when drawable_w == 0.
+    let reps = g.drawable_w.div_ceil(unit);
     let mut pieces: Vec<(&str, u32)> = Vec::with_capacity(unit_clusters.len() * reps as usize);
     for _ in 0..reps {
         for c in unit_clusters.iter() {

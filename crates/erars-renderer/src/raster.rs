@@ -114,7 +114,7 @@ impl GlyphImage {
 
     /// White + coverage-in-alpha RGBA from an 8-bit mask of `width × height`.
     fn from_mask(width: u32, height: u32, left: i32, top: i32, mask: &[u8]) -> Self {
-        let mut rgba = vec![0u8; (width * height * 4) as usize];
+        let mut rgba = vec![0u8; width as usize * height as usize * 4];
         for (px, a) in rgba.chunks_exact_mut(4).zip(mask) {
             px[0] = 255;
             px[1] = 255;
@@ -161,9 +161,9 @@ fn new_allocator() -> AtlasAllocator {
 
 /// Find room for a `w × h` image plus a 1 px gutter on an existing page, or on
 /// a page appended to `allocs`. Returns `(page, x, y)`; `None` when the image
-/// cannot fit on any page (`w + 1 > PAGE_SIZE` or `h + 1 > PAGE_SIZE`).
+/// plus its gutter cannot fit on any page (`w >= PAGE_SIZE` or `h >= PAGE_SIZE`).
 pub fn place(allocs: &mut Vec<AtlasAllocator>, w: u32, h: u32) -> Option<(usize, u32, u32)> {
-    if w + 1 > PAGE_SIZE || h + 1 > PAGE_SIZE {
+    if w >= PAGE_SIZE || h >= PAGE_SIZE {
         return None;
     }
     let want = size2(w as i32 + 1, h as i32 + 1);
@@ -263,6 +263,9 @@ pub fn outline_image(
     }
     let n = (p.width * p.height) as usize;
     let out = match image.content {
+        // `Mask` is sliced to `n` below, so a longer buffer is harmless;
+        // `Color` moves `image.data` in whole, so its length must match exactly
+        // or the image would not be `width × height`.
         Content::Mask => {
             if image.data.len() < n {
                 return None;
@@ -384,6 +387,11 @@ impl GlyphRaster {
         &'a self,
         buckets: &'a [Vec<Instance>],
     ) -> Vec<(&'a wgpu::TextureView, &'a [Instance])> {
+        debug_assert_eq!(
+            buckets.len(),
+            self.pages.len(),
+            "one instance bucket per atlas page"
+        );
         self.pages
             .iter()
             .zip(buckets)

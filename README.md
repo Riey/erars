@@ -29,7 +29,8 @@ metrics); the design is in
 `docs/superpowers/specs/2026-09-02-emuera-parity-renderer-design.md`.
 
 - Fonts, in order: `フォント名` from `emuera.config` → `<game>/font/*.ttf|ttc|otf|otc`
-  → `ERARS_FONT_DIR` (scanned recursively) → the language's fixed-pitch CJK
+  → `ERARS_FONT_DIR` (scanned recursively, so point it at a directory that
+  holds only fonts — not a source tree or `$HOME`) → the language's fixed-pitch CJK
   families (MS Gothic / D2Coding / GulimChe / Sarasa Mono / Noto Sans Mono CJK)
   → bundled Noto Sans Mono. Any installed font may fill a glyph; cell widths
   never depend on the font.

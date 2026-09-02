@@ -1059,7 +1059,9 @@ fn tui_png_korean() {
     let band_top = view_h - rows as u32 * m.line_h;
     let ink = |y0: u32, y1: u32| {
         img.band(y0, y1)
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
             .count()
     };

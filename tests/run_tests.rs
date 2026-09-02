@@ -15,7 +15,12 @@ fn fixture_config(erb_file: &Path) -> EraConfig {
     let local = erb_file.parent().unwrap().join("emuera.config");
     let text = match std::fs::read_to_string(&local) {
         Ok(text) => text,
-        Err(_) => include_str!("../emuera.config").to_owned(),
+        // Only "no per-directory config" falls back; a config that exists but
+        // cannot be read is a broken fixture, not a KOREAN one.
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            include_str!("../emuera.config").to_owned()
+        }
+        Err(e) => panic!("reading {}: {e}", local.display()),
     };
     EraConfig::from_text(&text).unwrap()
 }

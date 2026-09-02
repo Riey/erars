@@ -115,8 +115,9 @@ pub fn hit_button(
 ) -> Option<usize> {
     let active = active_gen?;
     let (row, dy) = row_at(layout.rows.len(), view, g.m.line_h, cursor.1)?;
+    // `row_at` yields `dy` in `[0, line_h)`, so only the upper bound is a test.
     let band = g.m.font_px.min(g.m.line_h.saturating_sub(1)) as i32;
-    if dy < 0 || dy > band {
+    if dy > band {
         return None;
     }
     let px = i32::try_from(cursor.0).ok()?;

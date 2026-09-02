@@ -2119,7 +2119,7 @@ mod config_tests {
     }
 
     #[test]
-    fn invalid_colour_warns_and_keeps_default() {
+    fn invalid_colour_keeps_default() {
         let c = EraConfig::from_text("文字色:300,0,0\n背景色:1,2\n選択中文字色:red\n").unwrap();
         assert_eq!(c.fore_color, [192, 192, 192]);
         assert_eq!(c.bg_color, [0, 0, 0]);

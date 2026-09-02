@@ -129,7 +129,13 @@ impl RegionSource for GpuRegions<'_> {
         if let Some(hit) = self.raster.lookup(&key) {
             return hit;
         }
-        let font = self.shaper.chain().font(g.font);
+        // Key the atlas on the face that is really rasterized: `font()`
+        // substitutes the primary for a face that fails to load, and caching
+        // that raster under the requested id would pin a wrong glyph there for
+        // good. A substituted face costs one `font_with_id` per glyph per
+        // frame; the raster itself is still cached under the primary.
+        let (font, face) = self.shaper.chain().font_with_id(g.font);
+        let key = RasterKey::new(face, g.glyph, g.size_px, g.flags);
         self.raster.get(self.device, self.queue, &font, key)
     }
 }

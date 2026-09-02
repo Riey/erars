@@ -19,7 +19,6 @@ anyhow.workspace = true
 encoding_rs.workspace = true
 
 bitflags = "2.3.1"
-pad = "0.1"
 enum-map = { version = "2.1.0", features = ["serde"] }
 hashbrown = { version = "0.15", features = ["serde"] }
 memchr = "2.4.1"

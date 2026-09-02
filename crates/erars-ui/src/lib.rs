@@ -423,6 +423,10 @@ impl VirtualConsole {
     /// PRINT: every `\n` ends the current logical line, exactly like Emuera's
     /// `EmueraConsole.Print`, so LINECOUNT / CLEARLINE / ALIGNMENT see it.
     /// Empty segments push nothing (Emuera returns early on an empty string).
+    ///
+    /// The `\n`-free fast path and the split loop must push a segment the same
+    /// way (`push_text` with the same generation and style): a one-segment
+    /// string has to land identically whichever branch handled it.
     pub fn print(&mut self, s: String) {
         if self.skipdisp {
             return;
@@ -677,10 +681,11 @@ fn is_left_alignment(align: &Alignment) -> bool {
 }
 
 /// PRINTBUTTON / PRINTBUTTONC / PRINTBUTTONLC drop every `\n`
-/// (Emuera Process.ScriptProc.cs:118/135).
+/// (Emuera Process.ScriptProc.cs:118/135) — and the `\r` of a CRLF label with
+/// it, which would otherwise stay in the button text as a 0-cell control char.
 fn strip_newlines(text: String) -> String {
-    if text.contains('\n') {
-        text.replace('\n', "")
+    if text.contains(['\n', '\r']) {
+        text.replace(['\n', '\r'], "")
     } else {
         text
     }
@@ -1095,6 +1100,18 @@ mod console_tests {
                 ConsoleLinePart::Text("[".into(), style()),
                 ConsoleLinePart::Text(format!("{}1] x", spaces(21)), style()),
             ]
+        );
+        assert_eq!(tx.last_line.button_start, None);
+
+        // ... and the reverse: a '[' inside the PRINTC item is not left pending
+        // for later text to close (the doc promise at `push_forced_text`).
+        let mut tx = jp();
+        tx.printrc("[1");
+        assert_eq!(tx.last_line.button_start, None);
+        tx.print("] x".into());
+        assert_eq!(
+            tx.last_line.parts,
+            vec![ConsoleLinePart::Text(format!("{}[1] x", spaces(23)), style())],
         );
         assert_eq!(tx.last_line.button_start, None);
 

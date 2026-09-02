@@ -20,7 +20,10 @@ time = "0.3.15"
 bitflags = "2.3.1"
 crossbeam-channel = "0.5.6"
 serde_iter = "0.1.1"
-unicode-width = "0.1"
+# Pinned: the cell-width rule (spec Component 1) is defined against this
+# table's East-Asian Width data. A newer table would silently move characters
+# between 1 and 2 cells and break Emuera parity, so bump it deliberately.
+unicode-width = "=0.1.11"
 
 [dev-dependencies]
 k9 = "0.11.5"

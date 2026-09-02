@@ -948,7 +948,6 @@ dependencies = [
  "num-traits",
  "once_cell",
  "option_set",
- "pad",
  "paste",
  "regex-automata 0.2.0",
  "serde",
@@ -2423,15 +2422,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4586edfe4c648c71797a74c84bacb32b52b212eff5dfe2bb9f2c599844023e7"
 dependencies = [
  "ttf-parser 0.20.0",
-]
-
-[[package]]
-name = "pad"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2ad9b889f1b12e0b9ee24db044b5129150d5eada288edc800f789928dc8c0e3"
-dependencies = [
- "unicode-width",
 ]
 
 [[package]]

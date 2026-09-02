@@ -1,21 +1,34 @@
-use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable, Debug, PartialEq)]
-pub struct Instance {
-    pub rect: [f32; 4],
-    pub uv: [f32; 4],
-    pub color: [f32; 4],
-    pub mode: u32,
-    pub _pad: [u32; 3],
-}
+pub use shader_types::{Globals, Instance};
 
-#[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
-pub struct Globals {
-    pub screen: [f32; 2],
-    pub _pad: [f32; 2],
+/// The two `#[repr(C)]` types the shader reads. They live in their own module
+/// because bytemuck's `Pod` / `Zeroable` derives expand to a padding-check
+/// struct and a `check()` function that nothing in Rust ever reads or calls;
+/// a module-level allow is the narrowest place that covers generated items
+/// (an `#[allow]` on the struct does not reach them).
+#[allow(dead_code)]
+mod shader_types {
+    use bytemuck::{Pod, Zeroable};
+
+    /// One quad: only the vertex shader reads it, through the instance buffer.
+    #[repr(C)]
+    #[derive(Clone, Copy, Pod, Zeroable, Debug, PartialEq)]
+    pub struct Instance {
+        pub rect: [f32; 4],
+        pub uv: [f32; 4],
+        pub color: [f32; 4],
+        pub mode: u32,
+        pub _pad: [u32; 3],
+    }
+
+    /// The screen-size uniform.
+    #[repr(C)]
+    #[derive(Clone, Copy, Pod, Zeroable)]
+    pub struct Globals {
+        pub screen: [f32; 2],
+        pub _pad: [f32; 2],
+    }
 }
 
 /// Create the instanced-quad pipeline and its bind-group layout for a given

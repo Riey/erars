@@ -184,10 +184,22 @@ fn load_bundled(db: &mut fontdb::Database) -> Vec<fontdb::ID> {
     db.load_font_source(fontdb::Source::Binary(data)).to_vec()
 }
 
+/// How deep [`load_dir`] descends. `<game>/font` and `ERARS_FONT_DIR` are font
+/// directories, not trees to crawl; a deeper one is almost certainly a mistake.
+const MAX_FONT_DIR_DEPTH: u32 = 8;
+
 /// Load every `ttf|ttc|otf|otc` under `dir` (recursive, sorted by path so the
 /// order is deterministic) and return the face ids in load order. Unlike
 /// `Database::load_fonts_dir` this reports which ids came from the directory.
+///
+/// Symlinked directories are skipped and the recursion stops at
+/// [`MAX_FONT_DIR_DEPTH`], so a symlink cycle under the scanned directory
+/// cannot overflow the stack.
 pub fn load_dir(db: &mut fontdb::Database, dir: &Path) -> Vec<fontdb::ID> {
+    load_dir_to_depth(db, dir, MAX_FONT_DIR_DEPTH)
+}
+
+fn load_dir_to_depth(db: &mut fontdb::Database, dir: &Path, depth: u32) -> Vec<fontdb::ID> {
     let mut ids = Vec::new();
     let Ok(read_dir) = std::fs::read_dir(dir) else {
         return ids;
@@ -195,8 +207,15 @@ pub fn load_dir(db: &mut fontdb::Database, dir: &Path) -> Vec<fontdb::ID> {
     let mut entries: Vec<PathBuf> = read_dir.flatten().map(|e| e.path()).collect();
     entries.sort();
     for path in entries {
-        if path.is_dir() {
-            ids.extend(load_dir(db, &path));
+        // `symlink_metadata`, not `is_dir()`: a symlinked directory must not be
+        // descended into (it may point back at an ancestor).
+        let is_real_dir = std::fs::symlink_metadata(&path).is_ok_and(|m| m.is_dir());
+        if is_real_dir {
+            if depth == 0 {
+                log::warn!("Font directory {} is nested too deep; skipped", path.display());
+                continue;
+            }
+            ids.extend(load_dir_to_depth(db, &path, depth - 1));
             continue;
         }
         let ext = path
@@ -339,7 +358,7 @@ impl FontChain {
                 .find(|id| font_system.get_font(*id).is_some());
             chain.extend(ids);
         }
-        let primary = primary.expect("bundled font always loads");
+        let primary = primary.expect("bundled NotoSansMono-Regular.ttf always loads");
         if let Some(info) = font_system.db().face(primary) {
             log::info!(
                 "Primary font: {:?} (face {})",
@@ -396,15 +415,24 @@ impl FontChain {
     /// Owned `Arc` so callers can keep borrowing the chain mutably. A face
     /// that fails to load is drawn with the primary font (warned once per face).
     pub fn font(&mut self, id: fontdb::ID) -> Arc<Font> {
+        self.font_with_id(id).0
+    }
+
+    /// [`FontChain::font`] plus the id of the face it actually returned, which
+    /// is `id` unless the substitution above kicked in. Callers that cache per
+    /// face (the glyph atlas) must key on this id, not on the requested one.
+    pub fn font_with_id(&mut self, id: fontdb::ID) -> (Arc<Font>, fontdb::ID) {
         if let Some(font) = self.font_system.get_font(id) {
-            return font;
+            return (font, id);
         }
         if self.failed_faces.insert(id) {
             log::warn!("Font face {id} failed to load; drawing with the primary font");
         }
-        self.font_system
+        let font = self
+            .font_system
             .get_font(self.primary)
-            .expect("primary font verified at construction")
+            .expect("primary font verified at construction");
+        (font, self.primary)
     }
 
     /// The regular face for `c`: SETFONT family → chain → database-wide scan
@@ -528,11 +556,34 @@ mod chain_tests {
     }
 
     /// Fresh per-test scratch directory (tests run in parallel).
-    fn scratch(name: &str) -> PathBuf {
+    /// A fresh temp directory that is removed when the guard drops, so a
+    /// failing assertion does not leak it under /tmp. Derefs to its `Path`.
+    struct Scratch(PathBuf);
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    impl std::ops::Deref for Scratch {
+        type Target = Path;
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl AsRef<Path> for Scratch {
+        fn as_ref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    fn scratch(name: &str) -> Scratch {
         let dir = std::env::temp_dir().join(format!("erars-font-{}-{name}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        dir
+        Scratch(dir)
     }
 
     fn source_path(db: &fontdb::Database, id: fontdb::ID) -> PathBuf {
@@ -660,6 +711,11 @@ mod chain_tests {
         chain.resolve('A', &StyleKey::plain());
         chain.resolve('A', &StyleKey::plain());
         assert_eq!(chain.cache_len(), 1);
+        assert_eq!(
+            chain.resolve('A', &StyleKey::plain()),
+            chain.resolve('A', &StyleKey::plain()),
+            "a cached resolve returns the same (face, flags)"
+        );
         chain.resolve('A', &key("", true, false));
         chain.resolve('B', &StyleKey::plain());
         assert_eq!(chain.cache_len(), 3);
@@ -755,7 +811,17 @@ mod chain_tests {
             })
             .collect();
         assert_eq!(names, vec!["b.TTF", "sub/a.otf"]);
-        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A symlink cycle under the scanned directory must not recurse forever.
+    #[cfg(unix)]
+    #[test]
+    fn load_dir_does_not_follow_symlinked_directories() {
+        let dir = scratch("load-dir-cycle");
+        std::fs::write(dir.join("a.ttf"), BUNDLED_FONT).unwrap();
+        std::os::unix::fs::symlink(&*dir, dir.join("loop")).unwrap();
+        let mut db = fontdb::Database::new();
+        assert_eq!(load_dir(&mut db, &dir).len(), 1);
     }
 
     #[test]
@@ -782,7 +848,6 @@ mod chain_tests {
         let primary = chain.primary();
         assert_eq!(source_path(chain.db(), primary), game_dir.join("font").join("zz.ttf"));
         assert_eq!(chain.resolve('A', &StyleKey::plain()), (primary, RasterFlags::empty()));
-        std::fs::remove_dir_all(&game_dir).unwrap();
     }
 
     #[test]
@@ -793,7 +858,7 @@ mod chain_tests {
         let chain = FontChain::new(&FontConfig {
             family: "",
             game_dir: &game_dir,
-            extra_dir: Some(extra.clone()),
+            extra_dir: Some(extra.to_path_buf()),
             lang: Language::Japanese,
         });
         assert_eq!(source_path(chain.db(), chain.primary()), extra.join("extra.ttf"));
@@ -801,13 +866,11 @@ mod chain_tests {
         let chain = FontChain::new(&FontConfig {
             family: "noto sans mono",
             game_dir: &game_dir,
-            extra_dir: Some(extra.clone()),
+            extra_dir: Some(extra.to_path_buf()),
             lang: Language::Japanese,
         });
         let info = chain.db().face(chain.primary()).unwrap();
         assert_eq!(info.families[0].0, "Noto Sans Mono");
-        std::fs::remove_dir_all(&extra).unwrap();
-        std::fs::remove_dir_all(&game_dir).unwrap();
     }
 
     /// Needs an installed family with upright regular and bold faces (DejaVu
@@ -846,8 +909,7 @@ mod chain_tests {
                 "SKIP real_bold_face_is_preferred_over_synthesis: \
                  no installed family has upright regular + bold faces"
             );
-            std::fs::remove_dir_all(&game_dir).unwrap();
-            return;
+                return;
         };
         let (plain_id, plain_flags) = chain.resolve('A', &key(&name, false, false));
         let plain = chain.db().face(plain_id).unwrap();
@@ -868,7 +930,6 @@ mod chain_tests {
         assert!(is_bold(bi), "{name}: bold face for bold+italic");
         assert!(!bi_flags.contains(RasterFlags::BOLD_SYNTH));
         assert_eq!(bi_flags.contains(RasterFlags::ITALIC_SYNTH), !is_italic(bi));
-        std::fs::remove_dir_all(&game_dir).unwrap();
     }
 
     #[test]
@@ -934,6 +995,5 @@ mod chain_tests {
         } else {
             assert_eq!(id, ms_id);
         }
-        std::fs::remove_dir_all(&game_dir).unwrap();
     }
 }
