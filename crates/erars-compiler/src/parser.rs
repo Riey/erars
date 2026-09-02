@@ -207,6 +207,18 @@ pub enum EraConfigKey {
 
     #[strum(to_string = "ウィンドウ高さ")]
     WindowHeight,
+
+    /// Emuera `ForeColor` — default text colour, `r,g,b`.
+    #[strum(to_string = "文字色")]
+    ForeColor,
+
+    /// Emuera `BackColor` — console background, `r,g,b`.
+    #[strum(to_string = "背景色")]
+    BgColor,
+
+    /// Emuera `FocusColor` — hovered-button text colour, `r,g,b`.
+    #[strum(to_string = "選択中文字色")]
+    FocusColor,
 }
 
 #[derive(Clone, Debug, derivative::Derivative, Serialize, Deserialize)]
@@ -216,22 +228,68 @@ pub struct EraConfig {
     pub save_nos: usize,
     #[derivative(Default(value = "500"))]
     pub max_log: usize,
-    #[derivative(Default(value = "4"))]
+    /// `PRINTCを並べる数` — Emuera PrintCPerLine.
+    #[derivative(Default(value = "3"))]
     pub printc_count: usize,
-    #[derivative(Default(value = "30"))]
+    /// `PRINTCの文字数` — Emuera PrintCLength (PRINTLC pads to this + 1).
+    #[derivative(Default(value = "25"))]
     pub printc_width: usize,
 
-    #[derivative(Default(value = "String::from(\"D2Coding\")"))]
+    /// `フォント名`. Empty means "no configured family": the renderer's
+    /// per-language font chain applies, and `SETFONT` without an argument
+    /// resets to it.
     pub font_family: String,
     #[derivative(Default(value = "18"))]
     pub font_size: u32,
     #[derivative(Default(value = "19"))]
     pub line_height: u32,
 
-    #[derivative(Default(value = "800"))]
+    /// `ウィンドウ幅` — Emuera WindowX.
+    #[derivative(Default(value = "760"))]
     pub window_width: u32,
-    #[derivative(Default(value = "600"))]
+    /// `ウィンドウ高さ` — Emuera WindowY (includes the input strip).
+    #[derivative(Default(value = "480"))]
     pub window_height: u32,
+
+    /// `文字色` — Emuera ForeColor.
+    #[derivative(Default(value = "[192, 192, 192]"))]
+    pub fore_color: [u8; 3],
+    /// `背景色` — Emuera BackColor.
+    #[derivative(Default(value = "[0, 0, 0]"))]
+    pub bg_color: [u8; 3],
+    /// `選択中文字色` — Emuera FocusColor.
+    #[derivative(Default(value = "[255, 255, 0]"))]
+    pub focus_color: [u8; 3],
+}
+
+/// Parse an Emuera colour value `r,g,b`: split at `,`, at least three tokens,
+/// each trimmed and in 0..=255; extra tokens are ignored
+/// (Emuera `ConfigItem.tryStringsToColor`).
+fn parse_color(s: &str) -> Option<[u8; 3]> {
+    let mut tokens = s.split(',');
+    let mut out = [0u8; 3];
+    for slot in out.iter_mut() {
+        *slot = tokens.next()?.trim().parse::<u8>().ok()?;
+    }
+    Some(out)
+}
+
+/// `0xRRGGBB`, the form Emuera's `GETCONFIG` returns for colour items
+/// (`ConfigData.GetConfigValueInERB`: `((R * 256) + G) * 256 + B`).
+fn color_to_int(c: [u8; 3]) -> i64 {
+    ((c[0] as i64) << 16) | ((c[1] as i64) << 8) | (c[2] as i64)
+}
+
+/// The parsed colour, or — on an invalid value — a warning and `default`
+/// (Emuera aborts loading here; we keep the game runnable).
+fn parse_color_or_default(value: &str, key: EraConfigKey, default: [u8; 3]) -> [u8; 3] {
+    match parse_color(value) {
+        Some(c) => c,
+        None => {
+            log::warn!("Invalid colour {value:?} for {key} (expected r,g,b); using {default:?}");
+            default
+        }
+    }
 }
 
 impl EraConfig {
@@ -247,6 +305,9 @@ impl EraConfig {
             EraConfigKey::LineHeight => self.line_height.into(),
             EraConfigKey::WindowWidth => self.window_width.into(),
             EraConfigKey::WindowHeight => self.window_height.into(),
+            EraConfigKey::ForeColor => color_to_int(self.fore_color).into(),
+            EraConfigKey::BgColor => color_to_int(self.bg_color).into(),
+            EraConfigKey::FocusColor => color_to_int(self.focus_color).into(),
         }
     }
 
@@ -334,6 +395,16 @@ impl EraConfig {
                                         error!(lex.span(), format!("Invalid window_height {value}"))
                                     }
                                 };
+                            }
+                            EraConfigKey::ForeColor => {
+                                ret.fore_color = parse_color_or_default(value, key, ret.fore_color);
+                            }
+                            EraConfigKey::BgColor => {
+                                ret.bg_color = parse_color_or_default(value, key, ret.bg_color);
+                            }
+                            EraConfigKey::FocusColor => {
+                                ret.focus_color =
+                                    parse_color_or_default(value, key, ret.focus_color);
                             }
                         }
                     }
@@ -2006,5 +2077,98 @@ mod language_tests {
         let hant = EraConfig::from_text("内部で使用する東アジア言語:CHINESE_HANT\n").unwrap();
         assert_eq!(hant.lang, Language::ChineseHant);
         assert_eq!(hant.lang.encoding(), encoding_rs::BIG5);
+    }
+}
+
+#[cfg(test)]
+mod config_tests {
+    use super::{color_to_int, parse_color, EraConfig, EraConfigKey, Language};
+    use erars_ast::Value;
+
+    #[test]
+    fn defaults_match_emuera() {
+        // Emuera ConfigData.cs:47-64
+        let c = EraConfig::default();
+        assert_eq!(c.lang, Language::Japanese);
+        assert_eq!(c.max_log, 500);
+        assert_eq!(c.printc_count, 3);
+        assert_eq!(c.printc_width, 25);
+        assert_eq!(c.font_family, "");
+        assert_eq!(c.font_size, 18);
+        assert_eq!(c.line_height, 19);
+        assert_eq!(c.window_width, 760);
+        assert_eq!(c.window_height, 480);
+        assert_eq!(c.fore_color, [192, 192, 192]);
+        assert_eq!(c.bg_color, [0, 0, 0]);
+        assert_eq!(c.focus_color, [255, 255, 0]);
+    }
+
+    #[test]
+    fn from_text_parses_colour_keys() {
+        let text = "\u{feff}内部で使用する東アジア言語:KOREAN\r\n\
+                    文字色:255, 200,100\r\n\
+                    背景色:16,16,16\r\n\
+                    選択中文字色:0,255,255\r\n\
+                    PRINTCの文字数:30\r\n";
+        let c = EraConfig::from_text(text).unwrap();
+        assert_eq!(c.lang, Language::Korean);
+        assert_eq!(c.fore_color, [255, 200, 100]);
+        assert_eq!(c.bg_color, [16, 16, 16]);
+        assert_eq!(c.focus_color, [0, 255, 255]);
+        assert_eq!(c.printc_width, 30);
+    }
+
+    #[test]
+    fn invalid_colour_warns_and_keeps_default() {
+        let c = EraConfig::from_text("文字色:300,0,0\n背景色:1,2\n選択中文字色:red\n").unwrap();
+        assert_eq!(c.fore_color, [192, 192, 192]);
+        assert_eq!(c.bg_color, [0, 0, 0]);
+        assert_eq!(c.focus_color, [255, 255, 0]);
+    }
+
+    #[test]
+    fn parse_color_follows_emuera_try_strings_to_color() {
+        assert_eq!(parse_color("192,192,192"), Some([192, 192, 192]));
+        assert_eq!(parse_color(" 1 , 2 , 3 "), Some([1, 2, 3]));
+        // Emuera ignores tokens after the third.
+        assert_eq!(parse_color("1,2,3,4"), Some([1, 2, 3]));
+        assert_eq!(parse_color("1,2"), None);
+        assert_eq!(parse_color("256,0,0"), None);
+        assert_eq!(parse_color("-1,0,0"), None);
+        assert_eq!(parse_color("red"), None);
+        assert_eq!(parse_color(""), None);
+    }
+
+    #[test]
+    fn get_config_packs_colours_as_rrggbb() {
+        // Emuera ConfigData.GetConfigValueInERB: ((R * 256) + G) * 256 + B
+        assert_eq!(color_to_int([192, 192, 192]), 0xC0C0C0);
+        let c = EraConfig::default();
+        assert_eq!(c.get_config(EraConfigKey::ForeColor), Value::Int(0xC0C0C0));
+        assert_eq!(c.get_config(EraConfigKey::BgColor), Value::Int(0));
+        assert_eq!(c.get_config(EraConfigKey::FocusColor), Value::Int(0xFFFF00));
+        assert_eq!(c.get_config(EraConfigKey::PrintcWidth), Value::Int(25));
+        assert_eq!(c.get_config(EraConfigKey::PrintcCount), Value::Int(3));
+        assert_eq!(
+            c.get_config(EraConfigKey::FontFamily),
+            Value::String(String::new())
+        );
+    }
+
+    #[test]
+    fn colour_keys_parse_from_their_japanese_labels() {
+        assert!(matches!(
+            "文字色".parse::<EraConfigKey>(),
+            Ok(EraConfigKey::ForeColor)
+        ));
+        assert!(matches!(
+            "背景色".parse::<EraConfigKey>(),
+            Ok(EraConfigKey::BgColor)
+        ));
+        assert!(matches!(
+            "選択中文字色".parse::<EraConfigKey>(),
+            Ok(EraConfigKey::FocusColor)
+        ));
+        assert_eq!(EraConfigKey::ForeColor.to_string(), "文字色");
     }
 }
