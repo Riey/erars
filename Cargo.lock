@@ -1065,6 +1065,7 @@ dependencies = [
  "pollster",
  "rustybuzz",
  "smol_str",
+ "swash",
  "sys-locale",
  "unicode-width",
  "wgpu",

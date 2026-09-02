@@ -2,6 +2,7 @@
 
 mod app;
 mod atlas;
+#[allow(dead_code)] // the Layout-based build_instances is wired into app.rs/headless.rs in T9/T10
 mod draw;
 #[allow(dead_code)] // RasterFlags is consumed by the shaper/raster rewrite (T6/T8)
 mod flags;
@@ -13,6 +14,8 @@ mod grid;
 mod layout;
 #[allow(dead_code)]
 mod headless;
+#[allow(dead_code)] // GlyphRaster replaces atlas.rs in T10
+mod raster;
 #[cfg(test)]
 mod test_support;
 #[allow(dead_code)] // Shaper/CellMetrics are consumed by layout (T7) and the app (T10)
