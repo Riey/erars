@@ -66,6 +66,9 @@ impl SystemFunctions for ProxySystem {
 pub struct ConsoleFrame {
     pub bg_color: Color,
     pub hl_color: Color,
+    /// The configured default text colour (`文字色`); used for chrome the
+    /// frontend draws itself, such as the input strip.
+    pub fore_color: Color,
     pub lines: Vec<ConsoleLine>,
 }
 
@@ -74,6 +77,7 @@ impl ConsoleFrame {
         Self {
             bg_color: vconsole.bg_color,
             hl_color: vconsole.hl_color,
+            fore_color: vconsole.default_color(),
             lines: vconsole
                 .lines
                 .iter()
