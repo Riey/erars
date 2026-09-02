@@ -8,7 +8,6 @@ use erars_ast::{BeginType, Value};
 use erars_ui::{Color, ConsoleConfig, InputRequest, InputRequestType, VirtualConsole};
 use hashbrown::HashMap;
 use itertools::Either;
-use pad::PadStr;
 use strum::Display;
 
 pub type SaveList = HashMap<u32, Either<SerializableVariableStorage, RawSaveData>>;

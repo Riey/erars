@@ -9,6 +9,8 @@ use markup5ever_rcdom as rcdom;
 
 use crate::{context::VariableRef, variable::KnownVariableNames as Var};
 
+use super::cells;
+
 use super::*;
 
 const BASE_TIME: time::OffsetDateTime = time::PrimitiveDateTime::new(
@@ -337,19 +339,14 @@ pub(super) fn run_instruction(
     } else if let Some(align) = inst.as_set_aligment() {
         tx.set_align(align);
     } else if let Some(align) = inst.as_pad_str() {
-        let size = ctx.pop_int()?;
+        let width = ctx.pop_int()?;
         let text = match ctx.pop_value()? {
             Value::String(s) => s,
             Value::Int(i) => i.to_string(),
         };
+        let text_cells = tx.cells(&text);
 
-        let align = match align {
-            Alignment::Left => pad::Alignment::Left,
-            Alignment::Center => pad::Alignment::Middle,
-            Alignment::Right => pad::Alignment::Right,
-        };
-
-        ctx.push(text.pad_to_width_with_alignment(size as usize, align));
+        ctx.push(cells::pad_str_cells(text, width, align, text_cells));
     } else if let Some(var) = inst.as_builtin_var() {
         let c = ctx.pop_int()? as u32;
         let args = ctx.take_arg_list(None, c)?;
@@ -1047,15 +1044,9 @@ fn run_builtin_method(
             check_arg_count!(2, 3);
             let s = get_arg!(@String: args, ctx);
             let find = get_arg!(@String: args, ctx);
-            let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
+            let start = get_arg!(@opt @i64: args, ctx);
 
-            let encoding = ctx.encoding();
-            let bytes = encoding.encode(&s).0;
-            let find = encoding.encode(&find).0;
-
-            let pos = twoway::find_bytes(&bytes.as_ref()[start..], find.as_ref())
-                .map_or(-1, |n| n as i64);
-            ctx.push(pos);
+            ctx.push(cells::strfind_cells(&s, &find, start, |c| tx.char_cells(c)));
         }
         BuiltinMethod::StrFindU => {
             check_arg_count!(2, 3);
@@ -1073,7 +1064,7 @@ fn run_builtin_method(
         BuiltinMethod::StrLenS => {
             check_arg_count!(1);
             let s = get_arg!(@String: args, ctx);
-            ctx.push(ctx.encoding().encode(&s).0.as_ref().len() as i64);
+            ctx.push(tx.cells(&s) as i64);
         }
         BuiltinMethod::StrLenSU => {
             check_arg_count!(1);
@@ -1320,38 +1311,9 @@ fn run_builtin_method(
             check_arg_count!(1, 3);
             let text = get_arg!(@String: args, ctx);
             let start = get_arg!(@opt @i64: args, ctx).unwrap_or(0);
-            match usize::try_from(start) {
-                Ok(start) => {
-                    let bytes = ctx.encoding().encode(&text).0;
-                    let length = get_arg!(@opt @i64: args, ctx);
+            let length = get_arg!(@opt @i64: args, ctx);
 
-                    if start >= bytes.len() {
-                        ctx.push("");
-                    } else {
-                        let length = length
-                            .and_then(|i| usize::try_from(i).ok())
-                            .map(|i| i.min(bytes.len() - start));
-
-                        let sub_bytes = match length {
-                            Some(length) => bytes.as_ref().get(start..(start + length)),
-                            None => bytes.as_ref().get(start..),
-                        };
-
-                        match sub_bytes {
-                            Some(sub_bytes) => {
-                                let sub_str = ctx.encoding().decode(sub_bytes).0;
-                                ctx.push(sub_str.into_owned());
-                            }
-                            None => {
-                                ctx.push("");
-                            }
-                        }
-                    }
-                }
-                _ => {
-                    ctx.push("");
-                }
-            };
+            ctx.push(cells::substring_cells(&text, start, length, |c| tx.char_cells(c)));
         }
 
         BuiltinMethod::SubStringU => {
