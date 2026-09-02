@@ -24,7 +24,7 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 use crate::draw::{build_instances, input_line, merge_pages, View};
-use crate::gpu::GpuContext;
+use crate::gpu::{GpuContext, RenderOutcome};
 use crate::layout::{layout, layout_no_sweep, Geometry, Layout};
 use crate::raster::GlyphRaster;
 use crate::text::{CellMetrics, Shaper};
@@ -399,7 +399,12 @@ impl App {
             merge_pages(&mut pages, strip_pages);
         }
         let pairs = raster.pages_with(&pages);
-        gpu.render(&pairs, self.frame.bg_color.0);
+        let outcome = gpu.render(&pairs, self.frame.bg_color.0);
+        if outcome == RenderOutcome::NeedsRedraw {
+            // The surface was reconfigured and nothing was drawn; without this
+            // the window keeps the stale frame until the next event arrives.
+            self.request_redraw();
+        }
     }
 
     fn on_click(&mut self) {

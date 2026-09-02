@@ -41,10 +41,13 @@ impl Rendered {
         [self.rgba[i], self.rgba[i + 1], self.rgba[i + 2], self.rgba[i + 3]]
     }
 
-    /// The bytes of rows `[y0, y1)`.
+    /// The bytes of rows `[y0, y1)`, clamped to the image (empty when the band
+    /// starts at or past its end).
     pub fn band(&self, y0: u32, y1: u32) -> &[u8] {
-        let stride = (self.width * 4) as usize;
-        &self.rgba[y0 as usize * stride..y1.min(self.height) as usize * stride]
+        let stride = self.width as usize * 4;
+        let y1 = y1.min(self.height) as usize;
+        let y0 = (y0 as usize).min(y1);
+        &self.rgba[y0 * stride..y1 * stride]
     }
 
     /// Per column: does any pixel in rows `[y0, y1)` have a channel ≥ `min`?
@@ -333,11 +336,13 @@ fn draw_offscreen(
     );
 
     // bytes_per_row must be a multiple of 256 for texture->buffer copies.
+    // The row strides stay u32 (`bytes_per_row` wants one); the buffer size and
+    // the readback offsets are computed wider so a large frame cannot wrap.
     let unpadded = width * 4;
     let padded = unpadded.div_ceil(256) * 256;
     let readback = device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("readback"),
-        size: (padded * height) as u64,
+        size: padded as u64 * height as u64,
         usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         mapped_at_creation: false,
     });
@@ -395,16 +400,19 @@ fn draw_offscreen(
         let _ = tx.send(r);
     });
     device.poll(wgpu::Maintain::Wait);
+    // Not a `RenderError`: the buffer is `MAP_READ`, the copy was submitted and
+    // the device polled to completion, so `map_async` can only fail on device
+    // loss — which every other wgpu call here would already have panicked on.
     rx.recv()
         .expect("map_async callback")
         .expect("readback buffer map");
 
     let mapped = slice.get_mapped_range();
-    let mut rgba = vec![0u8; (unpadded * height) as usize];
+    let (unpadded, padded) = (unpadded as usize, padded as usize);
+    let mut rgba = vec![0u8; unpadded * height as usize];
     for y in 0..height as usize {
-        let src = y * padded as usize;
-        let dst = y * unpadded as usize;
-        rgba[dst..dst + unpadded as usize].copy_from_slice(&mapped[src..src + unpadded as usize]);
+        let (src, dst) = (y * padded, y * unpadded);
+        rgba[dst..dst + unpadded].copy_from_slice(&mapped[src..src + unpadded]);
     }
     drop(mapped);
     readback.unmap();
@@ -425,7 +433,12 @@ fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
 /// Encode an RGBA8 buffer as a minimal PNG: signature, IHDR, one IDAT holding
 /// the zlib stream of filter-0 scanlines, IEND. No `png` crate needed.
 pub fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
-    assert_eq!(rgba.len(), (width * height * 4) as usize, "rgba size");
+    // PNG's IHDR forbids a zero dimension, and a zero stride would panic deep
+    // inside `chunks_exact`; say so here instead. `render_frame*` never produce
+    // one (both dimensions are `max(1)`).
+    assert!(width > 0 && height > 0, "encode_png: {width}x{height} has no pixels");
+    let stride = width as usize * 4;
+    assert_eq!(rgba.len(), stride * height as usize, "rgba size");
     let mut out = Vec::with_capacity(rgba.len() / 4 + 64);
     out.extend_from_slice(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
     let mut ihdr = Vec::with_capacity(13);
@@ -433,7 +446,6 @@ pub fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
     ihdr.extend_from_slice(&height.to_be_bytes());
     ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // bit depth 8, RGBA, deflate, filter 0, no interlace
     png_chunk(&mut out, b"IHDR", &ihdr);
-    let stride = (width * 4) as usize;
     let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
     for row in rgba.chunks_exact(stride) {
         enc.write_all(&[0]).expect("in-memory zlib write");

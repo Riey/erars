@@ -36,7 +36,7 @@ struct Args {
     #[clap(
         long,
         help = "Never use embedded bitmap strikes (e.g. MS Gothic 10-22 px); always \
-                rasterize outlines. Applies to the window only; ignored under --headless-shot"
+                rasterize outlines"
     )]
     no_bitmap_strikes: bool,
 }
@@ -77,7 +77,13 @@ fn spawn_vm(
 /// Headless capture: run the game until it first waits for input, then render
 /// that screen (`window_width × window_height`; the input strip is shown when
 /// the game is waiting for input) to a PNG file and exit. No window/display.
-fn headless_shot(mut shaper: Shaper, receiver: ProxyReceiver, (w, h): (u32, u32), path: &str) {
+fn headless_shot(
+    mut shaper: Shaper,
+    receiver: ProxyReceiver,
+    (w, h): (u32, u32),
+    path: &str,
+    use_bitmap_strikes: bool,
+) {
     let mut frame = ConsoleFrame::default();
     let mut input: Option<&str> = None;
     // Drain requests until the game blocks for input (screen is settled).
@@ -91,7 +97,16 @@ fn headless_shot(mut shaper: Shaper, receiver: ProxyReceiver, (w, h): (u32, u32)
             Ok(SystemRequest::Quit) | Err(_) => break,
         }
     }
-    match headless::render_frame(&mut shaper, &frame, w, h, input, None) {
+    let shot = headless::render_frame_opts(
+        &mut shaper,
+        &frame,
+        w,
+        h,
+        input,
+        None,
+        use_bitmap_strikes,
+    );
+    match shot {
         Ok(img) => match headless::write_png(path, &img) {
             Ok(()) => println!("Wrote {path} ({}x{})", img.width, img.height),
             Err(e) => {
@@ -150,7 +165,7 @@ fn main() {
     if let Some(path) = args.headless_shot.clone() {
         let (system, receiver) = erars_proxy_system::new_proxy(Arc::new(|| {}));
         spawn_vm(target_path, args.load, !args.lint_off, system, config);
-        headless_shot(shaper, receiver, init_size, &path);
+        headless_shot(shaper, receiver, init_size, &path, app_cfg.use_bitmap_strikes);
         return;
     }
 

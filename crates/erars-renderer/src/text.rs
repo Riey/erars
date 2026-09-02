@@ -45,6 +45,10 @@ pub struct CellMetrics {
     pub shift: u32,
 }
 
+/// Upper bound on the rasterized font size (spec Component 4): far beyond any
+/// real `emuera.config`, but small enough that one glyph still fits an atlas page.
+pub const MAX_FONT_PX: u32 = 512;
+
 impl CellMetrics {
     /// Derive the grid from the primary font at `font_size` / `line_height`
     /// logical px and the winit `scale` factor.
@@ -66,6 +70,14 @@ impl CellMetrics {
             );
         }
         let font_px = (font_size as f32 * scale).round().max(8.0) as u32;
+        // A misconfigured `フォントサイズ` would size every glyph raster (and
+        // the atlas allocation behind it); cap it before anything is rendered.
+        let font_px = if font_px > MAX_FONT_PX {
+            log::warn!("emuera.config: font size {font_px} px is absurd; clamped to {MAX_FONT_PX}");
+            MAX_FONT_PX
+        } else {
+            font_px
+        };
         let line_h = (line_height as f32 * scale).round().max(font_px as f32) as u32;
 
         // `Font::rustybuzz()` derefs to the ttf-parser face; name the target
@@ -546,6 +558,8 @@ mod tests {
             CellMetrics::from_primary(&font, 18, 19, f32::NAN),
             CellMetrics::from_primary(&font, 18, 19, 1.0)
         );
+        // An absurd font size is capped before anything is rasterized.
+        assert_eq!(CellMetrics::from_primary(&font, 100_000, 19, 4.0).font_px, MAX_FONT_PX);
     }
 
     #[test]

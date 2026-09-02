@@ -181,6 +181,17 @@ impl FrameDraw {
     }
 }
 
+/// What [`GpuContext::render`] did with the frame.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderOutcome {
+    /// The frame was drawn and presented.
+    Presented,
+    /// The swapchain was lost or outdated: the surface has been reconfigured
+    /// but nothing was drawn, so the caller must ask for another redraw or the
+    /// window stays stale until the next event.
+    NeedsRedraw,
+}
+
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -287,16 +298,23 @@ impl GpuContext {
 
     /// Render one frame: clear to `bg`, then draw every `(atlas page view,
     /// instances)` pair with its own bind group — one draw per page.
-    pub fn render(&mut self, pages: &[(&wgpu::TextureView, &[Instance])], bg: [u8; 3]) {
+    /// Returns [`RenderOutcome::NeedsRedraw`] when the surface had to be
+    /// reconfigured instead of drawn.
+    pub fn render(
+        &mut self,
+        pages: &[(&wgpu::TextureView, &[Instance])],
+        bg: [u8; 3],
+    ) -> RenderOutcome {
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
                 self.surface.configure(&self.device, &self.config);
-                return;
+                return RenderOutcome::NeedsRedraw;
             }
             Err(e) => {
+                // Timeout / OutOfMemory: drop this frame, the next event draws.
                 log::error!("surface error: {e:?}");
-                return;
+                return RenderOutcome::Presented;
             }
         };
         let view = frame
@@ -338,6 +356,7 @@ impl GpuContext {
         }
         self.queue.submit(Some(encoder.finish()));
         frame.present();
+        RenderOutcome::Presented
     }
 }
 
