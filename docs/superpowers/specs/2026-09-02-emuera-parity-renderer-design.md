@@ -259,6 +259,16 @@ full-width; Emuera STRLEN counts the `?` replacement as 1).
   the config; `reset_color()` restores `default_color`. Used by PRINTD
   (`executor.rs:195-200`, replacing `TODO: respect config`), `RESETCOLOR`
   (`executor.rs:2181`) and `GETDEFCOLOR` (`executor.rs:1434`).
+- **Colour integers are `0xRRGGBB`** like Emuera (`Color.ToArgb() & 0xFFFFFF`).
+  Today `SETCOLOR 0xFF0000` is decoded little-endian
+  (`executor.rs:2136, 2174`: R = low byte → blue) and `GETCOLOR`/`GETDEFCOLOR`
+  return R-low values (`erars-ui/src/lib.rs:29-32`), so every game that sets
+  colours numerically gets swapped channels. Fix: `impl From<Color> for u32`
+  returns `(r << 16) | (g << 8) | b`, `impl From<u32> for Color` decodes the
+  same way, the two `SETCOLOR`/`SETBGCOLOR` integer paths and the PRINTD
+  restore (`executor.rs:215`) use it, and `GETDEFCOLOR`/`GETDEFBGCOLOR`/
+  `GETCONFIG("文字色")` all report `0xRRGGBB`. `SETCOLOR r, g, b` and
+  `SETCOLORBYNAME` are unaffected.
 - **Config defaults:** `printc_width` 30 → **25**, `printc_count` 4 → **3**,
   `window_width` 800 → **760**, `window_height` 600 → **480** (Emuera
   WindowX/WindowY; the height includes the input strip), `font_family`
