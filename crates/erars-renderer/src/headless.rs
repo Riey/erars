@@ -705,6 +705,71 @@ mod tests {
         assert!(!any_ink(&none, 2 * lh, 3 * lh), "strip drawn without input");
     }
 
+    /// Spec Component 5 "View state": a frame with more rows than fit is
+    /// clipped at the *top* and the newest row is anchored just above the input
+    /// strip. Row `i` is `i` spaces then `|`, so the inked cell names the row:
+    /// 40 rows in a 480 px frame leave 24 visible (rows 16..39), and nothing
+    /// from rows 0..15 may be drawn anywhere in the row area.
+    #[test]
+    fn rows_beyond_the_view_are_clipped_at_the_top() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let (lh, hw, shift) = (m.line_h, m.half_w, m.shift);
+        assert_eq!((lh, hw, shift), (19, 11, 3));
+        let rows = 40usize;
+        let (w, h) = (480, 480);
+        let fr = frame(
+            (0..rows)
+                .map(|i| text_line(&format!("{}|", " ".repeat(i)), WHITE))
+                .collect(),
+        );
+        let img = render(&mut shaper, &dev, &fr, w, h, Some(""), None);
+
+        // 480 − 19 px strip = 461 px of row area = 24 whole rows.
+        let view_h = h - lh;
+        let visible = (view_h / lh) as usize;
+        assert_eq!((view_h, visible), (461, 24));
+        let first = rows - visible; // 16: the oldest row still on screen
+        let cell_x = |cell: usize| shift + cell as u32 * hw;
+
+        // Nothing of rows 0..15 is drawn: their cells are blank over the whole
+        // row area. (The strip below it draws "> _" in cells 0..2.)
+        let log_ink = img.ink_columns(0, view_h, INK);
+        for (x, &inked) in log_ink.iter().enumerate() {
+            assert!(
+                !inked || x as u32 >= cell_x(first),
+                "ink at x={x} belongs to a clipped row (< cell {first} at x={})",
+                cell_x(first)
+            );
+        }
+        // Every visible row is where `View::row_y` puts it, with its own cell
+        // inked; only the row above it may spill into its band.
+        for r in first..rows {
+            let y0 = row_y(rows, r, h, lh);
+            let ink = img.ink_columns(y0, y0 + lh, INK);
+            let own = (cell_x(r), cell_x(r + 1));
+            assert!(
+                (own.0..own.1).any(|x| ink[x as usize]),
+                "row {r} (band {y0}..{}) has no ink in its own cell",
+                y0 + lh
+            );
+            for (x, &inked) in ink.iter().enumerate() {
+                let x = x as u32;
+                assert!(
+                    !inked || (x >= cell_x(r - 1) && x < own.1),
+                    "row {r}: ink at x={x} outside cells {} and {r}",
+                    r - 1
+                );
+            }
+        }
+        // The oldest visible row sits in the 5 px-slack band at the top, the
+        // newest directly above the strip.
+        assert_eq!(row_y(rows, first, h, lh), 5);
+        assert_eq!(row_y(rows, rows - 1, h, lh), view_h - lh);
+    }
+
     /// Spec Testing §5: a box-drawing frame over an ASCII ruler. With the
     /// bundled font as primary (0.6 em → half_w 11) every JIS box character is
     /// a 2-cell, 22 px box holding a centred 10.8 px glyph; all ink must land

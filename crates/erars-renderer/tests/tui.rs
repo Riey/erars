@@ -132,12 +132,18 @@ fn snapshot_of(frame: &ConsoleFrame, lang: Language) -> String {
     layout_snapshot(&l, DEFAULT_FG)
 }
 
-#[test]
-fn tui_layout_korean() {
-    let frame = run_game("emuera.config");
+/// The console colours every config in this fixture shares: black background,
+/// Emuera's yellow focus colour, grey (192) default text.
+fn assert_frame_colours(frame: &ConsoleFrame) {
     assert_eq!(frame.bg_color.0, [0, 0, 0]);
     assert_eq!(frame.hl_color.0, [255, 255, 0]);
     assert_eq!(frame.fore_color.0, DEFAULT_FG);
+}
+
+#[test]
+fn tui_layout_korean() {
+    let frame = run_game("emuera.config");
+    assert_frame_colours(&frame);
     k9::snapshot!(
         snapshot_of(&frame, Language::Korean),
         r#"
@@ -572,6 +578,7 @@ btn 3 row=14 x=0 w=90 gen=0 value=Int(2)
 #[test]
 fn tui_layout_japanese() {
     let frame = run_game("emuera.jp.config");
+    assert_frame_colours(&frame);
     k9::snapshot!(
         snapshot_of(&frame, Language::Japanese),
         r#"
@@ -1039,14 +1046,25 @@ fn tui_png_korean() {
     )
     .expect("headless render");
     assert_eq!((img.width, img.height), (760, 480));
-    assert!(
-        img.rgba
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0),
-        "nothing was drawn"
-    );
+    // The 15 rows are bottom-anchored above the `line_h` input strip, so the
+    // text band is the `rows · line_h` px directly above it and everything
+    // above that band is slack. Both bounds are checked: enough ink inside the
+    // band for the frame to be legible, none at all above it.
+    let rows = layout(&frame.lines, &Geometry::new(760, m), &mut shaper).rows.len();
+    assert_eq!(rows, 15, "rows");
+    let view_h = 480 - m.line_h;
+    let band_top = view_h - rows as u32 * m.line_h;
+    let ink = |y0: u32, y1: u32| {
+        img.band(y0, y1)
+            .chunks_exact(4)
+            .filter(|p| p[0] > 0 || p[1] > 0 || p[2] > 0)
+            .count()
+    };
+    assert_eq!(ink(0, band_top), 0, "ink above the text band");
+    let drawn = ink(band_top, view_h);
+    // ~11.5k inked pixels with the bundled font; a tenth of that still
+    // means every row drew something.
+    assert!(drawn > 2_000, "only {drawn} inked pixels in the text band");
     let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("tui-korean.png");
     write_png(out.to_str().unwrap(), &img).unwrap();
     eprintln!("wrote {}", out.display());
