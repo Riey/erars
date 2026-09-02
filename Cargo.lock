@@ -1062,6 +1062,7 @@ dependencies = [
  "log-panics",
  "mimalloc",
  "pollster",
+ "rustybuzz",
  "smol_str",
  "sys-locale",
  "unicode-width",

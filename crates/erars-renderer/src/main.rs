@@ -13,6 +13,7 @@ mod grid;
 mod headless;
 #[cfg(test)]
 mod test_support;
+#[allow(dead_code)] // Shaper/CellMetrics are consumed by layout (T7) and the app (T10)
 mod text;
 
 use std::{path::Path, sync::Arc};
