@@ -21,6 +21,19 @@ use erars_ui::VirtualConsole;
 use erars_vm::{FunctionDic, SystemFunctions, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
+/// Console construction parameters from `emuera.config`. Temporary copy —
+/// the next task provides `erars_vm::console_config` and deletes this one.
+fn console_config(config: &EraConfig) -> erars_ui::ConsoleConfig {
+    erars_ui::ConsoleConfig {
+        printc_width: config.printc_width,
+        max_log: config.max_log,
+        encoding: config.lang.encoding(),
+        fore_color: erars_ui::Color(config.fore_color),
+        bg_color: erars_ui::Color(config.bg_color),
+        focus_color: erars_ui::Color(config.focus_color),
+    }
+}
+
 pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
     let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);
     erars_bytecode::write_to(&mut out, &vm.dic)?;
@@ -74,7 +87,7 @@ pub unsafe fn load_script(
     log::info!("Load game data");
     let (header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
         rmp_serde::decode::from_read(&mut file_bytes)?;
-    let vconsole = VirtualConsole::new(config.printc_width, config.max_log);
+    let vconsole = VirtualConsole::new(&console_config(&config));
 
     let elapsed = start.elapsed();
     log::info!("Load done! {}ms elapsed", elapsed.as_millis());
@@ -117,7 +130,7 @@ pub fn run_script(
     let mut time = Instant::now();
 
     let config = Arc::new(config);
-    let mut tx = VirtualConsole::new(config.printc_width, config.max_log);
+    let mut tx = VirtualConsole::new(&console_config(&config));
 
     macro_rules! check_time {
         ($work:expr) => {

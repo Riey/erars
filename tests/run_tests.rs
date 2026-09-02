@@ -7,6 +7,19 @@ use flexi_logger::*;
 
 mod test_util;
 
+/// Temporary copy of the console-config mapping; T4 replaces this file and
+/// uses `erars_vm::console_config`.
+fn console_config(config: &EraConfig) -> erars_ui::ConsoleConfig {
+    erars_ui::ConsoleConfig {
+        printc_width: config.printc_width,
+        max_log: config.max_log,
+        encoding: config.lang.encoding(),
+        fore_color: erars_ui::Color(config.fore_color),
+        bg_color: erars_ui::Color(config.bg_color),
+        focus_color: erars_ui::Color(config.focus_color),
+    }
+}
+
 #[test]
 fn run_test() {
     let _handle = Logger::try_with_str("trace")
@@ -71,7 +84,7 @@ fn run_test() {
 
 fn test_runner(dic: FunctionDic, mut ctx: VmContext) -> String {
     let vm = TerminalVm::new(dic, ctx.header_info.clone());
-    let mut tx = VirtualConsole::new(ctx.config.printc_width, ctx.config.max_log);
+    let mut tx = VirtualConsole::new(&console_config(&ctx.config));
 
     let ok = vm.start(&mut tx, &mut ctx);
 

@@ -24,5 +24,6 @@ unicode-width = "0.1"
 
 [dev-dependencies]
 k9 = "0.11.5"
+serde_json.workspace = true
 
 [features]
