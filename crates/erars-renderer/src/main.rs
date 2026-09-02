@@ -35,8 +35,8 @@ struct Args {
     headless_shot: Option<String>,
     #[clap(
         long,
-        help = "Never use embedded bitmap strikes (e.g. MS Gothic 10-22 px); \
-                always rasterize outlines"
+        help = "Never use embedded bitmap strikes (e.g. MS Gothic 10-22 px); always \
+                rasterize outlines. Applies to the window only; ignored under --headless-shot"
     )]
     no_bitmap_strikes: bool,
 }

@@ -77,6 +77,13 @@ pub fn wheel_rows(acc: &mut f64, delta: f64, line_h: u32) -> i64 {
     rows as i64
 }
 
+/// Wheel travel of `notches` mouse-wheel detents in pixels. One detent scrolls
+/// one row, so a detent is `line_h` px; feeding this to [`wheel_rows`] lets
+/// `LineDelta` and `PixelDelta` share one accumulator and one conversion.
+pub fn wheel_notch_px(notches: f32, line_h: u32) -> f64 {
+    notches as f64 * line_h as f64
+}
+
 /// The row drawn under screen `y` and the offset of `y` inside it, or `None`
 /// for the top slack, the input strip and off-screen rows. Inverse of
 /// [`View::row_y`]: row `r` covers `[row_y(r), row_y(r) + line_h)`.
@@ -176,10 +183,9 @@ pub struct App {
     input: String,
     /// Whole rows hidden below the bottom of the row area (0 = stuck to the bottom).
     scroll_rows: usize,
-    /// Accumulated `PixelDelta` wheel travel not yet converted to rows.
+    /// Accumulated wheel travel (px) not yet converted to rows. Both
+    /// `LineDelta` and `PixelDelta` feed it, so a mixed stream still adds up.
     wheel_px: f64,
-    /// Accumulated fractional `LineDelta` notches.
-    wheel_lines: f32,
     /// Index into `layout.buttons` of the fragment under the cursor.
     hovered: Option<usize>,
     /// Cursor in physical px; `(-1, -1)` when outside the window.
@@ -220,7 +226,6 @@ impl App {
             input: String::new(),
             scroll_rows: 0,
             wheel_px: 0.0,
-            wheel_lines: 0.0,
             hovered: None,
             cursor: (-1, -1),
             timeout_deadline: None,
@@ -374,16 +379,14 @@ impl App {
     }
 
     fn render(&mut self) {
+        // `view()` is the only place window height and metrics become a `View`,
+        // so the drawer and the hit test can never drift apart.
+        let view = self.view();
         let (Some(gpu), Some(raster)) = (self.gpu.as_mut(), self.raster.as_mut()) else {
             return;
         };
-        let (win_w, win_h) = gpu.size();
+        let (win_w, _) = gpu.size();
         let m = *self.shaper.metrics();
-        let view = View {
-            scroll_rows: self.scroll_rows,
-            view_h: win_h.saturating_sub(m.line_h),
-            strip_h: m.line_h,
-        };
         let hl = self.frame.hl_color.0;
         let mut pages = build_instances(
             &self.layout,
@@ -493,6 +496,9 @@ impl ApplicationHandler<Wake> for App {
             let v = self.timeout_value.clone();
             self.send(SystemResponse::Input(v));
             self.request_redraw();
+            // The deadline is now in the past: leaving `WaitUntil` in place
+            // would wake the loop on every iteration and spin a core.
+            event_loop.set_control_flow(winit::event_loop::ControlFlow::Wait);
         } else {
             // Wake again at the deadline so the timeout can fire on time.
             event_loop.set_control_flow(winit::event_loop::ControlFlow::WaitUntil(deadline));
@@ -550,18 +556,12 @@ impl ApplicationHandler<Wake> for App {
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 // Wheel up (positive y) reveals older rows: scroll_rows grows.
-                let rows = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => {
-                        self.wheel_lines += y;
-                        let whole = self.wheel_lines.trunc();
-                        self.wheel_lines -= whole;
-                        whole as i64
-                    }
-                    MouseScrollDelta::PixelDelta(p) => {
-                        let line_h = self.metrics().line_h;
-                        wheel_rows(&mut self.wheel_px, p.y, line_h)
-                    }
+                let line_h = self.metrics().line_h;
+                let px = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => wheel_notch_px(y, line_h),
+                    MouseScrollDelta::PixelDelta(p) => p.y,
                 };
+                let rows = wheel_rows(&mut self.wheel_px, px, line_h);
                 if rows != 0 && self.scroll_to(self.scroll_rows as i64 + rows) {
                     self.update_hover();
                     self.request_redraw();
@@ -698,6 +698,29 @@ mod tests {
         assert!((acc + 1.0).abs() < 1e-9);
         acc = 0.0;
         assert_eq!(wheel_rows(&mut acc, 0.5, 0), 0);
+    }
+
+    #[test]
+    fn wheel_line_notches_share_the_pixel_accumulator() {
+        // A detent is one row: 0.5 detents at line_h 19 is 9.5 px.
+        assert_eq!(wheel_notch_px(0.5, 19), 9.5);
+        assert_eq!(wheel_notch_px(3.0, 22), 66.0);
+        assert_eq!(wheel_notch_px(-1.0, 19), -19.0);
+
+        let mut acc = 0.0;
+        // Half a detent moves no whole row; the remainder is kept in px.
+        assert_eq!(wheel_rows(&mut acc, wheel_notch_px(0.5, 19), 19), 0);
+        assert!((acc - 9.5).abs() < 1e-9);
+        // The second half completes exactly one row and leaves nothing over.
+        assert_eq!(wheel_rows(&mut acc, wheel_notch_px(0.5, 19), 19), 1);
+        assert!(acc.abs() < 1e-9);
+        // Detents and raw pixels accumulate together, in either order.
+        assert_eq!(wheel_rows(&mut acc, wheel_notch_px(-0.5, 19), 19), 0);
+        assert_eq!(wheel_rows(&mut acc, -9.5, 19), -1);
+        assert!(acc.abs() < 1e-9);
+        // Whole detents convert to that many rows at any line height.
+        assert_eq!(wheel_rows(&mut acc, wheel_notch_px(3.0, 22), 22), 3);
+        assert!(acc.abs() < 1e-9);
     }
 
     #[test]
