@@ -1058,6 +1058,7 @@ dependencies = [
  "etagere",
  "flexi_logger 0.29.0",
  "flume",
+ "k9",
  "log",
  "log-panics",
  "mimalloc",

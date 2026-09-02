@@ -9,6 +9,8 @@ mod flags;
 mod font;
 mod gpu;
 mod grid;
+#[allow(dead_code)] // wired into app.rs / headless.rs by T10
+mod layout;
 #[allow(dead_code)]
 mod headless;
 #[cfg(test)]
