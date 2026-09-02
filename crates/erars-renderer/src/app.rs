@@ -14,19 +14,17 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use erars_ast::{Alignment, Value};
+use erars_ast::Value;
 use erars_proxy_system::{ConsoleFrame, ProxyReceiver, SystemRequest, SystemResponse};
-use erars_ui::{
-    Color, ConsoleLine, ConsoleLinePart, FontStyle, InputRequest, InputRequestType, TextStyle,
-};
+use erars_ui::{Color, InputRequest, InputRequestType};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
-use crate::draw::{build_instances, View};
-use crate::gpu::{GpuContext, Instance};
+use crate::draw::{build_instances, input_line, merge_pages, View};
+use crate::gpu::GpuContext;
 use crate::layout::{layout, layout_no_sweep, Geometry, Layout};
 use crate::raster::GlyphRaster;
 use crate::text::{CellMetrics, Shaper};
@@ -130,32 +128,6 @@ pub fn hit_button(
         let left = g.m.shift as i32 + x0 + b.x;
         px >= left && px <= left + b.w as i32
     })
-}
-
-/// The input strip line: `> {input}_` in the console's default colour.
-pub fn input_line(input: &str, fg: [u8; 3]) -> ConsoleLine {
-    ConsoleLine {
-        align: Alignment::Left,
-        button_start: None,
-        parts: vec![ConsoleLinePart::Text(
-            format!("> {input}_"),
-            TextStyle {
-                color: Color(fg),
-                font_family: "".into(),
-                font_style: FontStyle::NORMAL,
-            },
-        )],
-    }
-}
-
-/// Append per-page instance buckets (the input strip) onto the frame's buckets.
-fn merge_pages(into: &mut Vec<Vec<Instance>>, from: Vec<Vec<Instance>>) {
-    for (page, list) in from.into_iter().enumerate() {
-        if into.len() <= page {
-            into.resize_with(page + 1, Vec::new);
-        }
-        into[page].extend(list);
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -614,7 +586,9 @@ impl ApplicationHandler<Wake> for App {
 mod tests {
     use super::*;
     use crate::font::FontChain;
+    use erars_ast::Alignment;
     use erars_compiler::Language;
+    use erars_ui::{ConsoleLine, ConsoleLinePart, FontStyle, TextStyle};
     use erars_ui::width::WidthTable;
     use std::path::PathBuf;
 

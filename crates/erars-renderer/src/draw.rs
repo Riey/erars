@@ -12,10 +12,42 @@
 //! [`build_instances_with`]; [`build_instances`] is the production entry point
 //! backed by [`GlyphRaster`].
 
+use erars_ast::Alignment;
+use erars_ui::{Color, ConsoleLine, ConsoleLinePart, FontStyle, TextStyle};
+
 use crate::gpu::Instance;
 use crate::layout::Layout;
 use crate::raster::{AtlasRegion, GlyphRaster, RasterKey};
 use crate::text::{CellMetrics, ShapedGlyph, Shaper};
+
+/// The input strip's line: `> {input}_` in the console's default colour
+/// (spec Component 5 "View state"). Shared by the window and the headless
+/// renderer so both strips are laid out from the same text.
+pub fn input_line(input: &str, fg: [u8; 3]) -> ConsoleLine {
+    ConsoleLine {
+        align: Alignment::Left,
+        button_start: None,
+        parts: vec![ConsoleLinePart::Text(
+            format!("> {input}_"),
+            TextStyle {
+                color: Color(fg),
+                font_family: "".into(),
+                font_style: FontStyle::NORMAL,
+            },
+        )],
+    }
+}
+
+/// Append `from`'s per-page instance buckets to `into`'s (growing the list):
+/// how the input strip's quads join the frame's.
+pub fn merge_pages(into: &mut Vec<Vec<Instance>>, from: Vec<Vec<Instance>>) {
+    for (page, list) in from.into_iter().enumerate() {
+        if into.len() <= page {
+            into.resize_with(page + 1, Vec::new);
+        }
+        into[page].extend(list);
+    }
+}
 
 /// Which rows are on screen (spec Component 5, "View state").
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

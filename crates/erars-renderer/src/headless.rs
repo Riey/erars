@@ -16,14 +16,12 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use erars_ast::Alignment;
 use erars_compiler::EraConfig;
 use erars_proxy_system::ConsoleFrame;
 use erars_ui::width::WidthTable;
-use erars_ui::{ConsoleLine, ConsoleLinePart, FontStyle, TextStyle};
 use wgpu::util::DeviceExt;
 
-use crate::draw::{build_instances, View};
+use crate::draw::{build_instances, input_line, merge_pages, View};
 use crate::font::{FontChain, FontConfig};
 use crate::gpu::{create_quad_pipeline, nearest_sampler, FrameDraw, Globals, Instance};
 use crate::layout::{layout_no_sweep, Geometry};
@@ -250,18 +248,7 @@ pub fn render_frame_on(
 
     // Input strip: one line laid out on its own, drawn on the bottom `line_h` rows.
     if let Some(input) = input {
-        let line = ConsoleLine {
-            align: Alignment::Left,
-            button_start: None,
-            parts: vec![ConsoleLinePart::Text(
-                format!("> {input}_"),
-                TextStyle {
-                    color: frame.fore_color,
-                    font_family: "".into(),
-                    font_style: FontStyle::NORMAL,
-                },
-            )],
-        };
+        let line = input_line(input, frame.fore_color.0);
         let strip = layout_no_sweep(std::slice::from_ref(&line), &g, shaper);
         let strip_pages = build_instances(
             &strip,
@@ -296,16 +283,6 @@ pub fn render_frame_on(
         height,
         rgba,
     })
-}
-
-/// Append `from`'s per-page instance buckets to `into`'s (growing the list).
-fn merge_pages(into: &mut Vec<Vec<Instance>>, from: Vec<Vec<Instance>>) {
-    for (page, list) in from.into_iter().enumerate() {
-        if into.len() <= page {
-            into.resize_with(page + 1, Vec::new);
-        }
-        into[page].extend(list);
-    }
 }
 
 /// Clear to `bg` (linear target, so the bytes come back exactly), draw every
@@ -484,6 +461,8 @@ mod tests {
 
     use crate::font::{FontChain, StyleKey};
     use crate::layout::{layout, Layout, Row};
+    use erars_ast::Alignment;
+    use erars_ui::{ConsoleLine, ConsoleLinePart};
     use crate::test_support::{
         self as ts, bundled_font, frame, gpu_device, gpu_lock, style, text_line,
     };
