@@ -194,11 +194,12 @@ impl FrameDraw {
     }
 }
 
-/// What [`GpuContext::render`] did with the frame.
+/// What the caller must do after [`GpuContext::render`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RenderOutcome {
-    /// The frame was drawn and presented.
-    Presented,
+    /// Nothing: the frame was presented, or dropped on a surface error the
+    /// caller cannot act on.
+    Done,
     /// The swapchain was lost or outdated: the surface has been reconfigured
     /// but nothing was drawn, so the caller must ask for another redraw or the
     /// window stays stale until the next event.
@@ -327,7 +328,7 @@ impl GpuContext {
             Err(e) => {
                 // Timeout / OutOfMemory: drop this frame, the next event draws.
                 log::error!("surface error: {e:?}");
-                return RenderOutcome::Presented;
+                return RenderOutcome::Done;
             }
         };
         let view = frame
@@ -369,7 +370,7 @@ impl GpuContext {
         }
         self.queue.submit(Some(encoder.finish()));
         frame.present();
-        RenderOutcome::Presented
+        RenderOutcome::Done
     }
 }
 

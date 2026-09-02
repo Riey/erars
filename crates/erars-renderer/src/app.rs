@@ -594,8 +594,8 @@ mod tests {
     use crate::font::FontChain;
     use erars_ast::Alignment;
     use erars_compiler::Language;
-    use erars_ui::{ConsoleLine, ConsoleLinePart, FontStyle, TextStyle};
     use erars_ui::width::WidthTable;
+    use erars_ui::{ConsoleLine, ConsoleLinePart, FontStyle, TextStyle};
     use std::path::PathBuf;
 
     const BUNDLED: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/NotoSansMono-Regular.ttf");

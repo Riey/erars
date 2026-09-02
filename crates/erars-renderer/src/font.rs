@@ -555,9 +555,9 @@ mod chain_tests {
         StyleKey { family: SmolStr::new(family), bold, italic }
     }
 
-    /// Fresh per-test scratch directory (tests run in parallel).
-    /// A fresh temp directory that is removed when the guard drops, so a
-    /// failing assertion does not leak it under /tmp. Derefs to its `Path`.
+    /// A fresh per-test scratch directory (tests run in parallel), removed
+    /// when the guard drops so a failing assertion does not leak it under
+    /// /tmp. Derefs to its `Path`.
     struct Scratch(PathBuf);
 
     impl Drop for Scratch {
@@ -909,7 +909,7 @@ mod chain_tests {
                 "SKIP real_bold_face_is_preferred_over_synthesis: \
                  no installed family has upright regular + bold faces"
             );
-                return;
+            return;
         };
         let (plain_id, plain_flags) = chain.resolve('A', &key(&name, false, false));
         let plain = chain.db().face(plain_id).unwrap();

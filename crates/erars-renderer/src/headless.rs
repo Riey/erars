@@ -2,8 +2,9 @@
 //! and the `--headless-shot` CLI.
 //!
 //! `render_frame` draws a `ConsoleFrame` through the same path as the window
-//! (`layout::layout` → `draw::build_instances` → `gpu::{create_quad_pipeline,
-//! nearest_sampler, FrameDraw}`) into an `Rgba8Unorm` texture and reads it
+//! (`layout::layout_no_sweep` → `draw::build_instances` →
+//! `gpu::{create_quad_pipeline, nearest_sampler, FrameDraw}`) into an
+//! `Rgba8Unorm` texture and reads it
 //! back, so pixel positions can be asserted without a display. The target is
 //! linear (the window path clears an sRGB surface), so headless bytes are
 //! compared with each other and with exact 0/255 masks — never with the window.
@@ -467,14 +468,13 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    use erars_ast::Value;
+    use erars_ast::{Alignment, Value};
     use erars_compiler::Language;
     use erars_ui::width::WidthTable;
+    use erars_ui::{ConsoleLine, ConsoleLinePart};
 
     use crate::font::{FontChain, StyleKey};
     use crate::layout::{layout, Layout, Row};
-    use erars_ast::Alignment;
-    use erars_ui::{ConsoleLine, ConsoleLinePart};
     use crate::test_support::{
         self as ts, bundled_font, frame, gpu_device, gpu_lock, style, text_line,
     };
