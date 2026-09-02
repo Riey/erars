@@ -4,6 +4,8 @@
 //! font/grid/atlas/shader path as the on-screen renderer, so alignment can be
 //! asserted programmatically without an X server. See the tests below.
 
+use std::io::Write;
+
 use cosmic_text::SwashCache;
 use erars_ui::ConsoleLine;
 use wgpu::util::DeviceExt;
@@ -217,16 +219,43 @@ pub fn render_lines(
     })
 }
 
-/// Write an RGBA buffer as a binary PPM (P6) — viewable with most image tools,
-/// handy for eyeballing a headless render over SSH (`scp` it back).
-pub fn write_ppm(path: &str, img: &Rendered) -> std::io::Result<()> {
-    use std::io::Write;
-    let mut f = std::io::BufWriter::new(std::fs::File::create(path)?);
-    write!(f, "P6\n{} {}\n255\n", img.width, img.height)?;
-    for px in img.rgba.chunks_exact(4) {
-        f.write_all(&px[..3])?;
+/// Append one PNG chunk: length, type, data, CRC-32 over type + data.
+fn png_chunk(out: &mut Vec<u8>, kind: &[u8; 4], data: &[u8]) {
+    out.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    let mut hasher = crc32fast::Hasher::new();
+    hasher.update(kind);
+    hasher.update(data);
+    out.extend_from_slice(kind);
+    out.extend_from_slice(data);
+    out.extend_from_slice(&hasher.finalize().to_be_bytes());
+}
+
+/// Encode an RGBA8 buffer as a minimal PNG: signature, IHDR, one IDAT holding
+/// the zlib stream of filter-0 scanlines, IEND. No `png` crate needed.
+pub fn encode_png(width: u32, height: u32, rgba: &[u8]) -> Vec<u8> {
+    assert_eq!(rgba.len(), (width * height * 4) as usize, "rgba size");
+    let mut out = Vec::with_capacity(rgba.len() / 4 + 64);
+    out.extend_from_slice(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+    let mut ihdr = Vec::with_capacity(13);
+    ihdr.extend_from_slice(&width.to_be_bytes());
+    ihdr.extend_from_slice(&height.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]); // bit depth 8, RGBA, deflate, filter 0, no interlace
+    png_chunk(&mut out, b"IHDR", &ihdr);
+    let stride = (width * 4) as usize;
+    let mut enc = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+    for row in rgba.chunks_exact(stride) {
+        enc.write_all(&[0]).expect("in-memory zlib write");
+        enc.write_all(row).expect("in-memory zlib write");
     }
-    Ok(())
+    let idat = enc.finish().expect("in-memory zlib finish");
+    png_chunk(&mut out, b"IDAT", &idat);
+    png_chunk(&mut out, b"IEND", &[]);
+    out
+}
+
+/// Write a render as PNG — viewable anywhere, small enough to `scp` back.
+pub fn write_png(path: &str, img: &Rendered) -> std::io::Result<()> {
+    std::fs::write(path, encode_png(img.width, img.height, &img.rgba))
 }
 
 #[cfg(test)]
@@ -358,5 +387,74 @@ mod tests {
              (cell_w={}) — CJK is not exactly 2 cells / not aligned to the grid",
             font.cell_w
         );
+    }
+    fn checker(w: u32, h: u32) -> Vec<u8> {
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        for y in 0..h {
+            for x in 0..w {
+                let i = ((y * w + x) * 4) as usize;
+                rgba[i] = (x * 37) as u8;
+                rgba[i + 1] = (y * 91) as u8;
+                rgba[i + 2] = ((x + y) % 2 * 255) as u8;
+                rgba[i + 3] = 255;
+            }
+        }
+        rgba
+    }
+
+    /// Signature, IHDR fields, exactly IHDR/IDAT/IEND, and a valid CRC-32
+    /// (over type + data) on every chunk.
+    #[test]
+    fn png_chunks_are_well_formed() {
+        let (w, h) = (7u32, 3u32);
+        let png = encode_png(w, h, &checker(w, h));
+        assert_eq!(&png[..8], &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]);
+        let mut pos = 8;
+        let mut kinds = Vec::new();
+        while pos < png.len() {
+            let len = u32::from_be_bytes(png[pos..pos + 4].try_into().unwrap()) as usize;
+            let kind = &png[pos + 4..pos + 8];
+            let data = &png[pos + 8..pos + 8 + len];
+            let crc = u32::from_be_bytes(png[pos + 8 + len..pos + 12 + len].try_into().unwrap());
+            let mut hasher = crc32fast::Hasher::new();
+            hasher.update(kind);
+            hasher.update(data);
+            assert_eq!(hasher.finalize(), crc, "bad CRC in {}", String::from_utf8_lossy(kind));
+            if kind == b"IHDR" {
+                assert_eq!(len, 13);
+                assert_eq!(&data[..8], &[0, 0, 0, 7, 0, 0, 0, 3]);
+                assert_eq!(&data[8..], &[8, 6, 0, 0, 0]); // 8-bit RGBA, deflate, filter 0, no interlace
+            }
+            if kind == b"IEND" {
+                assert_eq!(len, 0);
+            }
+            kinds.push(String::from_utf8_lossy(kind).into_owned());
+            pos += 12 + len;
+        }
+        assert_eq!(pos, png.len());
+        assert_eq!(kinds, ["IHDR", "IDAT", "IEND"]);
+    }
+
+    /// The single IDAT inflates to `height` filter-0 scanlines of the input rows.
+    #[test]
+    fn png_idat_inflates_to_filter0_scanlines() {
+        use std::io::Read;
+        let (w, h) = (5u32, 4u32);
+        let rgba = checker(w, h);
+        let png = encode_png(w, h, &rgba);
+        // 8 signature + 25 (IHDR chunk) = 33: IDAT length at 33, type at 37, data at 41.
+        let len = u32::from_be_bytes(png[33..37].try_into().unwrap()) as usize;
+        assert_eq!(&png[37..41], b"IDAT");
+        let mut raw = Vec::new();
+        flate2::read::ZlibDecoder::new(&png[41..41 + len])
+            .read_to_end(&mut raw)
+            .unwrap();
+        let stride = 1 + (w * 4) as usize;
+        assert_eq!(raw.len(), stride * h as usize);
+        for (y, line) in raw.chunks_exact(stride).enumerate() {
+            assert_eq!(line[0], 0, "scanline {y} filter byte");
+            let row = &rgba[y * (w * 4) as usize..(y + 1) * (w * 4) as usize];
+            assert_eq!(&line[1..], row, "scanline {y}");
+        }
     }
 }

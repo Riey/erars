@@ -125,7 +125,7 @@ fn headless_shot(
         }
     }
     match headless::render_lines(&mut font, &frame.lines, w, h) {
-        Some(img) => match headless::write_ppm(path, &img) {
+        Some(img) => match headless::write_png(path, &img) {
             Ok(()) => println!("Wrote {path} ({w}x{h})"),
             Err(e) => eprintln!("Failed to write {path}: {e}"),
         },
