@@ -3,6 +3,9 @@
 mod app;
 mod atlas;
 mod draw;
+#[allow(dead_code)] // RasterFlags is consumed by the shaper/raster rewrite (T6/T8)
+mod flags;
+#[allow(dead_code)] // FontChain is wired into the app in T10; FontCtx stays until then
 mod font;
 mod gpu;
 mod grid;
