@@ -14,20 +14,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
     - name: Cargo Target Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: target
         key: ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-target-${{ hashFiles('**/Cargo.toml') }}
           ${{ runner.os }}-cargo-target
+    # lavapipe (Mesa's software Vulkan driver) gives wgpu an adapter on the
+    # headless runner, so the renderer's pixel tests run instead of skipping.
+    - name: Install lavapipe
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1 vulkan-tools
+        vulkaninfo --summary || true
     - name: Build
       run: cargo build --verbose --all
     - name: Run tests
       run: cargo test --verbose --all
-          
+      env:
+        # test_support::gpu_device panics instead of printing SKIP, so a
+        # missing adapter fails the job rather than passing silently.
+        ERARS_REQUIRE_GPU: "1"

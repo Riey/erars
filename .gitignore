@@ -13,3 +13,6 @@ massif*
 *~undo-tree~
 heaptrack*
 game.era
+# proprietary font kept locally for the opt-in MS Gothic tests (ERARS_FONT_DIR); never commit
+msgothic.ttc
+.DS_Store

@@ -24,13 +24,15 @@ run-ym-log:
 run-ym-toriko:
     cargo run --release --bin erars-stdio -- --use-input=toriko.ron ../eraTHYMKR
 
-# Headless GPU alignment tests (no display server needed)
+# Layout goldens + GPU pixel tests + the tui fixture game (no display server needed).
+# ERARS_REQUIRE_GPU=1 turns "no adapter" skips into failures; K9_UPDATE_SNAPSHOTS=1 refreshes goldens.
 test-align:
-    cargo test -p erars-renderer headless -- --nocapture
+    cargo test -p erars-renderer --lib -- layout:: text:: headless:: draw:: raster:: --nocapture
+    cargo test -p erars-renderer --test tui -- --nocapture
 
-# Render a game's first screen to a PPM headlessly (no display), e.g. over SSH.
-# Usage: just headless-shot /path/to/game /tmp/out.ppm
-headless-shot game="." out="/tmp/erars-shot.ppm":
+# Render a game's first screen to a PNG headlessly (no display), e.g. over SSH.
+# Usage: just headless-shot /path/to/game /tmp/out.png
+headless-shot game="." out="/tmp/erars-shot.png":
     cargo run -p erars-renderer -- --quite --headless-shot {{out}} {{game}}
 
 gen-test name:
