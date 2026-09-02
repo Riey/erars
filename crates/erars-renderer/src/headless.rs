@@ -9,7 +9,7 @@ use erars_ui::ConsoleLine;
 use wgpu::util::DeviceExt;
 
 use crate::atlas::GlyphAtlas;
-use crate::draw::build_instances;
+use crate::draw::build_instances_legacy;
 use crate::font::FontCtx;
 use crate::gpu::{create_quad_pipeline, Globals};
 use crate::grid::Grid;
@@ -87,7 +87,7 @@ pub fn render_lines(
 
     let cols = ((width as f32 / font.cell_w).floor() as usize).max(1);
     let grid = Grid::build(font, lines, cols, None, None, [255, 255, 0]);
-    let instances = build_instances(
+    let instances = build_instances_legacy(
         &device,
         &queue,
         &mut font.font_system,

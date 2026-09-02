@@ -12,7 +12,7 @@ use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
 
 use crate::atlas::GlyphAtlas;
-use crate::draw::build_instances;
+use crate::draw::build_instances_legacy;
 use crate::font::FontCtx;
 use crate::gpu::GpuContext;
 use crate::grid::{ButtonRegion, Grid};
@@ -156,7 +156,7 @@ impl App {
         // Phase 2: GPU work.
         let gpu = self.gpu.as_mut().unwrap();
         let atlas = self.atlas.as_mut().unwrap();
-        let instances = build_instances(
+        let instances = build_instances_legacy(
             &gpu.device,
             &gpu.queue,
             &mut self.font.font_system,
