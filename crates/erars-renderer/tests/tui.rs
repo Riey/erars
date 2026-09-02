@@ -1040,7 +1040,11 @@ fn tui_png_korean() {
     .expect("headless render");
     assert_eq!((img.width, img.height), (760, 480));
     assert!(
-        img.rgba.chunks_exact(4).any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0),
+        img.rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|p| p[0] > 0 || p[1] > 0 || p[2] > 0),
         "nothing was drawn"
     );
     let out = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("tui-korean.png");

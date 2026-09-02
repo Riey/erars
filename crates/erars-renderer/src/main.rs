@@ -116,7 +116,7 @@ fn main() {
         Some(
             Logger::try_with_str(format!(
                 "warn,wgpu_hal=off,naga=warn,erars={level},erars_renderer={level}",
-                level = &args.log_level
+                level = args.log_level
             ))
             .unwrap()
             .log_to_file(
