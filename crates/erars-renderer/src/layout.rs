@@ -211,6 +211,303 @@ fn rule_string(shaper: &mut Shaper, style: &TextStyle, s: &str, g: &Geometry) ->
     Some(pieces.iter().map(|(t, _)| *t).collect())
 }
 
+/// The styled run currently being placed (for underline / strike rects).
+struct RunState {
+    style: FontStyle,
+    color: [u8; 3],
+    /// Row-relative x of the run's first cluster on the current row.
+    start: Option<i32>,
+}
+
+/// Walks one `ConsoleLine` with a pixel cursor and emits rows into a `Layout`.
+struct LineBuilder<'a> {
+    g: &'a Geometry,
+    rules: LineRules,
+    line: usize,
+    align: Alignment,
+    logical_start: bool,
+    /// Pixel cursor on the current row (sum of the boxes placed so far).
+    x: i32,
+    clusters: Vec<PlacedCluster>,
+    rects: Vec<Rect>,
+    run: Option<RunState>,
+    /// The button part being walked: `(input_gen, value)`.
+    button: Option<(u32, &'a Value)>,
+    /// This row's fragment of that button: `(index into Layout::buttons, start x)`.
+    frag: Option<(usize, i32)>,
+}
+
+impl<'a> LineBuilder<'a> {
+    fn new(g: &'a Geometry, rules: LineRules, line: usize, align: Alignment) -> Self {
+        Self {
+            g,
+            rules,
+            line,
+            align,
+            logical_start: true,
+            x: 0,
+            clusters: Vec::new(),
+            rects: Vec::new(),
+            run: None,
+            button: None,
+            frag: None,
+        }
+    }
+
+    /// Place one styled run. A `\n` (only reachable from the console paths
+    /// that do not split: PRINTC/PRINTLC, PRINTPLAIN, PRINTSINGLE,
+    /// CUSTOMDRAWLINE, REUSELASTLINE) finishes the row and continues on a
+    /// continuation row; it occupies no cells and never reaches the shaper.
+    fn push_run(&mut self, text: &str, style: &TextStyle, shaper: &mut Shaper, out: &mut Layout) {
+        self.run = Some(RunState {
+            style: style.font_style,
+            color: style.color.0,
+            start: None,
+        });
+        for (i, seg) in text.split('\n').enumerate() {
+            if i > 0 {
+                self.break_row(out);
+            }
+            if seg.is_empty() {
+                continue;
+            }
+            let clusters = shaper.shape(seg, style);
+            for c in clusters.iter() {
+                self.place(c, style, out);
+            }
+        }
+        self.flush_run_rects();
+        self.run = None;
+    }
+
+    /// Character-granular wrapping: `x + w > drawable_w` with `x > 0` finishes
+    /// the row and the cluster starts the next one (a full-width cluster moves
+    /// whole; the first cluster of a row is always placed).
+    fn place(&mut self, c: &Cluster, style: &TextStyle, out: &mut Layout) {
+        let w = c.cells as u32 * self.g.m.half_w;
+        if self.x > 0 && self.x as u32 + w > self.g.drawable_w {
+            self.break_row(out);
+        }
+        let button = match (self.button, self.frag) {
+            (Some(_), Some((i, _))) => Some(i),
+            (Some(_), None) => {
+                // The region is pushed when the fragment ends; nothing else can
+                // push a region in between, so its index is known now.
+                let i = out.buttons.len();
+                self.frag = Some((i, self.x));
+                Some(i)
+            }
+            (None, _) => None,
+        };
+        if let Some(run) = &mut self.run {
+            if run.start.is_none() {
+                run.start = Some(self.x);
+            }
+        }
+        self.clusters.push(PlacedCluster {
+            x: self.x,
+            cells: c.cells,
+            text: c.text.clone(),
+            color: style.color.0,
+            style: style.font_style,
+            button,
+            glyphs: Arc::from(&c.glyphs[..]),
+        });
+        self.x += w as i32;
+    }
+
+    /// One rect per styled run per row, spanning its cluster boxes.
+    fn flush_run_rects(&mut self) {
+        let Some(run) = self.run.as_mut() else { return };
+        let Some(start) = run.start.take() else { return };
+        let w = (self.x - start) as u32;
+        if w == 0 {
+            return;
+        }
+        let button = self.frag.map(|(i, _)| i);
+        if run.style.contains(FontStyle::UNDERLINE) {
+            self.rects.push(Rect {
+                kind: RectKind::Underline,
+                x: start,
+                dy: self.rules.ul_dy,
+                h: self.rules.ul_h,
+                w,
+                color: run.color,
+                button,
+            });
+        }
+        if run.style.contains(FontStyle::STRIKELINE) {
+            self.rects.push(Rect {
+                kind: RectKind::Strike,
+                x: start,
+                dy: self.rules.st_dy,
+                h: self.rules.st_h,
+                w,
+                color: run.color,
+                button,
+            });
+        }
+    }
+
+    fn begin_button(&mut self, input_gen: u32, value: &'a Value) {
+        self.button = Some((input_gen, value));
+    }
+
+    fn end_button(&mut self, out: &mut Layout) {
+        self.end_fragment(out);
+        self.button = None;
+    }
+
+    /// Emit the `ButtonRegion` for this row's fragment (if any cluster landed).
+    fn end_fragment(&mut self, out: &mut Layout) {
+        if let (Some((i, start)), Some((input_gen, value))) = (self.frag.take(), self.button) {
+            debug_assert_eq!(i, out.buttons.len());
+            out.buttons.push(ButtonRegion {
+                row: out.rows.len(),
+                x: start,
+                w: (self.x - start) as u32,
+                input_gen,
+                value: value.clone(),
+            });
+        }
+    }
+
+    /// Finish the current row (rects, button fragment, alignment) and start a
+    /// continuation row.
+    fn break_row(&mut self, out: &mut Layout) {
+        self.flush_run_rects();
+        self.end_fragment(out);
+        let width = self.x.max(0) as u32;
+        out.rows.push(Row {
+            line: self.line,
+            logical_start: self.logical_start,
+            x0: align_x0(self.align, self.g.content_w, width),
+            width,
+            clusters: std::mem::take(&mut self.clusters),
+            rects: std::mem::take(&mut self.rects),
+        });
+        self.logical_start = false;
+        self.x = 0;
+    }
+
+    /// Every `ConsoleLine` yields at least one row (an empty line is a blank row).
+    fn finish(mut self, out: &mut Layout) {
+        self.break_row(out);
+    }
+}
+
+/// Lay out `lines` (a `ConsoleFrame`'s lines, oldest first) at `g`.
+/// Ends with `shaper.sweep()`, so the shape cache holds exactly these strings.
+pub fn layout(lines: &[ConsoleLine], g: &Geometry, shaper: &mut Shaper) -> Layout {
+    let rules = LineRules::from_primary(shaper);
+    let mut out = Layout::default();
+    for (li, line) in lines.iter().enumerate() {
+        let mut b = LineBuilder::new(g, rules, li, line.align);
+        for part in &line.parts {
+            match part {
+                ConsoleLinePart::Text(s, style) => b.push_run(s, style, shaper, &mut out),
+                ConsoleLinePart::Line(s, style) => {
+                    // DRAWLINE / CUSTOMDRAWLINE: Regular style, current colour
+                    // (Emuera PrintBar); the console stores NORMAL too (T3).
+                    let style = TextStyle {
+                        font_style: FontStyle::NORMAL,
+                        ..style.clone()
+                    };
+                    match rule_string(shaper, &style, s, g) {
+                        Some(rule) => b.push_run(&rule, &style, shaper, &mut out),
+                        None => log::warn!("DRAWLINE string {s:?} has no width; skipped"),
+                    }
+                }
+                ConsoleLinePart::Button(parts, input_gen, value) => {
+                    b.begin_button(*input_gen, value);
+                    for (s, style) in parts {
+                        b.push_run(s, style, shaper, &mut out);
+                    }
+                    b.end_button(&mut out);
+                }
+            }
+        }
+        b.finish(&mut out);
+    }
+    shaper.sweep();
+    out
+}
+
+fn style_letters(style: FontStyle) -> String {
+    let mut out = String::new();
+    if style.contains(FontStyle::BOLD) {
+        out.push('B');
+    }
+    if style.contains(FontStyle::ITALIC) {
+        out.push('I');
+    }
+    if style.contains(FontStyle::UNDERLINE) {
+        out.push('U');
+    }
+    if style.contains(FontStyle::STRIKELINE) {
+        out.push('S');
+    }
+    out
+}
+
+/// Font-independent text form of a `Layout` (spec Component 7), one line per
+/// row / cluster / rect / button, joined by `\n` without a trailing newline:
+///
+/// * `row <r> line <line>[+] x0=<x0> w=<width>` — `+` marks a continuation row
+/// * `  <x>:<cells> "<text>" [c=RRGGBB] [s=<BIUS>] [btn=<i>]` (two-space indent)
+/// * `  rect <underline|strike> x=<x> dy=<dy> h=<h> w=<w> [btn=<i>]`
+/// * `btn <i> row=<r> x=<x> w=<w> gen=<gen> value=<Value as Debug>`
+///
+/// `c=` only when the colour differs from `default_fg`; `s=` only when the
+/// style is not `NORMAL`. No font id, glyph id, `dx`, `dy` or `size_px`.
+pub fn layout_snapshot(layout: &Layout, default_fg: [u8; 3]) -> String {
+    use std::fmt::Write;
+    let mut lines: Vec<String> = Vec::new();
+    for (r, row) in layout.rows.iter().enumerate() {
+        lines.push(format!(
+            "row {r} line {}{} x0={} w={}",
+            row.line,
+            if row.logical_start { "" } else { "+" },
+            row.x0,
+            row.width
+        ));
+        for c in &row.clusters {
+            let mut s = format!("  {}:{} {:?}", c.x, c.cells, c.text.as_str());
+            if c.color != default_fg {
+                let _ = write!(s, " c={:02X}{:02X}{:02X}", c.color[0], c.color[1], c.color[2]);
+            }
+            if !c.style.is_empty() {
+                let _ = write!(s, " s={}", style_letters(c.style));
+            }
+            if let Some(b) = c.button {
+                let _ = write!(s, " btn={b}");
+            }
+            lines.push(s);
+        }
+        for rect in &row.rects {
+            let kind = match rect.kind {
+                RectKind::Underline => "underline",
+                RectKind::Strike => "strike",
+            };
+            let mut s = format!(
+                "  rect {kind} x={} dy={} h={} w={}",
+                rect.x, rect.dy, rect.h, rect.w
+            );
+            if let Some(b) = rect.button {
+                let _ = write!(s, " btn={b}");
+            }
+            lines.push(s);
+        }
+    }
+    for (i, b) in layout.buttons.iter().enumerate() {
+        lines.push(format!(
+            "btn {i} row={} x={} w={} gen={} value={:?}",
+            b.row, b.x, b.w, b.input_gen, b.value
+        ));
+    }
+    lines.join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -318,5 +615,80 @@ mod tests {
         // clamped at 0 when the row is wider than the window
         assert_eq!(align_x0(Alignment::Right, 30, 40), 0);
         assert_eq!(align_x0(Alignment::Center, 30, 40), 0);
+    }
+
+    fn styled(font_style: FontStyle) -> TextStyle {
+        TextStyle {
+            font_style,
+            ..style()
+        }
+    }
+
+    fn text(s: &str) -> ConsoleLinePart {
+        ConsoleLinePart::Text(s.to_owned(), style())
+    }
+
+    fn rule(s: &str) -> ConsoleLinePart {
+        ConsoleLinePart::Line(s.to_owned(), style())
+    }
+
+    fn button(s: &str, input_gen: u32, value: Value) -> ConsoleLinePart {
+        ConsoleLinePart::Button(vec![(s.to_owned(), style())], input_gen, value)
+    }
+
+    fn line(align: Alignment, parts: Vec<ConsoleLinePart>) -> ConsoleLine {
+        ConsoleLine {
+            align,
+            button_start: None,
+            parts,
+        }
+    }
+
+    fn snap(lines: &[ConsoleLine], content_w: u32) -> String {
+        let mut sh = shaper();
+        layout_snapshot(&layout(lines, &geometry(content_w), &mut sh), FG)
+    }
+
+    #[test]
+    fn empty_line_is_one_row() {
+        k9::snapshot!(snap(&[line(Alignment::Left, vec![])], 760), "row 0 line 0 x0=0 w=0");
+    }
+
+    #[test]
+    fn plain_text_colour_and_style_tags() {
+        let red_bold = TextStyle {
+            color: Color([255, 0, 0]),
+            ..styled(FontStyle::BOLD)
+        };
+        k9::snapshot!(
+            snap(
+                &[line(
+                    Alignment::Left,
+                    vec![text("ab"), ConsoleLinePart::Text("c".into(), red_bold)]
+                )],
+                760
+            ),
+            r#"
+row 0 line 0 x0=0 w=27
+  0:1 "a"
+  9:1 "b"
+  18:1 "c" c=FF0000 s=B
+"#
+        );
+    }
+
+    /// `あ` is not in the bundled font (it draws `.notdef`), but the JP width
+    /// table gives it 2 cells, so `b` lands at 27 regardless of the glyph.
+    #[test]
+    fn full_width_cells_without_glyphs() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![text("aあb")])], 760),
+            r#"
+row 0 line 0 x0=0 w=36
+  0:1 "a"
+  9:2 "あ"
+  27:1 "b"
+"#
+        );
     }
 }
