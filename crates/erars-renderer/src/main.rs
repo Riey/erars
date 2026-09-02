@@ -22,40 +22,20 @@ use erars_compiler::Language;
 use erars_loader::{load_config, load_script, run_script};
 use winit::event_loop::EventLoop;
 
-/// Build the ordered default-font candidate list: the configured family first,
-/// then coherent CJK *monospace* families for the game language, then generic
-/// monospace baselines. FontCtx picks the first one installed.
+/// Build the ordered default-font candidate list for the legacy `FontCtx`:
+/// the configured family first, then the per-language fixed-pitch CJK
+/// families from `font::language_candidates`, then generic monospace
+/// baselines. (Task 10 replaces this with `font::FontChain::new`.)
 fn font_candidates(lang: Language, configured: &str) -> Vec<String> {
-    let lang_fonts: &[&str] = match lang {
-        Language::Korean => &[
-            "D2Coding",
-            "NanumGothicCoding",
-            "GulimChe",
-            "굴림체",
-            "DotumChe",
-            "돋움체",
-            "Sarasa Mono K",
-            "Noto Sans Mono CJK KR",
-        ],
-        Language::Japanese => &[
-            "MS Gothic",
-            "ＭＳ ゴシック",
-            "Sarasa Mono J",
-            "Noto Sans Mono CJK JP",
-        ],
-        Language::ChineseHans | Language::ChineseHant => &[
-            "NSimSun",
-            "Sarasa Mono SC",
-            "Sarasa Mono TC",
-            "Noto Sans Mono CJK SC",
-        ],
-    };
-
     let mut out: Vec<String> = Vec::new();
     if !configured.is_empty() {
         out.push(configured.to_string());
     }
-    out.extend(lang_fonts.iter().map(|s| s.to_string()));
+    out.extend(
+        font::language_candidates(lang)
+            .iter()
+            .map(|s| s.to_string()),
+    );
     out.extend(
         ["DejaVu Sans Mono", "Noto Sans Mono"]
             .iter()
