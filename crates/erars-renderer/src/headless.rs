@@ -665,4 +665,152 @@ mod tests {
         let none = render(&mut shaper, &dev, &fr, w, h, None, None);
         assert!(!any_ink(&none, 2 * lh, 3 * lh), "strip drawn without input");
     }
+
+    /// Spec Testing §5: a box-drawing frame over an ASCII ruler. With the
+    /// bundled font as primary (0.6 em → half_w 11) every JIS box character is
+    /// a 2-cell, 22 px box holding a centred 10.8 px glyph; all ink must land
+    /// inside `[shift + k·half_w, shift + (k+cells)·half_w)` of the cluster
+    /// that owns it (or spill straight down from the row above), and the
+    /// spaced row proves nothing leaks sideways into a blank cell.
+    #[test]
+    fn box_frame_ink_lands_in_cells() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        assert_eq!((m.font_px, m.half_w, m.line_h, m.shift), (18, 11, 19, 3));
+        let fr = frame(vec![
+            text_line("01234567", WHITE),
+            text_line("┏━━┓", WHITE),
+            text_line("┃    ┃", WHITE),
+            text_line("┗━━┛", WHITE),
+            text_line("┏ ━ ┓", WHITE),
+        ]);
+        let (w, h) = (200, 6 * m.line_h);
+        let img = render(&mut shaper, &dev, &fr, w, h, None, None);
+        let lay = layout(&fr.lines, &geometry(&shaper, w), &mut shaper);
+        assert_eq!(lay.rows.len(), 5);
+        // JP widths: box characters are 2 cells, so every row is 8 cells wide.
+        for row in &lay.rows {
+            let cells: u32 = row.clusters.iter().map(|c| c.cells as u32).sum();
+            assert_eq!(cells, 8, "row {} cells", row.line);
+        }
+        assert_ink_in_boxes(&img, &lay, &m, h);
+    }
+
+    /// Identical lines render to byte-identical row bands: glyph origins are
+    /// integer pixels and the sampler is Nearest, so nothing drifts per row.
+    /// Rows 1–3 are compared (each has an identical row above it spilling the
+    /// same descenders into its band; row 0 has none).
+    #[test]
+    fn identical_rows_are_byte_identical() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let lh = shaper.metrics().line_h;
+        let fr = frame(vec![text_line("Abc123Xyz┏━┓", WHITE); 4]);
+        let h = 5 * lh;
+        let img = render(&mut shaper, &dev, &fr, 300, h, None, None);
+        let b1 = img.band(lh, 2 * lh);
+        assert!(b1.iter().any(|&v| v != 0), "no ink rendered");
+        assert_eq!(b1, img.band(2 * lh, 3 * lh), "row 2 differs from row 1");
+        assert_eq!(b1, img.band(3 * lh, 4 * lh), "row 3 differs from row 1");
+    }
+
+    /// A glyph whose natural advance exceeds its box (`a > w`: the bundled
+    /// 10.8 px glyphs in a pinned 9 px cell) is rescaled, and one that fits
+    /// (`a ≤ w`: 2-cell `α`/`°`/`→` in an 18 px box) is centred — neither may
+    /// put ink outside its box.
+    #[test]
+    fn rescaled_and_centred_glyphs_stay_in_their_boxes() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        shaper.set_metrics(CellMetrics {
+            scale: 1.0,
+            font_px: 18,
+            half_w: 9,
+            line_h: 19,
+            baseline: 15,
+            shift: 3,
+        });
+        let m = *shaper.metrics();
+        let fr = frame(vec![text_line("MMMM W W", WHITE), text_line("αα°→", WHITE)]);
+        let (w, h) = (200, 3 * m.line_h);
+        let img = render(&mut shaper, &dev, &fr, w, h, None, None);
+        let lay = layout(&fr.lines, &geometry(&shaper, w), &mut shaper);
+        assert_eq!(
+            lay.rows[0].clusters.iter().map(|c| c.cells).collect::<Vec<_>>(),
+            [1; 8]
+        );
+        assert_eq!(
+            lay.rows[1].clusters.iter().map(|c| c.cells).collect::<Vec<_>>(),
+            [2, 2, 2, 2]
+        );
+        assert_ink_in_boxes(&img, &lay, &m, h);
+    }
+
+    fn button(text: &str, gen: u32, v: i64) -> ConsoleLinePart {
+        ConsoleLinePart::Button(vec![(text.to_string(), style(WHITE))], gen, Value::Int(v))
+    }
+
+    /// Hover is colour-only at draw time: `hover = Some(i)` changes pixels only
+    /// inside `buttons[i]`'s columns, every changed pixel takes the focus colour
+    /// (white → yellow keeps r/g, zeroes b), and `hover = None` is byte-stable.
+    #[test]
+    fn hover_recolours_only_the_hovered_button() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let line = ConsoleLine {
+            align: Alignment::Left,
+            button_start: None,
+            parts: vec![
+                ConsoleLinePart::Text("pick: ".into(), style(WHITE)),
+                button("[1] go", 1, 1),
+                ConsoleLinePart::Text(" ".into(), style(WHITE)),
+                button("[2] stop", 1, 2),
+            ],
+        };
+        let fr = frame(vec![line]);
+        let (w, h) = (300, 2 * m.line_h);
+        let base = render(&mut shaper, &dev, &fr, w, h, None, None);
+        let again = render(&mut shaper, &dev, &fr, w, h, None, None);
+        assert_eq!(base.rgba, again.rgba, "unhovered render is not byte-stable");
+        let lay = layout(&fr.lines, &geometry(&shaper, w), &mut shaper);
+        assert_eq!(lay.buttons.len(), 2);
+        let mut hovered: Vec<Rendered> = Vec::new();
+        for i in 0..2 {
+            let img = render(&mut shaper, &dev, &fr, w, h, None, Some(i));
+            let b = &lay.buttons[i];
+            let bx0 = (m.shift as i32 + lay.rows[b.row].x0 + b.x) as u32;
+            let bx1 = bx0 + b.w;
+            let mut changed = 0usize;
+            for y in 0..h {
+                for x in 0..w {
+                    let (p, q) = (base.pixel(x, y), img.pixel(x, y));
+                    if p == q {
+                        continue;
+                    }
+                    changed += 1;
+                    assert!(
+                        x >= bx0 && x < bx1,
+                        "hover {i}: pixel ({x},{y}) changed outside its box [{bx0},{bx1})"
+                    );
+                    assert_eq!(
+                        (q[0], q[1], q[2]),
+                        (p[0], p[1], 0),
+                        "hover {i}: pixel ({x},{y}) is not the focus colour"
+                    );
+                }
+            }
+            assert!(changed > 0, "hover {i} changed nothing");
+            hovered.push(img);
+        }
+        assert_ne!(
+            hovered[0].rgba, hovered[1].rgba,
+            "hovering different buttons must differ"
+        );
+    }
 }
