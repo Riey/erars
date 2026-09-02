@@ -101,8 +101,38 @@ impl Rendered {
     }
 }
 
+/// Why a headless render could not be produced. `render_frame*` return these
+/// instead of panicking: an oversized frame is rejected before any wgpu call
+/// that would trip validation, so the CLI can report it and exit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RenderError {
+    /// This machine has no wgpu adapter at all.
+    NoAdapter,
+    /// The requested frame is larger than the adapter's maximum texture size.
+    TooLarge { width: u32, height: u32, max: u32 },
+}
+
+impl std::fmt::Display for RenderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NoAdapter => f.write_str("no GPU adapter available for headless rendering"),
+            Self::TooLarge { width, height, max } => write!(
+                f,
+                "frame {width}x{height} exceeds the adapter's max texture size {max}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for RenderError {}
+
 /// The default adapter/device without a surface. `None` when this machine has
 /// no wgpu adapter (tests skip or fail through `test_support::gpu_device`).
+///
+/// The downlevel limits are kept (the atlas page size is tied to them) except
+/// for the texture dimensions, which are raised to whatever the adapter really
+/// supports: a game may configure a window wider or taller than the downlevel
+/// 2048 px ceiling, and the offscreen target is that size.
 pub fn request_device() -> Option<(wgpu::Device, wgpu::Queue)> {
     let instance = wgpu::Instance::default();
     let adapter =
@@ -111,7 +141,8 @@ pub fn request_device() -> Option<(wgpu::Device, wgpu::Queue)> {
         &wgpu::DeviceDescriptor {
             label: Some("erars-headless"),
             required_features: wgpu::Features::empty(),
-            required_limits: wgpu::Limits::downlevel_defaults(),
+            required_limits: wgpu::Limits::downlevel_defaults()
+                .using_resolution(adapter.limits()),
         },
         None,
     ))
@@ -136,7 +167,8 @@ pub fn shaper_for(config: &EraConfig, game_dir: &Path) -> Shaper {
 }
 
 /// Render `frame` into a `content_w × height` image with `scroll_rows = 0`
-/// (bitmap strikes on). `None` if no GPU adapter is available.
+/// (bitmap strikes on). [`RenderError::NoAdapter`] if this machine has no GPU,
+/// [`RenderError::TooLarge`] if the frame exceeds the adapter's texture size.
 pub fn render_frame(
     shaper: &mut Shaper,
     frame: &ConsoleFrame,
@@ -144,7 +176,7 @@ pub fn render_frame(
     height: u32,
     input: Option<&str>,
     hover: Option<usize>,
-) -> Option<Rendered> {
+) -> Result<Rendered, RenderError> {
     render_frame_opts(shaper, frame, content_w, height, input, hover, true)
 }
 
@@ -157,9 +189,9 @@ pub fn render_frame_opts(
     input: Option<&str>,
     hover: Option<usize>,
     use_bitmap_strikes: bool,
-) -> Option<Rendered> {
-    let (device, queue) = request_device()?;
-    Some(render_frame_on(
+) -> Result<Rendered, RenderError> {
+    let (device, queue) = request_device().ok_or(RenderError::NoAdapter)?;
+    render_frame_on(
         &device,
         &queue,
         shaper,
@@ -169,12 +201,16 @@ pub fn render_frame_opts(
         input,
         hover,
         use_bitmap_strikes,
-    ))
+    )
 }
 
 /// [`render_frame`] on an existing device. `hover` indexes `Layout.buttons`
 /// of the log layout and recolours that fragment with `frame.hl_color` (draw
 /// time only, nothing moves).
+///
+/// The frame size is checked against `device.limits()` first, so an oversized
+/// request comes back as [`RenderError::TooLarge`] rather than aborting inside
+/// wgpu's texture validation.
 #[allow(clippy::too_many_arguments)]
 pub fn render_frame_on(
     device: &wgpu::Device,
@@ -186,9 +222,17 @@ pub fn render_frame_on(
     input: Option<&str>,
     hover: Option<usize>,
     use_bitmap_strikes: bool,
-) -> Rendered {
+) -> Result<Rendered, RenderError> {
     let content_w = content_w.max(1);
     let height = height.max(1);
+    let max = device.limits().max_texture_dimension_2d;
+    if content_w > max || height > max {
+        return Err(RenderError::TooLarge {
+            width: content_w,
+            height,
+            max,
+        });
+    }
     let m = *shaper.metrics();
     let g = Geometry::new(content_w, m);
     let mut raster = GlyphRaster::new(device, use_bitmap_strikes);
@@ -244,11 +288,11 @@ pub fn render_frame_on(
         content_w,
         height,
     );
-    Rendered {
+    Ok(Rendered {
         width: content_w,
         height,
         rgba,
-    }
+    })
 }
 
 /// Append `from`'s per-page instance buckets to `into`'s (growing the list).
@@ -464,6 +508,7 @@ mod tests {
         hover: Option<usize>,
     ) -> Rendered {
         render_frame_on(&dev.0, &dev.1, shaper, fr, w, h, input, hover, true)
+            .expect("render within the adapter's texture limits")
     }
 
     /// Screen y of row `r` in a `height`-tall render with `scroll_rows = 0`,
@@ -1038,6 +1083,50 @@ mod tests {
         for c in ['═', '║'] {
             assert_eq!(widths.char_cells(c), 1, "{c} cells");
             assert_eq!(adv(c) * 2, upem, "{c} advance");
+        }
+    }
+
+    /// A frame larger than the adapter's texture ceiling is an error, not a
+    /// panic inside wgpu validation — and a 3000 px wide frame (over the
+    /// downlevel 2048 default) renders now that `request_device` takes the
+    /// texture dimensions from the adapter.
+    #[test]
+    fn oversized_frame_is_rejected_and_wide_frames_render() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let fr = frame(vec![text_line("wide", WHITE)]);
+        let max = dev.0.limits().max_texture_dimension_2d;
+
+        let too_wide =
+            render_frame_on(&dev.0, &dev.1, &mut shaper, &fr, max + 1, 64, None, None, true);
+        let Err(err) = too_wide else {
+            panic!("a frame past the adapter's ceiling must be rejected, not rendered")
+        };
+        assert_eq!(
+            err,
+            RenderError::TooLarge {
+                width: max + 1,
+                height: 64,
+                max
+            }
+        );
+        assert!(
+            err.to_string().contains(&max.to_string()),
+            "error message must name the limit: {err}"
+        );
+
+        if max >= 3000 {
+            let lh = shaper.metrics().line_h;
+            let img = render(&mut shaper, &dev, &fr, 3000, 480, None, None);
+            assert_eq!((img.width, img.height), (3000, 480));
+            let ink = img.ink_columns(480 - 2 * lh, 480 - lh, INK);
+            assert!(ink.iter().any(|&b| b), "nothing drawn in a 3000 px wide frame");
+        } else {
+            eprintln!(
+                "SKIP {}: adapter max texture size is {max} (< 3000)",
+                ts::test_name()
+            );
         }
     }
 }

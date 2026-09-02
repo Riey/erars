@@ -212,7 +212,11 @@ impl GpuContext {
             &wgpu::DeviceDescriptor {
                 label: Some("erars-renderer"),
                 required_features: wgpu::Features::empty(),
-                required_limits: wgpu::Limits::downlevel_defaults(),
+                // Downlevel limits, but with the adapter's real texture
+                // dimensions: a game window may be wider or taller than the
+                // downlevel 2048 px ceiling.
+                required_limits: wgpu::Limits::downlevel_defaults()
+                    .using_resolution(adapter.limits()),
             },
             None,
         ))

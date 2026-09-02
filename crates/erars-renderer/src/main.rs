@@ -124,12 +124,19 @@ fn headless_shot(
             Ok(SystemRequest::Input(_)) | Ok(SystemRequest::Quit) | Err(_) => break,
         }
     }
-    match headless::render_frame(&mut shaper, &frame, w, h, Some(""), None) {
-        Some(img) => match headless::write_png(path, &img) {
-            Ok(()) => println!("Wrote {path} ({w}x{h})"),
-            Err(e) => eprintln!("Failed to write {path}: {e}"),
-        },
-        None => eprintln!("No GPU adapter available for headless rendering"),
+    let img = match headless::render_frame(&mut shaper, &frame, w, h, Some(""), None) {
+        Ok(img) => img,
+        Err(e) => {
+            eprintln!("Headless render failed: {e}");
+            std::process::exit(1);
+        }
+    };
+    match headless::write_png(path, &img) {
+        Ok(()) => println!("Wrote {path} ({w}x{h})"),
+        Err(e) => {
+            eprintln!("Failed to write {path}: {e}");
+            std::process::exit(1);
+        }
     }
 }
 
