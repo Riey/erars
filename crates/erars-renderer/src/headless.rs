@@ -813,4 +813,231 @@ mod tests {
             "hovering different buttons must differ"
         );
     }
+
+    /// Same frame test with a real CJK font as the *fallback* (the bundled
+    /// font stays primary, half_w 11): 18 px CJK glyphs are centred in their
+    /// 22 px boxes and must not leak; the CJK row really resolves to the
+    /// fallback face, not to the primary's `.notdef`.
+    #[test]
+    fn box_frame_ink_lands_in_cells_cjk() {
+        let _gpu = gpu_lock();
+        let Some(cjk) = ts::require_cjk_font() else { return };
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font(), cjk]);
+        let m = *shaper.metrics();
+        assert_eq!(
+            (m.font_px, m.half_w, m.line_h, m.shift),
+            (18, 11, 19, 3),
+            "bundled font must stay primary"
+        );
+        let primary = shaper.chain().primary();
+        for c in ['漢', 'あ', '한'] {
+            let (id, _) = shaper.chain().resolve(c, &StyleKey::plain());
+            assert_ne!(id, primary, "{c} must come from the CJK fallback");
+        }
+        let fr = frame(vec![
+            text_line("01234567", WHITE),
+            text_line("漢字한글", WHITE),
+            text_line("┏━━┓", WHITE),
+            text_line("あ い", WHITE),
+            text_line("Aあ漢B", WHITE),
+        ]);
+        let (w, h) = (200, 6 * m.line_h);
+        let img = render(&mut shaper, &dev, &fr, w, h, None, None);
+        let lay = layout(&fr.lines, &geometry(&shaper, w), &mut shaper);
+        assert_eq!(
+            lay.rows[1].clusters.iter().map(|c| c.cells).collect::<Vec<_>>(),
+            [2, 2, 2, 2]
+        );
+        assert_eq!(
+            lay.rows[4].clusters.iter().map(|c| c.cells).collect::<Vec<_>>(),
+            [1, 2, 2, 1]
+        );
+        assert_ink_in_boxes(&img, &lay, &m, h);
+    }
+
+    #[test]
+    fn identical_rows_are_byte_identical_cjk() {
+        let _gpu = gpu_lock();
+        let Some(cjk) = ts::require_cjk_font() else { return };
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font(), cjk]);
+        let lh = shaper.metrics().line_h;
+        let fr = frame(vec![text_line("漢字한글┏━┓Ab", WHITE); 4]);
+        let h = 5 * lh;
+        let img = render(&mut shaper, &dev, &fr, 300, h, None, None);
+        let b1 = img.band(lh, 2 * lh);
+        assert!(b1.iter().any(|&v| v != 0), "no ink rendered");
+        assert_eq!(b1, img.band(2 * lh, 3 * lh));
+        assert_eq!(b1, img.band(3 * lh, 4 * lh));
+    }
+
+    /// Size and popcount of the exact `ppem` strike of `c` in `font`
+    /// (ttf-parser route, packed 1-bit).
+    fn strike_stats(font: &cosmic_text::Font, c: char, ppem: u16) -> (u32, u32, u32) {
+        use cosmic_text::ttf_parser::RasterImageFormat;
+        let face = font.rustybuzz();
+        let gid = face.glyph_index(c).expect("cmap");
+        let img = face.glyph_raster_image(gid, ppem).expect("strike");
+        assert_eq!(img.pixels_per_em, ppem, "{c}: strike ppem");
+        assert_eq!(img.format, RasterImageFormat::BitmapMonoPacked, "{c}: strike format");
+        let n = img.width as usize * img.height as usize;
+        let pop = (0..n)
+            .filter(|&i| (img.data[i >> 3] >> (7 - (i & 7))) & 1 == 1)
+            .count() as u32;
+        (img.width as u32, img.height as u32, pop)
+    }
+
+    /// MS Gothic at 18 px draws its embedded 1-bit strikes: every pixel in a
+    /// glyph's cell box is 0 or 255 in white text, the white count equals the
+    /// strike's set bits, `あ`/`漢`/`─` fill an 18×18 box and `A`/`═` a 9×18 one,
+    /// and the 19th (slack) row stays empty.
+    #[test]
+    fn msgothic_18px_uses_bitmap_strikes() {
+        let _gpu = gpu_lock();
+        let Some(ms) = ts::msgothic_font() else { return };
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[ms]);
+        let m = *shaper.metrics();
+        assert_eq!((m.font_px, m.half_w, m.line_h, m.baseline, m.shift), (18, 9, 19, 15, 3));
+        let fr = frame(vec![text_line("Aあ漢─═", WHITE)]);
+        let (w, h) = (120, 2 * m.line_h);
+        let img = render(&mut shaper, &dev, &fr, w, h, None, None);
+        let lay = layout(&fr.lines, &geometry(&shaper, w), &mut shaper);
+        let primary = {
+            let id = shaper.chain().primary();
+            shaper.chain().font(id)
+        };
+        let row = &lay.rows[0];
+        let expected_cells = [1u8, 2, 2, 2, 1];
+        assert_eq!(row.clusters.len(), 5);
+        for (c, cells) in row.clusters.iter().zip(expected_cells) {
+            assert_eq!(c.cells, cells, "{:?} cells", c.text);
+            let ch = c.text.chars().next().unwrap();
+            let x0 = (m.shift as i32 + row.x0 + c.x) as u32;
+            let x1 = x0 + c.cells as u32 * m.half_w;
+            let (sw, sh, pop) = strike_stats(&primary, ch, 18);
+            assert_eq!((sw, sh), (c.cells as u32 * 9, 18), "{ch}: strike size");
+            assert!(pop > 0, "{ch}: empty strike");
+            let mut white = 0u32;
+            for y in 0..m.font_px {
+                for x in x0..x1 {
+                    let [r, g, b, _] = img.pixel(x, y);
+                    assert!(
+                        matches!((r, g, b), (0, 0, 0) | (255, 255, 255)),
+                        "{ch}: pixel ({x},{y}) = {:?} is not 0/255",
+                        (r, g, b)
+                    );
+                    if r == 255 {
+                        white += 1;
+                    }
+                }
+            }
+            assert_eq!(white, pop, "{ch}: white pixels != strike popcount");
+            assert!(
+                img.ink_bbox(x0, x1, m.font_px, m.line_h, 1).is_none(),
+                "{ch}: ink in the line slack row"
+            );
+        }
+        assert_ink_in_boxes(&img, &lay, &m, h);
+    }
+
+    /// 23 px has no exact strike (ttf-parser would hand back the 22 ppem one):
+    /// the outline path is used, so anti-aliased intermediate values appear.
+    #[test]
+    fn msgothic_23px_uses_outlines() {
+        let _gpu = gpu_lock();
+        let Some(ms) = ts::msgothic_font() else { return };
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = ts::test_shaper(&[ms], Language::Japanese, 23, 24);
+        let m = *shaper.metrics();
+        assert_eq!((m.font_px, m.half_w, m.line_h, m.baseline, m.shift), (23, 12, 24, 20, 3));
+        let fr = frame(vec![text_line("Aあ", WHITE)]);
+        let (w, h) = (120, 2 * m.line_h);
+        let img = render(&mut shaper, &dev, &fr, w, h, None, None);
+        let lay = layout(&fr.lines, &geometry(&shaper, w), &mut shaper);
+        let row = &lay.rows[0];
+        let mut grey = 0usize;
+        for c in &row.clusters {
+            let x0 = (m.shift as i32 + row.x0 + c.x) as u32;
+            let x1 = x0 + c.cells as u32 * m.half_w;
+            assert!(
+                img.ink_bbox(x0, x1, 0, m.line_h, 1).is_some(),
+                "{:?}: nothing drawn",
+                c.text
+            );
+            for y in 0..m.line_h {
+                for x in x0..x1 {
+                    let [r, _, _, _] = img.pixel(x, y);
+                    if r > 0 && r < 255 {
+                        grey += 1;
+                    }
+                }
+            }
+        }
+        assert!(grey > 0, "no anti-aliased pixels — a strike was used at 23 px");
+        assert_ink_in_boxes(&img, &lay, &m, h);
+    }
+
+    /// GPU-free companion: the 18 ppem strike of `あ` is exact, 18×18, packed;
+    /// 23 ppem yields the *nearest* (22) strike, which the raster layer
+    /// (`raster::strike_image`) rejects while accepting the exact one and
+    /// decoding it to a 0/255 mask placed at top = baseline (15).
+    #[test]
+    fn msgothic_strike_metadata_gpu_free() {
+        use cosmic_text::ttf_parser::RasterImageFormat;
+        let Some(ms) = ts::msgothic_font() else { return };
+        let mut chain = FontChain::from_files(&[ms], Language::Japanese);
+        let font = chain.font(chain.primary());
+        let face = font.rustybuzz();
+        let gid = face.glyph_index('あ').expect("あ in cmap");
+        assert_ne!(gid.0, 0);
+        let img = face.glyph_raster_image(gid, 18).expect("18 ppem strike");
+        assert_eq!(img.pixels_per_em, 18);
+        assert_eq!((img.width, img.height, img.x, img.y), (18, 18, 0, -3));
+        assert_eq!(img.format, RasterImageFormat::BitmapMonoPacked);
+        let near = face.glyph_raster_image(gid, 23).expect("nearest strike");
+        assert_eq!(near.pixels_per_em, 22, "ttf-parser picks the nearest strike");
+        assert!(
+            crate::raster::strike_image(&font, gid.0, 23).is_none(),
+            "22 ppem strike must be rejected for 23 px"
+        );
+        let mask = crate::raster::strike_image(&font, gid.0, 18).expect("exact strike accepted");
+        assert_eq!(
+            (mask.width, mask.height, mask.left, mask.top, mask.color),
+            (18, 18, 0, 15, false)
+        );
+        let alphas: Vec<u8> = mask.rgba.chunks_exact(4).map(|p| p[3]).collect();
+        assert!(alphas.iter().all(|&a| a == 0 || a == 255), "mask must be 0/255");
+        assert_eq!(
+            alphas.iter().filter(|&&a| a == 255).count(),
+            61,
+            "あ @18 has 61 set bits"
+        );
+    }
+
+    /// The classifier and MS Gothic agree on the JIS box set: the 32 JIS X 0208
+    /// box characters are 2 cells / a full em, `═`/`║` 1 cell / half an em.
+    #[test]
+    fn msgothic_jis_box_drawing_is_full_width_and_double_lines_half() {
+        let Some(ms) = ts::msgothic_font() else { return };
+        let widths = WidthTable::new(Language::Japanese.encoding());
+        let mut chain = FontChain::from_files(&[ms], Language::Japanese);
+        let font = chain.font(chain.primary());
+        let face = font.rustybuzz();
+        let upem = face.units_per_em() as u32;
+        assert_eq!(upem, 256);
+        let adv =
+            |c: char| face.glyph_hor_advance(face.glyph_index(c).expect("cmap")).unwrap() as u32;
+        let jis = "─│┌┐┘└├┬┤┴┼━┃┏┓┛┗┣┳┫┻╋┠┯┨┷┿┝┰┥┸╂";
+        assert_eq!(jis.chars().count(), 32);
+        for c in jis.chars() {
+            assert_eq!(widths.char_cells(c), 2, "{c} cells");
+            assert_eq!(adv(c), upem, "{c} advance");
+        }
+        for c in ['═', '║'] {
+            assert_eq!(widths.char_cells(c), 1, "{c} cells");
+            assert_eq!(adv(c) * 2, upem, "{c} advance");
+        }
+    }
 }
