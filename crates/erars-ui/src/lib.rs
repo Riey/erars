@@ -1,6 +1,5 @@
 use erars_ast::{Alignment, Value};
 use once_cell::sync::Lazy;
-use pad::PadStr;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use smol_str::SmolStr;
@@ -366,28 +365,22 @@ impl VirtualConsole {
         if self.skipdisp {
             return;
         }
-        self.print_button(
-            text.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Left),
-            value,
-        );
+        self.print_button(pad_to_width(&text, self.printc_width, false), value);
     }
 
     pub fn print_button_rc(&mut self, text: String, value: Value) {
         if self.skipdisp {
             return;
         }
-        self.print_button(
-            text.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Right),
-            value,
-        );
+        self.print_button(pad_to_width(&text, self.printc_width, true), value);
     }
 
     pub fn printlc(&mut self, s: &str) {
-        self.print(s.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Left));
+        self.print(pad_to_width(s, self.printc_width, false));
     }
 
     pub fn printrc(&mut self, s: &str) {
-        self.print(s.pad_to_width_with_alignment(self.printc_width, pad::Alignment::Right));
+        self.print(pad_to_width(s, self.printc_width, true));
     }
 
     fn push_line(&mut self) {
@@ -549,6 +542,28 @@ impl InputRequest {
 
 fn is_left_alignment(align: &Alignment) -> bool {
     *align == Alignment::Left
+}
+
+/// Transitional PRINTC/PRINTLC padding by Unicode display width — identical
+/// to the former `pad` crate (`pad_to_width_with_alignment`): a string at or
+/// beyond `width` columns is returned unchanged, otherwise spaces are added
+/// before (`right == true`) or after it. Task 3 replaces this with cell-based
+/// padding through `WidthTable`.
+fn pad_to_width(s: &str, width: usize, right: bool) -> String {
+    let cols = unicode_width::UnicodeWidthStr::width(s);
+    if cols >= width {
+        return s.to_owned();
+    }
+    let fill = width - cols;
+    let mut out = String::with_capacity(s.len() + fill);
+    if right {
+        out.extend(std::iter::repeat(' ').take(fill));
+        out.push_str(s);
+    } else {
+        out.push_str(s);
+        out.extend(std::iter::repeat(' ').take(fill));
+    }
+    out
 }
 
 pub struct LinesFrom<'a> {
@@ -798,4 +813,13 @@ fn button_test() {
 ]
 "#
     );
+}
+
+#[test]
+fn pad_to_width_matches_former_pad_crate() {
+    assert_eq!(pad_to_width("한", 4, true), "  한");
+    assert_eq!(pad_to_width("한", 4, false), "한  ");
+    assert_eq!(pad_to_width("abcdef", 4, true), "abcdef");
+    assert_eq!(pad_to_width("", 2, false), "  ");
+    assert_eq!(pad_to_width("ab", 2, true), "ab");
 }
