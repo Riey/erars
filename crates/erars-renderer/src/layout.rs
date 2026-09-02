@@ -319,7 +319,9 @@ impl<'a> LineBuilder<'a> {
     /// One rect per styled run per row, spanning its cluster boxes.
     fn flush_run_rects(&mut self) {
         let Some(run) = self.run.as_mut() else { return };
-        let Some(start) = run.start.take() else { return };
+        let Some(start) = run.start.take() else {
+            return;
+        };
         let w = (self.x - start) as u32;
         if w == 0 {
             return;
@@ -474,7 +476,11 @@ pub fn layout_snapshot(layout: &Layout, default_fg: [u8; 3]) -> String {
         for c in &row.clusters {
             let mut s = format!("  {}:{} {:?}", c.x, c.cells, c.text.as_str());
             if c.color != default_fg {
-                let _ = write!(s, " c={:02X}{:02X}{:02X}", c.color[0], c.color[1], c.color[2]);
+                let _ = write!(
+                    s,
+                    " c={:02X}{:02X}{:02X}",
+                    c.color[0], c.color[1], c.color[2]
+                );
             }
             if !c.style.is_empty() {
                 let _ = write!(s, " s={}", style_letters(c.style));
@@ -545,25 +551,46 @@ mod tests {
 
     #[test]
     fn line_rules_follow_font_tables_with_fallback() {
-        // MS Gothic: upem 256, post (−17, 19), OS/2 (66, 13) → rows 16 and 10 at 18 px (spec Component 5)
+        // MS Gothic: upem 256, post (−17, 19), OS/2 (66, 13) → rows 16 and 10
+        // at 18 px (spec Component 5)
         assert_eq!(
             LineRules::compute(metrics(), 256.0, Some((-17, 19)), Some((66, 13))),
-            LineRules { ul_dy: 16, ul_h: 1, st_dy: 10, st_h: 1 }
+            LineRules {
+                ul_dy: 16,
+                ul_h: 1,
+                st_dy: 10,
+                st_h: 1
+            }
         );
         // bundled Noto Sans Mono: upem 1000, post (−100, 50), OS/2 (322, 50)
         assert_eq!(
             LineRules::compute(metrics(), 1000.0, Some((-100, 50)), Some((322, 50))),
-            LineRules { ul_dy: 17, ul_h: 1, st_dy: 9, st_h: 1 }
+            LineRules {
+                ul_dy: 17,
+                ul_h: 1,
+                st_dy: 9,
+                st_h: 1
+            }
         );
         // tables absent: uEmuera's font_px and font_px/2 − 1, 1 px thick
         assert_eq!(
             LineRules::compute(metrics(), 1000.0, None, None),
-            LineRules { ul_dy: 18, ul_h: 1, st_dy: 8, st_h: 1 }
+            LineRules {
+                ul_dy: 18,
+                ul_h: 1,
+                st_dy: 8,
+                st_h: 1
+            }
         );
         // the real primary (bundled font) reproduces the Noto numbers
         assert_eq!(
             LineRules::from_primary(&mut shaper()),
-            LineRules { ul_dy: 17, ul_h: 1, st_dy: 9, st_h: 1 }
+            LineRules {
+                ul_dy: 17,
+                ul_h: 1,
+                st_dy: 9,
+                st_h: 1
+            }
         );
     }
 
@@ -583,7 +610,8 @@ mod tests {
     #[test]
     fn rule_string_grows_then_trims() {
         let mut sh = shaper();
-        let g = geometry(760); // drawable 757
+        let g = geometry(760); // drawable_w = 757
+
         // "-" × 85 = 765 px > 757 → trim one → 84 (spec: 84 `-` at the defaults)
         assert_eq!(rule_string(&mut sh, &style(), "-", &g).unwrap().len(), 84);
         // 5-cell unit "──-": 17 reps = 765 px → trailing "-" dropped → 16 reps + "──" = 756 px
@@ -593,7 +621,8 @@ mod tests {
         // zero-width / empty rules cannot fill anything (Emuera's getStBar would loop forever)
         assert_eq!(rule_string(&mut sh, &style(), "", &g), None);
         assert_eq!(rule_string(&mut sh, &style(), "\u{0301}", &g), None);
-        // a `\n` inside a CUSTOMDRAWLINE string is dropped before repeating: "ab" at drawable 27 → "abab" → "aba"
+        // a `\n` inside a CUSTOMDRAWLINE string is dropped before repeating:
+        // "ab" at drawable 27 → "abab" → "aba"
         assert_eq!(
             rule_string(&mut sh, &style(), "a\nb", &geometry(30)).as_deref(),
             Some("aba")
@@ -651,7 +680,10 @@ mod tests {
 
     #[test]
     fn empty_line_is_one_row() {
-        k9::snapshot!(snap(&[line(Alignment::Left, vec![])], 760), "row 0 line 0 x0=0 w=0");
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![])], 760),
+            "row 0 line 0 x0=0 w=0"
+        );
     }
 
     #[test]
@@ -689,6 +721,488 @@ row 0 line 0 x0=0 w=36
   9:2 "あ"
   27:1 "b"
 "#
+        );
+    }
+
+    #[test]
+    fn mid_word_wrap_is_character_granular() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![text("abcdefghijkl")])], 93),
+            r#"
+row 0 line 0 x0=0 w=90
+  0:1 "a"
+  9:1 "b"
+  18:1 "c"
+  27:1 "d"
+  36:1 "e"
+  45:1 "f"
+  54:1 "g"
+  63:1 "h"
+  72:1 "i"
+  81:1 "j"
+row 1 line 0+ x0=0 w=18
+  0:1 "k"
+  9:1 "l"
+"#
+        );
+    }
+
+    /// 9 cells are used; the 2-cell `あ` would end at 99 > 90, so it moves whole.
+    #[test]
+    fn full_width_cluster_that_does_not_fit_moves_whole() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![text("abcdefghiあ")])], 93),
+            r#"
+row 0 line 0 x0=0 w=81
+  0:1 "a"
+  9:1 "b"
+  18:1 "c"
+  27:1 "d"
+  36:1 "e"
+  45:1 "f"
+  54:1 "g"
+  63:1 "h"
+  72:1 "i"
+row 1 line 0+ x0=0 w=18
+  0:2 "あ"
+"#
+        );
+    }
+
+    /// `print_plain("a\nb")` keeps the `\n` inside one Text part (T3); the row
+    /// breaks there, the `\n` occupies no cells and the next row is a
+    /// continuation (`+`).
+    #[test]
+    fn residual_newline_from_print_plain() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![text("a\nb")])], 760),
+            r#"
+row 0 line 0 x0=0 w=9
+  0:1 "a"
+row 1 line 0+ x0=0 w=9
+  0:1 "b"
+"#
+        );
+    }
+
+    /// The shaper (T6) expands `\t` to 1-cell `" "` clusters up to the next
+    /// multiple of 8 cells, counted from the start of the part's text:
+    /// `a` + 7 spaces, `b` at 72.
+    #[test]
+    fn tab_expands_to_eight_cell_stops() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![text("a\tb")])], 760),
+            r#"
+row 0 line 0 x0=0 w=81
+  0:1 "a"
+  9:1 " "
+  18:1 " "
+  27:1 " "
+  36:1 " "
+  45:1 " "
+  54:1 " "
+  63:1 " "
+  72:1 "b"
+"#
+        );
+    }
+
+    /// 45 px → 380 − 22 = 358 (Center), 760 − 45 = 715 (Right); 36 px → 362; 54 px → 353.
+    #[test]
+    fn center_and_right_offsets_use_windowx() {
+        k9::snapshot!(
+            snap(
+                &[
+                    line(Alignment::Center, vec![text("abcde")]),
+                    line(Alignment::Right, vec![text("abcde")]),
+                    line(Alignment::Center, vec![text("abcd")]),
+                    line(Alignment::Center, vec![text("abcdef")]),
+                ],
+                760
+            ),
+            r#"
+row 0 line 0 x0=358 w=45
+  0:1 "a"
+  9:1 "b"
+  18:1 "c"
+  27:1 "d"
+  36:1 "e"
+row 1 line 1 x0=715 w=45
+  0:1 "a"
+  9:1 "b"
+  18:1 "c"
+  27:1 "d"
+  36:1 "e"
+row 2 line 2 x0=362 w=36
+  0:1 "a"
+  9:1 "b"
+  18:1 "c"
+  27:1 "d"
+row 3 line 3 x0=353 w=54
+  0:1 "a"
+  9:1 "b"
+  18:1 "c"
+  27:1 "d"
+  36:1 "e"
+  45:1 "f"
+"#
+        );
+    }
+
+    /// Emuera applies the alignment to every wrapped fragment: 93 − 90 = 3, 93 − 18 = 75.
+    #[test]
+    fn alignment_applies_to_every_wrapped_row() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Right, vec![text("abcdefghijkl")])], 93),
+            r#"
+row 0 line 0 x0=3 w=90
+  0:1 "a"
+  9:1 "b"
+  18:1 "c"
+  27:1 "d"
+  36:1 "e"
+  45:1 "f"
+  54:1 "g"
+  63:1 "h"
+  72:1 "i"
+  81:1 "j"
+row 1 line 0+ x0=75 w=18
+  0:1 "k"
+  9:1 "l"
+"#
+        );
+    }
+
+    /// The rule keeps the colour but is forced to NORMAL (no `s=`, no rect).
+    #[test]
+    fn drawline_fills_drawable_width_in_normal_style() {
+        let red_bold_underline = TextStyle {
+            color: Color([255, 0, 0]),
+            ..styled(FontStyle::BOLD | FontStyle::UNDERLINE)
+        };
+        k9::snapshot!(
+            snap(
+                &[line(
+                    Alignment::Left,
+                    vec![ConsoleLinePart::Line("-".into(), red_bold_underline)]
+                )],
+                93
+            ),
+            r#"
+row 0 line 0 x0=0 w=90
+  0:1 "-" c=FF0000
+  9:1 "-" c=FF0000
+  18:1 "-" c=FF0000
+  27:1 "-" c=FF0000
+  36:1 "-" c=FF0000
+  45:1 "-" c=FF0000
+  54:1 "-" c=FF0000
+  63:1 "-" c=FF0000
+  72:1 "-" c=FF0000
+  81:1 "-" c=FF0000
+"#
+        );
+    }
+
+    /// 3-character, 5-cell rule at drawable 108 (12 cells): 3 reps = 135 px,
+    /// trailing "-" dropped → 108 px, so the row ends inside a repetition.
+    #[test]
+    fn drawline_trims_a_partial_repetition() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![rule("──-")])], 111),
+            r#"
+row 0 line 0 x0=0 w=108
+  0:2 "─"
+  18:2 "─"
+  36:1 "-"
+  45:2 "─"
+  63:2 "─"
+  81:1 "-"
+  90:2 "─"
+"#
+        );
+    }
+
+    /// The rule string is computed once against drawable_w (10 dashes) and laid
+    /// out after the pending `abc`, so 7 dashes fit and 3 spill (Emuera 1.824,
+    /// ButtonWrap=false).
+    #[test]
+    fn text_then_drawline_spills_to_next_row() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![text("abc"), rule("-")])], 93),
+            r#"
+row 0 line 0 x0=0 w=90
+  0:1 "a"
+  9:1 "b"
+  18:1 "c"
+  27:1 "-"
+  36:1 "-"
+  45:1 "-"
+  54:1 "-"
+  63:1 "-"
+  72:1 "-"
+  81:1 "-"
+row 1 line 0+ x0=0 w=27
+  0:1 "-"
+  9:1 "-"
+  18:1 "-"
+"#
+        );
+    }
+
+    /// `unit == 0` (a combining-mark-only or empty rule) is skipped with a
+    /// warning; the line still takes a blank row.
+    #[test]
+    fn drawline_with_zero_width_rule_is_skipped() {
+        k9::snapshot!(
+            snap(
+                &[
+                    line(Alignment::Left, vec![rule("\u{0301}")]),
+                    line(Alignment::Left, vec![rule("")]),
+                ],
+                760
+            ),
+            r#"
+row 0 line 0 x0=0 w=0
+row 1 line 1 x0=0 w=0
+"#
+        );
+    }
+
+    /// Spec Component 5 at the Emuera defaults (760 → 757): 84 `-`;
+    /// `abc` + DRAWLINE → row 1 = `abc` + 81 `-`, row 2 = 3 `-`.
+    #[test]
+    fn drawline_at_emuera_defaults() {
+        let mut sh = shaper();
+        let g = geometry(760);
+        let l = layout(&[line(Alignment::Left, vec![rule("-")])], &g, &mut sh);
+        assert_eq!(l.rows.len(), 1);
+        let row = &l.rows[0];
+        assert_eq!((row.clusters.len(), row.width), (84, 756));
+        assert!(row.clusters.iter().all(|c| c.cells == 1 && c.text.as_str() == "-"));
+        assert_eq!(row.clusters[83].x, 747);
+
+        let l = layout(
+            &[line(Alignment::Left, vec![text("abc"), rule("-")])],
+            &g,
+            &mut sh,
+        );
+        assert_eq!(l.rows.len(), 2);
+        assert_eq!((l.rows[0].clusters.len(), l.rows[0].width), (84, 756));
+        assert_eq!(l.rows[0].clusters[3].text.as_str(), "-");
+        assert_eq!(
+            (
+                l.rows[1].clusters.len(),
+                l.rows[1].width,
+                l.rows[1].logical_start
+            ),
+            (3, 27, false)
+        );
+    }
+
+    /// Three 8-cell PRINTC columns as the console pads them by cells (T3):
+    /// `aa` right-aligned in cells 0–7, `あbc` (4 cells) in 8–15, `x` in 16–23.
+    #[test]
+    fn printc_columns_land_on_cell_boundaries() {
+        k9::snapshot!(
+            snap(
+                &[line(
+                    Alignment::Left,
+                    vec![text("      aa    あbc       x")]
+                )],
+                760
+            ),
+            r#"
+row 0 line 0 x0=0 w=216
+  0:1 " "
+  9:1 " "
+  18:1 " "
+  27:1 " "
+  36:1 " "
+  45:1 " "
+  54:1 "a"
+  63:1 "a"
+  72:1 " "
+  81:1 " "
+  90:1 " "
+  99:1 " "
+  108:2 "あ"
+  126:1 "b"
+  135:1 "c"
+  144:1 " "
+  153:1 " "
+  162:1 " "
+  171:1 " "
+  180:1 " "
+  189:1 " "
+  198:1 " "
+  207:1 "x"
+"#
+        );
+    }
+
+    /// A button part wraps mid-text: each row gets its own fragment with the
+    /// same generation and value; clusters carry the fragment index.
+    #[test]
+    fn button_fragments_across_a_wrap() {
+        k9::snapshot!(
+            snap(
+                &[line(
+                    Alignment::Left,
+                    vec![text("ab"), button("[1] click", 3, Value::Int(1))]
+                )],
+                93
+            ),
+            r#"
+row 0 line 0 x0=0 w=90
+  0:1 "a"
+  9:1 "b"
+  18:1 "[" btn=0
+  27:1 "1" btn=0
+  36:1 "]" btn=0
+  45:1 " " btn=0
+  54:1 "c" btn=0
+  63:1 "l" btn=0
+  72:1 "i" btn=0
+  81:1 "c" btn=0
+row 1 line 0+ x0=0 w=9
+  0:1 "k" btn=1
+btn 0 row=0 x=18 w=72 gen=3 value=Int(1)
+btn 1 row=1 x=0 w=9 gen=3 value=Int(1)
+"#
+        );
+    }
+
+    #[test]
+    fn two_buttons_on_one_row() {
+        k9::snapshot!(
+            snap(
+                &[line(
+                    Alignment::Left,
+                    vec![
+                        button("[0]", 1, Value::Int(0)),
+                        text(" "),
+                        button("go", 1, Value::String("go".into())),
+                    ]
+                )],
+                760
+            ),
+            r#"
+row 0 line 0 x0=0 w=54
+  0:1 "[" btn=0
+  9:1 "0" btn=0
+  18:1 "]" btn=0
+  27:1 " "
+  36:1 "g" btn=1
+  45:1 "o" btn=1
+btn 0 row=0 x=0 w=27 gen=1 value=Int(0)
+btn 1 row=0 x=36 w=18 gen=1 value=String("go")
+"#
+        );
+    }
+
+    /// One rect per styled run per row. Bundled Noto Sans Mono at 18 px:
+    /// underline dy = 15 + round(100·18/1000) = 17, strike dy = 15 −
+    /// round(322·18/1000) = 9, 1 px each.
+    #[test]
+    fn underline_and_strike_rects_span_their_runs() {
+        k9::snapshot!(
+            snap(
+                &[line(
+                    Alignment::Left,
+                    vec![
+                        ConsoleLinePart::Text("ab".into(), styled(FontStyle::UNDERLINE)),
+                        ConsoleLinePart::Text("cd".into(), styled(FontStyle::STRIKELINE)),
+                        ConsoleLinePart::Text(
+                            "ef".into(),
+                            styled(
+                                FontStyle::BOLD
+                                    | FontStyle::ITALIC
+                                    | FontStyle::UNDERLINE
+                                    | FontStyle::STRIKELINE
+                            )
+                        ),
+                    ]
+                )],
+                760
+            ),
+            r#"
+row 0 line 0 x0=0 w=54
+  0:1 "a" s=U
+  9:1 "b" s=U
+  18:1 "c" s=S
+  27:1 "d" s=S
+  36:1 "e" s=BIUS
+  45:1 "f" s=BIUS
+  rect underline x=0 dy=17 h=1 w=18
+  rect strike x=18 dy=9 h=1 w=18
+  rect underline x=36 dy=17 h=1 w=18
+  rect strike x=36 dy=9 h=1 w=18
+"#
+        );
+    }
+
+    #[test]
+    fn underlined_button_gets_one_rect_per_row() {
+        k9::snapshot!(
+            snap(
+                &[line(
+                    Alignment::Left,
+                    vec![ConsoleLinePart::Button(
+                        vec![("abcdefghijkl".into(), styled(FontStyle::UNDERLINE))],
+                        2,
+                        Value::Int(5)
+                    )]
+                )],
+                93
+            ),
+            r#"
+row 0 line 0 x0=0 w=90
+  0:1 "a" s=U btn=0
+  9:1 "b" s=U btn=0
+  18:1 "c" s=U btn=0
+  27:1 "d" s=U btn=0
+  36:1 "e" s=U btn=0
+  45:1 "f" s=U btn=0
+  54:1 "g" s=U btn=0
+  63:1 "h" s=U btn=0
+  72:1 "i" s=U btn=0
+  81:1 "j" s=U btn=0
+  rect underline x=0 dy=17 h=1 w=90 btn=0
+row 1 line 0+ x0=0 w=18
+  0:1 "k" s=U btn=1
+  9:1 "l" s=U btn=1
+  rect underline x=0 dy=17 h=1 w=18 btn=1
+btn 0 row=0 x=0 w=90 gen=2 value=Int(5)
+btn 1 row=1 x=0 w=18 gen=2 value=Int(5)
+"#
+        );
+    }
+
+    /// A button region's `x`/`w` are what `app.rs` hit-tests: draw x is
+    /// `shift + x0 + x`, so with Right alignment the region moves with `x0`.
+    #[test]
+    fn button_regions_follow_alignment_offset() {
+        let mut sh = shaper();
+        let g = geometry(760);
+        let l = layout(
+            &[line(
+                Alignment::Right,
+                vec![text("AB"), button("[1] ", 7, Value::Int(1))],
+            )],
+            &g,
+            &mut sh,
+        );
+        assert_eq!(l.rows[0].x0, 760 - 54);
+        assert_eq!(
+            l.buttons,
+            vec![ButtonRegion {
+                row: 0,
+                x: 18,
+                w: 36,
+                input_gen: 7,
+                value: Value::Int(1)
+            }]
         );
     }
 }
