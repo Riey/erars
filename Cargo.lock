@@ -932,6 +932,7 @@ dependencies = [
  "bitflags 2.6.0",
  "cow-utils",
  "derivative",
+ "encoding_rs",
  "enum-map",
  "erars-ast",
  "erars-lexer",

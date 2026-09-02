@@ -346,21 +346,37 @@ impl EraConfig {
     }
 }
 
-#[derive(Clone, Copy, Debug, EnumString, Display, Serialize, Deserialize)]
+/// The game's East-Asian language (`内部で使用する東アジア言語`). It decides the
+/// legacy code page Emuera uses for its byte-counting string functions and,
+/// through it, the console's cell-width table.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString, Display, Serialize, Deserialize)]
 pub enum Language {
     #[strum(to_string = "JAPANESE")]
     Japanese,
     #[strum(to_string = "KOREAN")]
     Korean,
     #[strum(to_string = "CHINESE_HANS")]
-    ChineseHant,
-    #[strum(to_string = "CHINESE_HANT")]
     ChineseHans,
+    #[strum(to_string = "CHINESE_HANT")]
+    ChineseHant,
 }
 
 impl Default for Language {
     fn default() -> Self {
         Self::Japanese
+    }
+}
+
+impl Language {
+    /// Emuera's code page for this language — cp932 / cp949 / cp936 / cp950,
+    /// i.e. WHATWG Shift_JIS / EUC-KR / GBK / Big5 in encoding_rs.
+    pub fn encoding(&self) -> &'static encoding_rs::Encoding {
+        match self {
+            Language::Japanese => encoding_rs::SHIFT_JIS,
+            Language::Korean => encoding_rs::EUC_KR,
+            Language::ChineseHans => encoding_rs::GBK,
+            Language::ChineseHant => encoding_rs::BIG5,
+        }
     }
 }
 
@@ -496,7 +512,9 @@ impl HeaderInfo {
                     None => self.global_variables.get(&var.var),
                 } {
                     if var_info.is_const {
-                        let Some(init) = var_info.init.get(0) else { bail!("No value"); };
+                        let Some(init) = var_info.init.get(0) else {
+                            bail!("No value");
+                        };
                         let init = self.const_eval(init)?;
                         Ok(init)
                     } else {
@@ -1540,7 +1558,9 @@ impl<'p> ParserContext<'p> {
 
                     SIF => {
                         let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
-                        let Some(body) = pp.next_line(b)? else { error!(pp.span(), "No body statement in SIF"); };
+                        let Some(body) = pp.next_line(b)? else {
+                            error!(pp.span(), "No body statement in SIF");
+                        };
                         Stmt::Sif(cond, Box::new(self.parse_stmt(body, pp, b)?))
                     }
 
@@ -1946,5 +1966,45 @@ impl<'p> ParserContext<'p> {
         } else {
             error!(pp.span(), "No stmt")
         }
+    }
+}
+
+#[cfg(test)]
+mod language_tests {
+    use super::{EraConfig, Language};
+
+    #[test]
+    fn labels_round_trip() {
+        for (label, lang) in [
+            ("JAPANESE", Language::Japanese),
+            ("KOREAN", Language::Korean),
+            ("CHINESE_HANS", Language::ChineseHans),
+            ("CHINESE_HANT", Language::ChineseHant),
+        ] {
+            assert_eq!(label.parse::<Language>().unwrap(), lang, "{label}");
+            assert_eq!(lang.to_string(), label);
+        }
+        assert!("ENGLISH".parse::<Language>().is_err());
+    }
+
+    #[test]
+    fn encoding_per_language() {
+        assert_eq!(Language::Japanese.encoding(), encoding_rs::SHIFT_JIS);
+        assert_eq!(Language::Korean.encoding(), encoding_rs::EUC_KR);
+        assert_eq!(Language::ChineseHans.encoding(), encoding_rs::GBK);
+        assert_eq!(Language::ChineseHant.encoding(), encoding_rs::BIG5);
+    }
+
+    #[test]
+    fn chinese_config_labels_select_the_right_code_page() {
+        // Regression: the CHINESE_HANS / CHINESE_HANT strum labels were swapped,
+        // so a simplified-Chinese game got Big5.
+        let hans = EraConfig::from_text("内部で使用する東アジア言語:CHINESE_HANS\n").unwrap();
+        assert_eq!(hans.lang, Language::ChineseHans);
+        assert_eq!(hans.lang.encoding(), encoding_rs::GBK);
+
+        let hant = EraConfig::from_text("内部で使用する東アジア言語:CHINESE_HANT\n").unwrap();
+        assert_eq!(hant.lang, Language::ChineseHant);
+        assert_eq!(hant.lang.encoding(), encoding_rs::BIG5);
     }
 }
