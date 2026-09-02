@@ -381,9 +381,11 @@ impl Shaper {
             let upem = face.units_per_em() as u32;
             let s = &expanded[span.start..span.end];
 
-            // No script and no `guess_segment_properties`: every run is drawn
-            // LTR on the cell grid with the default (common) script, so
-            // shaping never reorders or joins across the grid (spec Component 4).
+            // The script is deliberately not set: `rustybuzz::shape` runs
+            // `guess_segment_properties`, which infers it from the text, while
+            // the direction stays the LTR set explicitly below — every run is
+            // drawn left to right on the cell grid, so shaping never reorders
+            // across it (spec Component 4).
             buf.push_str(s);
             buf.set_direction(Direction::LeftToRight);
             buf.set_cluster_level(BufferClusterLevel::MonotoneGraphemes);
