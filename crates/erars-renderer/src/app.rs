@@ -27,7 +27,7 @@ use winit::window::{Window, WindowId};
 
 use crate::draw::{build_instances, View};
 use crate::gpu::{GpuContext, Instance};
-use crate::layout::{layout, Geometry, Layout};
+use crate::layout::{layout, layout_no_sweep, Geometry, Layout};
 use crate::raster::GlyphRaster;
 use crate::text::{CellMetrics, Shaper};
 
@@ -268,6 +268,11 @@ impl App {
 
     /// Recompute the layout for the current frame and surface width, then
     /// clamp the scroll position and re-derive the hovered fragment.
+    ///
+    /// This is the only place that sweeps the shape cache: it is the only
+    /// place that lays the whole log out again, so a sweep anywhere else
+    /// (`render`'s input strip) would drop every log entry and re-shape the
+    /// whole backlog on the next frame.
     fn relayout(&mut self) {
         let g = self.geometry();
         self.layout = layout(&self.frame.lines, &g, &mut self.shaper);
@@ -402,7 +407,9 @@ impl App {
             if self.strip_dirty || self.strip.is_none() {
                 let line = input_line(&self.input, self.frame.fore_color.0);
                 let g = Geometry::new(win_w.max(1), m);
-                self.strip = Some(layout(&[line], &g, &mut self.shaper));
+                // Not `layout`: sweeping here would evict the log's clusters
+                // (they are shaped in `relayout`, not per frame).
+                self.strip = Some(layout_no_sweep(&[line], &g, &mut self.shaper));
                 self.strip_dirty = false;
             }
             // `View::strip()` lands the one-row layout on the bottom line_h px.
@@ -787,6 +794,40 @@ mod tests {
             }
             other => panic!("unexpected parts {other:?}"),
         }
+    }
+
+    /// Regression: the per-frame input strip must not sweep the log out of the
+    /// shape cache. `relayout` (here: `layout`) shapes the whole log and sweeps;
+    /// `render` then lays the strip out with `layout_no_sweep`, so both survive
+    /// and the next frame re-shapes nothing.
+    #[test]
+    fn strip_layout_keeps_the_log_in_the_shape_cache() {
+        let mut sh = shaper();
+        let g = Geometry::new(760, M);
+        let log = vec![line(Alignment::Left, vec![text("row")])];
+        let _ = layout(&log, &g, &mut sh);
+        assert!(sh.is_cached("row", &style()), "the log line was not cached");
+        assert_eq!(sh.cache_len(), 1);
+
+        // The app's per-frame path for the strip.
+        let strip_fg = [192, 192, 192];
+        let strip = input_line("12", strip_fg);
+        let _ = layout_no_sweep(&[strip], &g, &mut sh);
+        assert!(
+            sh.is_cached("row", &style()),
+            "the input strip swept the log's shape cache"
+        );
+        let strip_style = TextStyle {
+            color: Color(strip_fg),
+            ..style()
+        };
+        assert!(sh.is_cached("> 12_", &strip_style), "the strip was not cached");
+        assert_eq!(sh.cache_len(), 2);
+
+        // The next relayout keeps both: the strip was used in this generation.
+        let _ = layout(&log, &g, &mut sh);
+        assert!(sh.is_cached("row", &style()));
+        assert!(sh.is_cached("> 12_", &strip_style));
     }
 
     #[test]

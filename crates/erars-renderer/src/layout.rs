@@ -311,7 +311,7 @@ impl<'a> LineBuilder<'a> {
             color: style.color.0,
             style: style.font_style,
             button,
-            glyphs: Arc::from(&c.glyphs[..]),
+            glyphs: Arc::clone(&c.glyphs),
         });
         self.x += w as i32;
     }
@@ -400,7 +400,21 @@ impl<'a> LineBuilder<'a> {
 
 /// Lay out `lines` (a `ConsoleFrame`'s lines, oldest first) at `g`.
 /// Ends with `shaper.sweep()`, so the shape cache holds exactly these strings.
+///
+/// Callers that lay out several independent line sets against one shaper (the
+/// app and the headless renderer both lay out the log and the one-line input
+/// strip separately) must use [`layout_no_sweep`] for all but the last of
+/// them, or the strip's sweep drops every log entry.
 pub fn layout(lines: &[ConsoleLine], g: &Geometry, shaper: &mut Shaper) -> Layout {
+    let out = layout_no_sweep(lines, g, shaper);
+    shaper.sweep();
+    out
+}
+
+/// [`layout`] without the trailing `shaper.sweep()`: the entries it touches
+/// are marked as used by the current generation, so a later `sweep()` keeps
+/// them alongside the ones of any other layout done in the same generation.
+pub fn layout_no_sweep(lines: &[ConsoleLine], g: &Geometry, shaper: &mut Shaper) -> Layout {
     let rules = LineRules::from_primary(shaper);
     let mut out = Layout::default();
     for (li, line) in lines.iter().enumerate() {
@@ -431,7 +445,6 @@ pub fn layout(lines: &[ConsoleLine], g: &Geometry, shaper: &mut Shaper) -> Layou
         }
         b.finish(&mut out);
     }
-    shaper.sweep();
     out
 }
 

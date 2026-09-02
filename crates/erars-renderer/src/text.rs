@@ -121,7 +121,9 @@ pub struct Cluster {
     pub cells: u8,
     /// The cluster's source characters.
     pub text: SmolStr,
-    pub glyphs: Vec<ShapedGlyph>,
+    /// Shared with every `PlacedCluster` laid out from this cluster, so a
+    /// relayout of a cached string copies no glyphs.
+    pub glyphs: Arc<[ShapedGlyph]>,
 }
 
 type StyleCache = HashMap<String, (u32, Arc<[Cluster]>)>;
@@ -205,8 +207,17 @@ impl Shaper {
     }
 
     #[cfg(test)]
-    fn cache_len(&self) -> usize {
+    pub(crate) fn cache_len(&self) -> usize {
         self.cache.values().map(|inner| inner.len()).sum()
+    }
+
+    /// Is `(style, text)` in the shape cache right now? Test introspection for
+    /// the sweep rules (a swept entry is re-shaped on its next use).
+    #[cfg(test)]
+    pub(crate) fn is_cached(&self, text: &str, style: &TextStyle) -> bool {
+        self.cache
+            .get(&StyleKey::from(style))
+            .is_some_and(|inner| inner.contains_key(text))
     }
 }
 
@@ -409,7 +420,7 @@ impl Shaper {
             .map(|(text, cells, glyphs)| Cluster {
                 cells,
                 text: SmolStr::from(text),
-                glyphs,
+                glyphs: Arc::from(glyphs),
             })
             .collect()
     }

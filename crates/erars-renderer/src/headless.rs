@@ -26,7 +26,7 @@ use wgpu::util::DeviceExt;
 use crate::draw::{build_instances, View};
 use crate::font::{FontChain, FontConfig};
 use crate::gpu::{create_quad_pipeline, nearest_sampler, FrameDraw, Globals, Instance};
-use crate::layout::{layout, Geometry};
+use crate::layout::{layout_no_sweep, Geometry};
 use crate::raster::GlyphRaster;
 use crate::text::{CellMetrics, Shaper};
 
@@ -245,7 +245,7 @@ pub fn render_frame_on(
         view_h: height.saturating_sub(strip_h),
         strip_h,
     };
-    let log = layout(&frame.lines, &g, shaper);
+    let log = layout_no_sweep(&frame.lines, &g, shaper);
     let mut pages = build_instances(&log, &view, hover, hl, &mut raster, device, queue, shaper);
 
     // Input strip: one line laid out on its own, drawn on the bottom `line_h` rows.
@@ -262,7 +262,7 @@ pub fn render_frame_on(
                 },
             )],
         };
-        let strip = layout(std::slice::from_ref(&line), &g, shaper);
+        let strip = layout_no_sweep(std::slice::from_ref(&line), &g, shaper);
         let strip_pages = build_instances(
             &strip,
             &view.strip(),
@@ -275,6 +275,9 @@ pub fn render_frame_on(
         );
         merge_pages(&mut pages, strip_pages);
     }
+    // One sweep per rendered frame, after both layouts: sweeping between them
+    // would drop the log's entries (see `layout_no_sweep`).
+    shaper.sweep();
     if pages.len() < raster.page_count() {
         pages.resize_with(raster.page_count(), Vec::new);
     }
@@ -480,7 +483,7 @@ mod tests {
     use erars_ui::width::WidthTable;
 
     use crate::font::{FontChain, StyleKey};
-    use crate::layout::{Layout, Row};
+    use crate::layout::{layout, Layout, Row};
     use crate::test_support::{
         self as ts, bundled_font, frame, gpu_device, gpu_lock, style, text_line,
     };
