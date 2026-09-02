@@ -1068,8 +1068,6 @@ dependencies = [
  "rustybuzz",
  "smol_str",
  "swash",
- "sys-locale",
- "unicode-width",
  "wgpu",
  "winit",
 ]

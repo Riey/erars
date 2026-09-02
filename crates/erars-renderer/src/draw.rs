@@ -12,11 +12,7 @@
 //! [`build_instances_with`]; [`build_instances`] is the production entry point
 //! backed by [`GlyphRaster`].
 
-use cosmic_text::{FontSystem, SwashCache};
-
-use crate::atlas::GlyphAtlas;
 use crate::gpu::Instance;
-use crate::grid::Grid;
 use crate::layout::Layout;
 use crate::raster::{AtlasRegion, GlyphRaster, RasterKey};
 use crate::text::{CellMetrics, ShapedGlyph, Shaper};
@@ -212,47 +208,6 @@ pub fn build_instances_with(
         }
     }
     pages
-}
-
-// Legacy Grid path (still used by app.rs/headless.rs); deleted in T10 with grid.rs/atlas.rs.
-/// Build GPU instances for a grid: all glyph quads, positioned in screen
-/// space. `scroll_y` is subtracted from content-space y.
-pub fn build_instances_legacy(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    font_system: &mut FontSystem,
-    swash: &mut SwashCache,
-    atlas: &mut GlyphAtlas,
-    grid: &Grid,
-    scroll_y: f32,
-) -> Vec<Instance> {
-    let mut out = Vec::with_capacity(grid.glyphs.len());
-
-    for g in &grid.glyphs {
-        let Some(region) = atlas.get(device, queue, font_system, swash, g.cache_key) else {
-            continue;
-        };
-        let mode = if region.color { 2u32 } else { 1u32 };
-        out.push(Instance {
-            rect: [
-                g.x_px + region.offset[0],
-                g.y_px - region.offset[1] - scroll_y,
-                region.size[0],
-                region.size[1],
-            ],
-            uv: region.uv,
-            color: [
-                g.color[0] as f32 / 255.0,
-                g.color[1] as f32 / 255.0,
-                g.color[2] as f32 / 255.0,
-                1.0,
-            ],
-            mode,
-            _pad: [0; 3],
-        });
-    }
-
-    out
 }
 
 #[cfg(test)]
