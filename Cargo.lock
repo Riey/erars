@@ -1095,6 +1095,7 @@ dependencies = [
  "anyhow",
  "bitflags 2.6.0",
  "crossbeam-channel",
+ "encoding_rs",
  "erars-ast",
  "k9",
  "log",
@@ -1106,6 +1107,7 @@ dependencies = [
  "serde_iter",
  "smol_str",
  "time",
+ "unicode-width",
 ]
 
 [[package]]

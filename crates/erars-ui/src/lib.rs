@@ -8,6 +8,8 @@ use std::collections::VecDeque;
 use std::fmt::{Debug, Display};
 use std::time::Instant;
 
+pub mod width;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TextStyle {
     pub color: Color,

@@ -30,6 +30,7 @@ anyhow = "1"
 logos = { version = "0.14", features = ["logos-derive"] }
 hashbrown = { version = "0.15", features = ["serde"] }
 enum-map = { version = "2", features = ["serde"] }
+encoding_rs = "0.8"
 
 [dev-dependencies]
 erars-ast = { path = "./crates/erars-ast" }
