@@ -68,8 +68,8 @@ struct Args {
     lint_off: bool,
     #[clap(
         long,
-        value_name = "PATH.ppm",
-        help = "Headless: render the first screen to a PPM image and exit (no display needed)"
+        value_name = "PATH.png",
+        help = "Headless: render the first screen to a PNG image and exit (no display needed)"
     )]
     headless_shot: Option<String>,
 }
@@ -108,9 +108,9 @@ fn spawn_vm(
 }
 
 /// Headless capture: run the game until it first waits for input, then render
-/// the current screen to a PPM file and exit. No window/display required.
+/// the current screen (with an empty input strip) to a PNG file and exit.
 fn headless_shot(
-    mut font: font::FontCtx,
+    mut shaper: text::Shaper,
     receiver: erars_proxy_system::ProxyReceiver,
     (w, h): (u32, u32),
     path: &str,
@@ -124,7 +124,7 @@ fn headless_shot(
             Ok(SystemRequest::Input(_)) | Ok(SystemRequest::Quit) | Err(_) => break,
         }
     }
-    match headless::render_lines(&mut font, &frame.lines, w, h) {
+    match headless::render_frame(&mut shaper, &frame, w, h, Some(""), None) {
         Some(img) => match headless::write_png(path, &img) {
             Ok(()) => println!("Wrote {path} ({w}x{h})"),
             Err(e) => eprintln!("Failed to write {path}: {e}"),
@@ -177,8 +177,9 @@ fn main() {
     // Headless capture mode: no window, no display server required.
     if let Some(path) = args.headless_shot.clone() {
         let (system, receiver) = erars_proxy_system::new_proxy(Arc::new(|| {}));
+        let shaper = headless::shaper_for(&config, Path::new(&args.target_path));
         spawn_vm(target_path, args.load, !args.lint_off, system, config);
-        headless_shot(build_font(), receiver, init_size, &path);
+        headless_shot(shaper, receiver, init_size, &path);
         return;
     }
 

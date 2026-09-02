@@ -1,20 +1,34 @@
-//! Offscreen rendering for headless environments (SSH/CI, no display server).
+//! Offscreen rendering for headless environments (SSH/CI, no display server)
+//! and the `--headless-shot` CLI.
 //!
-//! Renders a `ConsoleFrame`'s lines to an RGBA pixel buffer using the same
-//! font/grid/atlas/shader path as the on-screen renderer, so alignment can be
-//! asserted programmatically without an X server. See the tests below.
+//! `render_frame` draws a `ConsoleFrame` through the same path as the window
+//! (`layout::layout` → `draw::build_instances` → `gpu::{create_quad_pipeline,
+//! nearest_sampler, FrameDraw}`) into an `Rgba8Unorm` texture and reads it
+//! back, so pixel positions can be asserted without a display. The target is
+//! linear (the window path clears an sRGB surface), so headless bytes are
+//! compared with each other and with exact 0/255 masks — never with the window.
+//!
+//! View math (spec Component 5) with `scroll_rows = 0`: `strip_h = line_h`,
+//! `view_h = height − strip_h`, row `r` at `view_h − (bottom_row − r + 1)·line_h`,
+//! so slack appears at the top. The input strip shows `> {input}_` in
+//! `frame.fore_color` on the bottom `line_h` rows when `input` is `Some`.
 
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
-use cosmic_text::SwashCache;
-use erars_ui::ConsoleLine;
+use erars_ast::Alignment;
+use erars_compiler::EraConfig;
+use erars_proxy_system::ConsoleFrame;
+use erars_ui::width::WidthTable;
+use erars_ui::{ConsoleLine, ConsoleLinePart, FontStyle, TextStyle};
 use wgpu::util::DeviceExt;
 
-use crate::atlas::GlyphAtlas;
-use crate::draw::build_instances_legacy;
-use crate::font::FontCtx;
-use crate::gpu::{create_quad_pipeline, Globals};
-use crate::grid::Grid;
+use crate::draw::{build_instances, View};
+use crate::font::{FontChain, FontConfig};
+use crate::gpu::{create_quad_pipeline, nearest_sampler, FrameDraw, Globals, Instance};
+use crate::layout::{layout, Geometry};
+use crate::raster::GlyphRaster;
+use crate::text::{CellMetrics, Shaper};
 
 /// A rendered RGBA8 image (row-major, 4 bytes/pixel, no row padding).
 pub struct Rendered {
@@ -24,21 +38,58 @@ pub struct Rendered {
 }
 
 impl Rendered {
+    pub fn pixel(&self, x: u32, y: u32) -> [u8; 4] {
+        let i = ((y * self.width + x) * 4) as usize;
+        [self.rgba[i], self.rgba[i + 1], self.rgba[i + 2], self.rgba[i + 3]]
+    }
+
+    /// The bytes of rows `[y0, y1)`.
+    pub fn band(&self, y0: u32, y1: u32) -> &[u8] {
+        let stride = (self.width * 4) as usize;
+        &self.rgba[y0 as usize * stride..y1.min(self.height) as usize * stride]
+    }
+
+    /// Per column: does any pixel in rows `[y0, y1)` have a channel ≥ `min`?
+    pub fn ink_columns(&self, y0: u32, y1: u32, min: u8) -> Vec<bool> {
+        let mut cols = vec![false; self.width as usize];
+        for y in y0..y1.min(self.height) {
+            for x in 0..self.width {
+                let [r, g, b, _] = self.pixel(x, y);
+                if r.max(g).max(b) >= min {
+                    cols[x as usize] = true;
+                }
+            }
+        }
+        cols
+    }
+
+    /// Bounding box `[x_min, y_min, x_max_excl, y_max_excl]` of pixels with a
+    /// channel ≥ `min` inside `[x0, x1) × [y0, y1)`, or `None` if there are none.
+    pub fn ink_bbox(&self, x0: u32, x1: u32, y0: u32, y1: u32, min: u8) -> Option<[u32; 4]> {
+        let mut bb: Option<[u32; 4]> = None;
+        for y in y0..y1.min(self.height) {
+            for x in x0..x1.min(self.width) {
+                let [r, g, b, _] = self.pixel(x, y);
+                if r.max(g).max(b) < min {
+                    continue;
+                }
+                bb = Some(match bb {
+                    None => [x, y, x + 1, y + 1],
+                    Some([a, b2, c, d]) => [a.min(x), b2.min(y), c.max(x + 1), d.max(y + 1)],
+                });
+            }
+        }
+        bb
+    }
+
     /// Sum of pixel luminance over the rows `[y0, y1)` for each column x.
-    /// Used to find where ink lands horizontally.
     pub fn column_ink(&self, y0: u32, y1: u32) -> Vec<f32> {
         let y1 = y1.min(self.height);
         let mut prof = vec![0.0f32; self.width as usize];
         for y in y0..y1 {
-            let row = (y * self.width * 4) as usize;
-            for x in 0..self.width as usize {
-                let i = row + x * 4;
-                let (r, g, b) = (
-                    self.rgba[i] as f32,
-                    self.rgba[i + 1] as f32,
-                    self.rgba[i + 2] as f32,
-                );
-                prof[x] += 0.299 * r + 0.587 * g + 0.114 * b;
+            for x in 0..self.width {
+                let [r, g, b, _] = self.pixel(x, y);
+                prof[x as usize] += 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
             }
         }
         prof
@@ -46,9 +97,7 @@ impl Rendered {
 
     /// Rightmost column whose ink exceeds `threshold`, or 0 if none.
     pub fn ink_right_edge(prof: &[f32], threshold: f32) -> usize {
-        prof.iter()
-            .rposition(|&v| v > threshold)
-            .unwrap_or(0)
+        prof.iter().rposition(|&v| v > threshold).unwrap_or(0)
     }
 }
 
@@ -69,20 +118,161 @@ pub fn request_device() -> Option<(wgpu::Device, wgpu::Queue)> {
     .ok()
 }
 
-/// Render `lines` to an RGBA buffer of `width`x`height` on a headless GPU.
-/// Returns `None` if no GPU adapter is available (so tests can skip).
-pub fn render_lines(
-    font: &mut FontCtx,
-    lines: &[ConsoleLine],
+/// The shaper for a game: fonts from the configured family → `<game>/font`
+/// → `ERARS_FONT_DIR` → the language's fixed-pitch CJK list → the bundled
+/// font (spec Component 3), cell metrics from the primary face at scale 1
+/// (headless has no window scale; the window applies its real scale factor
+/// through `Shaper::set_metrics`). Shared by `--headless-shot` and the app.
+pub fn shaper_for(config: &EraConfig, game_dir: &Path) -> Shaper {
+    let mut chain = FontChain::new(&FontConfig {
+        family: &config.font_family,
+        game_dir,
+        extra_dir: std::env::var_os("ERARS_FONT_DIR").map(PathBuf::from),
+        lang: config.lang,
+    });
+    let primary = chain.font(chain.primary());
+    let m = CellMetrics::from_primary(&primary, config.font_size, config.line_height, 1.0);
+    Shaper::new(chain, WidthTable::new(config.lang.encoding()), m)
+}
+
+/// Render `frame` into a `content_w × height` image with `scroll_rows = 0`
+/// (bitmap strikes on). `None` if no GPU adapter is available.
+pub fn render_frame(
+    shaper: &mut Shaper,
+    frame: &ConsoleFrame,
+    content_w: u32,
+    height: u32,
+    input: Option<&str>,
+    hover: Option<usize>,
+) -> Option<Rendered> {
+    render_frame_opts(shaper, frame, content_w, height, input, hover, true)
+}
+
+/// [`render_frame`] with the `--no-bitmap-strikes` switch.
+pub fn render_frame_opts(
+    shaper: &mut Shaper,
+    frame: &ConsoleFrame,
+    content_w: u32,
+    height: u32,
+    input: Option<&str>,
+    hover: Option<usize>,
+    use_bitmap_strikes: bool,
+) -> Option<Rendered> {
+    let (device, queue) = request_device()?;
+    Some(render_frame_on(
+        &device,
+        &queue,
+        shaper,
+        frame,
+        content_w,
+        height,
+        input,
+        hover,
+        use_bitmap_strikes,
+    ))
+}
+
+/// [`render_frame`] on an existing device. `hover` indexes `Layout.buttons`
+/// of the log layout and recolours that fragment with `frame.hl_color` (draw
+/// time only, nothing moves).
+#[allow(clippy::too_many_arguments)]
+pub fn render_frame_on(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    shaper: &mut Shaper,
+    frame: &ConsoleFrame,
+    content_w: u32,
+    height: u32,
+    input: Option<&str>,
+    hover: Option<usize>,
+    use_bitmap_strikes: bool,
+) -> Rendered {
+    let content_w = content_w.max(1);
+    let height = height.max(1);
+    let m = *shaper.metrics();
+    let g = Geometry::new(content_w, m);
+    let mut raster = GlyphRaster::new(device, use_bitmap_strikes);
+    let hl = frame.hl_color.0;
+
+    // Log rows: bottom-anchored above the input strip.
+    let strip_h = m.line_h;
+    let view = View {
+        scroll_rows: 0,
+        view_h: height.saturating_sub(strip_h),
+        strip_h,
+    };
+    let log = layout(&frame.lines, &g, shaper);
+    let mut pages = build_instances(&log, &view, hover, hl, &mut raster, device, queue, shaper);
+
+    // Input strip: one line laid out on its own, drawn on the bottom `line_h` rows.
+    if let Some(input) = input {
+        let line = ConsoleLine {
+            align: Alignment::Left,
+            button_start: None,
+            parts: vec![ConsoleLinePart::Text(
+                format!("> {input}_"),
+                TextStyle {
+                    color: frame.fore_color,
+                    font_family: "".into(),
+                    font_style: FontStyle::NORMAL,
+                },
+            )],
+        };
+        let strip = layout(std::slice::from_ref(&line), &g, shaper);
+        let strip_pages = build_instances(
+            &strip,
+            &view.strip(),
+            None,
+            hl,
+            &mut raster,
+            device,
+            queue,
+            shaper,
+        );
+        merge_pages(&mut pages, strip_pages);
+    }
+    if pages.len() < raster.page_count() {
+        pages.resize_with(raster.page_count(), Vec::new);
+    }
+
+    let rgba = draw_offscreen(
+        device,
+        queue,
+        &raster,
+        &pages,
+        frame.bg_color.0,
+        content_w,
+        height,
+    );
+    Rendered {
+        width: content_w,
+        height,
+        rgba,
+    }
+}
+
+/// Append `from`'s per-page instance buckets to `into`'s (growing the list).
+fn merge_pages(into: &mut Vec<Vec<Instance>>, from: Vec<Vec<Instance>>) {
+    for (page, list) in from.into_iter().enumerate() {
+        if into.len() <= page {
+            into.resize_with(page + 1, Vec::new);
+        }
+        into[page].extend(list);
+    }
+}
+
+/// Clear to `bg` (linear target, so the bytes come back exactly), draw every
+/// page's instances against that page's atlas view with the `Nearest`
+/// sampler, and read the texture back without row padding.
+fn draw_offscreen(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    raster: &GlyphRaster,
+    pages: &[Vec<Instance>],
+    bg: [u8; 3],
     width: u32,
     height: u32,
-) -> Option<Rendered> {
-    let instance = wgpu::Instance::default();
-    let adapter =
-        pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
-    let (device, queue) =
-        pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default(), None)).ok()?;
-
+) -> Vec<u8> {
     let format = wgpu::TextureFormat::Rgba8Unorm;
     let target = device.create_texture(&wgpu::TextureDescriptor {
         label: Some("headless-target"),
@@ -100,22 +290,7 @@ pub fn render_lines(
     });
     let target_view = target.create_view(&wgpu::TextureViewDescriptor::default());
 
-    let (pipeline, bind_group_layout) = create_quad_pipeline(&device, format);
-    let mut atlas = GlyphAtlas::new(&device);
-    let mut swash = SwashCache::new();
-
-    let cols = ((width as f32 / font.cell_w).floor() as usize).max(1);
-    let grid = Grid::build(font, lines, cols, None, None, [255, 255, 0]);
-    let instances = build_instances_legacy(
-        &device,
-        &queue,
-        &mut font.font_system,
-        &mut swash,
-        &mut atlas,
-        &grid,
-        0.0,
-    );
-
+    let (pipeline, bind_group_layout) = create_quad_pipeline(device, format);
     let globals_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some("globals"),
         contents: bytemuck::bytes_of(&Globals {
@@ -124,34 +299,14 @@ pub fn render_lines(
         }),
         usage: wgpu::BufferUsages::UNIFORM,
     });
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        ..Default::default()
-    });
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: Some("bg"),
-        layout: &bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: globals_buf.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: wgpu::BindingResource::TextureView(&atlas.view),
-            },
-            wgpu::BindGroupEntry {
-                binding: 2,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            },
-        ],
-    });
-    let instance_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("instances"),
-        contents: bytemuck::cast_slice(&instances),
-        usage: wgpu::BufferUsages::VERTEX,
-    });
+    let sampler = nearest_sampler(device);
+    let draw = FrameDraw::new(
+        device,
+        &bind_group_layout,
+        &globals_buf,
+        &sampler,
+        &raster.pages_with(pages),
+    );
 
     // bytes_per_row must be a multiple of 256 for texture->buffer copies.
     let unpadded = width * 4;
@@ -172,7 +327,12 @@ pub fn render_lines(
                 view: &target_view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Clear(wgpu::Color {
+                        r: bg[0] as f64 / 255.0,
+                        g: bg[1] as f64 / 255.0,
+                        b: bg[2] as f64 / 255.0,
+                        a: 1.0,
+                    }),
                     store: wgpu::StoreOp::Store,
                 },
             })],
@@ -180,12 +340,7 @@ pub fn render_lines(
             timestamp_writes: None,
             occlusion_query_set: None,
         });
-        if !instances.is_empty() {
-            pass.set_pipeline(&pipeline);
-            pass.set_bind_group(0, &bind_group, &[]);
-            pass.set_vertex_buffer(0, instance_buf.slice(..));
-            pass.draw(0..6, 0..instances.len() as u32);
-        }
+        draw.draw(&mut pass, &pipeline);
     }
     encoder.copy_texture_to_buffer(
         wgpu::ImageCopyTexture {
@@ -216,24 +371,20 @@ pub fn render_lines(
         let _ = tx.send(r);
     });
     device.poll(wgpu::Maintain::Wait);
-    rx.recv().ok()?.ok()?;
+    rx.recv()
+        .expect("map_async callback")
+        .expect("readback buffer map");
 
     let mapped = slice.get_mapped_range();
     let mut rgba = vec![0u8; (unpadded * height) as usize];
     for y in 0..height as usize {
         let src = y * padded as usize;
         let dst = y * unpadded as usize;
-        rgba[dst..dst + unpadded as usize]
-            .copy_from_slice(&mapped[src..src + unpadded as usize]);
+        rgba[dst..dst + unpadded as usize].copy_from_slice(&mapped[src..src + unpadded as usize]);
     }
     drop(mapped);
     readback.unmap();
-
-    Some(Rendered {
-        width,
-        height,
-        rgba,
-    })
+    rgba
 }
 
 /// Append one PNG chunk: length, type, data, CRC-32 over type + data.
@@ -278,133 +429,98 @@ pub fn write_png(path: &str, img: &Rendered) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use erars_ast::Alignment;
-    use erars_ui::{Color, ConsoleLinePart, FontStyle, TextStyle};
+    use std::path::PathBuf;
 
-    fn line(s: &str) -> ConsoleLine {
-        ConsoleLine {
-            align: Alignment::Left,
-            button_start: None,
-            parts: vec![ConsoleLinePart::Text(
-                s.to_string(),
-                TextStyle {
-                    color: Color([255, 255, 255]),
-                    font_family: "".into(),
-                    font_style: FontStyle::NORMAL,
-                },
-            )],
+    use erars_ast::Value;
+    use erars_compiler::Language;
+    use erars_ui::width::WidthTable;
+
+    use crate::font::{FontChain, StyleKey};
+    use crate::layout::{Layout, Row};
+    use crate::test_support::{
+        self as ts, bundled_font, frame, gpu_device, gpu_lock, style, text_line,
+    };
+    use crate::text::CellMetrics;
+
+    /// A column counts as inked when some pixel in the band has a channel ≥ this.
+    const INK: u8 = 32;
+    const WHITE: [u8; 3] = [255, 255, 255];
+
+    fn jp_shaper(files: &[PathBuf]) -> Shaper {
+        ts::test_shaper(files, Language::Japanese, 18, 19)
+    }
+
+    fn geometry(shaper: &Shaper, content_w: u32) -> Geometry {
+        Geometry::new(content_w, *shaper.metrics())
+    }
+
+    fn render(
+        shaper: &mut Shaper,
+        dev: &(wgpu::Device, wgpu::Queue),
+        fr: &ConsoleFrame,
+        w: u32,
+        h: u32,
+        input: Option<&str>,
+        hover: Option<usize>,
+    ) -> Rendered {
+        render_frame_on(&dev.0, &dev.1, shaper, fr, w, h, input, hover, true)
+    }
+
+    /// Screen y of row `r` in a `height`-tall render with `scroll_rows = 0`,
+    /// re-derived from spec Component 5 (`view_h − (bottom_row − r + 1)·line_h`)
+    /// on purpose — independent of `draw::View::row_y`.
+    fn row_y(rows: usize, r: usize, height: u32, line_h: u32) -> u32 {
+        let view_h = height - line_h;
+        let bottom = rows - 1;
+        view_h - (bottom - r + 1) as u32 * line_h
+    }
+
+    /// Screen-space cell boxes of a laid-out row: (x_start, x_end_excl, text).
+    fn boxes(row: &Row, m: &CellMetrics) -> Vec<(u32, u32, String)> {
+        row.clusters
+            .iter()
+            .map(|c| {
+                let x = (m.shift as i32 + row.x0 + c.x).max(0) as u32;
+                (x, x + c.cells as u32 * m.half_w, c.text.to_string())
+            })
+            .collect()
+    }
+
+    fn in_glyph_box(bx: &[(u32, u32, String)], x: u32) -> bool {
+        bx.iter()
+            .any(|(a, b, t)| x >= *a && x < *b && !t.trim().is_empty())
+    }
+
+    /// The "perfect fallback" invariant in pixels: every inked column of row
+    /// `r`'s band lies inside a non-blank cell box of row `r` — or of row
+    /// `r−1`, because a tall font's glyphs overflow the row below (spec
+    /// Component 4: no clamping to `line_h`). Every row must have ink of its own.
+    fn assert_ink_in_boxes(img: &Rendered, lay: &Layout, m: &CellMetrics, height: u32) {
+        let rows = lay.rows.len();
+        for (r, row) in lay.rows.iter().enumerate() {
+            let y0 = row_y(rows, r, height, m.line_h);
+            let own = boxes(row, m);
+            let above = if r > 0 { boxes(&lay.rows[r - 1], m) } else { Vec::new() };
+            let ink = img.ink_columns(y0, y0 + m.line_h, INK);
+            let mut own_ink = 0usize;
+            for (x, &inked) in ink.iter().enumerate() {
+                if !inked {
+                    continue;
+                }
+                let x = x as u32;
+                if in_glyph_box(&own, x) {
+                    own_ink += 1;
+                } else if !in_glyph_box(&above, x) {
+                    panic!(
+                        "row {r}: ink at x={x} outside every glyph box of rows {r} and {}: {own:?}",
+                        r.saturating_sub(1)
+                    );
+                }
+            }
+            assert!(own_ink > 0, "row {r} has no ink inside its own boxes");
         }
     }
 
-    /// Text must not spread past its grid columns: a run of N half-width glyphs
-    /// must end near N*cell_w. This is the pixel-level guard against font
-    /// advances leaking into glyph positions (the bug that made text loose).
-    #[test]
-    fn text_stays_within_its_columns() {
-        let _gpu = crate::test_support::gpu_lock();
-        let mut font = FontCtx::new("", 18, 19);
-        let cols = 12usize;
-        let w = 400u32;
-        let h = (font.cell_h * 2.0) as u32 + 4;
-        let Some(img) = render_lines(&mut font, &[line(&"M".repeat(cols))], w, h) else {
-            eprintln!("no GPU adapter; skipping");
-            return;
-        };
-        let prof = img.column_ink(0, font.cell_h as u32 + 2);
-        let threshold = prof.iter().cloned().fold(0.0f32, f32::max) * 0.15;
-        let right = Rendered::ink_right_edge(&prof, threshold) as f32;
-        let expected = cols as f32 * font.cell_w;
-        assert!(
-            right <= expected + font.cell_w && right >= expected - 2.0 * font.cell_w,
-            "{cols} glyphs ended at x={right}, expected ~{expected} (cell_w={})",
-            font.cell_w
-        );
-    }
-
-    /// Identical lines must render to identical ink columns — i.e. column N is
-    /// at the same x on every row. Proves vertical alignment / determinism.
-    #[test]
-    fn identical_rows_align_vertically() {
-        let _gpu = crate::test_support::gpu_lock();
-        let mut font = FontCtx::new("", 18, 19);
-        let ch = font.cell_h as u32;
-        let w = 400u32;
-        let h = ch * 3 + 6;
-        let txt = "Abc123Xyz";
-        let Some(img) = render_lines(&mut font, &[line(txt), line(txt), line(txt)], w, h) else {
-            eprintln!("no GPU adapter; skipping");
-            return;
-        };
-        let p0 = img.column_ink(0, ch);
-        let p1 = img.column_ink(ch, ch * 2);
-        let total: f32 = p0.iter().sum();
-        if total < 1.0 {
-            eprintln!("no ink rendered; skipping");
-            return;
-        }
-        // Normalised L1 difference between the two row bands' ink profiles.
-        let diff: f32 = p0.iter().zip(&p1).map(|(a, b)| (a - b).abs()).sum();
-        let rel = diff / total;
-        assert!(
-            rel < 0.05,
-            "row ink profiles differ by {:.1}% — columns not aligned",
-            rel * 100.0
-        );
-    }
-
-    /// The core terminal property: a full-width CJK glyph occupies exactly two
-    /// cells and lines up with Latin columns. Renders 8 half-width digits over
-    /// 4 full-width ideographs (both = 8 cells) and asserts their ink ends at
-    /// the same x. This is what the mixed-font / advance-leak bugs broke.
-    /// Skips if no coherent CJK monospace is installed (the bundled font is
-    /// Latin-only).
-    #[test]
-    fn cjk_fills_two_cells_aligned_with_latin() {
-        let _gpu = crate::test_support::gpu_lock();
-        // Prefer a coherent CJK monospace so Latin and CJK share 1:2 metrics.
-        let mut font = FontCtx::with_candidates(
-            &[
-                "Sarasa Mono K",
-                "Sarasa Mono J",
-                "Noto Sans Mono CJK KR",
-                "Noto Sans Mono CJK JP",
-                "Noto Sans Mono CJK SC",
-                "GulimChe",
-                "MS Gothic",
-            ],
-            18,
-            19,
-        );
-        let ch = font.cell_h as u32;
-        let w = 400u32;
-        let h = ch * 2 + 6;
-        let latin = line("00000000"); // 8 half-width cells
-        let cjk = line("永永永永"); // 4 full-width = 8 cells
-
-        let Some(img) = render_lines(&mut font, &[latin, cjk], w, h) else {
-            eprintln!("no GPU adapter; skipping");
-            return;
-        };
-        let p_latin = img.column_ink(0, ch);
-        let p_cjk = img.column_ink(ch, ch * 2);
-        if p_cjk.iter().sum::<f32>() < 1.0 {
-            eprintln!("no CJK glyph available (Latin-only fonts); skipping");
-            return;
-        }
-
-        let edge = |prof: &[f32]| {
-            let thr = prof.iter().cloned().fold(0.0f32, f32::max) * 0.15;
-            Rendered::ink_right_edge(prof, thr) as f32
-        };
-        let right_latin = edge(&p_latin);
-        let right_cjk = edge(&p_cjk);
-        assert!(
-            (right_latin - right_cjk).abs() <= font.cell_w,
-            "8 Latin cells end at x={right_latin} but 4 CJK end at x={right_cjk} \
-             (cell_w={}) — CJK is not exactly 2 cells / not aligned to the grid",
-            font.cell_w
-        );
-    }
     fn checker(w: u32, h: u32) -> Vec<u8> {
         let mut rgba = vec![0u8; (w * h * 4) as usize];
         for y in 0..h {
@@ -440,7 +556,8 @@ mod tests {
             if kind == b"IHDR" {
                 assert_eq!(len, 13);
                 assert_eq!(&data[..8], &[0, 0, 0, 7, 0, 0, 0, 3]);
-                assert_eq!(&data[8..], &[8, 6, 0, 0, 0]); // 8-bit RGBA, deflate, filter 0, no interlace
+                // 8-bit RGBA, deflate, filter 0, no interlace
+                assert_eq!(&data[8..], &[8, 6, 0, 0, 0]);
             }
             if kind == b"IEND" {
                 assert_eq!(len, 0);
@@ -473,5 +590,79 @@ mod tests {
             let row = &rgba[y * (w * 4) as usize..(y + 1) * (w * 4) as usize];
             assert_eq!(&line[1..], row, "scanline {y}");
         }
+    }
+
+    /// `bg_color` is honoured: an empty frame is a solid image of it, byte-exact.
+    #[test]
+    fn bg_colour_fills_the_image() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let mut fr = frame(vec![]);
+        fr.bg_color = erars_ui::Color([10, 20, 30]);
+        let img = render(&mut shaper, &dev, &fr, 64, 40, None, None);
+        assert_eq!((img.width, img.height), (64, 40));
+        assert!(
+            img.rgba.chunks_exact(4).all(|p| p == [10, 20, 30, 255]),
+            "not a solid bg fill"
+        );
+    }
+
+    /// One row (`hill`: no glyph reaches below the baseline, which is the
+    /// strip's first pixel row) + input in a 3-row-tall image: slack row at the
+    /// top (rows are bottom-anchored above the strip), the text row in the middle, the strip
+    /// `> abc_` in the default colour on the bottom `line_h` rows; every strip
+    /// pixel is grey (fore 192) and inside a cell box of the strip line;
+    /// `input = None` leaves the strip empty.
+    #[test]
+    fn input_strip_is_drawn_at_the_bottom() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let lh = m.line_h;
+        let fr = frame(vec![text_line("hill", WHITE)]);
+        let (w, h) = (120, 3 * lh);
+        let img = render(&mut shaper, &dev, &fr, w, h, Some("abc"), None);
+        let any_ink =
+            |img: &Rendered, y0: u32, y1: u32| img.ink_columns(y0, y1, INK).iter().any(|&b| b);
+        assert!(!any_ink(&img, 0, lh), "slack row must be empty");
+        assert!(any_ink(&img, lh, 2 * lh), "text row missing");
+        assert!(any_ink(&img, 2 * lh, 3 * lh), "input strip missing");
+        for y in 2 * lh..3 * lh {
+            for x in 0..w {
+                let [r, g, b, _] = img.pixel(x, y);
+                assert!(r == g && g == b && r <= 192, "strip pixel ({x},{y}) = {:?}", (r, g, b));
+            }
+        }
+        // Strip ink lies inside the boxes of "> abc_" and touches > a b c (the
+        // bundled font's `_` sits below the baseline = the strip's last row → clipped).
+        let strip_line = text_line("> abc_", [192, 192, 192]);
+        let strip_lay = layout(
+            std::slice::from_ref(&strip_line),
+            &geometry(&shaper, w),
+            &mut shaper,
+        );
+        let bx = boxes(&strip_lay.rows[0], &m);
+        let ink = img.ink_columns(2 * lh, 3 * lh, INK);
+        let mut touched: Vec<&str> = Vec::new();
+        for (x, &inked) in ink.iter().enumerate() {
+            if !inked {
+                continue;
+            }
+            let (_, _, t) = bx
+                .iter()
+                .find(|(a, b, t)| (x as u32) >= *a && (x as u32) < *b && !t.trim().is_empty())
+                .unwrap_or_else(|| {
+                    panic!("strip ink at x={x} outside the strip's glyph boxes {bx:?}")
+                });
+            if touched.last() != Some(&t.as_str()) {
+                touched.push(t.as_str());
+            }
+        }
+        assert!(touched.starts_with(&[">", "a", "b", "c"]), "strip glyphs with ink: {touched:?}");
+        assert!(touched.len() <= 5, "strip glyphs with ink: {touched:?}");
+        let none = render(&mut shaper, &dev, &fr, w, h, None, None);
+        assert!(!any_ink(&none, 2 * lh, 3 * lh), "strip drawn without input");
     }
 }
