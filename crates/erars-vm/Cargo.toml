@@ -37,6 +37,7 @@ bytemuck = "1.13.0"
 
 [dev-dependencies]
 k9 = "0.11.5"
+serde_yaml = "0.9"
 
 [target.'wasm32-unknown-unknown'.dependencies]
 getrandom = { version = "0.2.7", features = ["js"] }

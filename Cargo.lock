@@ -1139,6 +1139,7 @@ dependencies = [
  "regex",
  "rmp-serde",
  "serde",
+ "serde_yaml",
  "static_assertions",
  "strum",
  "time",
