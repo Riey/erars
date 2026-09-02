@@ -785,6 +785,21 @@ row 1 line 0+ x0=0 w=9
         );
     }
 
+    /// A *trailing* `\n` still finishes its row, so the line ends with an empty
+    /// continuation row (`w=0`, no clusters). T9/T10 count rows, so this is
+    /// pinned: `"a\n"` is two rows, not one.
+    #[test]
+    fn trailing_newline_emits_an_empty_continuation_row() {
+        k9::snapshot!(
+            snap(&[line(Alignment::Left, vec![text("a\n")])], 760),
+            r#"
+row 0 line 0 x0=0 w=9
+  0:1 "a"
+row 1 line 0+ x0=0 w=0
+"#
+        );
+    }
+
     /// The shaper (T6) expands `\t` to 1-cell `" "` clusters up to the next
     /// multiple of 8 cells, counted from the start of the part's text:
     /// `a` + 7 spaces, `b` at 72.
