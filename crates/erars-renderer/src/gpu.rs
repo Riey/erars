@@ -2,7 +2,7 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
 #[repr(C)]
-#[derive(Clone, Copy, Pod, Zeroable)]
+#[derive(Clone, Copy, Pod, Zeroable, Debug, PartialEq)]
 pub struct Instance {
     pub rect: [f32; 4],
     pub uv: [f32; 4],
@@ -105,6 +105,82 @@ pub fn create_quad_pipeline(
     (pipeline, bind_group_layout)
 }
 
+/// The atlas sampler: glyphs are placed on integer pixels, so `Nearest`
+/// reproduces bitmap strikes 1:1 and never blurs mask edges. (The bind-group
+/// layout's `SamplerBindingType::Filtering` accepts any sampler in wgpu 0.19.)
+pub fn nearest_sampler(device: &wgpu::Device) -> wgpu::Sampler {
+    device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("atlas-sampler"),
+        mag_filter: wgpu::FilterMode::Nearest,
+        min_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        ..Default::default()
+    })
+}
+
+/// GPU resources for one frame's per-page instance lists: a bind group and a
+/// vertex buffer per non-empty page. Built *before* the render pass because a
+/// wgpu 0.19 `RenderPass<'a>` borrows every resource it uses for `'a`.
+/// Shared by [`GpuContext::render`] and the headless renderer.
+pub struct FrameDraw {
+    pages: Vec<(wgpu::BindGroup, wgpu::Buffer, u32)>,
+}
+
+impl FrameDraw {
+    pub fn new(
+        device: &wgpu::Device,
+        layout: &wgpu::BindGroupLayout,
+        globals: &wgpu::Buffer,
+        sampler: &wgpu::Sampler,
+        pages: &[(&wgpu::TextureView, &[Instance])],
+    ) -> Self {
+        let mut out = Vec::with_capacity(pages.len());
+        for (view, instances) in pages {
+            if instances.is_empty() {
+                continue;
+            }
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("atlas-page"),
+                layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: globals.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::TextureView(view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Sampler(sampler),
+                    },
+                ],
+            });
+            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("instances"),
+                contents: bytemuck::cast_slice(instances),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+            out.push((bind_group, buffer, instances.len() as u32));
+        }
+        Self { pages: out }
+    }
+
+    /// One `draw(0..6, 0..n)` per page, in page order.
+    pub fn draw<'a>(&'a self, pass: &mut wgpu::RenderPass<'a>, pipeline: &'a wgpu::RenderPipeline) {
+        if self.pages.is_empty() {
+            return;
+        }
+        pass.set_pipeline(pipeline);
+        for (bind_group, buffer, count) in &self.pages {
+            pass.set_bind_group(0, bind_group, &[]);
+            pass.set_vertex_buffer(0, buffer.slice(..));
+            pass.draw(0..6, 0..*count);
+        }
+    }
+}
+
 pub struct GpuContext {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -173,11 +249,7 @@ impl GpuContext {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
+        let sampler = nearest_sampler(&device);
 
         Self {
             device,
@@ -209,13 +281,9 @@ impl GpuContext {
         (self.config.width, self.config.height)
     }
 
-    /// Render one frame: clear to `bg`, draw `instances` against `atlas_view`.
-    pub fn render(
-        &mut self,
-        atlas_view: &wgpu::TextureView,
-        instances: &[Instance],
-        bg: [u8; 3],
-    ) {
+    /// Render one frame: clear to `bg`, then draw every `(atlas page view,
+    /// instances)` pair with its own bind group — one draw per page.
+    pub fn render(&mut self, pages: &[(&wgpu::TextureView, &[Instance])], bg: [u8; 3]) {
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
@@ -231,32 +299,13 @@ impl GpuContext {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("bg"),
-            layout: &self.bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: self.globals_buf.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::TextureView(atlas_view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::Sampler(&self.sampler),
-                },
-            ],
-        });
-
-        let instance_buf =
-            self.device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("instances"),
-                    contents: bytemuck::cast_slice(instances),
-                    usage: wgpu::BufferUsages::VERTEX,
-                });
+        let draw = FrameDraw::new(
+            &self.device,
+            &self.bind_group_layout,
+            &self.globals_buf,
+            &self.sampler,
+            pages,
+        );
 
         let mut encoder = self
             .device
@@ -281,12 +330,7 @@ impl GpuContext {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            if !instances.is_empty() {
-                pass.set_pipeline(&self.pipeline);
-                pass.set_bind_group(0, &bind_group, &[]);
-                pass.set_vertex_buffer(0, instance_buf.slice(..));
-                pass.draw(0..6, 0..instances.len() as u32);
-            }
+            draw.draw(&mut pass, &self.pipeline);
         }
         self.queue.submit(Some(encoder.finish()));
         frame.present();

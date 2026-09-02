@@ -165,7 +165,7 @@ impl App {
             &grid,
             scroll,
         );
-        gpu.render(&atlas.view, &instances, bg);
+        gpu.render(&[(&atlas.view, instances.as_slice())], bg);
     }
 
     fn on_click(&mut self) {
