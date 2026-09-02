@@ -1,7 +1,8 @@
 use crate::{CompileError, CompileResult, Instruction};
 use erars_ast::{
-    BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, Expr, FormExpr, FormText,
-    Function, FunctionHeader, ScriptPosition, SelectCaseCond, Stmt, StmtWithPos, StrKey, Variable,
+    Alignment, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, Expr, FormExpr,
+    FormText, Function, FunctionHeader, ScriptPosition, SelectCaseCond, Stmt, StmtWithPos, StrKey,
+    Variable,
 };
 use hashbrown::HashMap;
 
@@ -250,7 +251,9 @@ impl Compiler {
                 self.push_expr(expr)?;
                 if let Some(padding) = padding {
                     self.push_expr(padding)?;
-                    self.push(Instruction::pad_str(align.unwrap_or_default()));
+                    // Emuera pads on the left (right-aligns) when no LEFT/RIGHT is
+                    // written (StrForm.cs:128 `//標準RIGHT`); CENTER is an erars extension.
+                    self.push(Instruction::pad_str(align.unwrap_or(Alignment::Right)));
                 }
                 self.push(Instruction::load_str(text));
             }
@@ -769,4 +772,50 @@ fn default_arg_command(
     }
 
     Err(CompileError::NoArgumentForCommand(command, idx + 1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compile_stmt;
+    use crate::{HeaderInfo, ParserContext};
+    use erars_ast::{Alignment, StrKey};
+    use std::sync::Arc;
+
+    /// Alignments of every `PadStr` instruction the statement compiles to.
+    fn pad_aligns(src: &str) -> Vec<Alignment> {
+        erars_ast::init_interner();
+        let ctx = ParserContext::new(Arc::new(HeaderInfo::default()), StrKey::new("pad_test"));
+        let body = ctx
+            .parse_body_str(&format!("{src}\n"))
+            .unwrap_or_else(|(err, span)| panic!("parse {src:?}: {err} at {span:?}"));
+        let stmt = body.into_iter().next().expect("one statement");
+        let insts = compile_stmt(stmt.0).unwrap();
+        insts.iter().filter_map(|inst| inst.as_pad_str()).collect()
+    }
+
+    #[test]
+    fn form_padding_defaults_to_right() {
+        // Emuera StrForm.cs:128 `//標準RIGHT`: `{x, w}` / `%s, w%` pad on the left.
+        assert_eq!(pad_aligns("PRINTFORM {12, 5}"), vec![Alignment::Right]);
+        assert_eq!(pad_aligns("PRINTFORM %\"x\", 5%"), vec![Alignment::Right]);
+    }
+
+    #[test]
+    fn form_padding_keeps_explicit_alignment() {
+        assert_eq!(pad_aligns("PRINTFORM {12, 5, LEFT}"), vec![Alignment::Left]);
+        assert_eq!(
+            pad_aligns("PRINTFORM %\"x\", 5, CENTER%"),
+            vec![Alignment::Center]
+        );
+        assert_eq!(
+            pad_aligns("PRINTFORM {12, 5, RIGHT}"),
+            vec![Alignment::Right]
+        );
+    }
+
+    #[test]
+    fn form_without_width_emits_no_pad_str() {
+        assert_eq!(pad_aligns("PRINTFORM {12}"), Vec::<Alignment>::new());
+        assert_eq!(pad_aligns("PRINTFORM %\"x\"%"), Vec::<Alignment>::new());
+    }
 }
