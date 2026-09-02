@@ -1045,6 +1045,7 @@ dependencies = [
 name = "erars-renderer"
 version = "0.5.0"
 dependencies = [
+ "anyhow",
  "bitflags 2.6.0",
  "bytemuck",
  "clap 4.4.18",

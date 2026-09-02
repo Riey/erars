@@ -1,0 +1,35 @@
+﻿@SYSTEM_TITLE
+;marker: the test drops everything the loader printed before this line
+PRINTL ==TUI==
+ALIGNMENT CENTER
+PRINTL ★ 텍스트 UI 데모 ★
+ALIGNMENT LEFT
+DRAWLINE
+PRINTL ┏━━━━┓
+PRINTL ┃가A     ┃
+PRINTL ┗━━━━┛
+CUSTOMDRAWLINE ━
+PRINTC 한글
+PRINTC abc
+PRINTC ▒▒
+PRINTL
+PRINTLC 항목
+PRINTLC 12345
+PRINTL
+ALIGNMENT RIGHT
+PRINTL ▒░█═║
+ALIGNMENT LEFT
+FONTBOLD
+SETCOLOR 255, 128, 0
+PRINT 굵은 주황
+RESETCOLOR
+FONTREGULAR
+PRINTL 보통
+PRINTPLAINFORM ab%UNICODE(10)%cd
+PRINTL
+PRINTBUTTON "[0] 시작", 0
+PRINTBUTTON "[1] 이어\n하기", 1
+PRINTL
+PRINTBUTTON "[2] xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 2
+INPUT
+QUIT

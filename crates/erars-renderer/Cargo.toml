@@ -39,3 +39,4 @@ cosmic-text = "0.12.1"
 
 [dev-dependencies]
 k9 = "0.11.5"
+anyhow.workspace = true
