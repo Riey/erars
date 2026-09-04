@@ -17,11 +17,14 @@ pub fn cut_ident(line: &str) -> (&str, &str) {
     // bytes decide; both differ for every other character in the range.
     let bytes = line.as_bytes();
     let mut pos = 0;
-    while !ends_ident(&bytes[pos..]) {
+    while let Some(&b) = bytes.get(pos) {
+        if ends_ident_byte(b, &bytes[pos + 1..]) {
+            return (&line[..pos], &line[pos..]);
+        }
         pos += 1;
     }
 
-    (&line[..pos], &line[pos..])
+    (line, "")
 }
 
 /// Whether [`cut_ident`] would end an identifier at the head of `bytes`.
@@ -32,8 +35,14 @@ pub fn cut_ident(line: &str) -> (&str, &str) {
 pub fn ends_ident(bytes: &[u8]) -> bool {
     match bytes.first() {
         None => true,
-        Some(&b) => !is_ident_body_byte(b) || (b == 0xE3 && bytes[1..].starts_with(b"\x80\x80")),
+        Some(&b) => ends_ident_byte(b, &bytes[1..]),
     }
+}
+
+/// The class itself: `b` is the byte in question and `after` what follows it,
+/// which only the one non-ASCII terminator needs.
+fn ends_ident_byte(b: u8, after: &[u8]) -> bool {
+    !is_ident_body_byte(b) || (b == 0xE3 && after.starts_with(b"\x80\x80"))
 }
 
 /// Drops the one separator character that follows an instruction name.
