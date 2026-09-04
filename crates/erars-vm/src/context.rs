@@ -2,11 +2,13 @@ use anyhow::{bail, Context, Result};
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use erars_ast::{EventType, ScriptPosition, StrKey, Value, VariableInfo};
 use erars_ui::VirtualConsole;
 use erars_compiler::{EraConfig, HeaderInfo};
 
+use crate::input_logger::{InputAnswer, InputEvent, InputLogger};
 use crate::variable::StrKeyLike;
 use crate::{ArgVec, SystemFunctions, VariableStorage, VmVariable};
 
@@ -24,6 +26,11 @@ pub struct VmContext {
 
     /// Off-screen bitmaps and sprites for the `G*` / `SPRITE*` commands.
     pub graphics: crate::GraphicsStore,
+
+    /// Where every answered input wait is recorded for later analysis.
+    /// Opened by `erars-loader`; a context built anywhere else records
+    /// nothing until [`VmContext::set_input_logger`] says otherwise.
+    pub input_logger: InputLogger,
 
     /// For NOSKIP/ENDNOSKIP
     pub(crate) prev_skipdisp: Option<bool>,
@@ -77,6 +84,7 @@ impl VmContext {
             sav_dir,
             content_dir,
             graphics: crate::GraphicsStore::default(),
+            input_logger: InputLogger::disabled(),
             system,
             header_info,
             stack: Vec::with_capacity(1024),
@@ -106,6 +114,13 @@ impl VmContext {
     /// compiled-bytecode path gets it too.
     pub fn set_debug_mode(&mut self, debug_mode: bool) {
         self.debug_mode = debug_mode;
+    }
+
+    /// Start recording every answered input wait into `logger`. Called by
+    /// `erars-loader` once the game directory is known, so both front ends
+    /// get the log whether the run was compiled or loaded from bytecode.
+    pub fn set_input_logger(&mut self, logger: InputLogger) {
+        self.input_logger = logger;
     }
 
     /// Whether the run ended because `@REBOOT` asked for a fresh engine
@@ -188,7 +203,19 @@ impl VmContext {
                 self.is_timeout = false;
             }
 
+            let started = Instant::now();
             let ret = self.system.input_redraw(tx, req.clone(), painted)?;
+
+            // Before the debug-console branch below, so a `@`-command line is
+            // recorded too: the front end consumed a replayed answer for it,
+            // and the log has to hold every answer the run consumed or it
+            // stops replaying.
+            self.log_input(
+                req.ty,
+                req.is_one,
+                started.elapsed(),
+                InputAnswer::Value(ret.as_ref()),
+            );
 
             if let Some((deadline, default_value)) = &expiry {
                 // DELIBERATE: erars enforces the deadline in the frontend,
@@ -240,7 +267,21 @@ impl VmContext {
     /// [`SystemFunctions::input_int_redraw`] behind the image publish.
     pub fn input_int_redraw(&mut self, tx: &mut VirtualConsole) -> Result<i64> {
         let painted = self.graphics.publish(&tx.images);
-        self.system.input_int_redraw(tx, painted)
+        let started = Instant::now();
+        let ret = self.system.input_int_redraw(tx, painted)?;
+
+        // The request the trait method built for itself
+        // (`SystemFunctions::input_int_redraw`); it cannot be rebuilt here to
+        // be passed in, because `input_gen` hands out a fresh generation on
+        // every call.
+        self.log_input(
+            erars_ui::InputRequestType::Int,
+            false,
+            started.elapsed(),
+            InputAnswer::Value(Some(&Value::Int(ret))),
+        );
+
+        Ok(ret)
     }
 
     /// [`SystemFunctions::input_mouse_key`] behind the image publish.
@@ -250,7 +291,44 @@ impl VmContext {
         req: erars_ui::InputRequest,
     ) -> Result<erars_ui::MouseKeyEvent> {
         let painted = self.graphics.publish(&tx.images);
-        self.system.input_mouse_key(tx, req, painted)
+        let (ty, is_one) = (req.ty, req.is_one);
+        let started = Instant::now();
+        let ev = self.system.input_mouse_key(tx, req, painted)?;
+
+        self.log_input(ty, is_one, started.elapsed(), InputAnswer::MouseKey(&ev));
+
+        Ok(ev)
+    }
+
+    /// One answered wait into [`VmContext::input_logger`], tagged with the
+    /// function that asked for it — the top of the call stack, which is what
+    /// makes the log say *where* the user spends their time.
+    ///
+    /// Guarded on the logger being open, because naming the function costs a
+    /// `String` and a run that records nothing should not pay it.
+    fn log_input(
+        &self,
+        ty: erars_ui::InputRequestType,
+        is_one: bool,
+        latency: Duration,
+        answer: InputAnswer<'_>,
+    ) {
+        if !self.input_logger.is_enabled() {
+            return;
+        }
+
+        let function = self
+            .call_stack
+            .last()
+            .map_or_else(String::new, |frame| frame.func_name.to_string());
+
+        self.input_logger.log(InputEvent {
+            function: &function,
+            request_type: ty,
+            is_one,
+            latency,
+            answer,
+        });
     }
 
     /// The game language's legacy encoding (`Language::encoding`) — the
