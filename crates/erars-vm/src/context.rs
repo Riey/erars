@@ -511,9 +511,17 @@ impl VmContext {
         self.pop_value().and_then(|v| v.try_into_str())
     }
 
+    /// A key off the stack, as an *identity*: the name of a function, a
+    /// variable or a label.
+    ///
+    /// `LoadStr` may have pushed an ERB literal, whose key is a slot in the
+    /// literal store and unique to nothing, so it is traded for the interner's
+    /// answer here. The compiler already does that for a name it can see
+    /// (`Compiler::push_name_expr`); what reaches this is a name computed at
+    /// run time.
     pub fn pop_strkey(&mut self) -> Result<StrKey> {
         let value = match self.pop()? {
-            LocalValue::InternedStr(s) => return Ok(s),
+            LocalValue::InternedStr(s) => return Ok(s.to_global()),
             LocalValue::Value(v) => v,
             LocalValue::VarRef(var_ref) => self.read_var_ref(&var_ref)?,
         };

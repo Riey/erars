@@ -10,7 +10,7 @@ use crate::{get_interner, StrKey};
 /// UTF-8 Korean and Japanese run three bytes to the character, so 24 bytes is
 /// eight of them. Anything longer is a sentence, and a sentence is almost
 /// always unique — caching those is what makes a memo lose (see below).
-const WORD_LEN: usize = 24;
+pub(crate) const WORD_LEN: usize = 24;
 
 /// Slots, a power of two. 1024 of them is 32 KiB, which stays in L2 next to
 /// everything else the parser touches.

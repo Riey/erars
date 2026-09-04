@@ -108,8 +108,8 @@ impl VariableStorage {
     }
 
     #[inline]
-    pub fn resolve_key(&self, key: StrKey) -> &str {
-        self.interner.resolve(&key)
+    pub fn resolve_key(&self, key: StrKey) -> &'static str {
+        key.resolve()
     }
 
     pub fn check_var_exists(&self, fn_name: StrKey, name: StrKey) -> bool {
@@ -326,7 +326,6 @@ impl VariableStorage {
         palam: &mut [i64],
         up: &mut [i64],
         down: &mut [i64],
-        interner: &Interner,
     ) -> Result<()> {
         itertools::multizip((palam.iter_mut(), up.iter_mut(), down.iter_mut()))
             .enumerate()
@@ -337,7 +336,7 @@ impl VariableStorage {
 
                 let name = palam_name
                     .get(&(no as u32))
-                    .map(|s| interner.resolve(s))
+                    .map(|s| s.resolve())
                     .unwrap_or("");
 
                 tx.print(format!("{name} {p}"));
@@ -372,7 +371,6 @@ impl VariableStorage {
         idx: u32,
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
-        let interner = self.interner();
         let registered = idx < self.character_len;
         let (palam, up, down) = self.get_var3(
             KnownVariableNames::Palam,
@@ -390,7 +388,7 @@ impl VariableStorage {
         let up = up.1.assume_normal().as_int()?;
         let down = down.1.assume_normal().as_int()?;
 
-        Self::upcheck_internal(tx, palam_name, palam, up, down, &interner)
+        Self::upcheck_internal(tx, palam_name, palam, up, down)
     }
 
     /// `CUPCHECK` — Emuera `CUpdateInUpcheck`
@@ -407,7 +405,6 @@ impl VariableStorage {
             return Ok(());
         }
 
-        let interner = self.interner();
         let (palam, up, down) = self.get_var3(
             KnownVariableNames::Palam,
             KnownVariableNames::Cup,
@@ -418,7 +415,7 @@ impl VariableStorage {
         let up = up.1.assume_chara(idx).as_int()?;
         let down = down.1.assume_chara(idx).as_int()?;
 
-        Self::upcheck_internal(tx, palam_name, palam, up, down, &interner)
+        Self::upcheck_internal(tx, palam_name, palam, up, down)
     }
 
     /// A `PRINTC` run ends with Emuera's `PrintFlush(false)`: emit the pending

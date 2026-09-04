@@ -3,6 +3,7 @@ mod ast;
 mod command;
 mod event;
 mod intern_cache;
+mod literal_store;
 mod operator;
 mod value;
 mod variable;
@@ -12,6 +13,10 @@ pub use ast::*;
 pub use command::*;
 pub use event::*;
 pub use intern_cache::intern_cached;
+pub use literal_store::{
+    append_intern, intern_literal, literal_store_len, literal_store_strings, reset_literal_store,
+    restore_literals, LIT_BIT, LIT_CAP,
+};
 pub use operator::*;
 pub use ordered_float::NotNan;
 pub use value::{InlineValue, Value};
@@ -58,8 +63,36 @@ impl StrKey {
         self.0.into_inner().get()
     }
 
+    /// The string this key stands for, whichever half of the store holds it.
+    #[inline]
     pub fn resolve(self) -> &'static str {
-        get_interner().resolve(&self)
+        let n = self.to_u32();
+
+        if n & LIT_BIT != 0 {
+            literal_store::resolve_literal(n & !LIT_BIT)
+        } else {
+            get_interner().resolve(&self)
+        }
+    }
+
+    /// Whether this key indexes the literal store rather than the interner.
+    #[inline]
+    pub fn is_literal(self) -> bool {
+        self.to_u32() & LIT_BIT != 0
+    }
+
+    /// The interned key for the same string.
+    ///
+    /// A literal key is only ever resolved, so two occurrences of one sentence
+    /// may well hold different keys. Anything that uses a key as an *identity*
+    /// — the name of a function to call, of a variable to bind, of a label to
+    /// jump to — has to ask for the interner's answer, which is unique.
+    pub fn to_global(self) -> StrKey {
+        if self.is_literal() {
+            crate::intern_cached(self.resolve())
+        } else {
+            self
+        }
     }
 
     pub fn new(s: &str) -> Self {
@@ -69,7 +102,7 @@ impl StrKey {
 
 impl std::fmt::Debug for StrKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(get_interner().resolve(&self))
+        f.write_str(self.resolve())
     }
 }
 

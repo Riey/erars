@@ -256,7 +256,7 @@ impl FunctionDic {
             );
         }
 
-        if let Ok(ty) = self.interner.resolve(&func.header.name).parse::<EventType>() {
+        if let Ok(ty) = func.header.name.resolve().parse::<EventType>() {
             // With `イベント関数のCALLを許可する` on, Emuera also files the
             // event function under its own name in the *non*-event dictionary,
             // and only the first body defined gets that slot — `#PRI`,
@@ -292,7 +292,7 @@ impl FunctionDic {
                     log::warn!(
                         "이벤트 함수 \"@{}\"에는 이미 #ONLY 선언이 있습니다(이 함수는 실행되지 않습니다): {}",
                         <&str>::from(event.ty),
-                        self.interner.resolve(&body.file_path),
+                        body.file_path.resolve(),
                     );
                     collection.events.push(body);
                 } else {
@@ -334,6 +334,6 @@ impl FunctionDic {
 
     pub fn get_func(&self, name: StrKey) -> Result<&FunctionBody> {
         self.get_func_opt(name)
-            .ok_or_else(|| anyhow!("Function {} is not exists", self.interner.resolve(&name)))
+            .ok_or_else(|| anyhow!("Function {} is not exists", name.resolve()))
     }
 }

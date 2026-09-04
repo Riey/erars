@@ -79,7 +79,7 @@ macro_rules! get_arg {
     };
     (@key $arg:expr, $ctx:expr) => {
         match $arg.next() {
-            Some(LocalValue::InternedStr(key)) => key,
+            Some(LocalValue::InternedStr(key)) => key.to_global(),
             Some(v) => {
                 let s: String = $ctx.reduce_local_value(v)?.try_into().context("매개변수의 형식이 잘못되었습니다.")?;
                 $ctx.var.interner().get_or_intern(&s)
@@ -438,7 +438,7 @@ pub(super) fn run_instruction(
             .nth(idx as usize)
             .context("Invalid index for LoadDefaultArgument")?
         {
-            LocalValue::InternedStr(name) => *name,
+            LocalValue::InternedStr(name) => name.to_global(),
             LocalValue::Value(Value::String(name)) => ctx.var.interner().get_or_intern(name),
             _ => bail!("LoadDefaultArgument need function name"),
         };

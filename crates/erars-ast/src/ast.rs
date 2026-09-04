@@ -160,8 +160,12 @@ impl Expr {
         Self::Int(i.into())
     }
 
+    /// An ERB string literal — `"..."`, a form-string fragment, the argument
+    /// of a `PRINT`. Never an identifier: those are keys the rest of the
+    /// engine looks things up by, and belong to the interner
+    /// (`crate::intern_cached`).
     pub fn str(s: impl AsRef<str>) -> Self {
-        Self::String(crate::intern_cached(s.as_ref()))
+        Self::String(crate::intern_literal(s.as_ref()))
     }
 
     pub fn unary(op1: Self, op: UnaryOperator) -> Self {

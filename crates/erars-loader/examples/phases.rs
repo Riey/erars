@@ -232,35 +232,48 @@ fn main() {
         n
     });
 
-    let run_serial = |rounds| {
-        bench("parse+compile serial", rounds, || {
-            let mut out = Vec::new();
-            let mut b = Bump::new();
-            for (p, s) in paths.iter().zip(sources.iter()) {
-                let ctx = ParserContext::new(header.clone(), StrKey::new(p.to_str().unwrap()))
-                    .with_debug(debug_mode);
-                let mut pp = ctx.preprocessor(s.as_str());
-                b.reset();
-                match ctx.parse_and_compile(&mut pp, &mut b) {
-                    Ok(erb) => {
-                        out.extend(erb.functions);
-                        for (err, _) in erb.errors {
-                            eprintln!("compile error {}: {err}", p.display());
-                        }
+    // Every parse+compile round appends the corpus' literals afresh, exactly
+    // as one load does; without the reset a five-round bench would store five
+    // copies and end up measuring the overflow path (`erars_ast::LIT_CAP`)
+    // instead of the store. It also means the keys a round produced die with
+    // the next round's reset, so what feeds `insert`/`write_to` below is a
+    // final untimed pass rather than a benched round's leftovers.
+    let parse_all = || {
+        erars_ast::reset_literal_store();
+        let mut out = Vec::new();
+        let mut b = Bump::new();
+        for (p, s) in paths.iter().zip(sources.iter()) {
+            let ctx = ParserContext::new(header.clone(), StrKey::new(p.to_str().unwrap()))
+                .with_debug(debug_mode);
+            let mut pp = ctx.preprocessor(s.as_str());
+            b.reset();
+            match ctx.parse_and_compile(&mut pp, &mut b) {
+                Ok(erb) => {
+                    out.extend(erb.functions);
+                    for (err, _) in erb.errors {
+                        eprintln!("compile error {}: {err}", p.display());
                     }
-                    Err(e) => eprintln!("compile error {}: {}", p.display(), e.0),
                 }
+                Err(e) => eprintln!("compile error {}: {}", p.display(), e.0),
             }
-            out
-        })
+        }
+        out
     };
 
-    let funcs = if std::env::var_os("PHASES_PROFILE").is_some() {
+    let run_serial = |rounds| bench("parse+compile serial", rounds, parse_all);
+
+    let count = if std::env::var_os("PHASES_PROFILE").is_some() {
         profile(|| run_serial(rounds))
     } else {
         run_serial(rounds)
-    };
-    println!("{} functions", funcs.len());
+    }
+    .len();
+    println!("{count} functions");
+    println!(
+        "interner len {}, literal store len {}",
+        erars_ast::get_interner().len(),
+        erars_ast::literal_store_len()
+    );
 
     if std::env::var_os("PHASES_SERIAL_ONLY").is_some() {
         return;
@@ -271,6 +284,7 @@ fn main() {
         &format!("parse+compile par ({threads}t)"),
         rounds,
         || -> usize {
+            erars_ast::reset_literal_store();
             let v = paths
                 .par_iter()
                 .zip(sources.par_iter())
@@ -288,6 +302,7 @@ fn main() {
         },
     );
 
+    let funcs = parse_all();
     let mut var = VariableStorage::new(header.clone(), &header.global_variables);
     let mut dic = FunctionDic::new();
     bench("insert_compiled_func serial", 1, || {
@@ -301,6 +316,4 @@ fn main() {
         erars_bytecode::write_to(&mut out, &dic).unwrap();
         std::hint::black_box(out.len())
     });
-
-    println!("interner len {}", erars_ast::get_interner().len());
 }

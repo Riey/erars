@@ -1,6 +1,9 @@
 use byteorder::{ReadBytesExt, WriteBytesExt, LE};
 use enum_map::EnumMap;
-use erars_ast::{get_interner, update_interner, EventType, Interner, StrKey};
+use erars_ast::{
+    get_interner, literal_store_strings, restore_literals, update_interner, EventType, Interner,
+    StrKey,
+};
 use hashbrown::HashMap;
 use std::{
     collections::BTreeMap,
@@ -15,10 +18,10 @@ use erars_vm::{
 #[cfg(target_endian = "big")]
 compile_error!("Doesn't support big endian");
 
-// Bumped when `EventCollection` gained its `#ONLY` flag: an older `game.era`
-// has one fewer byte per event and would decode the rest of the file as
-// garbage.
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 9];
+// Bumped when the literal store arrived: string literals no longer live in the
+// interner, so an older `game.era` has no literal block and its instructions
+// hold interner keys where this build expects slot indices.
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 10];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {
@@ -85,6 +88,53 @@ fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBod
     }
 }
 
+/// Read the literal block and hand it back to the store.
+///
+/// The block is `count`, then the bytes of every literal in slot order,
+/// each preceded by its length. Slot order is the point: an instruction was
+/// written with its literal keys as raw `u32`, and a key *is* a slot index, so
+/// only a restore in the same order makes those instructions mean again what
+/// they meant when they were compiled.
+fn read_literals<R: Read + ReadBytesExt>(mut read: R) -> Result<()> {
+    let count = read.read_u32::<LE>()? as usize;
+    let bytes = read.read_u32::<LE>()? as usize;
+
+    // One read for the whole block, then one pass to cut it into the slices
+    // `restore_literals` copies into its arena.
+    let mut block = vec![0u8; bytes];
+    read.read_exact(&mut block)?;
+
+    let mut strings = Vec::with_capacity(count);
+    let mut at = 0usize;
+
+    for _ in 0..count {
+        let len = u32::from_le_bytes(block[at..at + 4].try_into().unwrap()) as usize;
+        at += 4;
+        strings.push(std::str::from_utf8(&block[at..at + len]).unwrap());
+        at += len;
+    }
+
+    restore_literals(&strings);
+
+    Ok(())
+}
+
+/// The literal block, as [`read_literals`] expects it.
+fn write_literals<W: Write + WriteBytesExt>(mut out: W) -> Result<()> {
+    let strings = literal_store_strings();
+    let bytes: usize = strings.iter().map(|s| 4 + s.len()).sum();
+
+    out.write_u32::<LE>(strings.len() as u32)?;
+    out.write_u32::<LE>(bytes as u32)?;
+
+    for s in strings {
+        out.write_u32::<LE>(s.len() as u32)?;
+        out.write_all(s.as_bytes())?;
+    }
+
+    Ok(())
+}
+
 pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionDic> {
     let mut buf = vec![0u8; 1024];
 
@@ -108,6 +158,8 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
     }
 
     update_interner(interner);
+
+    read_literals(&mut read)?;
 
     let mut normal = HashMap::new();
 
@@ -167,6 +219,8 @@ pub fn write_to<W: Write + WriteBytesExt>(mut out: W, dic: &FunctionDic) -> Resu
         out.write_u32::<LE>(str.len() as _)?;
         out.write_all(str.as_bytes())?;
     }
+
+    write_literals(&mut out)?;
 
     out.write_u32::<LE>(dic.normal.len() as _)?;
 

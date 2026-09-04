@@ -2934,7 +2934,7 @@ impl<'p> ParserContext<'p> {
                     DUMPRAND => normal_command!(BuiltinCommand::DumpRand),
                     RAND => normal_method!(BuiltinMethod::Rand),
 
-                    REUSELASTLINE => Stmt::ReuseLastLine(self.interner.get_or_intern(args)),
+                    REUSELASTLINE => Stmt::ReuseLastLine(erars_ast::intern_literal(args)),
 
                     CALL | JUMP | CALLFORM | JUMPFORM | CALLF | CALLFORMF | TRYCALL
                     | TRYCALLFORM | TRYJUMP | TRYJUMPFORM | TRYCCALL | TRYCCALLFORM | TRYCJUMP

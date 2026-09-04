@@ -472,7 +472,7 @@ pub fn form_str<'c, 'a>(
         let normal_str = parse_form_normal_str(ty);
         let (mut i, (normal, mut ty)) = normal_str(i)?;
 
-        let mut form = FormText::new(erars_ast::intern_cached(&normal));
+        let mut form = FormText::new(erars_ast::intern_literal(&normal));
 
         loop {
             let (left, expr, padding, align) = match ty {
@@ -523,7 +523,7 @@ pub fn form_str<'c, 'a>(
             i = left;
             ty = next_ty;
 
-            form.push(expr, padding, align, erars_ast::intern_cached(&normal));
+            form.push(expr, padding, align, erars_ast::intern_literal(&normal));
         }
 
         ctx.is_arg.set(is_arg_init_value);

@@ -119,6 +119,30 @@ impl Compiler {
         Ok(len as u32)
     }
 
+    /// A target *name* — the function a `CALL` enters, the label a `GOTO`
+    /// jumps to.
+    ///
+    /// The name is compared against the keys `FunctionDic` and the goto table
+    /// are built from, which are the interner's. A bare identifier already
+    /// carries that key, but `CALLFORM FOO` is a form string with nothing to
+    /// substitute, and its one fragment is an ERB literal like any other; left
+    /// as one it would force the VM to re-intern the name on every call
+    /// (`StrKey::to_global`, which is still the backstop for a name that only
+    /// exists at run time).
+    fn push_name_expr(&mut self, expr: Expr) -> CompileResult<()> {
+        match expr {
+            Expr::String(key) => {
+                self.push(Instruction::load_str(key.to_global()));
+                Ok(())
+            }
+            Expr::FormText(form) if form.other.is_empty() => {
+                self.push(Instruction::load_str(form.first.to_global()));
+                Ok(())
+            }
+            expr => self.push_expr(expr),
+        }
+    }
+
     fn push_expr(&mut self, expr: Expr) -> CompileResult<()> {
         match expr {
             Expr::IncOpExpr {
@@ -680,7 +704,7 @@ impl Compiler {
                 is_jump,
                 is_method,
             } => {
-                self.push_expr(name)?;
+                self.push_name_expr(name)?;
                 let count = self.push_opt_list(args, |idx, out| {
                     out.push(Instruction::load_default_argument(idx as u32));
                     Ok(())
@@ -731,7 +755,7 @@ impl Compiler {
                 let mut hits = Vec::with_capacity(candidates.len());
 
                 for (name, args) in candidates {
-                    self.push_expr(name)?;
+                    self.push_name_expr(name)?;
                     let count = self.push_opt_list(args, |idx, out| {
                         out.push(Instruction::load_default_argument(idx as u32));
                         Ok(())
@@ -755,7 +779,7 @@ impl Compiler {
             // candidate is tried (`Process.ScriptProc.cs:866-892`).
             Stmt::GotoList(labels) => {
                 for label in labels {
-                    self.push_expr(label)?;
+                    self.push_name_expr(label)?;
                     self.push(Instruction::try_goto_label());
                     self.push(Instruction::pop());
                 }
@@ -764,7 +788,7 @@ impl Compiler {
                 label,
                 catch_body: catch,
             } => {
-                self.push_expr(label)?;
+                self.push_name_expr(label)?;
 
                 if let Some(catch) = catch {
                     self.push(Instruction::try_goto_label());
