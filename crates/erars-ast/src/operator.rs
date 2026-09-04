@@ -51,14 +51,14 @@ pub enum BinaryOperator {
     /// ||
     #[strum(to_string = "||")]
     Or,
-    /// ||
+    /// !|
     #[strum(to_string = "!|")]
     Nor,
-    /// ^
-    #[strum(to_string = "^")]
-    Xor,
     /// ^^
     #[strum(to_string = "^^")]
+    Xor,
+    /// ^
+    #[strum(to_string = "^")]
     BitXor,
 
     /// <<
