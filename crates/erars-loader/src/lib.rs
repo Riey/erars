@@ -22,7 +22,7 @@ use erars_ast::{StrKey, VariableInfo};
 use erars_compiler::{Bump, CompiledFunction, EraConfig, HeaderInfo, ParserContext};
 use erars_lint::{check_function, ErarsFiles};
 use erars_ui::VirtualConsole;
-use erars_vm::{console_config, FunctionDic, InputLogger, SystemFunctions, TerminalVm, VmContext};
+use erars_vm::{console_config, FunctionDic, SystemFunctions, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
 pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
@@ -162,7 +162,6 @@ pub unsafe fn load_script(
         sav,
         Path::new(target_path).join("resources"),
     );
-    ctx.set_input_logger(InputLogger::open(None, Path::new(target_path)));
 
     for (key, vars) in local_infos {
         for var in vars {
@@ -616,7 +615,6 @@ pub fn run_script(
             sav,
             Path::new(target_path).join("resources"),
         );
-        ctx.set_input_logger(InputLogger::open(None, Path::new(target_path)));
 
         // `Program.Main` loads `resources/` before anything runs
         // (`Program.cs:63`, `AppContents.LoadContents`). Every failure in

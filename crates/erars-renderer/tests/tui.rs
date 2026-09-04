@@ -95,13 +95,6 @@ fn console_text(tx: &VirtualConsole) -> String {
 fn run_game(config_name: &str) -> ConsoleFrame {
     static RUN: Mutex<()> = Mutex::new(());
     let _guard = RUN.lock().unwrap_or_else(|e| e.into_inner());
-
-    // `run_script` opens an input log in the game directory, and this game
-    // directory is checked in: a test run must not leave files in it. Set
-    // under the same guard that serialises the runs, so nothing races on it,
-    // and the canned answers below would tell nobody anything anyway.
-    std::env::set_var(erars_vm::input_logger::NO_INPUT_LOG_ENV, "1");
-
     let at_input = Arc::new(Mutex::new(None));
     let system = Box::new(Scripted {
         latest: ConsoleFrame::default(),

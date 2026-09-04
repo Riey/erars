@@ -29,28 +29,6 @@ consolidated list of **deliberate deviations** from Emuera — mostly places whe
 pixel surface, a VM has no host locale, or erars tightens an ordering Emuera leaves unspecified. Each
 entry is also marked in the source with a `DELIBERATE …` comment naming the Emuera line and the reason.
 
-## Input logs
-
-Every front end records the input waits it answers into the game's `logs/`
-directory, so a session can be measured and replayed afterwards:
-
-- `logs/inputs_<stamp>.jsonl` — one JSON object per answered wait: the wall
-  clock, the milliseconds since the session started, how long the answer took,
-  the function that asked, the request type, and the value or the raw
-  mouse/key event. `logs/last_inputs.jsonl` always points at the newest one.
-- `logs/inputs_<stamp>.ron` — the same answers as the `Vec<Value>` that
-  `erars-stdio --use-input <file>` replays, kept valid after every single
-  input, so an interactive session can be re-run verbatim.
-
-`ERARS_NO_INPUT_LOG=1` records nothing. A log that cannot be opened or written
-is dropped with a warning and never stops the game.
-
-`cargo run -p erars-loader --example analyze_inputs -- <logs dir | *.jsonl>`
-turns those logs into usage statistics: the breakdown by request type, the
-functions the waits come from with their latencies, the answers players
-actually give, the think-time percentiles, which function follows which — and
-the optimisation suggestions those numbers support.
-
 ## GUI renderer (`erars-renderer`)
 
 `cargo run -p erars-renderer -- <game dir>` opens the winit/wgpu console. Text

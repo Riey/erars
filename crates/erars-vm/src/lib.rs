@@ -10,10 +10,6 @@ mod function;
 /// in another crate and has to name the token in its `redraw` signature.
 pub mod graphics;
 mod html;
-/// The per-session input log: what the user was asked, what they answered,
-/// and how long they took. Public because `erars-loader` opens it and the
-/// `analyze_inputs` example reads it back.
-pub mod input_logger;
 mod save;
 /// The `resources/` startup loader. Public because `erars-loader` drives it.
 pub mod resources;
@@ -38,7 +34,6 @@ pub use crate::{
     debug_console::{DebugCommand, DebugConsoleQuit, DebugLine},
     function::{EventCollection, FunctionArgDef, FunctionBody, FunctionDic, FunctionGotoLabel},
     graphics::{Bitmap, ColorMatrix, Font, GraphicsStore, Pen, Rect, Sprite, MAX_IMAGE_SIZE},
-    input_logger::{InputAnswer, InputEvent, InputLogEntry, InputLogger, MouseKeyEventLog},
     save::{RawSaveData, SerializableGlobalVariableStorage, SerializableVariableStorage},
     terminal_vm::TerminalVm,
     variable::{UniformVariable, VariableStorage, VmVariable},

@@ -11,7 +11,6 @@ erars-font = { path = "../erars-font" }
 erars-ui = { path = "../erars-ui" }
 
 serde.workspace = true
-serde_json.workspace = true
 strum.workspace = true
 anyhow.workspace = true
 enum-map.workspace = true
@@ -36,9 +35,6 @@ derivative = "2.2.0"
 tinyvec = "1.6.0"
 static_assertions = "1.1.0"
 rmp-serde = "1.1.1"
-# The `--use-input` replay half of the input log, written in the format
-# `erars-stdio` already reads (`main.rs:90-93`).
-ron = "0.8.0"
 flate2 = "1.0.25"
 bytemuck = "1.13.0"
 # GDI+ decodes whatever `Image.FromFile` recognises; the corpus ships `.webp`
@@ -48,7 +44,6 @@ image = { version = "0.25", default-features = false, features = ["png", "bmp", 
 [dev-dependencies]
 k9 = "0.11.5"
 serde_yaml = "0.9"
-tempfile = "3"
 
 [target.'wasm32-unknown-unknown'.dependencies]
 getrandom = { version = "0.2.7", features = ["js"] }

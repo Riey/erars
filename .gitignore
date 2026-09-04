@@ -9,9 +9,7 @@
 /.idea
 last_log.log
 last_test_log.log
-# The engine log and the input log both live in `<game>/logs`, and a game
-# directory can be anywhere — including the fixtures under `crates/*/tests`.
-logs/
+/logs
 massif*
 *~undo-tree~
 heaptrack*
