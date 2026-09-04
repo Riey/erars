@@ -3700,31 +3700,37 @@ impl<'p> ParserContext<'p> {
     /// Pre-scans the function body for `VARS` declarations to hoist their
     /// names into `local_strs`.
     ///
-    /// In the `.NET版` fork, `VARS` and `VARI` declare dynamic local variables
-    /// at any location in a function body ("任意の位置で宣言することが可能").
-    /// In Emuera, expression parsing occurs after the function is fully loaded,
-    /// so forward references to a `VARS` variable (such as `VAR = %FORM%`
-    /// before `VARS VAR`) correctly parse the right-hand side as a form string
-    /// rather than an integer expression.
+    /// In the `.NET版` fork (`LogicalLineParser.cs:423-529`, `ErbLoader.cs:463`),
+    /// `VARS` and `VARI` declare dynamic local variables at any location in a
+    /// function body ("任意の位置で宣言することが可能"), and are registered
+    /// via `parentLine.AddPrivateVariable` during line parsing while SET
+    /// arguments are parsed afterwards by `setLabelsArg()` (`ErbLoader.cs:105,170`)
+    /// or at runtime. Every `VARS` name in a function is therefore visible to
+    /// every line regardless of position. Forward references to a `VARS`
+    /// variable (such as `VAR = %FORM%` before `VARS VAR`) correctly parse the
+    /// right-hand side as a form string rather than an integer expression.
     fn hoist_var_decls(&self, pp: &Preprocessor) {
-        let left = pp.left_text();
-        if !left.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars")) {
-            return;
-        }
-
         let mut scan_pp = pp.clone();
         let mut b = Bump::new();
-        while let Ok(Some(line)) = scan_pp.next_line(&b) {
-            match line {
-                EraLine::FunctionLine(_) => break,
-                EraLine::VarDecl { is_str: true, decl, .. } => {
+        let mut prev_len = scan_pp.left_text().len();
+        loop {
+            b.reset();
+            match scan_pp.next_line(&b) {
+                Ok(Some(EraLine::FunctionLine(_))) | Ok(None) => break,
+                Ok(Some(EraLine::VarDecl { is_str: true, decl, .. })) => {
                     if let Ok((_, decl)) = self::expr::dim_line(self, true)(decl) {
                         self.local_strs.borrow_mut().insert(decl.var);
                     }
                 }
-                _ => {}
+                Ok(Some(_)) => {}
+                Err(_) => {
+                    let cur_len = scan_pp.left_text().len();
+                    if cur_len >= prev_len {
+                        break;
+                    }
+                    prev_len = cur_len;
+                }
             }
-            b.reset();
         }
     }
 
@@ -3756,6 +3762,7 @@ impl<'p> ParserContext<'p> {
         b: &mut Bump,
     ) -> ParserResult<CompiledErb> {
         let s = pp.left_text();
+        let has_vars = s.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars"));
         // `CompiledFunction` is 112 bytes, so the old `with_capacity(1024)`
         // reserved 112 KiB per file. Measured over the corpus a file defines
         // 20.5 functions on average (median 5, p90 64, p99 221) and exactly
@@ -3781,7 +3788,9 @@ impl<'p> ParserContext<'p> {
             Some(EraLine::FunctionLine(mut func_line)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
                 self.local_dims.borrow_mut().clear();
-                self.hoist_var_decls(pp);
+                if has_vars {
+                    self.hoist_var_decls(pp);
+                }
                 let mut compiler = Compiler::new();
                 // A label erars cannot read is the one case Emuera also treats
                 // as poisoning the load: `InvalidLabelLine` sets `noError`
@@ -3917,12 +3926,14 @@ impl<'p> ParserContext<'p> {
 
     pub fn parse(&self, pp: &mut Preprocessor, b: &mut Bump) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();
-
+        let has_vars = pp.left_text().as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars"));
         match pp.next_line(b)? {
             Some(EraLine::FunctionLine(mut func_line)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
                 self.local_dims.borrow_mut().clear();
-                self.hoist_var_decls(pp);
+                if has_vars {
+                    self.hoist_var_decls(pp);
+                }
                 let mut body = Vec::new();
                 let (label, args) = try_nom!(pp, self::expr::function_line(self)(func_line)).1;
                 let label = self.intern_ident(&label);
@@ -4015,7 +4026,9 @@ impl<'p> ParserContext<'p> {
         let mut body = Vec::new();
         self.local_strs.borrow_mut().clear();
         self.local_dims.borrow_mut().clear();
-        self.hoist_var_decls(&pp);
+        if s.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars")) {
+            self.hoist_var_decls(&pp);
+        }
         while let Some(line) = pp.next_line(&b)? {
             body.extend(self.parse_stmt(line, &mut pp, &b)?);
             b.reset();
@@ -4029,7 +4042,9 @@ impl<'p> ParserContext<'p> {
         let b = Bump::new();
         self.local_strs.borrow_mut().clear();
         self.local_dims.borrow_mut().clear();
-        self.hoist_var_decls(&pp);
+        if s.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars")) {
+            self.hoist_var_decls(&pp);
+        }
         match pp.next_line(&b)? {
             Some(line) => match self.parse_stmt(line, &mut pp, &b)? {
                 Some(stmt) => Ok(stmt),
