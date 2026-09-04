@@ -733,12 +733,12 @@ fn parse_color(s: &str) -> Option<[u8; 3]> {
     Some(out)
 }
 
-/// Does `s` hold `VARS`, in any case, anywhere?
+/// Offset of the next `VARS`, in any case, at or after `from`.
 ///
-/// [`ParserContext::hoist_var_decls`] re-lexes a whole function to find the
-/// `VARS` declarations that have to be visible before their own line, so
-/// `parse_and_compile` asks this first and skips the second pass for the files
-/// — the large majority — that declare no dynamic string local.
+/// [`ParserContext::hoist_var_decls`] re-lexes a whole function body to find
+/// the `VARS` declarations that have to be visible before their own line, so
+/// [`VarsGate`] asks this first and skips that second lex for the bodies —
+/// the large majority — that declare no dynamic string local.
 ///
 /// The naive `s.as_bytes().windows(4).any(…)` this replaces compared four
 /// bytes at every one of the corpus's 61_843_825 offsets, once per file, and
@@ -746,21 +746,121 @@ fn parse_color(s: &str) -> Option<[u8; 3]> {
 /// `parse_and_compile` itself. `V` is rare in text that is overwhelmingly
 /// Korean and Japanese, so seeking to the next one vectorises the scan and
 /// leaves only a handful of three-byte compares.
-fn contains_vars(s: &str) -> bool {
-    let bytes = s.as_bytes();
-    let mut at = 0;
+fn find_vars(bytes: &[u8], from: usize) -> Option<usize> {
+    let mut at = from;
 
-    while let Some(off) = memchr::memchr2(b'V', b'v', &bytes[at..]) {
+    while let Some(off) = memchr::memchr2(b'V', b'v', bytes.get(at..)?) {
         let pos = at + off;
         match bytes.get(pos + 1..pos + 4) {
-            Some(tail) if tail.eq_ignore_ascii_case(b"ARS") => return true,
+            Some(tail) if tail.eq_ignore_ascii_case(b"ARS") => return Some(pos),
             // Fewer than three bytes left: no window can match.
-            None => return false,
+            None => return None,
             Some(_) => at = pos + 1,
         }
     }
 
+    None
+}
+
+/// Does any line begin — after the indentation [`Preprocessor::skip_ws`] eats
+/// — with `[` or `{`?
+fn has_line_start_bracket(bytes: &[u8]) -> bool {
+    let mut at = 0;
+
+    while let Some(off) = memchr::memchr2(b'[', b'{', &bytes[at..]) {
+        let pos = at + off;
+        // `skip_ws` also skips U+3000 (`erars-lexer/src/lib.rs:400-449`), so
+        // its bytes are indentation too. Counting any `0xE3`/`0x80` byte — the
+        // lead and trail bytes it shares with the kana — as such only ever
+        // calls more files unsafe, which is the harmless direction.
+        let line_start = bytes[..pos]
+            .iter()
+            .rposition(|b| !matches!(b, b' ' | b'\t' | b'\r' | 0x80 | 0xE3))
+            .map_or(0, |i| i + 1);
+
+        if line_start == 0 || bytes[line_start - 1] == b'\n' {
+            return true;
+        }
+
+        at = pos + 1;
+    }
+
     false
+}
+
+/// Whether one function body can hold a `VARS` declaration at all.
+///
+/// The gate this replaces was a single scan of the whole file, which is the
+/// wrong grain: [`ParserContext::hoist_var_decls`] stops at the next function
+/// line, so one `VARS` anywhere in a file re-lexed *every* function in it.
+/// Over the corpus that is 3368 bodies re-lexed where 378 declare one
+/// (eraTHYMKR: 6.91 MB re-lexed, 1.36 MB of it necessary) and 6303 where 943
+/// do (eraMegaten: 14.13 MB, 5.86 MB).
+///
+/// Bounding a body by the next `\n@` is only sound while every line-start `@`
+/// is one the lexer hands back as an `EraLine::FunctionLine`. Two shapes hide
+/// one: a `[SKIPSTART]`/`[IF]` region drops its lines whole
+/// (`erars-lexer/src/lib.rs:561-563`) and a `{`…`}` block joins them into a
+/// single logical line (`:485-527`). Either would cut the body short and miss
+/// a `VARS` behind it — whose name would then never reach `local_strs`, so a
+/// forward reference such as `VAR = %FORM%` before `VARS VAR` would silently
+/// compile as an integer expression instead of a form string. Leading
+/// whitespace before an `@` is the opposite error and harmless: the bound only
+/// lands later than the real one, and a body scanned too far merely re-lexes.
+enum VarsGate<'s> {
+    /// No `VARS` in the file: no function in it has anything to hoist.
+    Empty,
+    /// No line-start `[` or `{`, so a body's own `\n@` bound holds.
+    PerBody,
+    /// One of those two shapes is present. Fall back to a monotone cursor over
+    /// the file — the offset of the next `VARS`, which only moves forward, the
+    /// shape `Preprocessor::next_rename` uses (`erars-lexer/src/lib.rs:263`) —
+    /// and hoist unless the whole rest of the file is free of `VARS`. That
+    /// never under-approximates the old file-wide gate and costs one amortized
+    /// pass however many functions ask.
+    Cursor { src: &'s str, next_vars: Option<usize> },
+}
+
+impl<'s> VarsGate<'s> {
+    fn new(src: &'s str) -> Self {
+        let bytes = src.as_bytes();
+
+        // A file with no `VARS` at all needs no bracket scan, which is why the
+        // scan costs only the 14% (eraTHYMKR) and 6% (eraMegaten) of files
+        // that have one.
+        match find_vars(bytes, 0) {
+            None => Self::Empty,
+            Some(first) if has_line_start_bracket(bytes) => {
+                Self::Cursor { src, next_vars: Some(first) }
+            }
+            Some(_) => Self::PerBody,
+        }
+    }
+
+    /// `body` is what the preprocessor has left after the function line, so a
+    /// suffix of the file [`Self::new`] was given.
+    fn needs_hoist(&mut self, body: &str) -> bool {
+        match self {
+            Self::Empty => false,
+            Self::PerBody => {
+                let bytes = body.as_bytes();
+                let end = memchr::memmem::find(bytes, b"\n@").unwrap_or(bytes.len());
+                find_vars(&bytes[..end], 0).is_some()
+            }
+            Self::Cursor { src, next_vars } => {
+                let body_start = src.len() - body.len();
+
+                while let Some(at) = *next_vars {
+                    if at >= body_start {
+                        break;
+                    }
+                    *next_vars = find_vars(src.as_bytes(), at + 1);
+                }
+
+                next_vars.is_some()
+            }
+        }
+    }
 }
 
 /// `0xRRGGBB`, the form Emuera's `GETCONFIG` returns for colour items
@@ -3769,7 +3869,7 @@ impl<'p> ParserContext<'p> {
         b: &mut Bump,
     ) -> ParserResult<CompiledErb> {
         let s = pp.left_text();
-        let has_vars = contains_vars(s);
+        let mut vars_gate = VarsGate::new(s);
         // `CompiledFunction` is 112 bytes, so the old `with_capacity(1024)`
         // reserved 112 KiB per file. Measured over the corpus a file defines
         // 20.5 functions on average (median 5, p90 64, p99 221) and exactly
@@ -3795,7 +3895,7 @@ impl<'p> ParserContext<'p> {
             Some(EraLine::FunctionLine(mut func_line)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
                 self.local_dims.borrow_mut().clear();
-                if has_vars {
+                if vars_gate.needs_hoist(pp.left_text()) {
                     self.hoist_var_decls(pp);
                 }
                 let mut compiler = Compiler::new();
@@ -3933,12 +4033,12 @@ impl<'p> ParserContext<'p> {
 
     pub fn parse(&self, pp: &mut Preprocessor, b: &mut Bump) -> ParserResult<Vec<Function>> {
         let mut out = Vec::new();
-        let has_vars = pp.left_text().as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars"));
+        let mut vars_gate = VarsGate::new(pp.left_text());
         match pp.next_line(b)? {
             Some(EraLine::FunctionLine(mut func_line)) => 'outer: loop {
                 self.local_strs.borrow_mut().clear();
                 self.local_dims.borrow_mut().clear();
-                if has_vars {
+                if vars_gate.needs_hoist(pp.left_text()) {
                     self.hoist_var_decls(pp);
                 }
                 let mut body = Vec::new();
@@ -4237,11 +4337,11 @@ mod config_tests {
 
 #[cfg(test)]
 mod scan_tests {
-    use super::contains_vars;
+    use super::{find_vars, has_line_start_bracket, VarsGate};
 
-    /// The naive `windows(4).any(…)` this replaced, kept as the oracle.
-    fn naive(s: &str) -> bool {
-        s.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars"))
+    /// The naive `windows(4)` scan this replaced, kept as the oracle.
+    fn naive(s: &str) -> Option<usize> {
+        s.as_bytes().windows(4).position(|w| w.eq_ignore_ascii_case(b"vars"))
     }
 
     #[test]
@@ -4267,7 +4367,82 @@ mod scan_tests {
             "PRINTL 안녕 VARS 하세요",
             "PRINTL 안녕하세요",
         ] {
-            assert_eq!(contains_vars(s), naive(s), "{s:?}");
+            assert_eq!(find_vars(s.as_bytes(), 0), naive(s), "{s:?}");
+
+            // Resuming past a match finds the next one, which is what the
+            // `VarsGate::Cursor` fallback walks the file with.
+            if let Some(at) = find_vars(s.as_bytes(), 0) {
+                assert_eq!(
+                    find_vars(s.as_bytes(), at + 1),
+                    naive(&s[at + 1..]).map(|off| at + 1 + off),
+                    "{s:?} after {at}"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn a_line_start_bracket_is_found_through_any_indentation() {
+        assert!(has_line_start_bracket(b"[IF DEBUG]"));
+        assert!(has_line_start_bracket(b"@FUNC\n[SKIPSTART]\n"));
+        assert!(has_line_start_bracket(b"@FUNC\n\t [SKIPSTART]\n"));
+        assert!(has_line_start_bracket(b"@FUNC\r\n [SKIPSTART]\r\n"));
+        assert!(has_line_start_bracket("@FUNC\n\u{3000}[SKIPSTART]\n".as_bytes()));
+        assert!(has_line_start_bracket(b"@FUNC\n{\nPRINTL a\n}\n"));
+        assert!(has_line_start_bracket("@FUNC\n\u{3000}{\n}\n".as_bytes()));
+
+        // A bracket that is not the first thing on its line is ordinary text:
+        // a subscript, a `%…%` field, a `[[rename]]` token mid-line.
+        assert!(!has_line_start_bracket(b"@FUNC\nA[1] = 2\n"));
+        assert!(!has_line_start_bracket(b"@FUNC\nPRINTL x [IF] {y}\n"));
+        assert!(!has_line_start_bracket("@FUNC\n하[[NAME]]\n".as_bytes()));
+    }
+
+    /// One decision per function line, in file order.
+    fn decisions(src: &str) -> Vec<bool> {
+        let mut gate = VarsGate::new(src);
+        let mut out = Vec::new();
+
+        for (at, _) in src
+            .match_indices('@')
+            .filter(|(at, _)| *at == 0 || src.as_bytes()[at - 1] == b'\n')
+        {
+            let body = src[at..].find('\n').map_or(src.len(), |off| at + off + 1);
+            out.push(gate.needs_hoist(&src[body..]));
+        }
+
+        out
+    }
+
+    #[test]
+    fn only_the_body_that_declares_one_is_gated_in() {
+        assert_eq!(decisions("@A\nPRINTL a\n@B\nPRINTL b\n"), [false, false]);
+        assert_eq!(decisions("@A\nPRINTL a\n@B\nVARS S\n@C\nPRINTL c\n"), [false, true, false]);
+        assert_eq!(decisions("@A\nVARS S\n@B\nPRINTL b\n"), [true, false]);
+        // The declaration can follow its use, which is the whole reason the
+        // hoist exists, and can sit at the very end of the file.
+        assert_eq!(decisions("@A\nS = %FORM%\nvars s\n"), [true]);
+    }
+
+    #[test]
+    fn a_hidden_function_line_falls_back_instead_of_cutting_the_body_short() {
+        // `@B` is inside a `[SKIPSTART]` region and inside a `{`…`}` block, so
+        // the lexer never emits it and `VARS S` still belongs to `@A`. A
+        // `\n@` bound would stop at it and miss the declaration. (`decisions`
+        // asks about the hidden `@B` too, which the lexer never would; only
+        // `@A`'s answer is the one under test.)
+        for src in [
+            "@A\n[SKIPSTART]\n@B\n[SKIPEND]\nVARS S\n",
+            "@A\n{\nPRINTL a\n@B\n}\nVARS S\n",
+        ] {
+            assert!(decisions(src)[0], "{src:?}");
+        }
+
+        // The fallback is still a gate: nothing left in the file, nothing to
+        // hoist.
+        assert_eq!(
+            decisions("@A\nVARS S\n[SKIPSTART]\n@B\n[SKIPEND]\n@C\nPRINTL c\n"),
+            [true, false, false]
+        );
     }
 }
