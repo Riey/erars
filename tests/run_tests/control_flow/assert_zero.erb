@@ -1,0 +1,13 @@
+; ASSERT carries Emuera's DEBUG_FUNC flag
+; (GameProc/Function/FunctionIdentifier.cs:372), so outside debug mode the line
+; is skipped without its argument ever being parsed
+; (GameProc/Process.ScriptProc.cs:33-40) and a zero argument cannot fire.
+; It still occupies a statement slot: Emuera cannot treat it as a comment line
+; 「SIF文のためにコメント行扱いにはできない」, so the SIF below must take the
+; skipped ASSERT as its body and the line after it must still run.
+@SYSTEM_TITLE
+PRINTFORML start
+ASSERT 1 - 1
+SIF 1
+	ASSERT 0
+PRINTFORML end

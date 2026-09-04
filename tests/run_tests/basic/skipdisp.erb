@@ -1,0 +1,33 @@
+; SKIPDISP takes one required int expression
+; (GameProc/Function/FunctionIdentifier.cs:317, INT_EXPRESSION), sets the skip
+; state from `value != 0` and puts that new state in RESULT
+; (GameProc/Process.ScriptProc.cs:571-578).
+;
+; It must take that argument out of the command argument list. Reading the
+; value stack directly popped the *caller's* frame and left this command's own
+; argument behind, so every SKIPDISP corrupted the stack — this fixture passing
+; also means the harness' end-of-run "stack is empty" check passed.
+@SYSTEM_TITLE
+PRINTFORML start
+
+SKIPDISP 1
+LOCAL = RESULT
+; suppressed: ISSKIP is on, so no PRINT reaches the console
+PRINTL invisible-1
+PRINTFORML invisible-2
+SKIPDISP 0
+PRINTFORML on={LOCAL} off={RESULT}
+
+; RESULT is the *state*, not the argument: any non-zero value means on.
+SKIPDISP 7
+LOCAL = RESULT
+SKIPDISP 0
+PRINTFORML seven={LOCAL}
+
+; ISSKIP reads back the same state.
+SKIPDISP 1
+LOCAL = ISSKIP()
+SKIPDISP 0
+PRINTFORML isskip={LOCAL} now={ISSKIP()}
+
+PRINTFORML end

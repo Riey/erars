@@ -1,0 +1,7 @@
+@SYSTEM_TITLE
+; `ReadRectangle` rejects a zero extent alongside the `int` range
+; (`Creator.Method.cs:5166-5173`), so a degenerate rect is a script error and
+; not a silent no-op. A negative one is fine: it mirrors.
+GCREATE 0, 4, 4
+PRINTFORML rect {GCLEAR(0, 0xFF0000FF, 0, 0, 4, 4)} {GCLEAR(0, 0xFFFF0000, 4, 4, -4, -4)}
+PRINTFORML {GCLEAR(0, 0xFF0000FF, 0, 0, 0, 4)}

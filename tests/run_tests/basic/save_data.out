@@ -1,0 +1,14 @@
+savetext 1
+loadtext [group3 text]
+savetext_neg 0
+loadtext_neg []
+loadtext_miss []
+chkvar 0 [var save test]
+loadvar 1 111 222 [gs]
+loadvar_miss 0 111
+chkvar_miss 1 [----]
+reset 0 [] 111
+savenos_result 20
+savenos_var 20
+gettimes 19 [/] [:]
+gettime 19 [/]

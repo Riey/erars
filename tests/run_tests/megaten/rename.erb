@@ -1,3 +1,15 @@
 @SYSTEM_TITLE
 DE:3:0 = 123
 PRINTFORML 권유할 자를 고르세요　　　경배치：{[[점포:인기]]:ARG}
+; The key's inner text is trimmed, as it is when the CSV is read.
+PRINTFORML {[[ OneTwo Three   ]]}
+; A value is spliced in as raw text, so it may be a whole array reference and
+; may stand on either side of an assignment.
+[[플래그다섯]] = 7
+PRINTFORML {[[플래그다섯]] + 1}
+; ...and it may build up part of an identifier rather than all of one, in a
+; function label as well as at a call site.
+CALL SUB_[[ONE]], 9
+
+@SUB_[[ONE]], ARG
+PRINTFORML sub{ARG}

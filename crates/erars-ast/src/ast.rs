@@ -26,7 +26,19 @@ pub enum Stmt {
     Print(PrintFlags, Expr),
     PrintList(PrintFlags, Vec<Expr>),
     PrintFormS(PrintFlags, Expr),
-    PrintData(PrintFlags, Option<Expr>, Vec<Vec<Expr>>),
+    /// Emuera `PRINTDATA [int var]`: a `DATA`/`DATAFORM`/`DATALIST` block
+    /// closed by `ENDDATA`. One entry is *always* chosen at random and the
+    /// optional variable *receives* that index — it never selects it
+    /// (`GameProc/Function/ArgumentBuilder.cs:1619-1630`,
+    /// `GameProc/Function/Instraction.Child.cs:205-244`). A multi-part entry
+    /// (`DATALIST`) prints one console line per part (`:222-233`).
+    PrintData(PrintFlags, Option<Variable>, Vec<Vec<Expr>>),
+    /// Emuera `STRDATA <str var>`: a `DATA`/`DATAFORM`/`DATALIST` block closed
+    /// by `ENDDATA`. One entry is chosen at random, its lines are joined with
+    /// `\n` and the result is assigned to the variable
+    /// (`GameProc/Process.ScriptProc.cs:750-774`). An empty block assigns
+    /// nothing at all (`:752-757`).
+    StrData(Variable, Vec<Vec<Expr>>),
     ReuseLastLine(StrKey),
     Assign(Variable, Option<BinaryOperator>, Expr),
     Sif(Expr, Box<StmtWithPos>),
@@ -45,6 +57,17 @@ pub enum Stmt {
         try_body: Vec<StmtWithPos>,
         catch_body: Option<Vec<StmtWithPos>>,
     },
+    /// Emuera `TRYCALLLIST` / `TRYJUMPLIST`: the candidates of a
+    /// `FUNC`…`ENDFUNC` block, tried in order. The first one that names an
+    /// existing function is called and the rest are skipped; if none exist
+    /// execution falls through past `ENDFUNC`.
+    CallList {
+        candidates: Vec<(Expr, Vec<Option<Expr>>)>,
+        is_jump: bool,
+    },
+    /// Emuera `TRYGOTOLIST`: like `CallList` but the candidates are `$labels`
+    /// of the current function, and they never take arguments.
+    GotoList(Vec<Expr>),
     CallEvent(EventType),
     Begin(BeginType),
     Repeat(Expr, Vec<StmtWithPos>),
@@ -56,6 +79,13 @@ pub enum Stmt {
     Command(BuiltinCommand, Vec<Option<Expr>>),
     Method(BuiltinMethod, Vec<Option<Expr>>),
     Alignment(Alignment),
+    /// A line that occupies a statement slot and does nothing.
+    ///
+    /// Emuera turns a `DEBUG_FUNC` line into one of these when it runs
+    /// without `-DEBUG`: 「SIF文のためにコメント行扱いにはできない」
+    /// (`GameProc/Process.ScriptProc.cs:33-40`) — dropping the line outright
+    /// would hand the `SIF` above it the *next* line as its body.
+    Nop,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,8 +124,12 @@ pub struct FunctionHeader {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FunctionInfo {
     EventFlag(EventFlags),
-    LocalSize(Expr),
-    LocalSSize(Expr),
+    /// Folded and validated where Emuera does it, at parse time
+    /// (`GameProc/LogicalLineParser.cs:199-253`), so an unusable `#LOCALSIZE`
+    /// leaves the `!VariableSize.csv` default in place instead of reaching the
+    /// VM as an expression that may not fold.
+    LocalSize(u32),
+    LocalSSize(u32),
     Dim(LocalVariable),
     Function,
     FunctionS,

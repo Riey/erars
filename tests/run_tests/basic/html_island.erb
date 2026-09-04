@@ -1,0 +1,18 @@
+@SYSTEM_TITLE
+PRINTL before
+; An island is an overlay held off the log: the markup builds its own lines,
+; which the front-end draws over the console, so nothing an island prints ever
+; joins the line flow — not the printed text, not LINECOUNT. The markup is
+; parsed in full, so a script still sees Emuera's tag diagnostics.
+HTML_PRINT_ISLAND "<div width='40' height='2'>island</div>"
+HTML_PRINT_ISLAND "plain", 2
+; A second print to a layer stacks on it instead of replacing it.
+HTML_PRINT_ISLAND "<div ypos='-100'>over</div>", 2
+PRINTFORML lines {LINECOUNT}
+; One layer, then every layer.
+HTML_PRINT_ISLAND_CLEAR 2
+HTML_PRINT_ISLAND_CLEAR
+PRINTL after
+; ...and a normal HTML_PRINT still prints, so nothing about the island path
+; leaks into the console.
+HTML_PRINT "<b>bold</b>"

@@ -1,0 +1,11 @@
+@SYSTEM_TITLE
+; `zdepth == 0` is the text's own depth in the merged draw loop
+; (`GameView/EmueraConsole.cs:109-111`), so no entry may hold it: every
+; `CBGSET*` raises instead (`Creator.Method.cs:6578-6581`, `:6637-6640`,
+; `:6697-6700`), the same message it raises for a depth outside `int`.
+;
+; The bitmap has to exist, because `!g.IsCreated` is a soft 0 checked *before*
+; the depth (`:6572-6573`).
+PRINTFORML start
+GCREATE 0, 4, 4
+PRINTFORML {CBGSETG(0, 0, 0, 0)}

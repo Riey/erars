@@ -1,8 +1,8 @@
-use crate::{CompileError, CompileResult, Instruction};
+use crate::{CompileError, CompileResult, Instruction, ParserError, ParserWarning};
 use erars_ast::{
     Alignment, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, Expr, FormExpr,
-    FormText, Function, FunctionHeader, ScriptPosition, SelectCaseCond, Stmt, StmtWithPos, StrKey,
-    Variable,
+    FormText, Function, FunctionHeader, PrintFlags, ScriptPosition, SelectCaseCond, Stmt,
+    StmtWithPos, StrKey, Variable,
 };
 use hashbrown::HashMap;
 
@@ -13,11 +13,33 @@ pub struct CompiledFunction {
     pub body: Box<[Instruction]>,
 }
 
+/// Everything one ERB file yielded.
+#[derive(Default)]
+pub struct CompiledErb {
+    pub functions: Vec<CompiledFunction>,
+    /// Lines erars could not interpret at all. Emuera turns each into an
+    /// `InvalidLine` and clears `noError` (`GameProc/ErbLoader.cs:403-407`,
+    /// `:423-427`), which refuses to start the game unless
+    /// `解釈不可能な行があっても実行する` is on
+    /// (`GameProc/Process.SystemProc.cs:173-186`).
+    pub errors: Vec<ParserError>,
+    /// Lines Emuera keeps and warns about without touching `noError`, each
+    /// tagged with the Emuera warning level it is reported at:
+    /// `表示する最低警告レベル` drops anything below its value before it is
+    /// ever printed (`GameData/ParserMediator.cs:26`).
+    pub warnings: Vec<ParserWarning>,
+}
+
 pub struct Compiler {
     pub out: Vec<Instruction>,
     pub goto_labels: HashMap<StrKey, u32>,
     pub continue_marks: Vec<Vec<u32>>,
     pub break_marks: Vec<Vec<u32>>,
+    /// Lines Emuera marks `IsError` without refusing to start the game
+    /// (`GameData/ParserMediator.cs:118-131` sets `line.IsError` but leaves
+    /// `ErbLoader.noError` alone). Drained by the caller, which turns each
+    /// position into a source span.
+    pub warnings: Vec<(String, ScriptPosition)>,
     current_pos: ScriptPosition,
 }
 
@@ -28,12 +50,24 @@ impl Compiler {
             goto_labels: HashMap::new(),
             continue_marks: Vec::new(),
             break_marks: Vec::new(),
+            warnings: Vec::new(),
             current_pos: ScriptPosition::default(),
         }
     }
 
     pub fn current_pos(&self) -> ScriptPosition {
         self.current_pos
+    }
+
+    /// Compile a line that could not be interpreted the way Emuera keeps one:
+    /// an `InvalidLine` stays in its function and raises the parse message
+    /// only if execution ever reaches it (`GameProc/LogicalLine.cs:74-85`,
+    /// added by `ErbLoader.cs:403-407` like any other line), so the rest of
+    /// the function remains callable. `THROW` is that line.
+    pub fn push_invalid_line(&mut self, msg: &str) {
+        self.push(Instruction::load_str(StrKey::new(msg)));
+        self.push(Instruction::load_int(1));
+        self.push(Instruction::builtin_command(BuiltinCommand::Throw));
     }
 
     fn push(&mut self, inst: Instruction) {
@@ -352,6 +386,52 @@ impl Compiler {
         Ok(())
     }
 
+    /// The `PRINTDATA`/`STRDATA` branch table. The selector must already be
+    /// on the stack, where it stays: every entry compares itself against a
+    /// duplicate of it, and the one that matches hands its parts to `emit`.
+    /// `PRINTDATA` and `STRDATA` disagree on what a multi-part entry means, so
+    /// joining is the emitter's job.
+    fn push_data_branch(
+        &mut self,
+        list: Vec<Vec<Expr>>,
+        mut emit: impl FnMut(&mut Self, Vec<Expr>) -> CompileResult<()>,
+    ) -> CompileResult<()> {
+        let branch = self.current_no();
+
+        for _ in 0..list.len() * 4 {
+            self.mark();
+        }
+
+        let mut line_positions = Vec::new();
+
+        for (i, part) in list.into_iter().enumerate() {
+            let start = self.current_no();
+
+            self.insert(branch + i as u32 * 4, Instruction::duplicate());
+            self.insert(branch + i as u32 * 4 + 1, Instruction::load_int(i as _));
+            self.insert(
+                branch + i as u32 * 4 + 2,
+                Instruction::binop(BinaryOperator::NotEqual),
+            );
+            self.insert(branch + i as u32 * 4 + 3, Instruction::goto_if_not(start));
+
+            emit(self, part)?;
+
+            line_positions.push(self.mark());
+        }
+
+        for end in line_positions {
+            self.insert(end, Instruction::goto(self.current_no()));
+        }
+
+        // The selector stays on the stack through every branch (each branch
+        // consumes only its own duplicate), so it must be dropped once after
+        // the chosen branch has run.
+        self.push(Instruction::pop());
+
+        Ok(())
+    }
+
     #[inline]
     pub fn push_stmt_with_pos(&mut self, stmt: StmtWithPos) -> CompileResult<()> {
         self.push(Instruction::report_position(stmt.1));
@@ -361,6 +441,11 @@ impl Compiler {
 
     pub fn push_stmt(&mut self, stmt: Stmt) -> CompileResult<()> {
         match stmt {
+            // One instruction, so the line is still a line: `SIF` above it
+            // jumps over exactly this (`Process.ScriptProc.cs:33-40`).
+            Stmt::Nop => {
+                self.push(Instruction::nop());
+            }
             Stmt::CallEvent(ty) => {
                 self.push(Instruction::call_event(ty));
             }
@@ -383,43 +468,54 @@ impl Compiler {
                 self.push(Instruction::concat_string(count));
                 self.push(Instruction::print(flags));
             }
-            Stmt::PrintData(flags, cond, list) => {
-                let cond = cond.unwrap_or_else(|| {
-                    Expr::BuiltinVar(BuiltinVariable::Rand, vec![Expr::Int(list.len() as _)])
-                });
-                self.push_expr(cond)?;
+            Stmt::PrintData(flags, var, list) => {
+                // `dataList.Count == 0` jumps straight past `ENDDATA` without
+                // drawing a number (`Instraction.Child.cs:205-210`).
+                if !list.is_empty() {
+                    let selector =
+                        Expr::BuiltinVar(BuiltinVariable::Rand, vec![Expr::Int(list.len() as _)]);
+                    self.push_expr(selector)?;
 
-                let branch = self.current_no();
-
-                for _ in 0..list.len() * 4 {
-                    self.mark();
-                }
-
-                let mut line_positions = Vec::new();
-
-                for (i, part) in list.into_iter().enumerate() {
-                    let start = self.current_no();
-
-                    self.insert(branch + i as u32 * 4, Instruction::duplicate());
-                    self.insert(branch + i as u32 * 4 + 1, Instruction::load_int(i as _));
-                    self.insert(
-                        branch + i as u32 * 4 + 2,
-                        Instruction::binop(BinaryOperator::NotEqual),
-                    );
-                    self.insert(branch + i as u32 * 4 + 3, Instruction::goto_if_not(start));
-
-                    for line in part {
-                        self.push_expr(line)?;
+                    // The chosen index lands in the variable before anything
+                    // is printed, so a `DATAFORM` entry can read it back
+                    // (`Instraction.Child.cs:213-217`).
+                    if let Some(var) = var {
+                        self.push(Instruction::duplicate());
+                        self.store_var(var)?;
                     }
 
-                    self.push(Instruction::print(flags));
-
-                    let end = self.mark();
-                    line_positions.push(end);
+                    // Emuera prints each part and calls `NewLine()` between
+                    // them, then applies the command's own newline/wait once
+                    // at the end (`:222-238`).
+                    let inner = (flags | PrintFlags::NEWLINE) - PrintFlags::WAIT;
+                    self.push_data_branch(list, |this, part| {
+                        let last = part.len() - 1;
+                        for (i, line) in part.into_iter().enumerate() {
+                            this.push_expr(line)?;
+                            this.push(Instruction::print(if i == last { flags } else { inner }));
+                        }
+                        Ok(())
+                    })?;
                 }
-
-                for end in line_positions {
-                    self.insert(end, Instruction::goto(self.current_no()));
+            }
+            Stmt::StrData(var, list) => {
+                // An empty block assigns nothing at all: Emuera jumps straight
+                // to the matching `ENDDATA` before drawing a random number
+                // (`GameProc/Process.ScriptProc.cs:752-757`).
+                if !list.is_empty() {
+                    let selector =
+                        Expr::BuiltinVar(BuiltinVariable::Rand, vec![Expr::Int(list.len() as _)]);
+                    self.push_expr(selector)?;
+                    self.push_data_branch(list, |this, part| {
+                        let count = part.len();
+                        for line in part {
+                            this.push_expr(line)?;
+                        }
+                        if count > 1 {
+                            this.push(Instruction::concat_string(count as u32));
+                        }
+                        this.store_var(var.clone())
+                    })?;
                 }
             }
             Stmt::ReuseLastLine(text) => {
@@ -494,20 +590,32 @@ impl Compiler {
                     self.insert(end, Instruction::goto(self.current_no()));
                 }
             }
-            Stmt::Continue => {
-                let mark = self.mark();
-                self.continue_marks
-                    .last_mut()
-                    .ok_or(CompileError::ContinueNotLoop)?
-                    .push(mark);
-            }
-            Stmt::Break => {
-                let mark = self.mark();
-                self.break_marks
-                    .last_mut()
-                    .ok_or(CompileError::BreakNotLoop)?
-                    .push(mark);
-            }
+            // A `BREAK`/`CONTINUE` with no enclosing loop is not fatal to the
+            // load in Emuera: the nest check warns at level 2 and marks the
+            // line `IsError` (`GameProc/ErbLoader.cs:1041-1058`), which leaves
+            // `noError` set and the function callable.
+            Stmt::Continue => match self.continue_marks.len() {
+                0 => {
+                    let msg = CompileError::ContinueNotLoop.to_string();
+                    self.push_invalid_line(&msg);
+                    self.warnings.push((msg, self.current_pos));
+                }
+                depth => {
+                    let mark = self.mark();
+                    self.continue_marks[depth - 1].push(mark);
+                }
+            },
+            Stmt::Break => match self.break_marks.len() {
+                0 => {
+                    let msg = CompileError::BreakNotLoop.to_string();
+                    self.push_invalid_line(&msg);
+                    self.warnings.push((msg, self.current_pos));
+                }
+                depth => {
+                    let mark = self.mark();
+                    self.break_marks[depth - 1].push(mark);
+                }
+            },
             Stmt::Repeat(end, body) => {
                 self.push_for(None, Expr::int(0), end, Expr::int(1), body)?
             }
@@ -609,6 +717,47 @@ impl Compiler {
                             self.push(Instruction::pop());
                         }
                     }
+                }
+            }
+            // Emuera `Process.ScriptProc.cs:834-865`: try each candidate in
+            // order, enter the first one that resolves, and fall through past
+            // `ENDFUNC` when none do. `try_call` leaves a success flag on the
+            // stack, so `goto_if` both consumes it and skips the rest of the
+            // list; a successful `try_jump` never returns here at all.
+            Stmt::CallList {
+                candidates,
+                is_jump,
+            } => {
+                let mut hits = Vec::with_capacity(candidates.len());
+
+                for (name, args) in candidates {
+                    self.push_expr(name)?;
+                    let count = self.push_opt_list(args, |idx, out| {
+                        out.push(Instruction::load_default_argument(idx as u32));
+                        Ok(())
+                    })?;
+
+                    if is_jump {
+                        self.push(Instruction::try_jump(count));
+                    } else {
+                        self.push(Instruction::try_call(count));
+                    }
+                    hits.push(self.mark());
+                }
+
+                let end = self.current_no();
+                for hit in hits {
+                    self.insert(hit, Instruction::goto_if(end));
+                }
+            }
+            // `try_goto_label` jumps away on a hit and pushes `false` on a
+            // miss, so each miss only needs its flag dropped before the next
+            // candidate is tried (`Process.ScriptProc.cs:866-892`).
+            Stmt::GotoList(labels) => {
+                for label in labels {
+                    self.push_expr(label)?;
+                    self.push(Instruction::try_goto_label());
+                    self.push(Instruction::pop());
                 }
             }
             Stmt::Goto {
@@ -766,6 +915,10 @@ fn default_arg_command(
             let (l, r) = unsafe { std::mem::transmute(i64::MAX) };
             out.push(Instruction::load_int(l));
             out.push(Instruction::load_int_suffix(r));
+            return Ok(());
+        }
+        BuiltinCommand::ArrayMove if idx == 3 => {
+            out.push(Instruction::load_int(0));
             return Ok(());
         }
         _ => {}

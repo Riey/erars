@@ -17,7 +17,6 @@ cow-utils = "0.1.2"
 option_set = "0.1.4"
 smol_str = { version = "0.2.0", features = ["serde"] }
 memchr = "2.5.0"
-regex-automata = "0.2.0"
 num-traits = "0.2.15"
 num-derive = "0.3.3"
 bumpalo = "3.11.1"

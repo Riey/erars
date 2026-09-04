@@ -1,0 +1,24 @@
+@SYSTEM_TITLE
+; ---- REDRAW's low bit is the paint gate, and it sticks ----------------
+PRINTFORML init={CURRENTREDRAW()}
+REDRAW 0
+PRINTFORML off={CURRENTREDRAW()}
+REDRAW 1
+PRINTFORML on={CURRENTREDRAW()}
+REDRAW 2
+PRINTFORML forced={CURRENTREDRAW()}
+REDRAW 3
+PRINTFORML both={CURRENTREDRAW()}
+
+; ---- no message skip is in flight under this front-end ---------------
+PRINTFORML skip={MESSKIP()} {MOUSESKIP()}
+
+; ---- a front-end with no font database answers no honestly -----------
+PRINTFORML font={CHKFONT("Arial")} {CHKFONT("")}
+
+; ---- INPUTMOUSEKEY: with no raw event source only the limit can fire --
+RESULTS '= "kept"
+INPUTMOUSEKEY 50
+PRINTFORML mouse={RESULT:0} {RESULT:1} {RESULT:2} {RESULT:3} {RESULT:4} {RESULT:5} [%RESULTS%]
+INPUTMOUSEKEY
+PRINTFORML mouse2={RESULT:0} {RESULT:5}

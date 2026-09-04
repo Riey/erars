@@ -1,6 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fmt::Debug,
+    fmt::{Debug, Write as _},
     sync::Arc,
 };
 
@@ -36,6 +36,17 @@ macro_rules! set_var {
             }
         }
     };
+}
+
+/// The three entry shapes Emuera's `GetCharacterDataString` produces.
+#[derive(Clone, Copy)]
+pub enum DataEntryStyle {
+    /// `{name}LV{value} ` — PRINT_ABL, PRINT_MARK.
+    Level,
+    /// `{name}{value} ` — PRINT_EXP.
+    Value,
+    /// `[{name}]`, run together with no separator — PRINT_TALENT.
+    Bracket,
 }
 
 #[derive(Clone)]
@@ -351,6 +362,10 @@ impl VariableStorage {
         Ok(())
     }
 
+    /// `UPCHECK` — Emuera `UpdateInUpcheck`
+    /// (`GameData/Variable/VariableEvaluator.cs:1538-1592`). An out-of-range
+    /// `TARGET` jumps straight to the `end:` label, so the parameter walk is
+    /// skipped **but UP and DOWN are still cleared**.
     pub fn upcheck(
         &mut self,
         tx: &mut VirtualConsole,
@@ -358,11 +373,18 @@ impl VariableStorage {
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
         let interner = self.interner();
+        let registered = idx < self.character_len;
         let (palam, up, down) = self.get_var3(
             KnownVariableNames::Palam,
             KnownVariableNames::Up,
             KnownVariableNames::Down,
         )?;
+
+        if !registered {
+            up.1.assume_normal().as_int()?.fill(0);
+            down.1.assume_normal().as_int()?.fill(0);
+            return Ok(());
+        }
 
         let palam = palam.1.assume_chara(idx).as_int()?;
         let up = up.1.assume_normal().as_int()?;
@@ -371,12 +393,20 @@ impl VariableStorage {
         Self::upcheck_internal(tx, palam_name, palam, up, down, &interner)
     }
 
+    /// `CUPCHECK` — Emuera `CUpdateInUpcheck`
+    /// (`GameData/Variable/VariableEvaluator.cs:1594-1599`). Unlike `UPCHECK`
+    /// this one returns before the `end:` label, so an out-of-range target
+    /// leaves CUP and CDOWN untouched.
     pub fn cupcheck(
         &mut self,
         tx: &mut VirtualConsole,
         idx: u32,
         palam_name: &BTreeMap<u32, StrKey>,
     ) -> Result<()> {
+        if idx >= self.character_len {
+            return Ok(());
+        }
+
         let interner = self.interner();
         let (palam, up, down) = self.get_var3(
             KnownVariableNames::Palam,
@@ -389,6 +419,204 @@ impl VariableStorage {
         let down = down.1.assume_chara(idx).as_int()?;
 
         Self::upcheck_internal(tx, palam_name, palam, up, down, &interner)
+    }
+
+    /// A `PRINTC` run ends with Emuera's `PrintFlush(false)`: emit the pending
+    /// line, but never an empty one.
+    fn flush_printc(tx: &mut VirtualConsole) {
+        if !tx.line_is_empty() {
+            tx.new_line();
+        }
+    }
+
+    fn assume_registered(&self, idx: u32) -> Result<()> {
+        ensure!(
+            idx < self.character_len,
+            "등록되지 않은 캐릭터 {idx}를 참조했습니다"
+        );
+        Ok(())
+    }
+
+    /// PRINT_ABL / PRINT_TALENT / PRINT_MARK / PRINT_EXP — Emuera
+    /// `VariableEvaluator.GetCharacterDataString` (`:891-975`). One dense walk
+    /// of the indices the character's array and the name table share, skipping
+    /// zero values and nameless slots, then a single line.
+    pub fn print_chara_data(
+        &mut self,
+        tx: &mut VirtualConsole,
+        idx: u32,
+        value_var: impl StrKeyLike,
+        name_var: impl StrKeyLike,
+        style: DataEntryStyle,
+    ) -> Result<()> {
+        self.assume_registered(idx)?;
+        let ((_, values), (_, names)) = self.get_var2(value_var, name_var)?;
+        let values = values.assume_chara(idx).as_int()?;
+        let names = names.assume_normal().as_str()?;
+
+        let mut out = String::new();
+        for (value, name) in values.iter().zip(names.iter()) {
+            if *value == 0 || name.is_empty() {
+                continue;
+            }
+            match style {
+                DataEntryStyle::Level => {
+                    let _ = write!(out, "{name}LV{value} ");
+                }
+                DataEntryStyle::Value => {
+                    let _ = write!(out, "{name}{value} ");
+                }
+                DataEntryStyle::Bracket => {
+                    let _ = write!(out, "[{name}]");
+                }
+            }
+        }
+
+        tx.print_line(out);
+        Ok(())
+    }
+
+    /// PRINT_PALAM — Emuera `Process.ScriptProc.cs:188-210` plus
+    /// `VariableEvaluator.GetCharacterParamString` (`:976-1027`): a ten-cell
+    /// bar graded by `PALAMLV`, laid out `printc_count` cells to the line.
+    ///
+    /// Emuera hard-codes the range `0..100` ("100 and up are the negative
+    /// beads, don't show them") and indexes `PALAMNAME` unchecked; here a
+    /// shorter `PALAM` ends the walk and a missing name reads as empty, so a
+    /// resized game cannot crash the VM.
+    pub fn print_palam(
+        &mut self,
+        tx: &mut VirtualConsole,
+        idx: u32,
+        printc_count: usize,
+    ) -> Result<()> {
+        self.assume_registered(idx)?;
+        let ((_, palam), (_, names), (_, lv)) = self.get_var3(
+            KnownVariableNames::Palam,
+            "PALAMNAME",
+            KnownVariableNames::PalamLv,
+        )?;
+        let palam = palam.assume_chara(idx).as_int()?;
+        let names = names.assume_normal().as_str()?;
+        let lv = lv.assume_normal().as_int()?;
+
+        // `paramlv[0]` is unused; the four thresholds pick the bar character.
+        let border_at = |i: usize| lv.get(i).copied().unwrap_or(0);
+
+        let mut cell = String::new();
+        let mut count = 0;
+        for (no, param) in palam.iter().take(100).enumerate() {
+            let name = names.get(no).map(String::as_str).unwrap_or("");
+            if *param == 0 && name.is_empty() {
+                continue;
+            }
+
+            let mut c = '-';
+            let mut border = border_at(1);
+            for next in 2..=4 {
+                if *param < border {
+                    break;
+                }
+                c = ['=', '>', '*'][next - 2];
+                border = border_at(next);
+            }
+
+            cell.clear();
+            cell.push_str(name);
+            cell.push('[');
+            if border <= 0 || border <= *param {
+                cell.extend(std::iter::repeat(c).take(10));
+            } else if *param <= 0 {
+                cell.extend(std::iter::repeat('.').take(10));
+            } else {
+                // Emuera multiplies `unchecked`; the clamp only bites if that
+                // wraps, where Emuera would throw out of `Append`.
+                let filled = (param.wrapping_mul(10) / border).clamp(0, 10) as usize;
+                cell.extend(std::iter::repeat(c).take(filled));
+                cell.extend(std::iter::repeat('.').take(10 - filled));
+            }
+            cell.push(']');
+            let _ = write!(cell, "{param:>6}");
+
+            tx.printrc(&cell);
+            count += 1;
+            if printc_count > 0 && count % printc_count == 0 {
+                Self::flush_printc(tx);
+            }
+        }
+
+        Self::flush_printc(tx);
+        Ok(())
+    }
+
+    /// PRINT_ITEM — Emuera `VariableEvaluator.GetHavingItemsString`
+    /// (`:850-872`). The two labels are Emuera's own literals, not `_Replace`
+    /// entries.
+    pub fn print_item(&mut self, tx: &mut VirtualConsole) -> Result<()> {
+        let ((_, items), (_, names)) = self.get_var2("ITEM", "ITEMNAME")?;
+        let items = items.assume_normal().as_int()?;
+        let names = names.assume_normal().as_str()?;
+
+        let mut out = String::from("所持アイテム：");
+        let mut count = 0;
+        for (item, name) in items.iter().zip(names.iter()) {
+            if *item == 0 {
+                continue;
+            }
+            count += 1;
+            let _ = write!(out, "{name}({item}) ");
+        }
+        if count == 0 {
+            out.push_str("なし");
+        }
+
+        tx.print_line(out);
+        Ok(())
+    }
+
+    /// PRINT_SHOPITEM — Emuera `Process.ScriptProc.cs:217-245`: every item
+    /// with a non-zero `ITEMSALES` and a name, priced from `ITEMPRICE`, laid
+    /// out `printc_count` cells to the line.
+    pub fn print_shop_item(
+        &mut self,
+        tx: &mut VirtualConsole,
+        printc_count: usize,
+        money_unit: &str,
+        unit_forward: bool,
+    ) -> Result<()> {
+        let ((_, sales), (_, names), (_, prices)) =
+            self.get_var3("ITEMSALES", "ITEMNAME", "ITEMPRICE")?;
+        let sales = sales.assume_normal().as_int()?;
+        let names = names.assume_normal().as_str()?;
+        let prices = prices.assume_normal().as_int()?;
+
+        let len = sales.len().min(names.len()).min(prices.len());
+        let mut cell = String::new();
+        let mut count = 0;
+        for no in 0..len {
+            // Emuera `ItemSales` also demands a name: an unnamed slot is not
+            // for sale however non-zero `ITEMSALES` is.
+            if sales[no] == 0 || names[no].is_empty() {
+                continue;
+            }
+
+            cell.clear();
+            let (name, price) = (&names[no], prices[no]);
+            let _ = if unit_forward {
+                write!(cell, "[{no}] {name}({money_unit}{price})")
+            } else {
+                write!(cell, "[{no}] {name}({price}{money_unit})")
+            };
+
+            tx.printlc(&cell);
+            count += 1;
+            if printc_count > 0 && count % printc_count == 0 {
+                Self::flush_printc(tx);
+            }
+        }
+
+        Self::flush_printc(tx);
+        Ok(())
     }
 
     pub fn prepare_train_data(&mut self) -> Result<()> {
@@ -868,11 +1096,132 @@ impl VariableStorage {
         });
     }
 
+    /// `DELCHARA` with several arguments — remove every listed character.
     pub fn del_chara_list(&mut self, list: &BTreeSet<u32>) {
         self.character_len -= list.len() as u32;
         self.variables.values_mut().for_each(|(_, var)| {
             var.del_chara_list(list);
         });
+    }
+
+    /// `PICKUPCHARA` — keep only the listed characters.
+    pub fn pickup_chara(&mut self, list: &BTreeSet<u32>) {
+        self.character_len = list.len() as u32;
+        self.variables.values_mut().for_each(|(_, var)| {
+            var.pickup_chara(list);
+        });
+    }
+
+    /// `DELALLCHARA` — Emuera `VariableEvaluator.DelAllCharacter`.
+    pub fn del_all_chara(&mut self) {
+        self.character_len = 0;
+        self.variables.values_mut().for_each(|(_, var)| {
+            if let UniformVariable::Character(charas) = var {
+                charas.clear();
+            }
+        });
+    }
+
+    /// Every savedata character variable of `idx`, as a `SAVECHARA` row.
+    pub fn extract_chara(&self, idx: u32) -> HashMap<StrKey, VmVariable> {
+        self.variables
+            .iter()
+            .filter_map(|(name, (info, var))| {
+                if !info.is_savedata {
+                    return None;
+                }
+                match var {
+                    UniformVariable::Character(charas) => {
+                        Some((*name, charas.get(idx as usize)?.clone()))
+                    }
+                    UniformVariable::Normal(_) => None,
+                }
+            })
+            .collect()
+    }
+
+    /// Overwrite character `idx` from a `SAVECHARA` row.
+    ///
+    /// Variables the save does not know keep the value they were created with,
+    /// and a stored row longer or shorter than the current variable is copied
+    /// element-wise up to the shorter length — a CSV resize between saving and
+    /// loading must not lose the whole variable.
+    pub fn restore_chara(&mut self, idx: u32, row: HashMap<StrKey, VmVariable>) {
+        for (name, saved) in row {
+            let Some((_, UniformVariable::Character(charas))) = self.variables.get_mut(&name)
+            else {
+                continue;
+            };
+            let Some(cur) = charas.get_mut(idx as usize) else {
+                continue;
+            };
+
+            if !cur.overwrite_from(saved) {
+                log::warn!("LOADCHARA: 변수 {name}의 타입이 세이브와 다릅니다");
+            }
+        }
+    }
+
+    /// `SAVEVAR` — the whole array of one savable global variable.
+    ///
+    /// Emuera saves `var.GetArray()` and its `SP_SAVEVAR` builder rejects
+    /// character, private, local, const, pseudo and reference variables
+    /// (`ArgumentBuilder.cs:2008-2019`). Its load path resolves names in the
+    /// global scope only (`LoadVariableBinary` passes a null function scope),
+    /// so a function-scoped variable could never round-trip and is rejected
+    /// here too.
+    pub fn extract_global_var(&self, name: StrKey) -> Result<VmVariable> {
+        let Some((info, var)) = self.variables.get(&name) else {
+            bail!("전역 변수 {name}를 찾을 수 없습니다");
+        };
+        ensure!(!info.is_const, "상수 {name}는 저장할 수 없습니다");
+        ensure!(!info.is_ref, "참조 변수 {name}는 저장할 수 없습니다");
+
+        match var {
+            UniformVariable::Normal(v) => Ok(v.clone()),
+            UniformVariable::Character(_) => bail!("캐릭터 변수 {name}는 저장할 수 없습니다"),
+        }
+    }
+
+    /// `LOADVAR` — write one saved array back.
+    ///
+    /// Emuera's `LoadVariableBinary` silently skips a name that is no longer a
+    /// plain global variable, so a stale file can never corrupt state.
+    pub fn restore_global_var(&mut self, name: StrKey, saved: VmVariable) {
+        let Some((info, UniformVariable::Normal(cur))) = self.variables.get_mut(&name) else {
+            log::warn!("LOADVAR: 변수 {name}를 불러올 수 없습니다");
+            return;
+        };
+        if info.is_const || info.is_ref {
+            log::warn!("LOADVAR: 변수 {name}를 불러올 수 없습니다");
+            return;
+        }
+        if !cur.overwrite_from(saved) {
+            log::warn!("LOADVAR: 변수 {name}의 타입이 세이브와 다릅니다");
+        }
+    }
+
+    /// `RESETGLOBAL` — Emuera `VariableData.SetDefaultGlobalValue`: every
+    /// global variable, built-in `GLOBAL`/`GLOBALS` or `#DIM GLOBAL`, goes back
+    /// to its declared default. The saved global file is untouched.
+    pub fn reset_global_data(&mut self) {
+        let header = self.header.clone();
+
+        for (info, var) in self.variables.values_mut() {
+            if info.is_global {
+                *var = UniformVariable::new(&header, info);
+            }
+        }
+
+        // Dropping a function-scoped global makes `get_local_var` rebuild it
+        // from its declaration on the next access.
+        for vars in self.local_variables.values_mut() {
+            for (info, var) in vars.values_mut() {
+                if info.is_global {
+                    *var = None;
+                }
+            }
+        }
     }
 
     pub fn get_chara(&mut self, target: i64) -> Result<Option<usize>> {
@@ -889,6 +1238,30 @@ impl VariableStorage {
             }
             UniformVariable::Normal(_) => bail!("NO can't be normal variable"),
         }
+    }
+
+    /// Emuera `GetChara_UseSp` (`GameData/Variable/VariableEvaluator.cs:1321-1338`):
+    /// the first *registered* character whose `NO` matches and whose SP-ness
+    /// agrees with the request, where being an SP character at run time means
+    /// `CFLAG:0` is non-zero. `GETSPCHARA` is the only caller; `GETCHARA`
+    /// keeps ignoring SP-ness, as it always has.
+    pub fn get_chara_with_sp(&mut self, target: i64, want_sp: bool) -> Result<Option<usize>> {
+        for idx in 0..self.character_len() {
+            let no = self
+                .get_var(KnownVariableNames::No)?
+                .1
+                .assume_chara(idx)
+                .as_int()?[0];
+            if no != target {
+                continue;
+            }
+            let is_sp = self.get_var("CFLAG")?.1.assume_chara(idx).as_int()?[0] != 0;
+            if is_sp == want_sp {
+                return Ok(Some(idx as usize));
+            }
+        }
+
+        Ok(None)
     }
 
     pub fn init(&mut self, header: &HeaderInfo) -> Result<()> {
@@ -937,6 +1310,9 @@ impl VariableStorage {
             ("GLOBALSNAME", "GLOBALS"),
             ("MARKNAME", "MARK"),
             ("SAVESTRNAME", "SAVESTR"),
+            ("TFLAGNAME", "TFLAG"),
+            ("CDFLAGNAME1", "CDFLAG1"),
+            ("CDFLAGNAME2", "CDFLAG2"),
         ];
 
         for (var_name, var) in NAMES {
@@ -1005,6 +1381,11 @@ impl VariableStorage {
         set!(@intarr "MARK", mark);
         set!(@intarr "TALENT", talent);
         set!(@intarr "CFLAG", cflag);
+        // `装着物`/`EQUIP` and `珠`/`JUEL` are chara-CSV keys in Emuera
+        // (`GameData/ConstantData.cs:1585-1598`) and were parsed into the
+        // template but never stamped onto the character.
+        set!(@intarr "EQUIP", equip);
+        set!(@intarr "JUEL", juel);
         set!(@intarr "RELATION", relation);
 
         set!(@strarr "CSTR", cstr);
@@ -1033,6 +1414,26 @@ impl VmVariable {
         }
 
         ret
+    }
+
+    /// Overwrite from a saved array, element-wise up to the shorter length: a
+    /// CSV resize between saving and loading must lose only the tail, never the
+    /// whole variable. `false` when the saved array has the other type.
+    pub fn overwrite_from(&mut self, saved: Self) -> bool {
+        match (self, saved) {
+            (Self::Int(cur), Self::Int(saved)) => {
+                let len = cur.len().min(saved.len());
+                cur[..len].copy_from_slice(&saved[..len]);
+                true
+            }
+            (Self::Str(cur), Self::Str(saved)) => {
+                for (cur, saved) in cur.iter_mut().zip(saved) {
+                    *cur = saved;
+                }
+                true
+            }
+            _ => false,
+        }
     }
 
     pub fn get(&self, idx: u32) -> Result<Value> {
@@ -1208,7 +1609,18 @@ impl UniformVariable {
         }
     }
 
+    /// Remove every character in `list`.
     pub fn del_chara_list(&mut self, list: &BTreeSet<u32>) {
+        if let Self::Character(c) = self {
+            // Descending, so an earlier removal cannot shift a later index.
+            for i in list.iter().rev() {
+                c.remove(*i as usize);
+            }
+        }
+    }
+
+    /// Drop every character *not* in `list`, keeping ascending index order.
+    pub fn pickup_chara(&mut self, list: &BTreeSet<u32>) {
         if let Self::Character(c) = self {
             for i in (0..c.len()).rev() {
                 if !list.contains(&(i as u32)) {

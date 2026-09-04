@@ -1,0 +1,3 @@
+start
+VM error occurred: 지역 변수 LOCAL는 저장할 수 없습니다
+At function SYSTEM_TITLE tests/run_tests/savevar/reject_local.erb@3

@@ -1,0 +1,36 @@
+@SYSTEM_TITLE
+; COLOR_FROMRGB packs the components as ((R * 256) + G) * 256 + B
+; (`Creator.Method.cs:2693-2718`).
+PRINTFORML rgb {COLOR_FROMRGB(255, 0, 0)} {COLOR_FROMRGB(0, 128, 255)}
+
+; COLOR_FROMNAME resolves a colour *name*; anything Color.FromName cannot
+; name — an unknown word, a `#rrggbb` literal — comes back -1.
+PRINTFORML name {COLOR_FROMNAME("red")} {COLOR_FROMNAME("blue")} {COLOR_FROMNAME("nosuchcolour")} {COLOR_FROMNAME("#FF0000")}
+
+; (Int64)Math.Pow(x, 1.0 / 3.0) truncates, so a perfect cube can come back one
+; short: CBRT(64) is 3 in Emuera and CBRT(1000) is 9.
+PRINTFORML cbrt {CBRT(0)} {CBRT(8)} {CBRT(27)} {CBRT(64)} {CBRT(1000)}
+
+; (Int64)Math.Exp(x).
+PRINTFORML exponent {EXPONENT(0)} {EXPONENT(1)} {EXPONENT(3)}
+
+; PRINTCLENGTH reports `PRINTCの文字数`, left at its default of 25 here.
+PRINTFORML printclength {PRINTCLENGTH()}
+
+; GETLINESTR is the CUSTOMDRAWLINE bar: the 760px default window less the 3px
+; shift, over a 9px half-width cell, is 84 cells wide whatever the unit is.
+PRINTFORML linelen {STRLENS(GETLINESTR("-"))} {STRLENS(GETLINESTR("=="))} {STRLENS(GETLINESTR("가"))}
+PRINTFORML %GETLINESTR("-")%
+
+; STRFORM expands a form string built at run time. `=` on a string variable is
+; itself a form assignment (`ArgumentBuilder.cs:1036-1045`), so the braces and
+; percents have to arrive as characters for there to be anything left to expand.
+STR:1 = nested
+LOCALS = %UNICODE(123)%2 * 3%UNICODE(125)% %UNICODE(37)%STR:1%UNICODE(37)%
+PRINTFORML raw [%LOCALS%]
+PRINTFORML strform [%STRFORM(LOCALS)%]
+
+; `SPキャラを使用する` is off here, and Emuera tests that before it even reads
+; the argument — so this line fails and nothing below it runs.
+PRINTFORML spchara {GETSPCHARA(3)}
+PRINTFORML unreachable

@@ -22,7 +22,10 @@ pub enum BuiltinVariable {
     #[strum(to_string = "LASTLOAD_TEXT")]
     LastLoadText,
 
-    #[strum(to_string = "GAMEBASE_CODE")]
+    /// Emuera spells this `GAMEBASE_GAMECODE`
+    /// (`GameData/Variable/VariableData.cs:305`); `GAMEBASE_CODE` stays
+    /// readable because erars only ever offered that spelling.
+    #[strum(to_string = "GAMEBASE_GAMECODE", serialize = "GAMEBASE_CODE")]
     GamebaseCode,
     #[strum(to_string = "GAMEBASE_VERSION")]
     GamebaseVersion,
@@ -40,6 +43,20 @@ pub enum BuiltinVariable {
     GamebaseTitle,
     #[strum(to_string = "GAMEBASE_INFO")]
     GamebaseInfo,
+
+    /// The baked `DRAWLINE` bar (`VariableToken.cs:1573-1584`, returning
+    /// `EmueraConsole.getDefStBar`).
+    #[strum(to_string = "DRAWLINESTR")]
+    DrawLineStr,
+
+    /// Emuera `ISTIMEOUTToken` (`VariableToken.cs:1658-1669`), reporting
+    /// `EmueraConsole.isTimeout`: whether the last timed input expired.
+    #[strum(to_string = "ISTIMEOUT")]
+    IsTimeout,
+    /// Emuera `MONEYLABEL_Token` (`VariableToken.cs:1560-1571`), returning
+    /// `Config.MoneyLabel` — the `お金の単位` replacement, `$` by default.
+    #[strum(to_string = "MONEYLABEL")]
+    MoneyLabel,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

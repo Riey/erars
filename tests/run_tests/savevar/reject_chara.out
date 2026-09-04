@@ -1,0 +1,3 @@
+start
+VM error occurred: 캐릭터 변수 CFLAG는 저장할 수 없습니다
+At function SYSTEM_TITLE tests/run_tests/savevar/reject_chara.erb@3

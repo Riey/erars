@@ -181,6 +181,9 @@ pub fn frame(lines: Vec<ConsoleLine>) -> ConsoleFrame {
         hl_color: Color([255, 255, 0]),
         fore_color: Color([192, 192, 192]),
         lines,
+        islands: Vec::new(),
+        images: erars_ui::image::ImageStore::new(),
+        cbg: std::sync::Arc::default(),
     }
 }
 

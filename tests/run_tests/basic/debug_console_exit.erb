@@ -1,0 +1,9 @@
+; `@EXIT` (and its alias `@QUIT`) is `window.Close()`
+; (GameView/EmueraConsole.cs:1357-1361) — the run ends where the command was
+; entered, so the line after the INPUTS never executes. erars raises it from
+; inside the input request as a marker error that TerminalVm::start turns into
+; a clean exit, because no input path can return a Workflow.
+@SYSTEM_TITLE
+PRINTL START
+INPUTS
+PRINTFORML unreachable

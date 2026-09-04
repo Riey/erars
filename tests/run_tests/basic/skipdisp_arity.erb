@@ -1,0 +1,7 @@
+; The argument is required: Emuera's argument builder rejects a missing
+; INT_EXPRESSION outright (GameProc/Function/FunctionIdentifier.cs:317), and a
+; bare SKIPDISP used to reach the executor and pop the caller's frame.
+@SYSTEM_TITLE
+PRINTFORML start
+SKIPDISP
+PRINTFORML notreached

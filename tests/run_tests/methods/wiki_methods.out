@@ -1,0 +1,11 @@
+rgb 16711680 33023
+name 16711680 255 -1 -1
+cbrt 0 2 3 3 9
+exponent 1 2 20
+printclength 25
+linelen 84 84 84
+------------------------------------------------------------------------------------
+raw [{2 * 3} %STR:1%]
+strform [6 nested]
+VM error occurred: SPキャラ関係の機能は標準では使用できません(互換性オプション「SPキャラを使用する」をONにしてください)
+At function SYSTEM_TITLE tests/run_tests/methods/wiki_methods.erb@35

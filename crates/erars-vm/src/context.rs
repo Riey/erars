@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use erars_ast::{EventType, ScriptPosition, StrKey, Value, VariableInfo};
+use erars_ui::VirtualConsole;
 use erars_compiler::{EraConfig, HeaderInfo};
 
 use crate::variable::StrKeyLike;
@@ -17,15 +18,47 @@ pub struct VmContext {
     pub config: Arc<EraConfig>,
     pub system: Box<dyn SystemFunctions>,
     pub sav_dir: PathBuf,
+    /// Emuera `Program.ContentDir` (`Program.cs:63`) — `<game>/resources`,
+    /// the root a `GCREATEFROMFILE` relative path resolves against.
+    pub content_dir: PathBuf,
+
+    /// Off-screen bitmaps and sprites for the `G*` / `SPRITE*` commands.
+    pub graphics: crate::GraphicsStore,
 
     /// For NOSKIP/ENDNOSKIP
     pub(crate) prev_skipdisp: Option<bool>,
     /// Set `true` during SAVEGAME
     pub(crate) put_form_enabled: bool,
+    /// Emuera `EmueraConsole.isTimeout` — read by `ISTIMEOUT`, maintained in
+    /// [`VmContext::input_redraw`].
+    pub(crate) is_timeout: bool,
+
+    /// Emuera `Program.DebugMode`, the `-Debug` command line argument
+    /// (`Program.cs:219-220`). `@DEBUG` is gated on it
+    /// (`GameView/EmueraConsole.cs:1367-1373`); a front end that exposes the
+    /// debug console sets it with [`VmContext::with_debug_mode`].
+    pub(crate) debug_mode: bool,
+    /// `@REBOOT` asked for a fresh engine (`Forms/MainWindow.cs:810-811`).
+    /// Read with [`VmContext::reboot_requested`] once the run has ended.
+    reboot_requested: bool,
+
+    /// Emuera `Process.isCTrain`: only a `CALLTRAIN` sequence — never
+    /// `DOTRAIN` — may be abandoned by `STOPCALLTRAIN`.
+    pub(crate) call_train_running: bool,
+    /// Emuera `Process.ClearCommands`: `STOPCALLTRAIN` empties the queue of
+    /// commands `CALLTRAIN` has not run yet.
+    pub(crate) call_train_stopped: bool,
 
     pub(crate) lastload_version: u32,
     pub(crate) lastload_no: u32,
     pub(crate) lastload_text: String,
+
+    /// Emuera's `static readonly short[] keytoggle`
+    /// (`Creator.Method.cs:6709`): per virtual key, the toggle state the last
+    /// `GETKEY`/`GETKEYTRIGGERED` call observed, stored as `(state & 1) + 1`
+    /// so 0 means "never queried". Both methods share it, so a `GETKEY` call
+    /// consumes the edge a later `GETKEYTRIGGERED` would have seen.
+    key_toggle: [u8; erars_ui::InputState::KEYS],
 
     stack: Vec<LocalValue>,
     call_stack: Vec<Callstack>,
@@ -37,25 +70,187 @@ impl VmContext {
         config: Arc<EraConfig>,
         system: Box<dyn SystemFunctions>,
         sav_dir: PathBuf,
+        content_dir: PathBuf,
     ) -> Self {
         let mut ret = Self {
             var: VariableStorage::new(header_info.clone(), &header_info.global_variables),
             sav_dir,
+            content_dir,
+            graphics: crate::GraphicsStore::default(),
             system,
             header_info,
             stack: Vec::with_capacity(1024),
             call_stack: Vec::with_capacity(512),
             prev_skipdisp: None,
             put_form_enabled: false,
+            is_timeout: false,
+            debug_mode: false,
+            reboot_requested: false,
+            call_train_running: false,
+            call_train_stopped: false,
             lastload_no: 0,
             lastload_text: "".into(),
             lastload_version: 0,
+            key_toggle: [0; erars_ui::InputState::KEYS],
             config,
         };
 
         ret.init_variable().unwrap();
 
         ret
+    }
+
+    /// Emuera's `-Debug` argument (`Program.cs:219-220`), which decides
+    /// whether `@DEBUG` opens the debug window or refuses. Set by whichever
+    /// front end exposes the debug console, after the game has loaded, so the
+    /// compiled-bytecode path gets it too.
+    pub fn set_debug_mode(&mut self, debug_mode: bool) {
+        self.debug_mode = debug_mode;
+    }
+
+    /// Whether the run ended because `@REBOOT` asked for a fresh engine
+    /// (`Forms/MainWindow.cs:807-812`). Only a front end that reloads the
+    /// game can honour it; see §5.16 of
+    /// `docs/research/2026-09-03-emuera-command-gap.md`.
+    pub fn reboot_requested(&self) -> bool {
+        self.reboot_requested
+    }
+
+    /// Show `tx`, publishing every bitmap changed since the last frame first.
+    ///
+    /// Every path that makes the console visible goes through this method or
+    /// one of the `input_*` wrappers below. Nothing else *can*:
+    /// [`SystemFunctions::redraw`] demands a [`graphics::Painted`], only
+    /// `GraphicsStore::publish` mints one, and the token borrows the store, so
+    /// the publish is provably the last thing that touches pixels before the
+    /// frame leaves the VM thread. Without that, the renderer could draw new
+    /// text against old pixels.
+    pub fn redraw(&mut self, tx: &mut VirtualConsole) -> Result<()> {
+        let painted = self.graphics.publish(&tx.images);
+        self.system.redraw(tx, painted)
+    }
+
+    /// `GETKEY` and `GETKEYTRIGGERED`, which Emuera serves from one
+    /// `GetKeyStateMethod` (`Creator.Method.cs:6710-6735`).
+    ///
+    /// The order of effects is the C#'s: an out-of-range code returns 0
+    /// *without* touching the latch, and the latch is written on every
+    /// in-range call whether the key is down or not. `GETKEYTRIGGERED` is
+    /// therefore "down, and its toggle bit differs from the last observation",
+    /// which is true on the first observation of a held key and again on every
+    /// fresh press.
+    ///
+    /// Emuera returns 0 for both when the console is not active; in this fork
+    /// `IsActive` is a constant `true` (`GameView/EmueraConsole.cs:276-277`),
+    /// so that guard can never fire and is not reproduced.
+    pub fn get_key(&mut self, keycode: i64, triggered: bool) -> Result<i64> {
+        if !(0..=255).contains(&keycode) {
+            return Ok(0);
+        }
+        let vk = keycode as u8;
+        let state = self.system.input_state()?;
+        let prev = self.key_toggle[vk as usize];
+        let now = state.is_toggled(vk) as u8 + 1;
+        self.key_toggle[vk as usize] = now;
+        Ok(if triggered {
+            (state.is_down(vk) && prev != now) as i64
+        } else {
+            state.is_down(vk) as i64
+        })
+    }
+
+    /// [`SystemFunctions::input_redraw`] behind the image publish, and the
+    /// one place a debug console command can be entered.
+    ///
+    /// A request that carries a deadline also drives `ISTIMEOUT`, exactly as
+    /// Emuera's timer does: `presetTimer` clears the flag when a request with
+    /// `Timelimit > 0` starts and `endTimer` raises it when the timer expires,
+    /// so an untimed `INPUT` in between leaves the previous answer standing
+    /// (`GameView/EmueraConsole.cs:575-580,671-673,737-738`).
+    ///
+    /// Emuera diverts an answer beginning with `@` to `doSystemCommand`
+    /// *instead of* consuming the pending request, so the same prompt comes
+    /// back once the command has run (`GameView/EmueraConsole.cs:1103-1110`).
+    /// Its console can do that because it owns the input loop; erars' VM owns
+    /// it, so the loop below is the same thing in the same place: classify the
+    /// answer, run it, ask again. See [`crate::debug_console`].
+    pub fn input_redraw(
+        &mut self,
+        tx: &mut VirtualConsole,
+        req: erars_ui::InputRequest,
+    ) -> Result<Option<Value>> {
+        let expiry = req.timeout.as_ref().map(|t| (t.timeout, t.default_value.clone()));
+
+        loop {
+            let painted = self.graphics.publish(&tx.images);
+
+            if expiry.is_some() {
+                self.is_timeout = false;
+            }
+
+            let ret = self.system.input_redraw(tx, req.clone(), painted)?;
+
+            if let Some((deadline, default_value)) = &expiry {
+                // DELIBERATE: erars enforces the deadline in the frontend,
+                // which answers with `Timeout::default_value` once it passes,
+                // so the VM has no timer of its own to read. Both conditions
+                // below hold for every genuine expiry and the only way to fake
+                // them is to send the default value after the deadline has
+                // already gone by — an answer indistinguishable from the
+                // timeout in every other respect. See §5 of
+                // `docs/research/2026-09-03-emuera-command-gap.md`.
+                self.is_timeout = time::OffsetDateTime::now_utc().unix_timestamp_nanos()
+                    >= *deadline
+                    && ret.as_ref() == Some(default_value);
+            }
+
+            let Some(Value::String(answer)) = &ret else {
+                return Ok(ret);
+            };
+
+            let line = crate::debug_console::classify(answer, req.is_one, self.config.ignore_case);
+
+            if line == crate::debug_console::DebugLine::Answer {
+                return Ok(ret);
+            }
+
+            if expiry.is_some() {
+                // `if (timer.Enabled)` (`GameView/EmueraConsole.cs:1323-1329`):
+                // no command runs while a `TINPUT` deadline is counting down,
+                // and the request stays pending either way.
+                crate::debug_console::refuse_for_timer(tx);
+            } else {
+                // `Print(command); PrintFlush(false);` (`:1336-1338`) — the
+                // line is echoed before anything acts on it, and `@` alone is
+                // the one case that prints nothing (`:1340-1341`).
+                if line != crate::debug_console::DebugLine::Empty {
+                    tx.print_line(answer.clone());
+                }
+                let quit = crate::debug_console::run(line, tx, self);
+                if let Err(err) = quit {
+                    if let Some(q) = err.downcast_ref::<crate::debug_console::DebugConsoleQuit>() {
+                        self.reboot_requested = q.reboot;
+                    }
+                    return Err(err);
+                }
+            }
+        }
+    }
+
+    /// [`SystemFunctions::input_int_redraw`] behind the image publish.
+    pub fn input_int_redraw(&mut self, tx: &mut VirtualConsole) -> Result<i64> {
+        let painted = self.graphics.publish(&tx.images);
+        self.system.input_int_redraw(tx, painted)
+    }
+
+    /// [`SystemFunctions::input_mouse_key`] behind the image publish.
+    pub fn input_mouse_key(
+        &mut self,
+        tx: &mut VirtualConsole,
+        req: erars_ui::InputRequest,
+    ) -> Result<erars_ui::MouseKeyEvent> {
+        let painted = self.graphics.publish(&tx.images);
+        self.system.input_mouse_key(tx, req, painted)
     }
 
     /// The game language's legacy encoding (`Language::encoding`) — the
@@ -88,29 +283,44 @@ impl VmContext {
         }
     }
 
+    /// Resolve `func`/`var_name` to the variable it names, following a
+    /// `#DIM REF` variable to its target.
+    ///
+    /// A reference's storage is one int holding `(name, func)` interned keys,
+    /// which `REF` and reference call arguments write. Both halves of an
+    /// unbound reference are zero, and `lasso` keys are non-zero, so a zero
+    /// slot is Emuera's `trerror.EmptyRefVar` rather than a real target.
     pub fn make_var_ref(
         &mut self,
         func: impl StrKeyLike,
         var_name: impl StrKeyLike,
         idxs: ArgVec,
-    ) -> VariableRef {
+    ) -> Result<VariableRef> {
         let mut func_name = func.get_key(&self.var);
         let mut var_name = var_name.get_key(&self.var);
 
         if let Ok((info, var)) = self.var.get_local_var(func_name, var_name) {
             if info.is_ref {
-                let (name, func): (u32, u32) =
-                    unsafe { std::mem::transmute(var.assume_normal().as_int().unwrap()[0]) };
+                let packed = match var {
+                    UniformVariable::Normal(VmVariable::Int(v)) => v[0],
+                    _ => bail!("참조 변수 {var_name}의 저장소가 정수가 아닙니다"),
+                };
+
+                if packed == 0 {
+                    bail!("참조 변수 {var_name}는 아무것도 참조하고 있지 않습니다");
+                }
+
+                let (name, func): (u32, u32) = unsafe { std::mem::transmute(packed) };
                 var_name = StrKey::from_u32(name);
                 func_name = StrKey::from_u32(func);
             }
         }
 
-        VariableRef {
+        Ok(VariableRef {
             name: var_name,
             func_name,
             idxs,
-        }
+        })
     }
 
     pub fn reduce_local_value(&mut self, value: LocalValue) -> Result<Value> {
@@ -252,9 +462,15 @@ impl VmContext {
         self.stack.push(prev);
     }
 
-    pub fn push_var_ref(&mut self, name: StrKey, func_name: StrKey, idxs: ArgVec) {
-        let var_ref = self.make_var_ref(func_name, name, idxs);
+    pub fn push_var_ref(
+        &mut self,
+        name: StrKey,
+        func_name: StrKey,
+        idxs: ArgVec,
+    ) -> Result<()> {
+        let var_ref = self.make_var_ref(func_name, name, idxs)?;
         self.stack.push(LocalValue::VarRef(var_ref));
+        Ok(())
     }
 
     pub fn push_strkey(&mut self, key: StrKey) {

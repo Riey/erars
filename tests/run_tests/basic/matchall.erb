@@ -1,0 +1,22 @@
+@SYSTEM_TITLE
+#DIM DYNAMIC L_ARR, 8
+#DIMS DYNAMIC L_STRS, 4
+L_ARR:0 = 7
+L_ARR:2 = 7
+L_ARR:5 = 7
+L_ARR:6 = 1
+; The fork's MATCHALL puts the hit count in RESULT:0 and the matching indices
+; in RESULT:1 onward. `MATCH` only ever reports the count, so the indices are
+; the whole point.
+MATCHALL L_ARR, 7
+PRINTFORML {RESULT:0}|{RESULT:1}{RESULT:2}{RESULT:3}
+; The range start is inclusive and the end exclusive, so 0..5 misses index 5.
+MATCHALL L_ARR, 7, 0, 5
+PRINTFORML {RESULT:0}|{RESULT:1}{RESULT:2}
+; Strings compare literally; the fork documents that they are not regexes.
+L_STRS:1 = ab
+L_STRS:3 = ab
+MATCHALL L_STRS, "ab"
+PRINTFORML {RESULT:0}|{RESULT:1}{RESULT:2}
+MATCHALL L_STRS, "a."
+PRINTFORML {RESULT:0}

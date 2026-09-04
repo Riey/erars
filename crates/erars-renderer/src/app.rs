@@ -16,16 +16,20 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use erars_ast::Value;
 use erars_proxy_system::{ConsoleFrame, ProxyReceiver, SystemRequest, SystemResponse};
-use erars_ui::{Color, InputRequest, InputRequestType};
+use erars_ui::{win32, Color, InputRequest, InputRequestType, InputState, MouseKeyEvent};
 use winit::application::ApplicationHandler;
 use winit::event::{ElementState, MouseScrollDelta, WindowEvent};
 use winit::event_loop::ActiveEventLoop;
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{Key, ModifiersState, NamedKey};
 use winit::window::{Window, WindowId};
 
-use crate::draw::{build_instances, input_line, merge_pages, View};
-use crate::gpu::{GpuContext, RenderOutcome};
-use crate::layout::{layout, layout_no_sweep, Geometry, Layout};
+use crate::draw::{build_instances, cbg_quads, input_line, ImageCtx, View};
+use crate::font;
+use crate::gpu::{DrawGroup, Filter, GpuContext, RenderOutcome};
+use crate::images::ImageTextures;
+use crate::layout::{
+    layout_frame_no_sweep, layout_no_sweep, ButtonRegion, Geometry, Layout, RowKind,
+};
 use crate::raster::GlyphRaster;
 use crate::text::{CellMetrics, Shaper};
 
@@ -82,30 +86,26 @@ pub fn wheel_notch_px(notches: f32, line_h: u32) -> f64 {
     notches as f64 * line_h as f64
 }
 
-/// The row drawn under screen `y` and the offset of `y` inside it, or `None`
-/// for the top slack, the input strip and off-screen rows. Inverse of
-/// [`View::row_y`]: row `r` covers `[row_y(r), row_y(r) + line_h)`.
-pub fn row_at(rows: usize, view: &View, line_h: u32, y: i64) -> Option<(usize, i32)> {
-    if line_h == 0 || y < 0 || y >= view.view_h as i64 {
-        return None;
-    }
-    let bottom = rows.checked_sub(1)? - view.scroll_rows.min(rows - 1);
-    let below = ((view.view_h as i64 - 1 - y) / line_h as i64) as usize;
-    if below > bottom || below >= view.visible_rows(line_h) {
-        return None;
-    }
-    let r = bottom - below;
-    let top = view.row_y(rows, r, line_h)?;
-    Some((r, (y - top as i64) as i32))
-}
-
 /// Button fragment under the cursor (physical px), as an index into
-/// `layout.buttons`: the row from [`row_at`], then Emuera's inclusive hit rect
-/// (spec Component 5) — `shift + x0 + x ≤ px ≤ shift + x0 + x + w` and
+/// `layout.buttons`: each candidate fragment's row is placed on screen
+/// forward (flow rows through [`View::row_y`], positioned ones through
+/// [`View::place_y`]) and tested with Emuera's inclusive hit rect (spec
+/// Component 5) — `base_x + x ≤ px ≤ base_x + x + w` and
 /// `0 ≤ dy ≤ min(font_px, line_h − 1)` (i.e. the rect
-/// `[shift + x0 + x, row_y, w + 1, min(font_px + 1, line_h)]`) — restricted to
-/// fragments of the active input generation. Fragments are checked in layout
-/// order; the first hit wins.
+/// `[base_x + x, row_y, w + 1, min(font_px + 1, line_h)]`) — restricted to
+/// fragments of the active input generation.
+///
+/// Placed fragments are tested first, in **reverse** layout order, because
+/// that is reverse paint order: a positioned box and an island cover the log
+/// and each other (see [`crate::draw::Quads::overlays`]), and two islands may
+/// even share a layer number and stack (`SYSTEM_DUNGEON.ERB:2630-2641`), so
+/// the topmost one has to answer for the pixel. Flow fragments are then
+/// tested in layout order, first hit wins, exactly as before.
+///
+/// A fragment inside a positioned box is additionally tested against that
+/// box's content clip as a half-open rect, which is `rect.Contains` on the
+/// clipped rect (`_Library/EvilMask/ConsoleDivPart.cs:99-105`): a button
+/// outside its own box is not clickable, just as its ink is not drawn.
 pub fn hit_button(
     layout: &Layout,
     g: &Geometry,
@@ -114,21 +114,72 @@ pub fn hit_button(
     cursor: (i64, i64),
 ) -> Option<usize> {
     let active = active_gen?;
-    let (row, dy) = row_at(layout.rows.len(), view, g.m.line_h, cursor.1)?;
-    // `row_at` yields `dy` in `[0, line_h)`, so only the upper bound is a test.
-    let band = g.m.font_px.min(g.m.line_h.saturating_sub(1)) as i32;
-    if dy > band {
+    let px = i32::try_from(cursor.0).ok()?;
+    let py = i32::try_from(cursor.1).ok()?;
+    let line_h = g.m.line_h;
+    if line_h == 0 {
         return None;
     }
-    let px = i32::try_from(cursor.0).ok()?;
-    let x0 = layout.rows.get(row)?.x0;
-    layout.buttons.iter().position(|b| {
-        if b.row != row || b.input_gen != active {
+    // A flow row's band never reaches into the input strip; a placed row is
+    // drawn over the whole surface, so only its own clip bounds it.
+    let band = g.m.font_px.min(line_h - 1) as i32;
+    let hits = |b: &ButtonRegion| {
+        if b.input_gen != active {
             return false;
         }
-        let left = g.m.shift as i32 + x0 + b.x;
-        px >= left && px <= left + b.w as i32
-    })
+        let Some(row) = layout.rows.get(b.row) else {
+            return false;
+        };
+        let (top, clip) = match &row.kind {
+            RowKind::Flow(n) => {
+                let Some(top) = view.row_y(layout.flow_rows, *n, line_h) else {
+                    return false;
+                };
+                // The strip covers the bottom `strip_h`, and `row_y` already
+                // keeps flow rows above it.
+                if py >= view.view_h as i32 {
+                    return false;
+                }
+                (top, None)
+            }
+            RowKind::Placed(p) => {
+                let Some(top) = view.place_y(layout.flow_rows, p, line_h) else {
+                    return false;
+                };
+                (top, Some((p, top - p.y)))
+            }
+        };
+        let dy = py - top;
+        if dy < 0 || dy > band {
+            return false;
+        }
+        let left = row.base_x(g.m.shift) + b.x;
+        if px < left || px > left + b.w as i32 {
+            return false;
+        }
+        match clip {
+            None => true,
+            Some((p, anchor_y)) => {
+                let in_x = p.clip.x.is_none_or(|(a, c)| px >= a && px < c);
+                let in_y = p
+                    .clip
+                    .y
+                    .is_none_or(|(a, c)| py >= anchor_y + a && py < anchor_y + c);
+                in_x && in_y
+            }
+        }
+    };
+    let placed = |b: &ButtonRegion| {
+        layout
+            .rows
+            .get(b.row)
+            .is_some_and(|r| r.placement().is_some())
+    };
+    layout
+        .buttons
+        .iter()
+        .rposition(|b| placed(b) && hits(b))
+        .or_else(|| layout.buttons.iter().position(|b| !placed(b) && hits(b)))
 }
 
 // ---------------------------------------------------------------------------
@@ -142,6 +193,12 @@ pub struct App {
     window: Option<Arc<Window>>,
     gpu: Option<GpuContext>,
     raster: Option<GlyphRaster>,
+    /// One texture per bitmap the frame's inline images sample.
+    images: ImageTextures,
+    /// Start of the animation clock. Emuera latches an animation's start on
+    /// its first draw; erars measures every animation from here (see
+    /// [`ImageCtx`]).
+    epoch: Instant,
 
     frame: ConsoleFrame,
     /// Layout of `frame.lines` at `layout_w` / the current metrics.
@@ -159,15 +216,27 @@ pub struct App {
     /// Accumulated wheel travel (px) not yet converted to rows. Both
     /// `LineDelta` and `PixelDelta` feed it, so a mixed stream still adds up.
     wheel_px: f64,
+    /// The keyboard half of [`InputState`], fed by every key event the window
+    /// sees. Emuera asks `GetKeyState` per call; winit only reports keys while
+    /// the window has focus, so this is the same information for as long as
+    /// erars can observe it (see `docs/research` §5.11).
+    keys: InputState,
     /// Index into `layout.buttons` of the fragment under the cursor.
     hovered: Option<usize>,
     /// Cursor in physical px; `(-1, -1)` when outside the window.
     cursor: (i64, i64),
+    /// Live modifier state; INPUTMOUSEKEY folds it into the reported
+    /// `KeyData`.
+    modifiers: ModifiersState,
 
     /// When the current input request times out (TINPUT), and the value to
     /// send on expiry.
     timeout_deadline: Option<Instant>,
     timeout_value: Value,
+    /// The CBG button value under the cursor, `-1` for none — Emuera's
+    /// `selectingCBGButtonInt` (`GameView/EmueraConsole.cs:103`), which is
+    /// front-end state there too.
+    cbg_selecting: i32,
 }
 
 /// Current wall-clock time as Unix nanoseconds, matching `Timeout::timeout`.
@@ -176,6 +245,51 @@ fn current_unix_nanos() -> i128 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos() as i128)
         .unwrap_or(0)
+}
+
+/// The Win32 virtual key WinForms would report for a winit key — the
+/// vocabulary INPUTMOUSEKEY's `RESULT:1` speaks. `None` for a key WinForms
+/// has no `Keys` value for, which Emuera could never report either.
+fn vk_of(key: &Key) -> Option<i64> {
+    Some(match key {
+        Key::Named(named) => match named {
+            NamedKey::Backspace => win32::VK_BACK,
+            NamedKey::Tab => win32::VK_TAB,
+            NamedKey::Enter => win32::VK_RETURN,
+            NamedKey::Shift => win32::VK_SHIFT,
+            NamedKey::Control => win32::VK_CONTROL,
+            NamedKey::Alt => win32::VK_MENU,
+            NamedKey::CapsLock => win32::VK_CAPITAL,
+            NamedKey::Escape => win32::VK_ESCAPE,
+            NamedKey::Space => win32::VK_SPACE,
+            NamedKey::PageUp => win32::VK_PRIOR,
+            NamedKey::PageDown => win32::VK_NEXT,
+            NamedKey::End => win32::VK_END,
+            NamedKey::Home => win32::VK_HOME,
+            NamedKey::ArrowLeft => win32::VK_LEFT,
+            NamedKey::ArrowUp => win32::VK_UP,
+            NamedKey::ArrowRight => win32::VK_RIGHT,
+            NamedKey::ArrowDown => win32::VK_DOWN,
+            NamedKey::Insert => win32::VK_INSERT,
+            NamedKey::Delete => win32::VK_DELETE,
+            // `Keys.F1` is 112 and the function keys run on from there.
+            NamedKey::F1 => 112,
+            NamedKey::F2 => 113,
+            NamedKey::F3 => 114,
+            NamedKey::F4 => 115,
+            NamedKey::F5 => 116,
+            NamedKey::F6 => 117,
+            NamedKey::F7 => 118,
+            NamedKey::F8 => 119,
+            NamedKey::F9 => 120,
+            NamedKey::F10 => 121,
+            NamedKey::F11 => 122,
+            NamedKey::F12 => 123,
+            _ => return None,
+        },
+        Key::Character(s) => win32::vk_from_char(s.chars().next()?)?,
+        _ => return None,
+    })
 }
 
 impl App {
@@ -187,6 +301,8 @@ impl App {
             window: None,
             gpu: None,
             raster: None,
+            images: ImageTextures::new(),
+            epoch: Instant::now(),
             frame: ConsoleFrame {
                 fore_color: Color(cfg.default_fg),
                 ..ConsoleFrame::default()
@@ -199,10 +315,13 @@ impl App {
             input: String::new(),
             scroll_rows: 0,
             wheel_px: 0.0,
+            keys: InputState::default(),
             hovered: None,
             cursor: (-1, -1),
+            modifiers: ModifiersState::empty(),
             timeout_deadline: None,
             timeout_value: Value::Int(0),
+            cbg_selecting: -1,
         }
     }
 
@@ -248,7 +367,9 @@ impl App {
     /// whole backlog on the next frame.
     fn relayout(&mut self) {
         let g = self.geometry();
-        self.layout = layout(&self.frame.lines, &g, &mut self.shaper);
+        self.layout =
+            layout_frame_no_sweep(&self.frame.lines, &self.frame.islands, &g, &mut self.shaper);
+        self.shaper.sweep();
         self.layout_w = g.content_w;
         self.strip_dirty = true;
         self.clamp_scroll_state();
@@ -258,31 +379,43 @@ impl App {
     /// Keep `scroll_rows` within `[0, rows − visible]` (never forces the bottom).
     fn clamp_scroll_state(&mut self) {
         let visible = self.view().visible_rows(self.metrics().line_h);
-        let max = max_scroll(self.layout.rows.len(), visible);
+        let max = max_scroll(self.layout.flow_rows, visible);
         self.scroll_rows = clamp_scroll(self.scroll_rows as i64, max);
     }
 
     /// Scroll to `requested` rows (clamped). Returns whether the position changed.
     fn scroll_to(&mut self, requested: i64) -> bool {
         let visible = self.view().visible_rows(self.metrics().line_h);
-        let max = max_scroll(self.layout.rows.len(), visible);
+        let max = max_scroll(self.layout.flow_rows, visible);
         let next = clamp_scroll(requested, max);
         let changed = next != self.scroll_rows;
         self.scroll_rows = next;
         changed
     }
 
-    /// Re-derive `hovered` from the stored cursor. Returns whether it changed.
+    /// Re-derive `hovered` and `cbg_selecting` from the stored cursor.
+    /// Returns whether either changed.
+    ///
+    /// `MoveMouse` (`GameView/EmueraConsole.cs:2009-2044`) tests the CBG
+    /// button map *first* and, on a hit, clears the text hover outright: the
+    /// plane masks the log's buttons wherever its map is opaque.
     fn update_hover(&mut self) -> bool {
-        let next = hit_button(
-            &self.layout,
-            &self.geometry(),
-            &self.view(),
-            self.active_gen(),
-            self.cursor,
-        );
-        let changed = next != self.hovered;
+        let (x, y) = self.mouse_key_pos();
+        let selecting = self.frame.cbg.hit_test(&self.frame.images, x, y);
+        let next = if selecting >= 0 {
+            None
+        } else {
+            hit_button(
+                &self.layout,
+                &self.geometry(),
+                &self.view(),
+                self.active_gen(),
+                self.cursor,
+            )
+        };
+        let changed = next != self.hovered || selecting != self.cbg_selecting;
         self.hovered = next;
+        self.cbg_selecting = selecting;
         changed
     }
 
@@ -331,6 +464,18 @@ impl App {
                     self.frame = frame;
                     new_frame = true;
                 }
+                // Answered straight on the channel: `send` also retires the
+                // pending input request, and CHKFONT is not one.
+                SystemRequest::ChkFont(name) => {
+                    let found = font::find_family(self.shaper.chain().db(), &name).is_some();
+                    let _ = self.receiver.res_tx.send(SystemResponse::ChkFont(found));
+                }
+                // Also not a wait: the answer is the state as of right now.
+                SystemRequest::QueryState => {
+                    let mut state = self.keys;
+                    (state.mouse_x, state.mouse_y) = self.mouse_key_pos();
+                    let _ = self.receiver.res_tx.send(SystemResponse::State(state));
+                }
                 SystemRequest::Input(req) => {
                     if let Some(t) = req.timeout.as_ref() {
                         let remaining_ns = (t.timeout - current_unix_nanos()).max(0) as u128;
@@ -366,15 +511,22 @@ impl App {
         let (win_w, _) = gpu.size();
         let m = *self.shaper.metrics();
         let hl = self.frame.hl_color.0;
-        let mut pages = build_instances(
+        let images = ImageCtx {
+            store: &self.frame.images,
+            now_ms: self.epoch.elapsed().as_millis() as u64,
+        };
+        let fg = self.frame.fore_color.0;
+        let mut quads = build_instances(
             &self.layout,
             &view,
             self.hovered,
             hl,
+            fg,
             raster,
             &gpu.device,
             &gpu.queue,
             &mut self.shaper,
+            images,
         );
         if self.current_req.is_some() {
             if self.strip_dirty || self.strip.is_none() {
@@ -387,20 +539,75 @@ impl App {
             }
             // `View::strip()` lands the one-row layout on the bottom line_h px.
             let strip = self.strip.as_ref().expect("strip laid out above");
-            let strip_pages = build_instances(
+            let strip_quads = build_instances(
                 strip,
                 &view.strip(),
                 None,
                 hl,
+                fg,
                 raster,
                 &gpu.device,
                 &gpu.queue,
                 &mut self.shaper,
+                images,
             );
-            merge_pages(&mut pages, strip_pages);
+            quads.merge(strip_quads);
         }
-        let pairs = raster.pages_with(&pages);
-        let outcome = gpu.render(&pairs, self.frame.bg_color.0);
+        quads.merge(cbg_quads(
+            &self.frame.cbg,
+            view.view_h as i32,
+            self.cbg_selecting,
+            images,
+        ));
+        quads.fit_pages(raster.page_count());
+        self.images
+            .sync(&gpu.device, &gpu.queue, &self.frame.images, &quads.bitmaps());
+        let glyphs = raster.pages_with(&quads.glyphs);
+        let under = self.images.pages_with(&quads.under);
+        let inline = self.images.pages_with(&quads.images);
+        let over = self.images.pages_with(&quads.over);
+        // Emuera's merged depth loop, in four groups
+        // (`GameView/EmueraConsole.cs:1557-1599`), then the placed boxes and
+        // island overlays above it, lowest slice first (`Quads::overlays`).
+        let overlays: Vec<_> = quads
+            .overlays
+            .iter()
+            .map(|s| {
+                (
+                    raster.pages_with(&s.glyphs),
+                    self.images.pages_with(&s.images),
+                )
+            })
+            .collect();
+        let mut groups = vec![
+            DrawGroup {
+                filter: Filter::Linear,
+                pages: &under,
+            },
+            DrawGroup {
+                filter: Filter::Nearest,
+                pages: &glyphs,
+            },
+            DrawGroup {
+                filter: Filter::Linear,
+                pages: &inline,
+            },
+            DrawGroup {
+                filter: Filter::Linear,
+                pages: &over,
+            },
+        ];
+        for (glyphs, images) in &overlays {
+            groups.push(DrawGroup {
+                filter: Filter::Nearest,
+                pages: glyphs,
+            });
+            groups.push(DrawGroup {
+                filter: Filter::Linear,
+                pages: images,
+            });
+        }
+        let outcome = gpu.render(&groups, self.frame.bg_color.0);
         if outcome == RenderOutcome::NeedsRedraw {
             // The surface was reconfigured and nothing was drawn; without this
             // the window keeps the stale frame until the next event arrives.
@@ -441,7 +648,107 @@ impl App {
             | InputRequestType::ForceEnterKey => {
                 self.send(SystemResponse::Empty);
             }
+            // A raw-event wait is answered by `mouse_key`, which every event
+            // handler consults first, so nothing routes here.
+            InputRequestType::MouseKey => {}
         }
+    }
+
+    /// Escape or a right click on a message wait: answer it and ask the
+    /// console to fast-forward the following ones, like Emuera's
+    /// `PressEnterKey(keySkip: true, ...)` (`MainWindow.cs:1170`, `:607`).
+    /// A wait that needs a real value is left alone.
+    fn submit_skip(&mut self) {
+        let Some(req) = self.current_req.as_ref() else {
+            return;
+        };
+        if matches!(
+            req.ty,
+            InputRequestType::AnyKey | InputRequestType::EnterKey
+        ) {
+            self.send(SystemResponse::InputSkip);
+        }
+    }
+
+    /// Is a raw INPUTMOUSEKEY event wait in flight? While one is, the mouse
+    /// and keyboard report events instead of driving the console.
+    fn mouse_key_wait(&self) -> bool {
+        matches!(
+            self.current_req.as_ref().map(|r| r.ty),
+            Some(InputRequestType::MouseKey)
+        )
+    }
+
+    /// `RESULT:2`/`RESULT:3` for a mouse event: the cursor in client
+    /// coordinates, with Y measured from the bottom edge as Emuera does
+    /// (`EmueraConsole.cs:982-983`).
+    ///
+    /// The edge is the bottom of the *console area*, Emuera's
+    /// `ClientHeight = window.MainPicBox.Height` (`:238`), which excludes the
+    /// input strip — the same height the CBG plane's bottom-left origin and
+    /// its button map are measured against, so a click cannot land on a
+    /// different pixel than the one it was drawn on.
+    fn mouse_key_pos(&self) -> (i64, i64) {
+        (self.cursor.0, self.cursor.1 - self.client_height() as i64)
+    }
+
+    /// Emuera `ClientHeight`: the drawing area above the input strip.
+    fn client_height(&self) -> u32 {
+        self.view().view_h
+    }
+
+    /// Fold one key event into the [`InputState`] `GETKEY` reads.
+    ///
+    /// Windows flips a key's toggle bit on each press, which is the only thing
+    /// `GETKEYTRIGGERED` looks at (`Creator.Method.cs:6725-6734`); erars flips
+    /// it on each press winit reports as new, so an auto-repeat burst counts
+    /// once — a held key triggers exactly on its first observation, as the
+    /// C#'s comment describes.
+    fn track_key(&mut self, event: &winit::event::KeyEvent) {
+        let Some(code) = vk_of(&event.logical_key) else {
+            return;
+        };
+        let Ok(vk) = u8::try_from(code) else {
+            // `vk_of` only produces Win32 virtual keys, which are bytes.
+            return;
+        };
+        match event.state {
+            ElementState::Pressed => {
+                if !event.repeat {
+                    self.keys.flip_toggled(vk);
+                }
+                self.keys.set_down(vk, true);
+            }
+            ElementState::Released => self.keys.set_down(vk, false),
+        }
+    }
+
+    /// `RESULT:4`/`RESULT:5` for a press. `RESULT:4` is the CBG button map's
+    /// pixel under the cursor (`MouseDown`, `EmueraConsole.cs:1000-1014`),
+    /// `-1` where no map is opaque, and the text button is read on top of it
+    /// — Emuera fills both from one click.
+    fn mouse_key_button(&self, ev: &mut MouseKeyEvent) {
+        let (x, y) = self.mouse_key_pos();
+        ev.mask = self.frame.cbg.hit_test(&self.frame.images, x, y) as i64;
+        let hit = hit_button(
+            &self.layout,
+            &self.geometry(),
+            &self.view(),
+            self.active_gen(),
+            self.cursor,
+        );
+        let Some(i) = hit else {
+            return;
+        };
+        match &self.layout.buttons[i].value {
+            Value::Int(v) => ev.button = *v,
+            Value::String(s) => ev.button_str = Some(s.clone()),
+        }
+    }
+
+    fn submit_mouse_key(&mut self, ev: MouseKeyEvent) {
+        self.send(SystemResponse::MouseKey(ev));
+        self.request_redraw();
     }
 }
 
@@ -478,8 +785,14 @@ impl ApplicationHandler<Wake> for App {
             return;
         };
         if Instant::now() >= deadline {
-            let v = self.timeout_value.clone();
-            self.send(SystemResponse::Input(v));
+            if self.mouse_key_wait() {
+                // Emuera's expiry event, and no timeout message
+                // (`EmueraConsole.cs:744`).
+                self.submit_mouse_key(MouseKeyEvent::TIMEOUT);
+            } else {
+                let v = self.timeout_value.clone();
+                self.send(SystemResponse::Input(v));
+            }
             self.request_redraw();
             // The deadline is now in the past: leaving `WaitUntil` in place
             // would wake the loop on every iteration and spin a core.
@@ -491,6 +804,16 @@ impl ApplicationHandler<Wake> for App {
     }
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
+        // Before the console gets a say: every key event updates the surface
+        // GETKEY reads, whatever the console then does with it (or does not —
+        // most of the arms below are guarded and return early).
+        match &event {
+            WindowEvent::KeyboardInput { event: key, .. } => self.track_key(key),
+            // winit only delivers key events to the focused window, so a key
+            // released elsewhere would stay down forever.
+            WindowEvent::Focused(false) => self.keys.release_all(),
+            _ => {}
+        }
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
@@ -526,6 +849,30 @@ impl ApplicationHandler<Wake> for App {
             }
             WindowEvent::MouseInput {
                 state: ElementState::Pressed,
+                button,
+                ..
+            } if self.mouse_key_wait() => {
+                let (x, y) = self.mouse_key_pos();
+                let mut ev = MouseKeyEvent {
+                    kind: 1,
+                    code: match button {
+                        winit::event::MouseButton::Left => win32::MOUSE_LEFT,
+                        winit::event::MouseButton::Right => win32::MOUSE_RIGHT,
+                        winit::event::MouseButton::Middle => win32::MOUSE_MIDDLE,
+                        winit::event::MouseButton::Back => win32::MOUSE_X1,
+                        winit::event::MouseButton::Forward => win32::MOUSE_X2,
+                        // Emuera can only ever name the five WinForms buttons.
+                        winit::event::MouseButton::Other(_) => return,
+                    },
+                    x,
+                    y,
+                    ..MouseKeyEvent::default()
+                };
+                self.mouse_key_button(&mut ev);
+                self.submit_mouse_key(ev);
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
                 button: winit::event::MouseButton::Left,
                 ..
             } => {
@@ -538,6 +885,30 @@ impl ApplicationHandler<Wake> for App {
                     }
                     self.request_redraw();
                 }
+            }
+            WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: winit::event::MouseButton::Right,
+                ..
+            } => {
+                self.submit_skip();
+                self.request_redraw();
+            }
+            WindowEvent::MouseWheel { delta, .. } if self.mouse_key_wait() => {
+                // Emuera reports the raw `WM_MOUSEWHEEL` delta, 120 a notch.
+                let line_h = self.metrics().line_h;
+                let notches = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => y as f64,
+                    MouseScrollDelta::PixelDelta(p) => p.y / line_h.max(1) as f64,
+                };
+                let (x, y) = self.mouse_key_pos();
+                self.submit_mouse_key(MouseKeyEvent {
+                    kind: 2,
+                    code: (notches * win32::WHEEL_DELTA as f64).round() as i64,
+                    x,
+                    y,
+                    ..MouseKeyEvent::default()
+                });
             }
             WindowEvent::MouseWheel { delta, .. } => {
                 // Wheel up (positive y) reveals older rows: scroll_rows grows.
@@ -552,12 +923,35 @@ impl ApplicationHandler<Wake> for App {
                     self.request_redraw();
                 }
             }
+            WindowEvent::ModifiersChanged(m) => self.modifiers = m.state(),
+            WindowEvent::KeyboardInput { event, .. }
+                if event.state == ElementState::Pressed && self.mouse_key_wait() =>
+            {
+                // Emuera sends `KeyCode` and `KeyData`, the latter being the
+                // key with the modifier bits folded in
+                // (`EmueraConsole.cs:1045`).
+                let Some(code) = vk_of(&event.logical_key) else {
+                    return;
+                };
+                let m = self.modifiers;
+                let data = code
+                    | if m.shift_key() { win32::MOD_SHIFT } else { 0 }
+                    | if m.control_key() { win32::MOD_CONTROL } else { 0 }
+                    | if m.alt_key() { win32::MOD_ALT } else { 0 };
+                self.submit_mouse_key(MouseKeyEvent {
+                    kind: 3,
+                    code,
+                    x: data,
+                    ..MouseKeyEvent::default()
+                });
+            }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 let Some(req) = self.current_req.clone() else {
                     return;
                 };
                 match &event.logical_key {
                     Key::Named(NamedKey::Enter) => self.submit(),
+                    Key::Named(NamedKey::Escape) => self.submit_skip(),
                     Key::Named(NamedKey::Backspace) => {
                         self.input.pop();
                     }
@@ -592,6 +986,7 @@ impl ApplicationHandler<Wake> for App {
 mod tests {
     use super::*;
     use crate::font::FontChain;
+    use crate::layout::layout;
     use erars_ast::Alignment;
     use erars_compiler::Language;
     use erars_ui::width::WidthTable;
@@ -711,58 +1106,6 @@ mod tests {
     }
 
     #[test]
-    fn row_at_matches_the_drawer_and_rejects_slack_and_strip() {
-        // 30 rows, 24 visible: rows 6..=29 on screen, row 6 at top = 5.
-        assert_eq!(row_at(30, &VIEW, 19, 2), None, "top slack");
-        assert_eq!(row_at(30, &VIEW, 19, 5), Some((6, 0)));
-        assert_eq!(row_at(30, &VIEW, 19, 23), Some((6, 18)));
-        assert_eq!(row_at(30, &VIEW, 19, 24), Some((7, 0)));
-        assert_eq!(row_at(30, &VIEW, 19, 460), Some((29, 18)));
-        assert_eq!(row_at(30, &VIEW, 19, 461), None, "input strip");
-        assert_eq!(row_at(30, &VIEW, 19, -1), None);
-        assert_eq!(row_at(0, &VIEW, 19, 100), None);
-        // 3 rows: bottom-anchored, row 0 at 461 − 3·19 = 404.
-        assert_eq!(row_at(3, &VIEW, 19, 404), Some((0, 0)));
-        assert_eq!(row_at(3, &VIEW, 19, 403), None);
-        // Scrolled by one row: bottom row 28, row 5 at top = 5.
-        let v1 = View {
-            scroll_rows: 1,
-            ..VIEW
-        };
-        assert_eq!(row_at(30, &v1, 19, 5), Some((5, 0)));
-        assert_eq!(row_at(30, &v1, 19, 460), Some((28, 18)));
-        // Every on-screen pixel maps to the row View::row_y draws there.
-        for rows in [0usize, 1, 5, 24, 30] {
-            for scroll in [0usize, 1, 6, 100] {
-                let v = View {
-                    scroll_rows: scroll,
-                    ..VIEW
-                };
-                for y in -5i64..=480 {
-                    match row_at(rows, &v, 19, y) {
-                        Some((r, dy)) => {
-                            let top = v.row_y(rows, r, 19).unwrap() as i64;
-                            assert!(y >= top && y < top + 19, "rows {rows} scroll {scroll} y {y}");
-                            assert_eq!(dy as i64, y - top);
-                        }
-                        None => {
-                            for r in 0..rows {
-                                if let Some(top) = v.row_y(rows, r, 19) {
-                                    let top = top as i64;
-                                    assert!(
-                                        !(y >= top && y < top + 19 && y < v.view_h as i64),
-                                        "missed rows {rows} scroll {scroll} y {y} r {r}"
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
     fn input_line_is_default_coloured_plain_text() {
         let l = input_line("12", [192, 192, 192]);
         assert_eq!(l.align, Alignment::Left);
@@ -866,5 +1209,108 @@ mod tests {
         };
         assert_eq!(hit_button(&l, &g22, &v22, Some(7), (left, 454)), Some(3));
         assert_eq!(hit_button(&l, &g22, &v22, Some(7), (left, 455)), None);
+    }
+
+    fn div_part(
+        anchor: erars_ui::DivAnchor,
+        (x, y): (i32, i32),
+        (width, height): (Option<u32>, Option<u32>),
+        lines: Vec<ConsoleLine>,
+    ) -> ConsoleLinePart {
+        ConsoleLinePart::Div(std::sync::Arc::new(erars_ui::ConsoleDiv {
+            anchor,
+            x,
+            y,
+            width,
+            height,
+            style: erars_ui::DivBox::default(),
+            lines,
+            alt_head: String::new(),
+        }))
+    }
+
+    /// A positioned box covers the log, so its fragments answer for the pixels
+    /// first (reverse paint order), and a fragment outside the box's own clip
+    /// (`_Library/EvilMask/ConsoleDivPart.cs:99-105`) is not clickable at all.
+    #[test]
+    fn hit_test_prefers_placed_rows_and_honours_their_clip() {
+        let mut sh = shaper();
+        let g = Geometry::new(760, M);
+        // Row 0 is a 36 px button at x 3..39. Row 1 prints a box that hangs
+        // one row up (`ypos = −19`) and `xpos = −18` puts its content back at
+        // x 3, right on top of that button. The box is one row tall, so its
+        // second child line falls outside its own clip.
+        let l = layout_frame_no_sweep(
+            &[
+                line(Alignment::Left, vec![button("AAAA", 7, 1)]),
+                line(
+                    Alignment::Left,
+                    vec![
+                        text("ab"),
+                        div_part(
+                            erars_ui::DivAnchor::Relative,
+                            (-18, -19),
+                            (Some(60), Some(19)),
+                            vec![
+                                line(Alignment::Left, vec![button("XY", 7, 2)]),
+                                line(Alignment::Left, vec![button("Z", 7, 3)]),
+                            ],
+                        ),
+                    ],
+                ),
+            ],
+            &[],
+            &g,
+            &mut sh,
+        );
+        sh.sweep();
+        assert_eq!((l.flow_rows, l.rows.len(), l.buttons.len()), (2, 4, 3));
+        // Two flow rows, bottom-anchored: row 1 at 442, row 0 and the box at 423.
+        assert_eq!(l.rows[2].placement().map(|p| (p.x, p.y)), Some((3, -19)));
+
+        assert_eq!(
+            hit_button(&l, &g, &VIEW, Some(7), (5, 425)),
+            Some(1),
+            "the box covers the log button, so the box answers"
+        );
+        assert_eq!(
+            hit_button(&l, &g, &VIEW, Some(7), (30, 425)),
+            Some(0),
+            "past the box's 18 px fragment the log button is clickable again"
+        );
+        assert_eq!(hit_button(&l, &g, &VIEW, Some(7), (5, 422)), None);
+        assert_eq!(
+            hit_button(&l, &g, &VIEW, Some(7), (5, 442)),
+            None,
+            "the second child row is clipped out of its own box"
+        );
+    }
+
+    #[test]
+    fn vk_mapping_speaks_winforms_key_codes() {
+        // Letters and digits carry their ASCII uppercase value whichever
+        // case the layout produced.
+        assert_eq!(vk_of(&Key::Character("z".into())), Some(90));
+        assert_eq!(vk_of(&Key::Character("Z".into())), Some(90));
+        assert_eq!(vk_of(&Key::Character("7".into())), Some(55));
+        // Punctuation lands on the OEM codes, shifted or not.
+        assert_eq!(vk_of(&Key::Character(";".into())), Some(186));
+        assert_eq!(vk_of(&Key::Character(":".into())), Some(186));
+        assert_eq!(vk_of(&Key::Character("/".into())), Some(191));
+        // Named keys use the Keys enum values scripts compare against.
+        assert_eq!(vk_of(&Key::Named(NamedKey::Enter)), Some(13));
+        assert_eq!(vk_of(&Key::Named(NamedKey::Escape)), Some(27));
+        assert_eq!(vk_of(&Key::Named(NamedKey::Space)), Some(32));
+        assert_eq!(vk_of(&Key::Named(NamedKey::ArrowUp)), Some(38));
+        assert_eq!(vk_of(&Key::Named(NamedKey::F5)), Some(116));
+        assert_eq!(vk_of(&Key::Named(NamedKey::F12)), Some(123));
+        // A key WinForms has no `Keys` value for is not reported at all.
+        assert_eq!(vk_of(&Key::Named(NamedKey::BrightnessUp)), None);
+        assert_eq!(vk_of(&Key::Character("あ".into())), None);
+        // KeyData folds the modifier bits on top of the key code.
+        assert_eq!(
+            win32::VK_ESCAPE | win32::MOD_SHIFT | win32::MOD_CONTROL,
+            27 | 0x0001_0000 | 0x0002_0000
+        );
     }
 }

@@ -1,0 +1,21 @@
+@SYSTEM_TITLE
+; GETKEY / GETKEYTRIGGERED / MOUSEX / MOUSEY / ISACTIVE with no window,
+; which is exactly the state Emuera itself is in before `MainWindow` exists:
+; `GetMousePosition` returns `new Point()` (`GameView/EmueraConsole.cs:1983-1984`)
+; and no key can be down. `ISACTIVE` is `EmueraConsole.IsActive`, which this
+; fork defines as `return true` (`:276-277`).
+
+; 0x10 is VK_SHIFT — the key eraMegaten polls most often.
+PRINTFORML GETKEY(VK_SHIFT) = {GETKEY(0x10)}
+; `keycode < 0 || keycode > 255` returns 0 before touching the toggle latch
+; (`GameData/Function/Creator.Method.cs:6722-6723`).
+PRINTFORML GETKEY(-1) = {GETKEY(-1)}
+PRINTFORML GETKEY(256) = {GETKEY(256)}
+; The latch says "newly pressed", but the key is not down, so the AND fails
+; (`:6732`).
+PRINTFORML GETKEYTRIGGERED(VK_SHIFT) = {GETKEYTRIGGERED(0x10)}
+; A second query in the same run: still 0, and still for the down bit.
+PRINTFORML GETKEYTRIGGERED(VK_SHIFT) = {GETKEYTRIGGERED(0x10)}
+PRINTFORML MOUSEX() = {MOUSEX()}
+PRINTFORML MOUSEY() = {MOUSEY()}
+PRINTFORML ISACTIVE() = {ISACTIVE()}

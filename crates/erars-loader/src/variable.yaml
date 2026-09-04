@@ -119,6 +119,24 @@ SAVESTRNAME:
   is_str: true
   is_const: true
 
+# `TFLAG.CSV` (`GameData/Variable/VariableCode.cs:217`); sized like TFLAG.
+TFLAGNAME:
+  size: [10000]
+  is_str: true
+  is_const: true
+
+# CDFLAG's two dimensions have a name table each
+# (`GameData/Variable/VariableCode.cs:223-224`, `CDFLAG1.CSV`/`CDFLAG2.CSV`).
+CDFLAGNAME1:
+  size: [100]
+  is_str: true
+  is_const: true
+
+CDFLAGNAME2:
+  size: [100]
+  is_str: true
+  is_const: true
+
 
 WINDOW_TITLE:
   size: []

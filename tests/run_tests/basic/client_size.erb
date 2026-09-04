@@ -1,0 +1,7 @@
+@SYSTEM_TITLE
+; Emuera's `CLIENTWIDTH`/`CLIENTHEIGHT` report the console area, not the
+; window: `WindowX` and `WindowY` minus the one-line input strip
+; (`GameData/Function/Creator.Method.cs:5844-5863`, `Forms/MainWindow.cs:530`).
+; The defaults are 760 x 480 with a 19 px line height.
+PRINTFORML {CLIENTWIDTH()}
+PRINTFORML {CLIENTHEIGHT()}

@@ -1,0 +1,157 @@
+@SYSTEM_TITLE
+#DIM CM, 10, 10
+
+; --- GCREATE / GCREATED / GWIDTH / GHEIGHT ---
+PRINTFORML GCREATED before {GCREATED(0)}
+GCREATE 0, 4, 3
+PRINTFORML GCREATE {RESULT} {GCREATE(0, 4, 3)}
+PRINTFORML GCREATED {GCREATED(0)} {GCREATED(9)}
+PRINTFORML GSIZE {GWIDTH(0)} {GHEIGHT(0)} {GWIDTH(9)} {GHEIGHT(9)}
+
+; --- GGETCOLOR / GSETCOLOR ---
+PRINTFORML GGETCOLOR fresh {GGETCOLOR(0, 0, 0)}
+PRINTFORML GGETCOLOR oob {GGETCOLOR(0, 4, 0)} {GGETCOLOR(0, 0, -1)} {GGETCOLOR(9, 0, 0)}
+PRINTFORML GSETCOLOR {GSETCOLOR(0, 0xFFFF0000, 1, 1)} {GGETCOLOR(0, 1, 1)}
+PRINTFORML GSETCOLOR fail {GSETCOLOR(0, 0xFFFF0000, 9, 9)} {GSETCOLOR(9, 0xFFFF0000, 0, 0)}
+
+; --- GCLEAR ---
+PRINTFORML GCLEAR {GCLEAR(0, 0xFF0000FF)} {GGETCOLOR(0, 1, 1)} {GCLEAR(9, 0)}
+PRINTFORML GCLEAR rect {GCLEAR(0, 0xFF00FF00, 1, 1, 2, 2)} {GGETCOLOR(0, 1, 1)} {GGETCOLOR(0, 0, 0)}
+
+; --- brush / pen / font state ---
+PRINTFORML GSETBRUSH {GSETBRUSH(0, 0xFF112233)} {GSETBRUSH(9, 0xFF112233)}
+PRINTFORML GSETPEN {GSETPEN(0, 0xFF445566, 3)} {GSETPEN(9, 0, 1)}
+GSETFONT 0, "MS Gothic", 12
+PRINTFORML GSETFONT {RESULT} {GSETFONT(0, "MS Gothic", 12, 3)} {GSETFONT(9, "MS Gothic", 12)}
+
+; --- GDRAWG, with a 2x horizontal upscale ---
+PRINTFORML SRC {GCREATE(1, 2, 1)} {GSETCOLOR(1, 0xFFFF0000, 0, 0)} {GSETCOLOR(1, 0xFF0000FF, 1, 0)}
+PRINTFORML GDRAWG {GCREATE(2, 4, 1)} {GDRAWG(2, 1, 0, 0, 4, 1, 0, 0, 2, 1)}
+PRINTFORML GDRAWG row {GGETCOLOR(2, 0, 0)} {GGETCOLOR(2, 1, 0)} {GGETCOLOR(2, 2, 0)} {GGETCOLOR(2, 3, 0)}
+PRINTFORML GDRAWG fail {GDRAWG(2, 9, 0, 0, 1, 1, 0, 0, 1, 1)} {GDRAWG(9, 1, 0, 0, 1, 1, 0, 0, 1, 1)}
+
+; --- GDRAWGWITHMASK: the mask's blue channel is the opacity ---
+PRINTFORML MASK setup {GCREATE(3, 2, 1)} {GCLEAR(3, 0xFF000000)} {GCREATE(4, 2, 1)} {GCLEAR(4, 0xFFFFFFFF)}
+PRINTFORML MASK build {GCREATE(5, 2, 1)} {GSETCOLOR(5, 0x000000FF, 0, 0)} {GSETCOLOR(5, 0x00000000, 1, 0)}
+PRINTFORML GDRAWGWITHMASK {GDRAWGWITHMASK(3, 4, 5, 0, 0)} {GGETCOLOR(3, 0, 0)} {GGETCOLOR(3, 1, 0)}
+PRINTFORML GDRAWGWITHMASK fail {GDRAWGWITHMASK(3, 4, 2, 0, 0)} {GDRAWGWITHMASK(3, 4, 5, 1, 0)}
+
+; --- sprites ---
+SPRITECREATE "SPR", 1
+PRINTFORML SPRITECREATE {RESULT}
+PRINTFORML SPRITECREATED {SPRITECREATED("SPR")} {SPRITECREATED("spr")} {SPRITECREATED("NOPE")}
+PRINTFORML SPRITESIZE {SPRITEWIDTH("SPR")} {SPRITEHEIGHT("SPR")} {SPRITEWIDTH("NOPE")} {SPRITEHEIGHT("NOPE")}
+PRINTFORML SPRITEPOS {SPRITEPOSX("SPR")} {SPRITEPOSY("SPR")} {SPRITEPOSX("NOPE")} {SPRITEPOSY("NOPE")}
+PRINTFORML SPRITESETPOS {SPRITESETPOS("SPR", 3, -4)} {SPRITEPOSX("SPR")} {SPRITEPOSY("SPR")}
+PRINTFORML SPRITEMOVE {SPRITEMOVE("SPR", -1, 2)} {SPRITEPOSX("SPR")} {SPRITEPOSY("SPR")}
+PRINTFORML SPRITE fail {SPRITESETPOS("NOPE", 0, 0)} {SPRITEMOVE("NOPE", 0, 0)} {SPRITEDISPOSE("NOPE")}
+PRINTFORML SPRITECREATE again {SPRITECREATE("SPR", 1)} {SPRITECREATE("X", 9)} {SPRITECREATE("", 1)}
+PRINTFORML SPRITECREATE rect {SPRITECREATE("HALF", 1, 1, 0, 1, 1)} {SPRITEWIDTH("HALF")} {SPRITEHEIGHT("HALF")}
+
+; --- GDRAWSPRITE in its 2, 4 and 6 argument forms ---
+PRINTFORML CANVAS {SPRITESETPOS("SPR", 0, 0)} {GCREATE(6, 4, 1)} {GCLEAR(6, 0)}
+PRINTFORML GDRAWSPRITE {GDRAWSPRITE(6, "SPR")} {GGETCOLOR(6, 0, 0)} {GGETCOLOR(6, 1, 0)} {GGETCOLOR(6, 2, 0)}
+PRINTFORML GDRAWSPRITE xy {GDRAWSPRITE(6, "SPR", 2, 0)} {GGETCOLOR(6, 2, 0)} {GGETCOLOR(6, 3, 0)}
+PRINTFORML GDRAWSPRITE wh {GDRAWSPRITE(6, "SPR", 0, 0, 4, 1)} {GGETCOLOR(6, 1, 0)} {GGETCOLOR(6, 2, 0)}
+PRINTFORML GDRAWSPRITE fail {GDRAWSPRITE(6, "NOPE")} {GDRAWSPRITE(9, "SPR")}
+
+; --- GSAVE / GLOAD refusals (no file is touched) ---
+PRINTFORML GSAVE fail {GSAVE(9, 0)} {GSAVE(0, -1)}
+PRINTFORML GLOAD fail {GLOAD(0, 9990)} {GLOAD(30, 999999)}
+
+; --- GDISPOSE, and the sprite it orphans ---
+PRINTFORML GDISPOSE {GDISPOSE(0)} {GCREATED(0)} {GDISPOSE(0)}
+PRINTFORML orphan {GDISPOSE(1)} {SPRITECREATED("SPR")} {SPRITEWIDTH("SPR")} {SPRITEDISPOSE("SPR")}
+PRINTFORML revive {GCREATE(1, 2, 1)} {SPRITECREATED("SPR")} {SPRITEWIDTH("SPR")}
+PRINTFORML SPRITEDISPOSE {SPRITEDISPOSE("SPR")} {SPRITECREATED("SPR")}
+
+; --- GFILLRECTANGLE takes no colour: it fills with GSETBRUSH's colour, or
+; with Config.BackColor (0xFF000000 here) when the bitmap never had a brush,
+; and it composites source-over where GCLEAR replaces
+; (Creator.Method.cs:6157-6168, GraphicsImage.cs:190-203).
+PRINTFORML FILL setup {GCREATE(10, 4, 1)}
+PRINTFORML GFILLRECTANGLE {GFILLRECTANGLE(10, 0, 0, 2, 1)} {GGETCOLOR(10, 0, 0)} {GGETCOLOR(10, 2, 0)}
+PRINTFORML FILL brush {GSETBRUSH(10, 0x80FF0000)} {GFILLRECTANGLE(10, 0, 0, 3, 1)}
+PRINTFORML FILL blended {GGETCOLOR(10, 0, 0)} {GGETCOLOR(10, 2, 0)} {GGETCOLOR(10, 3, 0)}
+PRINTFORML GFILLRECTANGLE fail {GFILLRECTANGLE(9, 0, 0, 1, 1)}
+
+; --- SPRITEGETCOLOR answers 0xAARRGGBB, and -1 — not 0 — for a missing
+; sprite, a disposed parent or a point outside the sprite's box
+; (Creator.Method.cs:5826-5841). A point inside the sprite but outside its
+; parent bitmap is Color.Transparent = 0x00FFFFFF (CroppedImage.cs:78-89).
+PRINTFORML SGC setup {GCREATE(11, 4, 2)} {GSETCOLOR(11, 0xFFFF0000, 1, 0)} {GSETCOLOR(11, 0xFF00FF00, 2, 1)}
+PRINTFORML SGC sprite {SPRITECREATE("CROP", 11, 1, 0, 2, 2)}
+PRINTFORML SPRITEGETCOLOR {SPRITEGETCOLOR("CROP", 0, 0)} {SPRITEGETCOLOR("crop", 1, 1)} {SPRITEGETCOLOR("CROP", 0, 1)}
+PRINTFORML SPRITEGETCOLOR oob {SPRITEGETCOLOR("CROP", 2, 0)} {SPRITEGETCOLOR("CROP", 0, -1)} {SPRITEGETCOLOR("NOPE", 0, 0)}
+PRINTFORML SGC overhang {SPRITECREATE("EDGE", 11, 3, 0, 2, 1)} {SPRITEGETCOLOR("EDGE", 0, 0)} {SPRITEGETCOLOR("EDGE", 1, 0)}
+PRINTFORML SGC orphan {GDISPOSE(11)} {SPRITEGETCOLOR("CROP", 0, 0)}
+
+; --- GDRAWTEXT draws GDI+ text into the bitmap and reports the extent
+; MeasureString would have (Creator.Method.cs:5531-5565,
+; GraphicsImage.cs:120-142). *Which* pixels get ink depends on the face the
+; font chain resolves, so what is pinned here is machine-independent: the
+; return value, a positive measured extent in RESULT:1/:2, and that every
+; inked pixel carries exactly the brush colour — source-over onto a
+; transparent bitmap keeps the RGB and puts the coverage in the alpha channel.
+; The pen is set to the same colour because GDrawString always strokes the
+; path after filling it (GraphicsImage.cs:131-141).
+PRINTFORML TEXT setup {GCREATE(20, 128, 96)} {GSETBRUSH(20, 0xFF00FF00)} {GSETPEN(20, 0xFF00FF00, 1)} {GSETFONT(20, "", 16)}
+GDRAWTEXT 20, "MMM"
+LOCAL:1 = RESULT
+LOCAL:2 = RESULT:1
+LOCAL:3 = RESULT:2
+PRINTFORML GDRAWTEXT {LOCAL:1} {LOCAL:2 > 0} {LOCAL:3 > 0}
+LOCAL:4 = 0
+LOCAL:5 = 0
+FOR LOCAL:6, 0, 96
+    FOR LOCAL:7, 0, 128
+        LOCAL:8 = GGETCOLOR(20, LOCAL:7, LOCAL:6)
+        SIF (LOCAL:8 & 0xFF000000) != 0
+            LOCAL:4 += 1
+        SIF ((LOCAL:8 & 0xFF000000) != 0) && ((LOCAL:8 & 0x00FFFFFF) != 0x0000FF00)
+            LOCAL:5 += 1
+    NEXT
+NEXT
+PRINTFORML TEXT ink {LOCAL:4 > 0} {LOCAL:5}
+
+; The 4-argument form takes the top-left corner of the layout box; an empty
+; string measures (0, 0) and fills nothing, yet still returns 1
+; (Creator.Method.cs:5540-5547, 5565).
+PRINTFORML GDRAWTEXT xy {GDRAWTEXT(20, "M", 4, 4)}
+PRINTFORML GDRAWTEXT empty {GDRAWTEXT(20, "")} {RESULT:1} {RESULT:2}
+
+; A bitmap that was never created returns 0 *before* the measurement, so
+; RESULT:1/:2 keep whatever they held (Creator.Method.cs:5536-5538).
+RESULT:1 = 1234
+RESULT:2 = 5678
+PRINTFORML GDRAWTEXT missing {GDRAWTEXT(9, "M")} {RESULT:1} {RESULT:2}
+
+; --- The optional trailing argument of GDRAWG and GDRAWSPRITE is a 5x5 block
+; of an integer array, every entry scaled by 1/256 and read at the indices the
+; term itself carries: array[e1+x, e2+y] (Creator.Method.cs:5180-5211). The
+; block at CM:0:0 swaps the red and blue channels; the one at CM:5:5 is the
+; identity, which is what pins that the indices, not the variable, pick it.
+CM:0:2 = 256
+CM:1:1 = 256
+CM:2:0 = 256
+CM:3:3 = 256
+CM:5:5 = 256
+CM:6:6 = 256
+CM:7:7 = 256
+CM:8:8 = 256
+PRINTFORML CM src {GCREATE(12, 2, 1)} {GSETCOLOR(12, 0xFFFF0000, 0, 0)} {GSETCOLOR(12, 0xFF0000FF, 1, 0)}
+PRINTFORML CM swap {GCREATE(13, 2, 1)} {GDRAWG(13, 12, 0, 0, 2, 1, 0, 0, 2, 1, CM)} {GGETCOLOR(13, 0, 0)} {GGETCOLOR(13, 1, 0)}
+PRINTFORML CM identity {GDRAWG(13, 12, 0, 0, 2, 1, 0, 0, 2, 1, CM:5:5)} {GGETCOLOR(13, 0, 0)} {GGETCOLOR(13, 1, 0)}
+
+; A character variable is read the same way: the per-character array at
+; Index1, with the block origin at Index2/Index3
+; (GetArrayChara, Creator.Method.cs:5188-5193). Emuera's 3D *character*
+; branch is `throw new NotImplCodeEE()` (:5214-5217), so only this 2D form is
+; readable, and the corpus passes its matrices as plain arrays
+; (カラーマトリクス変更.ERB:75, 画像合成.ERB:99).
+ADDCHARA 3
+CDFLAG:0:0:2 = 256
+CDFLAG:0:1:1 = 256
+CDFLAG:0:2:0 = 256
+CDFLAG:0:3:3 = 256
+PRINTFORML CM chara {SPRITECREATE("CMSPR", 12)} {GDRAWSPRITE(13, "CMSPR", 0, 0, 2, 1, CDFLAG:0:0:0)} {GGETCOLOR(13, 0, 0)} {GGETCOLOR(13, 1, 0)}

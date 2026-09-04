@@ -1,0 +1,11 @@
+; `@REBOOT` is `window.Reboot()`: stop the timer, set `Program.Reboot`, close
+; the window (Forms/MainWindow.cs:807-812), after which Emuera's outer loop
+; builds a fresh engine from disk. Only the front end can reload, so the VM
+; ends the run and records the request; `VmContext::reboot_requested` reports
+; it, and the sibling `.reboot` marker is this fixture asserting it.
+; §5.16 of docs/research/2026-09-03-emuera-command-gap.md states what erars
+; does with it per front end.
+@SYSTEM_TITLE
+PRINTL START
+INPUTS
+PRINTFORML unreachable

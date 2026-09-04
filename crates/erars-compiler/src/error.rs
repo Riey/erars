@@ -7,6 +7,12 @@ pub type CompileResult<T> = Result<T, CompileError>;
 
 pub type ParserError = (String, std::ops::Range<usize>);
 
+/// A warning plus the Emuera warning level it is reported at. Level 1 is what
+/// the `[…]` preprocessor emits (`GameProc/ErbLoader.cs:154-171`, `:239-252`),
+/// level 2 what the line compiler emits (`:1041-1058`);
+/// `表示する最低警告レベル` filters on it (`GameData/ParserMediator.cs:26`).
+pub type ParserWarning = (String, std::ops::Range<usize>, u8);
+
 #[derive(thiserror::Error)]
 pub enum CompileError {
     #[error("중복된 GOTO 라벨입니다.")]

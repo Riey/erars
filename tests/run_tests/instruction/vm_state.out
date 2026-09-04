@@ -1,0 +1,9 @@
+init=1
+off=0
+on=1
+forced=0
+both=1
+skip=0 0
+font=0 0
+mouse=4 0 0 0 0 0 [kept]
+mouse2=4 0

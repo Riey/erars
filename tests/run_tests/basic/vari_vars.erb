@@ -1,0 +1,26 @@
+@SYSTEM_TITLE
+; The `.NET版` fork's `VARI`/`VARS`: like `#DIM DYNAMIC` but declarable at any
+; position, so a declaration inside one `IF` branch is still function-scoped
+; and readable after the `ENDIF`
+; (`RPG/イベント/EVENT_201_白き鋼鉄のX2/EVENT_201_91_BATTLE_6_楽土.ERB:188`).
+VARI A = 3
+VARS S = "x"
+; An empty initialiser is a corpus form and assigns the empty string.
+VARS EMPTY = 
+; Sizes work like `#DIM`'s.
+VARI ARR, 4
+IF A == 3
+	VARI INNER = A * 3
+ENDIF
+ARR:3 = 5
+PRINTFORML {A}%S%{INNER}
+PRINTFORML {VARSIZE("ARR")}{ARR:3}
+PRINTFORML [%EMPTY%]
+; The initialiser is evaluated where the line sits, not at function entry, so
+; it can read runtime state that only holds here.
+CALL SUB
+VARI FROM_RESULT = RESULT
+PRINTFORML {FROM_RESULT}
+
+@SUB
+RETURN 42

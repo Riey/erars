@@ -1,0 +1,10 @@
+@SYSTEM_TITLE
+
+; CSV/ITEM.CSV row 5 is `5,아이템4,124:테스트용`. Emuera reads the price with
+; `Int64.TryParse(tokens[2].TrimEnd(), out long price)`
+; (GameData/ConstantData.cs:1726-1732), which is strict: the trailing text
+; makes the whole field unreadable, so the row is warned about and the price
+; is left at 0. The *name* is assigned before that check (`:1722`), so it
+; survives the rejected price.
+PRINTVL ITEMPRICE:5
+PRINTFORML [%ITEMNAME:5%]

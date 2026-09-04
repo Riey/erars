@@ -45,6 +45,9 @@ struct Args {
 
     #[clap(long, help = "Turn off ERB lint")]
     lint_off: bool,
+
+    #[clap(long, help = "Enable debug commands ([IF_DEBUG], ;#;, DEBUGPRINT)")]
+    debug: bool,
 }
 
 fn main() {
@@ -76,7 +79,13 @@ fn main() {
         )
     };
 
-    log_panics::init();
+    // `log_panics` replaces the default hook, which writes to stderr, with one
+    // that writes to the logger — so under `--quite`, where no logger is
+    // installed, it swallowed the panic message entirely and a crash showed up
+    // only as exit status 101.
+    if _handle.is_some() {
+        log_panics::init();
+    }
 
     let inputs = match args.use_input {
         Some(input) => ron::from_str(&std::fs::read_to_string(input).unwrap()).unwrap(),
@@ -90,11 +99,36 @@ fn main() {
         .name("erars-runtime".into())
         .spawn(move || {
             let config = load_config(&args.target_path);
-            let (vm, mut ctx, mut tx) = if args.load {
-                unsafe { load_script(&args.target_path, system, config).unwrap() }
+            let loaded = if args.load {
+                unsafe { load_script(&args.target_path, system, config) }
             } else {
-                run_script(&args.target_path, system, config, true, !args.lint_off).unwrap()
+                run_script(
+                    &args.target_path,
+                    system,
+                    config,
+                    true,
+                    !args.lint_off,
+                    args.debug,
+                )
             };
+            let (vm, mut ctx, mut tx) = match loaded {
+                Ok(loaded) => loaded,
+                Err(err) => {
+                    // `log_panics::init` above routes a panic message to the
+                    // logger, and `--quite` installs no logger at all, so
+                    // unwrapping here printed nothing whatsoever — a game that
+                    // failed to load looked like a game that had nothing to do.
+                    eprintln!("Failed to load {}: {err:#}", args.target_path);
+                    log::error!("Failed to load {}: {err:#}", args.target_path);
+                    std::process::exit(1);
+                }
+            };
+
+            // Emuera's `-Debug` (`Program.cs:219-220`): `@DEBUG` opens the
+            // debug window only in a run started with it. Set here rather
+            // than in the loader so the compiled `--load` path is gated the
+            // same way.
+            ctx.set_debug_mode(args.debug);
 
             if args.measure_memory {
                 measure_by_drop("TerminalVm", vm);
@@ -107,6 +141,16 @@ fn main() {
             } else if args.save {
                 save_script(vm, ctx, &args.target_path).unwrap();
             } else {
+                // Emuera titles its window from GAMEBASE right after the
+                // script loads (`GameProc/Process.cs:144`
+                // `console.SetWindowTitle(gamebase.ScriptWindowTitle)`); OSC 2
+                // is the terminal's equivalent. Not in `--json` mode, where
+                // stdout carries the protocol and escape bytes would corrupt
+                // it, and not for `--save`/`--measure-memory`, which never
+                // present a console at all.
+                if !args.json {
+                    print!("\x1b]2;{}\x07", ctx.header_info.gamebase.window_title);
+                }
                 vm.start(&mut tx, &mut ctx);
             }
         })

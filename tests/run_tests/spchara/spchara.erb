@@ -1,0 +1,15 @@
+@SYSTEM_TITLE
+TARGET = -1
+
+; CSV/CHARA3.CSV sets `フラグ,0,-1`, so template 3 is an SP character and with
+; the option on it is invisible to everything but the SP lookups.
+PRINTFORML csv {EXISTCSV(3)} {EXISTCSV(3, 1)}
+PRINTFORML csvname [%CSVNAME(3)%] [%CSVNAME(3, 1)%]
+PRINTFORML csvbase {CSVBASE(3, 0)} {CSVBASE(3, 0, 1)}
+
+ADDSPCHARA 3
+PRINTFORML sp {CHARANUM} {NO:0} {CFLAG:0:0} [%NAME:0%]
+
+; ADDCHARA cannot reach an SP template, so this is the last line to run.
+ADDCHARA 3
+PRINTFORML unreachable

@@ -1,0 +1,8 @@
+@SYSTEM_TITLE
+; `RandToken.GetIntValue` throws for a non-positive argument
+; (`GameData/Variable/VariableToken.cs:1459-1465`) rather than sampling an
+; empty range. `SYSTEM_TITLE` in eraMegaten reaches this through
+; `TITLE_NO = TITLE_LIST:(RAND:CNT_TITLE_PICTURE)` when no title art is
+; installed, so it has to be a script error and not a panic.
+PRINTFORML start
+PRINTFORML {RAND:0}

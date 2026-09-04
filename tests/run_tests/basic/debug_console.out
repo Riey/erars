@@ -1,0 +1,8 @@
+START
+@REBOO
+디버그 커맨드를 사용할 수 없는 설정입니다
+@DEBUG
+디버그 창은 --debug 인수를 붙여 실행했을 때에만 사용할 수 있습니다
+@OUTPUT
+※※※ログファイルをemuera.logに出力しました※※※
+[plain]

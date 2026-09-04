@@ -1,0 +1,3 @@
+start
+VM error occurred: 메소드 CBGSETG의 zdepth는 0이 아닌 int 범위의 값이여야합니다: 0
+At function SYSTEM_TITLE tests/run_tests/basic/cbg_zdepth.erb@11

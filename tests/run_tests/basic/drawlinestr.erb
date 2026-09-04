@@ -1,0 +1,10 @@
+@SYSTEM_TITLE
+; DRAWLINESTR is the bar Emuera bakes once at start-up from `DRAWLINE文字`
+; (`GameProc/Process.cs:117` -> `getStBar`), so it is the same string DRAWLINE
+; prints. With the default 760 px window it is 84 half-width cells wide:
+; DrawableWidth = 760 - max(2, 18 / 6) = 757, one half-width cell is 18 / 2 = 9
+; px, and 757 / 9 = 84.
+PRINTFORML {STRLENS(DRAWLINESTR)}
+PRINTFORML %DRAWLINESTR%
+; It is a string, so string methods see it like any other.
+PRINTFORML {STRFIND(DRAWLINESTR, "--")}

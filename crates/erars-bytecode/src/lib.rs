@@ -15,7 +15,10 @@ use erars_vm::{
 #[cfg(target_endian = "big")]
 compile_error!("Doesn't support big endian");
 
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 8];
+// Bumped when `EventCollection` gained its `#ONLY` flag: an older `game.era`
+// has one fewer byte per event and would decode the rest of the file as
+// garbage.
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 9];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {
@@ -127,6 +130,7 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
         let collection = &mut event[event_ty];
 
         collection.single = read.read_u8()? != 0;
+        collection.only = read.read_u8()? != 0;
 
         let empty_len = read.read_u32::<LE>()? as usize;
         collection.empty_count = empty_len;
@@ -142,6 +146,10 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
         interner: get_interner(),
         event,
         normal,
+        // `イベント関数のCALLを許可する` is applied while functions are
+        // registered, so a dictionary read back from `game.era` already has
+        // whatever entries it produced.
+        compati_call_event: false,
     };
 
     Ok(dic)
@@ -172,6 +180,7 @@ pub fn write_to<W: Write + WriteBytesExt>(mut out: W, dic: &FunctionDic) -> Resu
     for (ev, collection) in dic.event.iter() {
         out.write_u32::<LE>(ev as u32)?;
         out.write_u8(collection.single as u8)?;
+        out.write_u8(collection.only as u8)?;
         out.write_u32::<LE>(collection.empty_count as u32)?;
         out.write_u32::<LE>(collection.events.len() as u32)?;
         for body in collection.events.iter() {

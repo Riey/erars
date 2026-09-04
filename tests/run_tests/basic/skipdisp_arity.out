@@ -1,0 +1,3 @@
+start
+VM error occurred: SKIPDISP은 인수가 하나여야합니다. 0
+At function SYSTEM_TITLE tests/run_tests/basic/skipdisp_arity.erb@6

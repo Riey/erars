@@ -1,0 +1,84 @@
+@SYSTEM_TITLE
+
+; The four HTML_* string functions, plus CHARATU. Every expectation is derived
+; from the C# by hand:
+;   HTML_ESCAPE          Creator.Method.cs:5093-5105 -> HtmlManager.Escape
+;                        (GameView/HtmlManager.cs:640-662, table at :198-202)
+;   HTML_TOPLAINTEXT     Creator.Method.cs:5080-5091 -> Html2PlainText (:634-638),
+;                        Regex.Replace(str, "\<[^<]*\>", "") then Unescape
+;   HTML_GETPRINTEDSTR   Creator.Method.cs:5024-5060 -> GetDisplayLines
+;                        (EmueraConsole.Print.cs:752-771) + DisplayLine2Html(_, true)
+;   HTML_POPPRINTINGSTR  Creator.Method.cs:5062-5078 -> PopDisplayingLines
+;                        (EmueraConsole.Print.cs:773-780) + DisplayLine2Html(_, false)
+;   CHARATU              Creator.Method.cs:4804-4820
+;
+; Note every PRINTVL below commits a line of its own, so the line index
+; HTML_GETPRINTEDSTR counts back over includes this file's own output.
+
+; --- HTML_ESCAPE: the five characters at HtmlManager.cs:198-202, nothing else.
+PRINTVL HTML_ESCAPE("a&b")
+PRINTVL HTML_ESCAPE("<>'&")
+; UNICODE(34) is a double quote, which is awkward to write inside an ERB string.
+PRINTVL HTML_ESCAPE(UNICODE(34))
+; Non-ASCII is untouched: this is not HttpUtility.HtmlEncode (:641-642).
+PRINTVL HTML_ESCAPE("あ&い")
+; A string with no metacharacter comes back unchanged.
+PRINTVL HTML_ESCAPE("plain")
+
+; --- HTML_TOPLAINTEXT: strip tags, then unescape.
+PRINTVL HTML_TOPLAINTEXT("<b>bold</b>")
+PRINTVL HTML_TOPLAINTEXT("<font color='red'>r</font>&amp;s")
+; `[^<]*` is greedy and .NET backtracks to the LAST `>` in the span, so all of
+; `<a>b>` is one match.
+PRINTVL HTML_TOPLAINTEXT("x<a>b>y")
+; `[^<]*` cannot cross a `<`, so the first `<` here is literal text and only
+; `<b>` is a tag.
+PRINTVL HTML_TOPLAINTEXT("<a<b>c")
+; Unescaping runs on the stripped text, numeric references included.
+PRINTVL HTML_TOPLAINTEXT("<i>&#65;&#x42;&lt;</i>")
+
+; --- HTML_GETPRINTEDSTR: 0 is the last committed line.
+PRINTL alpha
+PRINTVL HTML_GETPRINTEDSTR()
+; 1 is one logical line further back.
+PRINTL beta
+PRINTL gamma
+PRINTVL HTML_GETPRINTEDSTR(1)
+; Past the top of the log is Emuera's null, i.e. "" (Print.cs:754, :767-768).
+PRINTVL HTML_GETPRINTEDSTR(9999)
+; A SETCOLOR colour becomes <font color>, because StringStyle.ColorChanged is
+; `color != Config.ForeColor` (EmueraConsole.Print.cs:83); the default colour
+; produces no tag at all (HtmlManager.cs:782-783).
+SETCOLOR 0xFF0000
+PRINTL red
+RESETCOLOR
+PRINTVL HTML_GETPRINTEDSTR()
+; A button becomes <button value='n'> around its text (:325-330).
+PRINTBUTTON "hit", 7
+PRINTL
+PRINTVL HTML_GETPRINTEDSTR()
+; ALIGNMENT reaches the <p align> wrapper (:296-308).
+ALIGNMENT CENTER
+PRINTL mid
+ALIGNMENT LEFT
+PRINTVL HTML_GETPRINTEDSTR()
+
+; --- HTML_POPPRINTINGSTR: the line still being built, with no <p>/<nobr>.
+; The pop empties the buffer, so `pending` appears once, not twice: if it had
+; been left in place this line would read `pendingpending|popped`.
+PRINT pending
+PRINTVL HTML_POPPRINTINGSTR() + "|popped"
+; The buffer is empty now, so this is Emuera's null -> "".
+PRINTVL HTML_POPPRINTINGSTR() + "|empty"
+; Style tags appear without the <p>/<nobr> wrapper.
+SETCOLOR 0x00FF00
+PRINT g
+RESETCOLOR
+PRINTVL HTML_POPPRINTINGSTR()
+
+; --- CHARATU: one character, "" out of range (Creator.Method.cs:4816-4817).
+PRINTVL CHARATU("abc", 0)
+PRINTVL CHARATU("abc", 2)
+PRINTVL CHARATU("abc", 3) + "|"
+PRINTVL CHARATU("abc", -1) + "|"
+PRINTVL CHARATU("あいう", 1)

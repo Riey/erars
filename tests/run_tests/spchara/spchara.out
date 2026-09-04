@@ -1,0 +1,6 @@
+csv 0 1
+csvname [] [이름]
+csvbase 0 2000
+sp 1 3 -1 [이름]
+VM error occurred: 존재하지 않는 캐릭터 번호입니다(3)
+At function SYSTEM_TITLE tests/run_tests/spchara/spchara.erb@14

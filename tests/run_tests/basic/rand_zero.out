@@ -1,0 +1,3 @@
+start
+VM error occurred: RAND: 인수에 0 이하의 값(0)이 지정됐습니다
+At function SYSTEM_TITLE tests/run_tests/basic/rand_zero.erb@8

@@ -1,0 +1,142 @@
+@SYSTEM_TITLE
+
+PRINT before-clear-no-newline
+CLEARTEXTBOX
+LINEISEMPTY
+PRINTFORML EMPTY={RESULT}
+
+BARL 3,10,10
+
+PRINT_SPACE 5
+PRINTL X
+
+; PRINT_RECT takes one or four numeric parameters; anything else renders
+; Emuera's literal error-shape text (ConsoleShapePart.cs:88-92).
+PRINT_RECT 3
+PRINTL
+PRINT_RECT 1, 0, 4, 2
+PRINTL
+PRINT_RECT 1, 2
+PRINTL
+
+PRINTCPERLINE
+PRINTFORML PRINTCPERLINE={RESULT}
+
+AWAIT
+AWAIT 0
+TOOLTIP_SETCOLOR 16711680, 65280
+TOOLTIP_SETDELAY 250
+TOOLTIP_SETDURATION 5000
+
+PRINTL dbg-before
+DEBUGPRINT hidden1
+DEBUGPRINTL hidden2
+DEBUGPRINTFORM hidden3
+DEBUGPRINTFORML hidden4
+DEBUGCLEAR
+PRINTL dbg-after
+
+; FORCEKANA is a 0..3 mode and only the PRINTK family is converted.
+FORCEKANA 1
+PRINTL あいう
+PRINTKL あいう
+FORCEKANA 2
+PRINTKL アイウ
+FORCEKANA 3
+PRINTKL ﾊﾝｶｸ
+FORCEKANA 0
+PRINTKL あいう
+
+ALIGNMENT CENTER
+CURRENTALIGN
+PRINTFORML ALIGN=%RESULTS%
+ALIGNMENT LEFT
+
+PRINTFORML SIGN {SIGN(5)} {SIGN(-5)} {SIGN(0)} {SIGN(-7)}
+SIGN 7
+PRINTFORML SIGNSTMT={RESULT}
+
+MONEYSTR 12345
+PRINTFORML MONEY1=%RESULTS%
+MONEYSTR 12345, "N0"
+PRINTFORML MONEY2=%RESULTS%
+MONEYSTR 12345, "F2"
+PRINTFORML MONEY3=%RESULTS%
+MONEYSTR 7, "D3"
+PRINTFORML MONEY4=%RESULTS%
+MONEYSTR 255, "X"
+PRINTFORML MONEY5=%RESULTS%
+MONEYSTR 12345, "0,000"
+PRINTFORML MONEY6=%RESULTS%
+MONEYSTR 5, "0.00"
+PRINTFORML MONEY7=%RESULTS%
+MONEYSTR 0, "0"
+PRINTFORML MONEY8=%RESULTS%
+MONEYSTR 1234567, "N"
+PRINTFORML MONEY9=%RESULTS%
+MONEYSTR 5, "F"
+PRINTFORML MONEY10=%RESULTS%
+
+; PRINT_IMG name[, srcb][, srcm], width, height, ypos — the trailing arguments
+; dispatch on type, not position (ArgumentBuilder.cs:245-305), and the numbers
+; land as height=param[1], width=param[0], ypos=param[2]
+; (Instraction.Child.cs:330-337). An unresolved name prints the reconstructed
+; tag (ConsoleImagePart.cs:25-73): height before width, and an absent or zero
+; number contributes no attribute (Utils.cs:140-147).
+PRINT_IMG "face"
+PRINTL
+PRINT_IMG "face", "focus", 150, 200, -50
+PRINTL
+PRINT_IMG "face", 0, 0
+PRINTL
+; A string in slot 3 is the srcm hit mask, and a negative extent is kept as
+; written: it is the *mirroring* flag GDI+ reads off the signed destination
+; rectangle (ConsoleImagePart.cs:105-116).
+PRINT_IMG "face", "focus", "mask", -150, 200
+PRINTL
+; An empty srcb is nulled (ArgumentBuilder.cs:328) and an empty srcm is
+; dropped by `IsNullOrEmpty` (ConsoleImagePart.cs:33), so neither appears.
+PRINT_IMG "face", "", "", 0, 24
+PRINTL ENDIMG
+
+; ---- PRINTDATA's argument RECEIVES the random index, it never selects one
+; (ArgumentBuilder.cs:1619-1630). A one-entry block pins the draw to 0.
+LOCAL = 42
+PRINTDATAL LOCAL
+    DATA only
+ENDDATA
+PRINTFORML idx={LOCAL}
+
+; Three identical entries keep the text deterministic while still proving
+; the draw happened and stayed in range.
+PRINTDATAL LOCAL
+    DATA same
+    DATA same
+    DATA same
+ENDDATA
+PRINTFORML inrange={LOCAL >= 0 && LOCAL <= 2}
+
+; A DATALIST entry prints one console line per part
+; (Instraction.Child.cs:222-233); the command's own newline lands once, last.
+PRINTDATAL
+    DATALIST
+        DATA p1
+        DATAFORM p{2}
+    ENDLIST
+ENDDATA
+PRINTL after
+
+; ---- STRDATA joins the chosen entry's parts with \n instead
+; (Process.ScriptProc.cs:762-771) and defaults to RESULTS.
+STRDATA
+    DATALIST
+        DATA s1
+        DATAFORM s{2}
+    ENDLIST
+ENDDATA
+PRINTFORML got=[%RESULTS%]
+
+STRDATA LOCALS
+    DATA plain
+ENDDATA
+PRINTFORML localS=%LOCALS%

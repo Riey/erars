@@ -1,0 +1,41 @@
+@SYSTEM_TITLE
+; The `CBG*` plane (`GameData/Function/Creator.Method.cs:6476-6707`,
+; `GameView/EmueraConsole.cs:131-235`). Only the return values are visible
+; from a script — nothing reads the plane back — so the plane's own contents
+; are proved in `erars-ui` (`cbg::tests`) and on the GPU
+; (`erars-renderer`, `headless::tests::the_plane_*`).
+
+; --- CBGSETG: a bitmap, wrapped in an anonymous sprite (`:6572-6581`) ---
+PRINTFORML GCREATE {GCREATE(0, 40, 20)}
+PRINTFORML CBGSETG {CBGSETG(0, 8, 0, 2)}
+; `!g.IsCreated` answers 0 before the coordinates are even read (`:6572-6573`).
+PRINTFORML CBGSETG none {CBGSETG(9, 8, 0, 2)}
+
+; --- CBGSETSPRITE: a named sprite (`:6615-6644`) ---
+PRINTFORML SPRITECREATE {SPRITECREATE("cbg", 0, 0, 0, 8, 6)}
+PRINTFORML CBGSETSPRITE {CBGSETSPRITE("cbg", 0, 0, -1)}
+; A name that resolves to nothing is a soft 0 (`:6631-6632`).
+PRINTFORML CBGSETSPRITE none {CBGSETSPRITE("nope", 0, 0, -1)}
+
+; --- CBGSETBMAPG: the button map (`:6585-6612`) ---
+PRINTFORML CBGSETBMAPG {CBGSETBMAPG(0)}
+; `CBG_SetButtonMap` answers false for a bitmap that is already the map
+; (`EmueraConsole.cs:213-214`), but the method returns 1 regardless
+; (`:6606-6608`).
+PRINTFORML CBGSETBMAPG again {CBGSETBMAPG(0)}
+PRINTFORML CBGSETBMAPG none {CBGSETBMAPG(9)}
+
+; --- CBGSETBUTTONSPRITE: 6 or 7 arguments, `OmitStart = 6` (`:6656`) ---
+; Both sprites may be missing and the entry is still registered
+; (`EmueraConsole.cs:220-235` has no `IsCreated` guard).
+PRINTFORML CBGSETBUTTONSPRITE {CBGSETBUTTONSPRITE(0xFFFFFF, "cbg", "nope", 4, 4, -2)}
+PRINTFORML CBGSETBUTTONSPRITE tip {CBGSETBUTTONSPRITE(0, "nope", "nope", 4, 4, -2, "설명")}
+; The button value has to fit a 24-bit colour, because that is all the button
+; map's pixel can carry (`:6687-6689`).
+PRINTFORML CBGSETBUTTONSPRITE range {CBGSETBUTTONSPRITE(0x1000000, "cbg", "cbg", 0, 0, -2)} {CBGSETBUTTONSPRITE(-1, "cbg", "cbg", 0, 0, -2)}
+
+; --- the four removers, which always answer 1 (`:6491`, `:6515`, `:6535`, `:6553`) ---
+PRINTFORML CBGREMOVERANGE {CBGREMOVERANGE(1, 3)} {CBGREMOVERANGE(3, 1)}
+PRINTFORML CBGCLEARBUTTON {CBGCLEARBUTTON()}
+PRINTFORML CBGREMOVEBMAP {CBGREMOVEBMAP()}
+PRINTFORML CBGCLEAR {CBGCLEAR()}

@@ -27,4 +27,6 @@ pub enum SharpCode {
     PRI,
     LATER,
     SINGLE,
+    // Appended below, never reordered: `game.era` decodes these by value.
+    ONLY,
 }

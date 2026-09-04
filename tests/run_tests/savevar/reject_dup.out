@@ -1,0 +1,3 @@
+start
+VM error occurred: 변수가 중복되었습니다(FLAG)
+At function SYSTEM_TITLE tests/run_tests/savevar/reject_dup.erb@3

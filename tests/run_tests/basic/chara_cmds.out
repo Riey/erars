@@ -1,0 +1,13 @@
+void 1 0 0 []
+tmpl 2 3 -1 [이름]
+csv 1 0
+delall 0 1 -1
+delmulti 2 11 13
+find 0 2
+findmiss -1 -1
+findrange 3 1
+chk 0 [chara save test]
+load 1 6 101 100
+load2 9 7 3 [이름]
+miss 0 6
+chkmiss 1 [----]

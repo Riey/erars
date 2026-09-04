@@ -57,7 +57,6 @@ pub enum InstructionCode {
     GETCHARA,
     FINDCHARA,
     FINDLASTCHARA,
-    FINDCHARADATA,
 
     GETNUM,
     GETEXPLV,
@@ -143,6 +142,10 @@ pub enum InstructionCode {
     TRYCALLLIST,
     TRYJUMPLIST,
     TRYGOTOLIST,
+    /// A `TRYCALLLIST`/`TRYJUMPLIST`/`TRYGOTOLIST` candidate line.
+    FUNC,
+    /// Ends a `TRYCALLLIST`/`TRYJUMPLIST`/`TRYGOTOLIST` block.
+    ENDFUNC,
     CALLF,
     CALLFORMF,
 
@@ -269,7 +272,16 @@ pub enum InstructionCode {
     REF,
 
     HTML_PRINT,
+    /// `.NET版` fork additions; see `BuiltinCommand::HtmlPrintIsland`.
+    HTML_PRINT_ISLAND,
+    HTML_PRINT_ISLAND_CLEAR,
     HTML_TAGSPLIT,
+    /// In-expression `HTML_*` string functions
+    /// (`GameData/Function/Creator.cs:145-148`).
+    HTML_ESCAPE,
+    HTML_TOPLAINTEXT,
+    HTML_GETPRINTEDSTR,
+    HTML_POPPRINTINGSTR,
 
     TOOLTIP_SETCOLOR,
     TOOLTIP_SETDELAY,
@@ -361,4 +373,26 @@ pub enum InstructionCode {
     CSVJUEL,
     CSVEQUIP,
     CSVCFLAG,
+
+    /// Function-local declaration statements added by the `.NET版` fork.
+    /// `VARI` declares an integer, `VARS` a string; unlike `#DIM` they may
+    /// appear anywhere in a function body and behave like `#DIM DYNAMIC`.
+    VARI,
+    VARS,
+
+    /// `.NET版` fork `MATCHALL`; see `BuiltinCommand::MatchAll`.
+    MATCHALL,
+
+    /// Wiki-documented in-expression functions with no line-head twin in
+    /// Emuera; the arms exist because erars accepts every method in the
+    /// statement position too (`GameData/Function/Creator.cs:19`, `:55-56`,
+    /// `:68`, `:82`, `:85`, `:137-138`).
+    GETLINESTR,
+    STRFORM,
+    COLOR_FROMRGB,
+    COLOR_FROMNAME,
+    PRINTCLENGTH,
+    CBRT,
+    EXPONENT,
+    GETSPCHARA,
 }

@@ -1,0 +1,22 @@
+; `RELATION` and `NAME` index by *character name*: Emuera builds a reverse
+; dictionary from every chara template's Name, Callname and Nickname to that
+; template's `No` (`GameData/ConstantData.cs:690-700`) and hands it to
+; `VariableCode.RELATION` with `allowIndex 1` and `VariableCode.NAME` with
+; `allowIndex -1`, both reporting `chara*.csv` as the error position
+; (`:1061-1070`). First definition wins.
+;
+; The template here is `CSV/CHARA3.CSV` — `番号,3` / `名前,이름` — so the name
+; `이름` must resolve to 3 wherever a RELATION target index is expected.
+@SYSTEM_TITLE
+ADDCHARA 3
+
+; written through the name, read back through the number
+RELATION:0:이름 = 7
+PRINTFORML byname={RELATION:0:3}
+
+; and the other way round
+RELATION:0:3 = 11
+PRINTFORML bynumber={RELATION:0:이름}
+
+; the name is an ordinary index expression, so it composes
+PRINTFORML sum={RELATION:0:이름 + 0}

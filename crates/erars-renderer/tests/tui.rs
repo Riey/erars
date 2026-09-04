@@ -68,7 +68,11 @@ impl SystemFunctions for Scripted {
         }
     }
 
-    fn redraw(&mut self, vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
+    fn redraw(
+        &mut self,
+        vconsole: &mut VirtualConsole,
+        _painted: erars_vm::graphics::Painted<'_>,
+    ) -> anyhow::Result<()> {
         self.latest = ConsoleFrame::from_vconsole(vconsole);
         Ok(())
     }
@@ -98,7 +102,7 @@ fn run_game(config_name: &str) -> ConsoleFrame {
         answers: vec![Value::Int(0)],
     });
     let (vm, mut ctx, mut tx) =
-        erars_loader::run_script(GAME, system, read_config(config_name), true, false)
+        erars_loader::run_script(GAME, system, read_config(config_name), true, false, false)
             .expect("compile tests/games/tui");
     let ok = vm.start(&mut tx, &mut ctx);
     assert!(ok, "VM error:\n{}", console_text(&tx));

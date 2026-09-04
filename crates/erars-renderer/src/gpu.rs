@@ -131,23 +131,66 @@ pub fn nearest_sampler(device: &wgpu::Device) -> wgpu::Sampler {
     })
 }
 
+/// The inline-image sampler. Emuera's console `Graphics` never sets
+/// `InterpolationMode`, so GDI+ scales `ConsoleImagePart`'s destination box
+/// with its default bilinear filter; an image is almost never drawn at its
+/// source size (`height` alone fixes the box and the width follows the aspect
+/// ratio), so `Nearest` would visibly alias.
+pub fn linear_sampler(device: &wgpu::Device) -> wgpu::Sampler {
+    device.create_sampler(&wgpu::SamplerDescriptor {
+        label: Some("image-sampler"),
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        ..Default::default()
+    })
+}
+
+/// Which filter a draw group's texture is sampled with. Names the *intent*,
+/// so the caller composing the frame needs no sampler handles.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Filter {
+    /// Glyph atlas pages: strikes land on integer pixels.
+    Nearest,
+    /// Image textures: almost always scaled, as GDI+ scales them.
+    Linear,
+}
+
+/// One group of `(texture, instances)` pages sharing a filter, drawn after
+/// every group before it.
+///
+/// A frame is a list of these in paint order, which is how the renderer
+/// expresses Emuera's merged depth loop
+/// (`GameView/EmueraConsole.cs:1557-1599`): the console-background plane
+/// behind, the text, then the plane's negative depths in front.
+pub struct DrawGroup<'a> {
+    pub filter: Filter,
+    pub pages: &'a [(&'a wgpu::TextureView, &'a [Instance])],
+}
+
 /// GPU resources for one frame's per-page instance lists: a bind group and a
 /// vertex buffer per non-empty page. Built *before* the render pass because a
 /// wgpu 0.19 `RenderPass<'a>` borrows every resource it uses for `'a`.
 /// Shared by [`GpuContext::render`] and the headless renderer.
+#[derive(Default)]
 pub struct FrameDraw {
     pages: Vec<(wgpu::BindGroup, wgpu::Buffer, u32)>,
 }
 
 impl FrameDraw {
-    pub fn new(
+    /// Append a group's `(texture, instances)` pages, drawn after everything
+    /// already pushed and with `sampler` of their own — how the image
+    /// textures join the glyph pages with `Linear` filtering instead of
+    /// `Nearest`.
+    pub fn push_pages(
+        &mut self,
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         globals: &wgpu::Buffer,
         sampler: &wgpu::Sampler,
         pages: &[(&wgpu::TextureView, &[Instance])],
-    ) -> Self {
-        let mut out = Vec::with_capacity(pages.len());
+    ) {
+        self.pages.reserve(pages.len());
         for (view, instances) in pages {
             if instances.is_empty() {
                 continue;
@@ -175,9 +218,9 @@ impl FrameDraw {
                 contents: bytemuck::cast_slice(instances),
                 usage: wgpu::BufferUsages::VERTEX,
             });
-            out.push((bind_group, buffer, instances.len() as u32));
+            self.pages
+                .push((bind_group, buffer, instances.len() as u32));
         }
-        Self { pages: out }
     }
 
     /// One `draw(0..6, 0..n)` per page, in page order.
@@ -213,7 +256,10 @@ pub struct GpuContext {
     config: wgpu::SurfaceConfiguration,
     pipeline: wgpu::RenderPipeline,
     globals_buf: wgpu::Buffer,
+    /// `Nearest`, for the glyph atlas.
     sampler: wgpu::Sampler,
+    /// `Linear`, for the inline-image textures.
+    image_sampler: wgpu::Sampler,
     bind_group_layout: wgpu::BindGroupLayout,
 }
 
@@ -279,6 +325,7 @@ impl GpuContext {
         });
 
         let sampler = nearest_sampler(&device);
+        let image_sampler = linear_sampler(&device);
 
         Self {
             device,
@@ -288,6 +335,7 @@ impl GpuContext {
             pipeline,
             globals_buf,
             sampler,
+            image_sampler,
             bind_group_layout,
         }
     }
@@ -310,15 +358,19 @@ impl GpuContext {
         (self.config.width, self.config.height)
     }
 
-    /// Render one frame: clear to `bg`, then draw every `(atlas page view,
-    /// instances)` pair with its own bind group — one draw per page.
+    fn sampler_for(&self, filter: Filter) -> &wgpu::Sampler {
+        match filter {
+            Filter::Nearest => &self.sampler,
+            Filter::Linear => &self.image_sampler,
+        }
+    }
+
+    /// Render one frame: clear to `bg`, then draw `groups` in order, each
+    /// page with its own bind group and each group with the sampler its
+    /// filter names — one draw per page.
     /// Returns [`RenderOutcome::NeedsRedraw`] when the surface had to be
     /// reconfigured instead of drawn.
-    pub fn render(
-        &mut self,
-        pages: &[(&wgpu::TextureView, &[Instance])],
-        bg: [u8; 3],
-    ) -> RenderOutcome {
+    pub fn render(&mut self, groups: &[DrawGroup<'_>], bg: [u8; 3]) -> RenderOutcome {
         let frame = match self.surface.get_current_texture() {
             Ok(f) => f,
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
@@ -335,13 +387,16 @@ impl GpuContext {
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let draw = FrameDraw::new(
-            &self.device,
-            &self.bind_group_layout,
-            &self.globals_buf,
-            &self.sampler,
-            pages,
-        );
+        let mut draw = FrameDraw::default();
+        for group in groups {
+            draw.push_pages(
+                &self.device,
+                &self.bind_group_layout,
+                &self.globals_buf,
+                self.sampler_for(group.filter),
+                group.pages,
+            );
+        }
 
         let mut encoder = self
             .device

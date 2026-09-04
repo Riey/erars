@@ -1,0 +1,13 @@
+@SYSTEM_TITLE
+[IF_DEBUG]
+PRINTL debug only
+[ELSE]
+PRINTL release
+[ENDIF]
+[IF_NDEBUG]
+PRINTL ndebug
+[ENDIF]
+[IF_DEBUG]
+@DEBUG_ONLY_FUNCTION
+PRINTL never defined
+[ENDIF]

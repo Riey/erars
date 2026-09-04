@@ -1,10 +1,11 @@
-use erars_compiler::PP_REGEX;
 use erars_lexer::{Bump, Preprocessor};
 
 #[test]
 fn lex_test() {
-    let default = Default::default();
-    let mut pp = Preprocessor::new(&PP_REGEX, &default, include_str!("../ERB/SYSTEM.ERB"));
+    let rename = Default::default();
+    let macros = Default::default();
+    let mut pp =
+        Preprocessor::new_erb(&rename, &macros, false, include_str!("../ERB/SYSTEM.ERB"));
 
     let mut b = Bump::new();
 

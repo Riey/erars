@@ -1,0 +1,47 @@
+@SYSTEM_TITLE
+
+; ---- Emuera guards STOPCALLTRAIN on `isCTrain`, which only CALLTRAIN sets
+STOPCALLTRAIN
+PRINTFORML no train
+
+; ---- the command running when it fires still finishes; the queued rest
+; ---- are dropped, as `ClearCommands` empties `coms`
+SELECTCOM:0 = 5
+SELECTCOM:1 = 6
+CALLTRAIN 2
+PRINTFORML after calltrain
+
+; ---- a nested CALLTRAIN carries its own stop flag, so stopping the inner
+; ---- train leaves the outer queue running
+SELECTCOM:0 = 4
+SELECTCOM:1 = 7
+CALLTRAIN 2
+PRINTFORML after nested calltrain
+
+@COM6
+PRINTFORML com6
+STOPCALLTRAIN
+PRINTFORML com6 continues
+
+@COM5
+PRINTFORML com5
+
+@COM7
+PRINTFORML com7 begin
+SELECTCOM:0 = 8
+SELECTCOM:1 = 9
+CALLTRAIN 2
+PRINTFORML com7 end
+
+@COM9
+PRINTFORML com9
+STOPCALLTRAIN
+
+@COM8
+PRINTFORML com8
+
+@COM4
+PRINTFORML com4
+
+@CALLTRAINEND
+PRINTFORML calltrainend

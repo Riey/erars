@@ -1,0 +1,30 @@
+@SYSTEM_TITLE
+#DIMS TOK, 8
+#DIMS SMALL, 2
+#DIM N
+
+; ---- text runs and tags alternate -------------------------------------
+HTML_TAGSPLIT "abc<b>def</b>ghi", TOK, N
+PRINTFORML n={N} [%TOK:0%][%TOK:1%][%TOK:2%][%TOK:3%][%TOK:4%]
+
+; ---- a leading tag emits no empty text run, and the tail stays stale --
+HTML_TAGSPLIT "<p>x</p>", TOK, N
+PRINTFORML lead={N} [%TOK:0%][%TOK:1%][%TOK:2%][%TOK:3%][%TOK:4%]
+
+; ---- surplus tokens are dropped, but the count reports them all -------
+SMALL:0 '= "keep0"
+SMALL:1 '= "keep1"
+HTML_TAGSPLIT "a<i>b</i>c", SMALL, N
+PRINTFORML over={N} [%SMALL:0%][%SMALL:1%]
+
+; ---- an unclosed tag fails the whole split: only -1 is written --------
+HTML_TAGSPLIT "a<b", SMALL, N
+PRINTFORML bad={N} [%SMALL:0%][%SMALL:1%]
+
+; ---- an empty string has no tokens -----------------------------------
+HTML_TAGSPLIT "", SMALL, N
+PRINTFORML empty={N} [%SMALL:0%][%SMALL:1%]
+
+; ---- both destinations default to RESULTS and RESULT:0 ---------------
+HTML_TAGSPLIT "<i>z"
+PRINTFORML def={RESULT} [%RESULTS:0%][%RESULTS:1%]

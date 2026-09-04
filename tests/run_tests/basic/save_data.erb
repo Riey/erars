@@ -1,0 +1,46 @@
+@SYSTEM_TITLE
+
+; ---- SAVETEXT / LOADTEXT round trip through sav/txt03.txt ---------------
+PRINTFORML savetext {SAVETEXT("group3 text", 3)}
+PRINTFORML loadtext [%LOADTEXT(3)%]
+
+; ---- a file number outside 0..=INT_MAX is refused, never an error -------
+PRINTFORML savetext_neg {SAVETEXT("nope", -1)}
+PRINTFORML loadtext_neg [%LOADTEXT(-1)%]
+
+; ---- and a slot that was never written reads back empty ----------------
+PRINTFORML loadtext_miss [%LOADTEXT(41)%]
+
+; ---- SAVEVAR stores whole arrays, CHKVARDATA reports the description ---
+FLAG:1 = 111
+GLOBAL:2 = 222
+GLOBALS:3 '= "gs"
+SAVEVAR "grp3", "var save test", FLAG, GLOBAL, GLOBALS
+PRINTFORML chkvar {CHKVARDATA("grp3")} [%RESULTS%]
+
+; ---- LOADVAR puts every one of them back -------------------------------
+FLAG:1 = 0
+GLOBAL:2 = 0
+GLOBALS:3 '= ""
+LOADVAR "grp3"
+PRINTFORML loadvar {RESULT} {FLAG:1} {GLOBAL:2} [%GLOBALS:3%]
+
+; ---- a missing file is reported through RESULT, never raised -----------
+LOADVAR "grp3_absent"
+PRINTFORML loadvar_miss {RESULT} {FLAG:1}
+PRINTFORML chkvar_miss {CHKVARDATA("grp3_absent")} [%RESULTS%]
+
+; ---- RESETGLOBAL clears globals only, leaving plain savedata alone -----
+RESETGLOBAL
+PRINTFORML reset {GLOBAL:2} [%GLOBALS:3%] {FLAG:1}
+
+; ---- SAVENOS writes to RESULT, or to the variable it is given ----------
+SAVENOS
+PRINTFORML savenos_result {RESULT}
+SAVENOS FLAG:5
+PRINTFORML savenos_var {FLAG:5}
+
+; ---- GETTIMES is yyyy/MM/dd HH:mm:ss, as is GETTIME's RESULTS ----------
+PRINTFORML gettimes {STRLENS(GETTIMES())} [%SUBSTRING(GETTIMES(), 4, 1)%] [%SUBSTRING(GETTIMES(), 13, 1)%]
+GETTIME
+PRINTFORML gettime {STRLENS(RESULTS)} [%SUBSTRING(RESULTS, 4, 1)%]

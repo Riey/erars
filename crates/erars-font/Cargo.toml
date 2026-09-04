@@ -1,0 +1,23 @@
+[package]
+name = "erars-font"
+version = "0.5.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+
+# The GPU-free half of the text stack: font selection and fallback, cell-grid
+# shaping and glyph rasterisation. Two crates need it — `erars-renderer` to
+# fill its atlas, `erars-vm` to composite `GDRAWTEXT` into an ARGB bitmap — and
+# the VM must not depend on the renderer, so it cannot live in either.
+#
+# It therefore must NOT depend on `erars-vm` or `erars-renderer`.
+[dependencies]
+erars-compiler = { path = "../erars-compiler" }
+erars-ui = { path = "../erars-ui" }
+
+cosmic-text = "0.12.1"
+etagere = "0.2"
+rustybuzz = "0.14"
+swash = "0.1.18"
+smol_str = "0.2"
+bitflags = "2"
+log = "0.4.17"

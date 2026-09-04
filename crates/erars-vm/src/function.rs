@@ -73,13 +73,26 @@ impl FunctionBody {
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub struct EventCollection {
     pub single: bool,
+    /// A `#ONLY` body is registered, and it is `events[0]`. Emuera's group 0
+    /// (`GameProc/LabelDictionary.cs:99-100`, `:112`).
+    pub only: bool,
     pub empty_count: usize,
     pub events: Vec<FunctionBody>,
 }
 
 impl EventCollection {
+    /// The bodies this event actually runs, in order.
+    ///
+    /// `#ONLY` ends the event the moment its body returns
+    /// (`GameProc/Process.State.cs:399-400`: `called.IsOnly` → `FinishEvent()`),
+    /// so a collection with one only ever runs that one — every later body is
+    /// registered (and linted) but unreachable, which is exactly what Emuera's
+    /// `AlreadyDeclaredOnly` warns about.
     pub fn iter(&self) -> impl Iterator<Item = &'_ FunctionBody> {
-        self.events.iter()
+        self.events.iter().take(match self.only {
+            true => 1,
+            false => self.events.len(),
+        })
     }
 }
 
@@ -90,6 +103,13 @@ pub struct FunctionDic {
     pub interner: &'static Interner,
     pub normal: HashMap<StrKey, FunctionBody>,
     pub event: EnumMap<EventType, EventCollection>,
+    /// `イベント関数のCALLを許可する` — when on, every event function also gets
+    /// a normal-function entry so `CALL` can reach it
+    /// (`GameProc/LabelDictionary.cs:83-84`). A load-time decision, like
+    /// `--debug`: it is baked into the dictionary `--save` writes, so a
+    /// dictionary read back from `game.era` needs no flag.
+    #[derivative(Debug = "ignore", PartialEq = "ignore")]
+    pub compati_call_event: bool,
 }
 
 impl FunctionDic {
@@ -98,6 +118,7 @@ impl FunctionDic {
             interner: get_interner(),
             normal: HashMap::new(),
             event: EnumMap::default(),
+            compati_call_event: false,
         }
     }
 
@@ -122,7 +143,10 @@ impl FunctionDic {
                                 if let Expr::Int(i) = v {
                                     i as u32
                                 } else {
-                                    panic!("Variable index must be constant")
+                                    panic!(
+                                        "Variable index must be constant, @{} in {} has {v:?}",
+                                        func.header.name, func.header.file_path
+                                    )
                                 }
                             })
                             .collect(),
@@ -148,22 +172,30 @@ impl FunctionDic {
 
         for info in func.header.infos {
             match info {
+                // Already folded, positive and in range: the parser rejects
+                // everything else with Emuera's own diagnostic
+                // (`erars-compiler/src/parser.rs`, `#LOCALSIZE` arm of
+                // `push_info`), where a failure to fold here would have
+                // silently replaced the `!VariableSize.csv` default with
+                // nothing.
                 FunctionInfo::LocalSize(size) => {
-                    local_size = var_dic.header().const_eval_log_error(&size).try_into().ok();
+                    local_size = Some(size);
                 }
                 FunctionInfo::LocalSSize(size) => {
-                    locals_size = var_dic.header().const_eval_log_error(&size).try_into().ok();
+                    locals_size = Some(size);
                 }
                 FunctionInfo::EventFlag(f) => {
                     flags = f;
                 }
+                // `#FUNCTION` and `#FUNCTIONS` on one function is a parse-time
+                // diagnostic (`AlreadyDeclaredSharpFunction(s)`,
+                // `GameProc/LogicalLineParser.cs:161-165`) and the second
+                // directive is dropped there, so only one of these can be set.
                 FunctionInfo::Function => {
                     body.is_function = true;
-                    assert!(!body.is_functions);
                 }
                 FunctionInfo::FunctionS => {
                     body.is_functions = true;
-                    assert!(!body.is_function);
                 }
                 FunctionInfo::Dim(local) => {
                     var_dic.add_local_info(func.header.name, local.var, local.info);
@@ -225,6 +257,16 @@ impl FunctionDic {
         }
 
         if let Ok(ty) = self.interner.resolve(&func.header.name).parse::<EventType>() {
+            // With `イベント関数のCALLを許可する` on, Emuera also files the
+            // event function under its own name in the *non*-event dictionary,
+            // and only the first body defined gets that slot — `#PRI`,
+            // `#LATER` and `#SINGLE` are ignored for the `CALL` path
+            // (`GameProc/LabelDictionary.cs:82-84`, eramaker behaviour). ERBs
+            // are loaded in sorted filename order, so "first defined" is
+            // "first inserted": keep whichever entry is already there.
+            if self.compati_call_event {
+                self.normal.entry(func.header.name).or_insert_with(|| body.clone());
+            }
             self.insert_event(Event { ty, flags }, body);
         } else {
             self.insert_func(func.header.name, body);
@@ -237,9 +279,29 @@ impl FunctionDic {
 
     pub fn insert_event(&mut self, event: Event, body: FunctionBody) {
         let collection = &mut self.event[event.ty];
+        // `events[0]` belongs to `#ONLY` once one is registered; nothing may
+        // displace it, because it is the only body that runs.
+        let base = collection.only as usize;
         match event.flags {
+            EventFlags::Only => {
+                if collection.only {
+                    // 「このイベント関数"@{0}"にはすでに#ONLYが宣言されています
+                    // （この関数は実行されません）」
+                    // (`_Library/EvilMask/Lang.cs:856`). Emuera warns at
+                    // level 1 and registers the body anyway.
+                    log::warn!(
+                        "이벤트 함수 \"@{}\"에는 이미 #ONLY 선언이 있습니다(이 함수는 실행되지 않습니다): {}",
+                        <&str>::from(event.ty),
+                        self.interner.resolve(&body.file_path),
+                    );
+                    collection.events.push(body);
+                } else {
+                    collection.events.insert(0, body);
+                    collection.only = true;
+                }
+            }
             EventFlags::Single => {
-                collection.events.clear();
+                collection.events.truncate(base);
                 collection.events.push(body);
                 collection.single = true;
             }
@@ -250,12 +312,12 @@ impl FunctionDic {
             }
             EventFlags::Pre => {
                 if !collection.single {
-                    collection.events.insert(collection.empty_count, body);
+                    collection.events.insert(base + collection.empty_count, body);
                 }
             }
             EventFlags::None => {
                 if !collection.single {
-                    collection.events.insert(0, body);
+                    collection.events.insert(base, body);
                     collection.empty_count += 1;
                 }
             }

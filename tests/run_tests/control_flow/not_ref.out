@@ -1,0 +1,3 @@
+start
+VM error occurred: PLAIN는 참조형 변수여야합니다
+At function SYSTEM_TITLE tests/run_tests/control_flow/not_ref.erb@4

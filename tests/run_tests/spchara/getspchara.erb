@@ -1,0 +1,16 @@
+@SYSTEM_TITLE
+; GETSPCHARA finds a *registered* character by CSV number, but only an SP one:
+; `GetSpChara` walks the character list and takes the first whose `NO` matches
+; and whose `CFLAG:0` is non-zero (`Creator.Method.cs:2010-2044`). GETCHARA
+; ignores that flag, so both find template 3 here — CSV/CHARA3.CSV sets
+; `フラグ,0,-1`.
+ADDSPCHARA 3
+PRINTFORML sp {GETSPCHARA(3)} {GETCHARA(3)}
+
+; A number no registered character carries is -1, not an error.
+PRINTFORML missing {GETSPCHARA(99)}
+
+; The flag is read live, not remembered from the CSV: clearing CFLAG:0 makes
+; the same character invisible to GETSPCHARA while GETCHARA still finds it.
+CFLAG:0:0 = 0
+PRINTFORML cleared {GETSPCHARA(3)} {GETCHARA(3)}

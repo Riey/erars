@@ -1,0 +1,6 @@
+n=5 [abc][<b>][def][</b>][ghi]
+lead=3 [<p>][x][</p>][</b>][ghi]
+over=5 [a][<i>]
+bad=-1 [a][<i>]
+empty=0 [a][<i>]
+def=2 [<i>][z]

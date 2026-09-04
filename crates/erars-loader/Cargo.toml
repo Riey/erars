@@ -26,6 +26,11 @@ parking_lot = "0.12.1"
 rmp-serde = "1.1.1"
 memmap2 = "0.5.7"
 
+[dev-dependencies]
+libc = "0.2"
+mimalloc = { version = "0.1.31", default-features = false }
+pprof = "0.15"
+
 [features]
 multithread = [
     "rayon",
@@ -33,3 +38,11 @@ multithread = [
     "erars-vm/multithread",
     "erars-lint/multithread",
 ]
+
+# `phases` is the load-pipeline measurement harness (per-phase timings, the
+# function and interner counts). It uses `rayon` directly, so it only builds
+# with `multithread`; a workspace-wide `cargo build` unifies the feature in
+# from the front-end crates, but `-p erars-loader` alone would not.
+[[example]]
+name = "phases"
+required-features = ["multithread"]

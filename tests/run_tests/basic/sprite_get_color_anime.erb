@@ -1,0 +1,14 @@
+@SYSTEM_TITLE
+; `SpriteAnime.SpriteGetColor` is nothing but `throw new
+; NotSupportedException()` (`Content/CroppedImage.cs:273-286`), so an animated
+; sprite has no readable pixel.
+;
+; `SpriteAnime.IsCreated` is hard-coded `true` (`:257-260`) and the box test
+; runs before the read (`Creator.Method.cs:5827-5838`), so a point *outside*
+; the animation's DestBaseSize still takes the ordinary -1 exit and only a
+; point inside it reaches the refusal.
+GCREATE 0, 4, 2
+SPRITEANIMECREATE "ANI", 2, 2
+SPRITEANIMEADDFRAME "ANI", 0, 0, 0, 2, 2, 0, 0, 50
+PRINTFORML outside {SPRITEGETCOLOR("ANI", 2, 0)} {SPRITEGETCOLOR("ANI", 0, -1)}
+PRINTFORML inside {SPRITEGETCOLOR("ANI", 1, 1)}

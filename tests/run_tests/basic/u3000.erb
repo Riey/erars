@@ -1,0 +1,21 @@
+@SYSTEM_TITLE
+; `全角スペースをホワイトスペースに含める` is on in every corpus config, so
+; U+3000 is whitespace everywhere U+0020 is: Emuera's `SkipWhiteSpace`
+; (`Sub/LexicalAnalyzer.cs:749-752`) and `ReadSingleIdentifier`
+; (`:429-432`) both treat it that way. `#DIM DYNAMIC　L_ACTOR` is
+; `FORMATION.ERB:419` and `IF ASSI　!= L_MOTHER` is `EVENT_P.ERB:135`.
+#DIM DYNAMIC　L_ACTOR
+#DIMS DYNAMIC　L_NAME
+　PRINTL head
+PRINTFORML　{1 + 1}
+L_ACTOR　=　3
+SIF L_ACTOR　!= 4
+　PRINTL ne
+L_NAME = mid
+CALL SUB,　7,　8
+　
+PRINTFORML %L_NAME%
+PRINTL tail
+
+@SUB, ARG, ARG:1
+PRINTFORML {ARG}{ARG:1}

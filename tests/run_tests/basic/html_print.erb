@@ -1,0 +1,73 @@
+@SYSTEM_TITLE
+
+; Emuera walks the html string once and emits the text between tags with the
+; running style (HtmlManager.cs:452-632). The flag-0 form flushes the print
+; buffer and adds *complete display lines*, so it always ends the line
+; (EmueraConsole.Print.cs:428-439).
+;
+; Only the rendering paths live here: an HTML_PRINT error is a CodeEE that
+; stops the whole VM, so the seventeen rejection cases are unit-tested in
+; crates/erars-vm/src/html.rs instead.
+HTML_PRINT "plain"
+
+; Style tags nest and are popped by their close tags; the text itself is
+; unchanged by the styling.
+HTML_PRINT "<b>bold</b><i>it</i><u>un</u><s>st</s>"
+
+; A <font> frame layers over the console style, and an inner tag inherits
+; every field it leaves unset (HtmlManager.cs:1421-1431).
+HTML_PRINT "<font color='red'>r<font face='Serif'>rs</font>r</font>"
+
+; <br> breaks the line mid-string.
+HTML_PRINT "a<br>b"
+
+; Entities: the six named references plus decimal and hex numeric ones
+; (HtmlManager.cs:695-728).
+HTML_PRINT "&lt;&amp;&gt;&quot;&apos;|&nbsp;|&#65;&#x42;"
+
+; <!-- --> is skipped outright (HtmlManager.cs:502-509).
+HTML_PRINT "x<!-- dropped -->y"
+
+; <p align> must be the first thing on the line and aligns the lines this one
+; string produced (HtmlManager.cs:623-629). It is not the console's own
+; alignment, so CURRENTALIGN is back to LEFT afterwards.
+HTML_PRINT "<p align='center'>mid</p>"
+CURRENTALIGN
+PRINTFORML align=%RESULTS%
+
+; An <img> whose src names no sprite prints Emuera's reconstructed tag as
+; ordinary text (ConsoleImagePart.cs:25-73), height before width. A percentage
+; is written resolved against the font size (MixedNum.BuilderString,
+; _Library/EvilMask/Utils.cs:44-48), so 32% of an 18px font is 5.
+HTML_PRINT "<img src='face' width='32' height='32'>"
+
+; A <div> is a positioned box: it takes no room on the line it was printed on
+; and a text front-end shows it as its own reconstructed tag around its
+; content, which is ConsoleDisplayLine.BuildString (ConsoleDivPart.cs:189-200).
+; DELIBERATE: accepted without width/height and nested, where Emuera raises
+; NotSetAttribute (HtmlManager.cs:1166-1169) and NestedTag (:1070-1071).
+; eramegaten_p_kr needs both; see the html.rs module header.
+HTML_PRINT "<div xpos='0' ypos='-40'>boxed</div>"
+HTML_PRINT "<div><div>nested</div></div>"
+
+; A <button value> run becomes one clickable button; <nonbutton> and a
+; <button> with no value stay plain text (HtmlManager.cs:1327).
+HTML_PRINT "<button value='7'>go</button>|<nonbutton>no</nonbutton>|<button>bare</button>"
+
+; <clearbutton> strips clickability from the buttons inside it
+; (HtmlManager.cs:1317-1334).
+HTML_PRINT "<clearbutton><button value='7'>dead</button></clearbutton>"
+
+; <nobr> has to be at the line head and is a no-op for a console that never
+; word-wraps.
+HTML_PRINT "<nobr>nowrap</nobr>"
+
+; The second argument keeps the line open instead of terminating it.
+HTML_PRINT "kept", 1
+PRINTL -open
+
+; An empty string returns immediately without ending the line
+; (EmueraConsole.Print.cs:423-424).
+PRINT before-
+HTML_PRINT ""
+PRINTL after

@@ -1634,7 +1634,7 @@ mod body {
                 ),
                 Some(
                     Int(
-                        1,
+                        0,
                     ),
                 ),
             ],
@@ -2059,21 +2059,6 @@ BinopExpr(
     Int(
         3,
     ),
-)
-"
-        );
-    }
-
-    #[test]
-    fn test_rename() {
-        k9::snapshot!(
-            do_test(
-                r#"tests/parse_tests/exprs/rename.erb"#,
-                ParserContext::parse_expr_str
-            ),
-            "
-Int(
-    123,
 )
 "
         );
@@ -2567,7 +2552,7 @@ Function {
 Function {
     header: FunctionHeader {
         file_path: tests/parse_tests/functions/function.erb,
-        name: FOO,
+        name: EVENTFIRST,
         args: [],
         infos: [
             EventFlag(

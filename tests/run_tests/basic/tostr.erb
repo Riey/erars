@@ -1,0 +1,45 @@
+@SYSTEM_TITLE
+; `TOSTR`'s optional second argument is `Int64.ToString(format)`
+; (`GameData/Function/Creator.Method.cs:4430-4447`) — the same .NET numeric
+; formatter `MONEYSTR` passes its own format to (`:2785`), so erars has one
+; implementation for both (`crates/erars-vm/src/dotnet_number.rs`).
+; Without a format the value prints as itself.
+PRINTFORML {TOSTR(12)}
+; A standard specifier is one letter plus an optional precision. `X`/`x` pick
+; the case of the hex digits; the precision is a minimum digit count.
+PRINTFORML {TOSTR(255,"x")}
+PRINTFORML {TOSTR(255,"X6")}
+; Custom patterns: `0` is a mandatory digit, `#` an optional one, so the
+; leftmost `0` fixes the minimum number of integer digits.
+PRINTFORML {TOSTR(12,"000")}
+PRINTFORML {TOSTR(42,"0#")}
+; Digits never overflow the pattern: extra ones are emitted at the leftmost
+; placeholder.
+PRINTFORML {TOSTR(1234,"00")}
+; `,` between digit placeholders groups by three.
+PRINTFORML {TOSTR(1234567,"#,##0")}
+; A `'…'` run is a literal, so this `.` is *not* the decimal point: all three
+; placeholders hold integer digits and the literal sits between the first and
+; the second. This is the form the corpus uses to print a scaled integer.
+PRINTFORML {TOSTR(1234,"0'.'00")}
+PRINTFORML {TOSTR(12,"0'.'00")}
+; `%` scales by 100 and prints itself.
+PRINTFORML {TOSTR(12,"0%")}
+; Each comma immediately before the (implied) decimal point divides by 1000,
+; and the rounding is half away from zero.
+PRINTFORML {TOSTR(1234567,"0,,")}
+PRINTFORML {TOSTR(1500000,"0,,")}
+; Up to three `;` sections: positive, negative, zero. A negative value
+; formatted by its own section gets no automatic sign.
+PRINTFORML {TOSTR(7,"0;(0);zero")}
+PRINTFORML {TOSTR(-5,"0;(0);zero")}
+PRINTFORML {TOSTR(0,"0;(0);zero")}
+; With no zero section, zero falls back to the first one.
+PRINTFORML {TOSTR(0,"0;(0)")}
+; One section only: the sign is supplied by the formatter.
+PRINTFORML {TOSTR(-5,"000")}
+; A letter that is not one of the integral standard specifiers `C D E F G N P X`
+; raises `FormatException`, which Emuera reports as `Lang.Error.InvalidFormat`
+; naming the method and argument 2 (`Creator.Method.cs:4441-4445`,
+; `_Library/EvilMask/Lang.cs:1135`) — the same message `MONEYSTR` gets.
+PRINTFORML {TOSTR(1,"Q")}

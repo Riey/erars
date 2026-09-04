@@ -1,0 +1,3 @@
+start
+VM error occurred: SAVEVAR의 매개변수가 부족합니다
+At function SYSTEM_TITLE tests/run_tests/savevar/reject_arity.erb@3

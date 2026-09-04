@@ -1,0 +1,55 @@
+@SYSTEM_TITLE
+TARGET = -1
+
+; ---- ADDVOIDCHARA applies no template at all ----------------------------
+ADDVOIDCHARA
+PRINTFORML void {CHARANUM} {NO:0} {CFLAG:0:0} [%NAME:0%]
+
+; ---- ADDCHARA does, so the two differ in every field -------------------
+ADDCHARA 3
+PRINTFORML tmpl {CHARANUM} {NO:1} {CFLAG:1:0} [%NAME:1%]
+
+; ---- with SP characters off, EXISTCSV sees one flat template list -------
+PRINTFORML csv {EXISTCSV(3)} {EXISTCSV(99)}
+
+; ---- DELALLCHARA empties the list and leaves the pointers alone --------
+MASTER = 1
+DELALLCHARA
+PRINTFORML delall {CHARANUM} {MASTER} {TARGET}
+
+; ---- ADDCHARA and DELCHARA both take a list ----------------------------
+MASTER = -1
+ADDCHARA 3, 3, 3, 3
+CFLAG:0:10 = 10
+CFLAG:1:10 = 11
+CFLAG:2:10 = 12
+CFLAG:3:10 = 13
+DELCHARA 2, 0
+PRINTFORML delmulti {CHARANUM} {CFLAG:0:10} {CFLAG:1:10}
+
+; ---- FINDCHARA scans forwards, FINDLASTCHARA backwards -----------------
+DELALLCHARA
+ADDCHARA 3, 3, 3, 3
+CFLAG:0:10 = 7
+CFLAG:1:10 = 9
+CFLAG:2:10 = 7
+CFLAG:3:10 = 9
+PRINTFORML find {FINDCHARA(CFLAG:10, 7)} {FINDLASTCHARA(CFLAG:10, 7)}
+PRINTFORML findmiss {FINDCHARA(CFLAG:10, 5)} {FINDLASTCHARA(CFLAG:10, 5)}
+PRINTFORML findrange {FINDCHARA(CFLAG:10, 9, 2)} {FINDLASTCHARA(CFLAG:10, 9, 0, 3)}
+
+; ---- SAVECHARA writes the listed charas in the order given -------------
+CFLAG:0:11 = 100
+CFLAG:1:11 = 101
+SAVECHARA "grp2", "chara save test", 1, 0
+PRINTFORML chk {CHKCHARADATA("grp2")} [%RESULTS%]
+
+; ---- LOADCHARA appends them, so the save order shows up in the slots ---
+LOADCHARA "grp2"
+PRINTFORML load {RESULT} {CHARANUM} {CFLAG:4:11} {CFLAG:5:11}
+PRINTFORML load2 {CFLAG:4:10} {CFLAG:5:10} {NO:4} [%NAME:4%]
+
+; ---- a missing file is reported through RESULT, never as an error ------
+LOADCHARA "grp2_absent"
+PRINTFORML miss {RESULT} {CHARANUM}
+PRINTFORML chkmiss {CHKCHARADATA("grp2_absent")} [%RESULTS%]

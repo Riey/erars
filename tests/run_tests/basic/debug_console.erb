@@ -1,0 +1,20 @@
+; The `@`-prefixed debug console. Emuera diverts an answered input line that
+; starts with `@` to `doSystemCommand` *without* consuming the pending request,
+; so the same prompt comes back once the command has run
+; (GameView/EmueraConsole.cs:1103-1110, :1321-1390).
+;
+; Four of the five wiki commands need no debug mode at all — only `@DEBUG` is
+; gated on `-Debug`, and only the generic fall-through is gated on
+; `デバッグコマンドを使用する` (:1367-1386). This fixture is therefore *not*
+; marked `.debug`, and every line below is answered by one line of
+; `debug_console.in`:
+;
+;   `@`         nothing after the sigil: returns before the echo (:1339-1341)
+;   `@REBOO`    not a whole-string match, so the generic path, gate shut
+;   `@DEBUG`    refused: this run has no -Debug
+;   `@OUTPUT`   writes the console to <WorkingDir>/emuera.log and says so
+;   `plain`     an ordinary answer, which finally satisfies the INPUTS
+@SYSTEM_TITLE
+PRINTL START
+INPUTS
+PRINTFORML [%RESULTS%]

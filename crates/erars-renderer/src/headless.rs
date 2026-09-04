@@ -2,7 +2,7 @@
 //! and the `--headless-shot` CLI.
 //!
 //! `render_frame` draws a `ConsoleFrame` through the same path as the window
-//! (`layout::layout_no_sweep` → `draw::build_instances` →
+//! (`layout::layout_frame_no_sweep` → `draw::build_instances` →
 //! `gpu::{create_quad_pipeline, nearest_sampler, FrameDraw}`) into an
 //! `Rgba8Unorm` texture and reads it
 //! back, so pixel positions can be asserted without a display. The target is
@@ -22,10 +22,13 @@ use erars_proxy_system::ConsoleFrame;
 use erars_ui::width::WidthTable;
 use wgpu::util::DeviceExt;
 
-use crate::draw::{build_instances, input_line, merge_pages, View};
+use crate::draw::{build_instances, cbg_quads, input_line, ImageCtx, View};
 use crate::font::{FontChain, FontConfig};
-use crate::gpu::{create_quad_pipeline, nearest_sampler, FrameDraw, Globals, Instance};
-use crate::layout::{layout_no_sweep, Geometry};
+use crate::gpu::{
+    create_quad_pipeline, linear_sampler, nearest_sampler, DrawGroup, Filter, FrameDraw, Globals,
+};
+use crate::images::ImageTextures;
+use crate::layout::{layout_frame_no_sweep, layout_no_sweep, Geometry};
 use crate::raster::GlyphRaster;
 use crate::text::{CellMetrics, Shaper};
 
@@ -247,41 +250,88 @@ pub fn render_frame_on(
         view_h: height.saturating_sub(strip_h),
         strip_h,
     };
-    let log = layout_no_sweep(&frame.lines, &g, shaper);
-    let mut pages = build_instances(&log, &view, hover, hl, &mut raster, device, queue, shaper);
+    let log = layout_frame_no_sweep(&frame.lines, &frame.islands, &g, shaper);
+    // A one-shot render is an animation's *first* draw, which is exactly when
+    // Emuera latches `StartTime` and shows frame 0
+    // (`Content/CroppedImage.cs:229-235`), so `now_ms = 0` is both faithful
+    // and deterministic.
+    let images = ImageCtx {
+        store: &frame.images,
+        now_ms: 0,
+    };
+    let fg = frame.fore_color.0;
+    let mut quads = build_instances(
+        &log, &view, hover, hl, fg, &mut raster, device, queue, shaper, images,
+    );
 
     // Input strip: one line laid out on its own, drawn on the bottom `line_h` rows.
     if let Some(input) = input {
         let line = input_line(input, frame.fore_color.0);
         let strip = layout_no_sweep(std::slice::from_ref(&line), &g, shaper);
-        let strip_pages = build_instances(
+        let strip_quads = build_instances(
             &strip,
             &view.strip(),
             None,
             hl,
+            fg,
             &mut raster,
             device,
             queue,
             shaper,
+            images,
         );
-        merge_pages(&mut pages, strip_pages);
+        quads.merge(strip_quads);
     }
     // One sweep per rendered frame, after both layouts: sweeping between them
     // would drop the log's entries (see `layout_no_sweep`).
     shaper.sweep();
-    if pages.len() < raster.page_count() {
-        pages.resize_with(raster.page_count(), Vec::new);
-    }
+    // The plane is client-absolute, so it joins after both layouts. No cursor
+    // in a one-shot render, so no button is selected.
+    quads.merge(cbg_quads(&frame.cbg, view.view_h as i32, -1, images));
+    quads.fit_pages(raster.page_count());
 
-    let rgba = draw_offscreen(
-        device,
-        queue,
-        &raster,
-        &pages,
-        frame.bg_color.0,
-        content_w,
-        height,
-    );
+    let mut textures = ImageTextures::new();
+    textures.sync(device, queue, &frame.images, &quads.bitmaps());
+
+    let glyphs = raster.pages_with(&quads.glyphs);
+    let under = textures.pages_with(&quads.under);
+    let inline = textures.pages_with(&quads.images);
+    let over = textures.pages_with(&quads.over);
+    // Placed boxes and island overlays, lowest slice first (`Quads::overlays`).
+    let overlays: Vec<_> = quads
+        .overlays
+        .iter()
+        .map(|s| (raster.pages_with(&s.glyphs), textures.pages_with(&s.images)))
+        .collect();
+    let mut groups = vec![
+        DrawGroup {
+            filter: Filter::Linear,
+            pages: &under,
+        },
+        DrawGroup {
+            filter: Filter::Nearest,
+            pages: &glyphs,
+        },
+        DrawGroup {
+            filter: Filter::Linear,
+            pages: &inline,
+        },
+        DrawGroup {
+            filter: Filter::Linear,
+            pages: &over,
+        },
+    ];
+    for (glyphs, images) in &overlays {
+        groups.push(DrawGroup {
+            filter: Filter::Nearest,
+            pages: glyphs,
+        });
+        groups.push(DrawGroup {
+            filter: Filter::Linear,
+            pages: images,
+        });
+    }
+    let rgba = draw_offscreen(device, queue, &groups, frame.bg_color.0, content_w, height);
     Ok(Rendered {
         width: content_w,
         height,
@@ -289,14 +339,13 @@ pub fn render_frame_on(
     })
 }
 
-/// Clear to `bg` (linear target, so the bytes come back exactly), draw every
-/// page's instances against that page's atlas view with the `Nearest`
-/// sampler, and read the texture back without row padding.
+/// Clear to `bg` (linear target, so the bytes come back exactly), draw
+/// `groups` in order with the sampler each one's filter names, and read the
+/// texture back without row padding.
 fn draw_offscreen(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-    raster: &GlyphRaster,
-    pages: &[Vec<Instance>],
+    groups: &[DrawGroup<'_>],
     bg: [u8; 3],
     width: u32,
     height: u32,
@@ -328,13 +377,20 @@ fn draw_offscreen(
         usage: wgpu::BufferUsages::UNIFORM,
     });
     let sampler = nearest_sampler(device);
-    let draw = FrameDraw::new(
-        device,
-        &bind_group_layout,
-        &globals_buf,
-        &sampler,
-        &raster.pages_with(pages),
-    );
+    let image_sampler = linear_sampler(device);
+    let mut draw = FrameDraw::default();
+    for group in groups {
+        draw.push_pages(
+            device,
+            &bind_group_layout,
+            &globals_buf,
+            match group.filter {
+                Filter::Nearest => &sampler,
+                Filter::Linear => &image_sampler,
+            },
+            group.pages,
+        );
+    }
 
     // bytes_per_row must be a multiple of 256 for texture->buffer copies.
     // The row strides stay u32 (`bytes_per_row` wants one); the buffer size and
@@ -467,6 +523,9 @@ pub fn write_png(path: &str, img: &Rendered) -> std::io::Result<()> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use erars_ui::image::ImageGeometry;
 
     use erars_ast::{Alignment, Value};
     use erars_compiler::Language;
@@ -1186,6 +1245,972 @@ mod tests {
                 "SKIP {}: adapter max texture size is {max} (< 3000)",
                 ts::test_name()
             );
+        }
+    }
+
+    // ---- the inline image layer -------------------------------------------
+
+    /// A deliberately asymmetric source: 8×4 (not square, so a transpose
+    /// cannot pass) with four distinct quadrant colours (so a mirror or an
+    /// axis swap cannot pass either).
+    const IMG_TL: [u8; 3] = [255, 0, 0];
+    const IMG_TR: [u8; 3] = [0, 255, 0];
+    const IMG_BL: [u8; 3] = [0, 0, 255];
+    const IMG_BR: [u8; 3] = [255, 255, 0];
+
+    fn quad_bitmap() -> Arc<erars_ui::image::ImageBitmap> {
+        let (w, h) = (8u32, 4u32);
+        let argb = |c: [u8; 3]| {
+            0xFF00_0000 | ((c[0] as u32) << 16) | ((c[1] as u32) << 8) | c[2] as u32
+        };
+        let mut px = Vec::with_capacity((w * h) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                px.push(argb(match (x < w / 2, y < h / 2) {
+                    (true, true) => IMG_TL,
+                    (false, true) => IMG_TR,
+                    (true, false) => IMG_BL,
+                    (false, false) => IMG_BR,
+                }));
+            }
+        }
+        Arc::new(erars_ui::image::ImageBitmap::new(
+            w,
+            h,
+            px.into_boxed_slice(),
+            1,
+        ))
+    }
+
+    /// One console line holding a single inline image of the whole 8×4 bitmap,
+    /// sized by `height` px like `<img src='…' height='16px'>`, plus the store
+    /// the renderer samples.
+    fn image_frame(height_px: i32) -> (ConsoleFrame, ImageGeometry) {
+        image_frame_wh(None, height_px)
+    }
+
+    /// The same, with an explicit `width=` — negative to mirror.
+    fn image_frame_wh(width_px: Option<i32>, height_px: i32) -> (ConsoleFrame, ImageGeometry) {
+        use erars_ui::image::{
+            ImageGeometry, ImageSampler, InlineImage, InlineSprite, MixedNum, Rect as SrcRect,
+        };
+
+        let bitmap = quad_bitmap();
+        let (w, h) = (bitmap.width, bitmap.height);
+        let sprite = InlineSprite {
+            sampler: ImageSampler::Single {
+                bitmap: 7,
+                src: SrcRect {
+                    x: 0,
+                    y: 0,
+                    width: w as i32,
+                    height: h as i32,
+                },
+            },
+            width: w,
+            height: h,
+            pos_x: 0,
+            pos_y: 0,
+        };
+        let geometry = ImageGeometry::new(
+            18,
+            w,
+            h,
+            width_px.map(|num| MixedNum { num, is_px: true }),
+            Some(MixedNum {
+                num: height_px,
+                is_px: true,
+            }),
+            None,
+        );
+        let image = InlineImage {
+            name: "QUAD".into(),
+            button: None,
+            mask: None,
+            sprite,
+            geometry,
+            alt: "<img src='QUAD'>".into(),
+        };
+        let line = ConsoleLine {
+            align: Alignment::Left,
+            button_start: None,
+            parts: vec![ConsoleLinePart::Image(Arc::new(image))],
+        };
+        let fr = frame(vec![line]);
+        fr.images.publish(7, bitmap);
+        (fr, geometry)
+    }
+
+    /// The image really reaches the framebuffer, **scaled**: an 8×4 source
+    /// drawn into a 32×16 destination box (4× on both axes, which the geometry
+    /// derives from `height=16px` and the 2:1 aspect ratio, so this is the
+    /// `ConsoleImagePart` arithmetic and not a 1:1 blit).
+    ///
+    /// Asserted at known coordinates: the destination box starts at
+    /// `m.shift` (3) on the row's top pixel, each quadrant centre carries its
+    /// own source colour, and the pixels just outside the box are still
+    /// background. Because the quadrants differ on both axes, a mirror, a
+    /// transpose or a UV swap changes at least one of the four.
+    #[test]
+    fn a_scaled_inline_image_lands_on_the_right_pixels() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let (fr, geo) = image_frame(16);
+        assert_eq!(
+            (geo.dest_width, geo.dest_height, geo.width),
+            (32, 16, 32),
+            "height=16px on an 8×4 sprite must give a 32×16 destination box"
+        );
+
+        // One row, bottom-anchored above a one-line input strip: row 0 sits at
+        // y = 0 in a 2·line_h tall frame.
+        let (w, h) = (64, 2 * m.line_h);
+        let img = render(&mut shaper, &dev, &fr, w, h, None, None);
+        assert_eq!(row_y(1, 0, h, m.line_h), 0);
+
+        let x0 = m.shift; // 3: base_x + PlacedImage::x (0) + geo.dest_x (0)
+        let y0 = 0;
+        let (dw, dh) = (geo.dest_width as u32, geo.dest_height as u32);
+        let at = |x: u32, y: u32| {
+            let [r, g, b, a] = img.pixel(x, y);
+            assert_eq!(a, 255, "image pixel ({x},{y}) must be opaque");
+            [r, g, b]
+        };
+
+        // Quadrant centres: dest pixel (px+0.5) maps to source (px+0.5)/4, so
+        // every centre lands strictly inside one source quadrant.
+        for (qx, qy, want, name) in [
+            (0, 0, IMG_TL, "top-left"),
+            (1, 0, IMG_TR, "top-right"),
+            (0, 1, IMG_BL, "bottom-left"),
+            (1, 1, IMG_BR, "bottom-right"),
+        ] {
+            let x = x0 + qx * dw / 2 + dw / 4;
+            let y = y0 + qy * dh / 2 + dh / 4;
+            assert_eq!(at(x, y), want, "{name} quadrant centre at ({x},{y})");
+        }
+
+        // The box's own corners, one pixel inside: still the corner colours.
+        assert_eq!(at(x0, y0), IMG_TL, "box top-left corner");
+        assert_eq!(at(x0 + dw - 1, y0), IMG_TR, "box top-right corner");
+        assert_eq!(at(x0, y0 + dh - 1), IMG_BL, "box bottom-left corner");
+        assert_eq!(at(x0 + dw - 1, y0 + dh - 1), IMG_BR, "box bottom-right");
+
+        // …and nothing outside it. `bg_color` is black in `frame()`.
+        for (x, y, why) in [
+            (x0 - 1, y0, "left of the box"),
+            (x0 + dw, y0, "right of the box"),
+            (x0, y0 + dh, "below the box"),
+        ] {
+            assert_eq!(
+                img.pixel(x, y),
+                [0, 0, 0, 255],
+                "{why}: ({x},{y}) must still be background"
+            );
+        }
+
+        // A 1:1 blit would leave this pixel — inside the 32×16 box but well
+        // outside an 8×4 one — at the background colour. x=24 samples source
+        // 6.125 and y=10 samples 2.625, both between two same-coloured texel
+        // centres, so the expected colour is exact.
+        assert_eq!(at(x0 + 24, y0 + 10), IMG_BR, "scaling really happened");
+    }
+
+    /// The image sampler is `Linear`, as GDI+'s default `InterpolationMode`
+    /// is: across the source's vertical colour boundary (source x = 4, i.e.
+    /// dest x = 16 relative to the box), a destination pixel whose source
+    /// coordinate stays between two same-coloured texel centres is pure, while
+    /// the one that straddles the boundary blends the two.
+    ///
+    /// Dest px `k` samples source `(k + 0.5) / 4`: k=13 → 3.375, between the
+    /// texel centres 2.5 and 3.5 (both red) → pure red; k=15 → 3.875, between
+    /// 3.5 (red) and 4.5 (green) at weight 0.375 → ≈(159, 96, 0). `Nearest`
+    /// would make both pure.
+    #[test]
+    fn inline_images_are_sampled_bilinearly() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let (fr, _) = image_frame(16);
+        let img = render(&mut shaper, &dev, &fr, 64, 2 * m.line_h, None, None);
+        let x0 = m.shift;
+        let y = 4; // inside the top half, so the boundary is x only
+
+        let [r, g, b, _] = img.pixel(x0 + 13, y);
+        assert_eq!([r, g, b], IMG_TL, "x=13 samples two red texels");
+
+        let [r, g, b, _] = img.pixel(x0 + 15, y);
+        assert_eq!(b, 0, "the blend is between red and green only");
+        assert!(
+            (0 < r && r < 255) && (0 < g && g < 255),
+            "x=15 must blend red and green (got {:?}); Nearest would be pure",
+            (r, g, b)
+        );
+        let near = |v: u8, want: i32| (v as i32 - want).abs() <= 3;
+        assert!(
+            near(r, 159) && near(g, 96),
+            "x=15 blend weight 0.375 → ≈(159, 96, 0), got {:?}",
+            (r, g, b)
+        );
+    }
+
+    /// A negative `width=`/`height=` **mirrors in place**: Emuera leaves the
+    /// destination extents signed and only flips the layout scalars
+    /// (`ConsoleImagePart.cs:105-116`), so GDI+ draws the same box with the
+    /// source reversed on that axis.
+    ///
+    /// Asserted against the upright render of the same image: the box lands on
+    /// exactly the same pixels, and every quadrant holds its opposite's
+    /// colour. Only a true mirror does both — a shifted box would move the
+    /// corners, and a UV that mirrored without the `dest_x`/`dest_y` fixup
+    /// would draw somewhere else entirely.
+    #[test]
+    fn a_negative_extent_mirrors_the_inline_image_in_place() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let (w, h) = (64, 2 * m.line_h);
+
+        let (upright, geo) = image_frame(16);
+        let (dw, dh) = (geo.dest_width as u32, geo.dest_height as u32);
+        let upright = render(&mut shaper, &dev, &upright, w, h, None, None);
+
+        // `width=-32px`: dest_width stays -32 and dest_x becomes +32, which is
+        // the same box.
+        let (flipped_x, geo_x) = image_frame_wh(Some(-32), 16);
+        assert_eq!((geo_x.dest_width, geo_x.dest_x, geo_x.width), (-32, 32, 32));
+        let flipped_x = render(&mut shaper, &dev, &flipped_x, w, h, None, None);
+
+        // `height=-16px` with an explicit positive width, so only the vertical
+        // axis flips: an *implied* width would inherit the negative height's
+        // sign through the aspect ratio (`:87-102` runs before the fixup) and
+        // mirror both ways.
+        let (flipped_y, geo_y) = image_frame_wh(Some(32), -16);
+        assert_eq!((geo_y.dest_height, geo_y.dest_y, geo_y.top), (-16, 16, 0));
+        let flipped_y = render(&mut shaper, &dev, &flipped_y, w, h, None, None);
+
+        let x0 = m.shift;
+        for (qx, qy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            let x = x0 + qx * dw / 2 + dw / 4;
+            let y = qy * dh / 2 + dh / 4;
+            let mirror_x = x0 + (1 - qx) * dw / 2 + dw / 4;
+            let mirror_y = (1 - qy) * dh / 2 + dh / 4;
+            assert_eq!(
+                flipped_x.pixel(x, y),
+                upright.pixel(mirror_x, y),
+                "negative width: ({x},{y}) must hold the colour from x={mirror_x}"
+            );
+            assert_eq!(
+                flipped_y.pixel(x, y),
+                upright.pixel(x, mirror_y),
+                "negative height: ({x},{y}) must hold the colour from y={mirror_y}"
+            );
+        }
+
+        // The box itself did not move: the pixels just outside it are still
+        // background in both mirrored renders.
+        for (x, y, why) in [
+            (x0 - 1, 0, "left of the box"),
+            (x0 + dw, 0, "right of the box"),
+            (x0, dh, "below the box"),
+        ] {
+            assert_eq!(flipped_x.pixel(x, y), [0, 0, 0, 255], "negative width, {why}");
+            assert_eq!(flipped_y.pixel(x, y), [0, 0, 0, 255], "negative height, {why}");
+        }
+    }
+
+    /// End-to-end through the artefact the operator sees: render a scaled
+    /// image, encode it with [`write_png`], read the file back, inflate it and
+    /// assert the same known coordinates on the decoded pixels. A PNG that
+    /// decodes to the wrong colours is a failed proof even if the framebuffer
+    /// was right.
+    #[test]
+    fn the_written_png_decodes_to_the_scaled_image() {
+        use std::io::Read;
+
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let (fr, geo) = image_frame(16);
+        let (w, h) = (64, 2 * m.line_h);
+        let rendered = render(&mut shaper, &dev, &fr, w, h, None, None);
+
+        let path = std::env::temp_dir().join(format!("erars-{}.png", ts::test_name()));
+        let path = path.to_str().expect("utf-8 temp path");
+        write_png(path, &rendered).expect("write the shot");
+        let png = std::fs::read(path).expect("read the shot back");
+        std::fs::remove_file(path).ok();
+
+        // 8 signature + 25 IHDR: the encoder writes exactly IHDR/IDAT/IEND
+        // (`png_chunks_are_well_formed`), so IDAT's length is at 33.
+        assert_eq!(&png[37..41], b"IDAT");
+        let len = u32::from_be_bytes(png[33..37].try_into().unwrap()) as usize;
+        let mut raw = Vec::new();
+        flate2::read::ZlibDecoder::new(&png[41..41 + len])
+            .read_to_end(&mut raw)
+            .expect("inflate IDAT");
+        let stride = 1 + (w * 4) as usize;
+        assert_eq!(raw.len(), stride * h as usize, "one scanline per row");
+
+        let px = |x: u32, y: u32| -> [u8; 3] {
+            let line = &raw[y as usize * stride..(y as usize + 1) * stride];
+            assert_eq!(line[0], 0, "scanline {y} must be filter 0");
+            let i = 1 + x as usize * 4;
+            assert_eq!(line[i + 3], 255, "decoded ({x},{y}) must be opaque");
+            [line[i], line[i + 1], line[i + 2]]
+        };
+        let x0 = m.shift;
+        let (dw, dh) = (geo.dest_width as u32, geo.dest_height as u32);
+        assert_eq!(px(x0 + dw / 4, dh / 4), IMG_TL, "decoded top-left");
+        assert_eq!(px(x0 + 3 * dw / 4, dh / 4), IMG_TR, "decoded top-right");
+        assert_eq!(px(x0 + dw / 4, 3 * dh / 4), IMG_BL, "decoded bottom-left");
+        assert_eq!(px(x0 + 3 * dw / 4, 3 * dh / 4), IMG_BR, "decoded bottom-right");
+        assert_eq!(px(x0 + dw, 0), [0, 0, 0], "decoded background right of the box");
+    }
+
+    // ---- the console-background plane -------------------------------------
+
+    /// Magenta, and nothing else in these tests is magenta.
+    const CBG: [u8; 3] = [255, 0, 255];
+    /// The plane's box: `x = 8` so all four edges have a testable outside.
+    const CBG_X: u32 = 8;
+    const CBG_W: u32 = 40;
+
+    /// A uniform source, so every pixel inside a drawn box is exactly this
+    /// colour whatever the sampler's filter does — the scaling arithmetic is
+    /// already proved by the inline-image tests, and this test is about
+    /// paint order.
+    fn solid_bitmap(color: [u8; 3]) -> Arc<erars_ui::image::ImageBitmap> {
+        let argb =
+            0xFF00_0000 | ((color[0] as u32) << 16) | ((color[1] as u32) << 8) | color[2] as u32;
+        Arc::new(erars_ui::image::ImageBitmap::new(
+            4,
+            4,
+            vec![argb; 16].into_boxed_slice(),
+            1,
+        ))
+    }
+
+    /// `lines` of text plus one plane entry at `zdepth`, sized to cover
+    /// exactly the bottom log row.
+    fn cbg_frame(lines: Vec<ConsoleLine>, zdepth: i32, line_h: u32) -> ConsoleFrame {
+        use erars_ui::cbg::CbgLayer;
+        use erars_ui::image::{ImageSampler, InlineSprite, Rect as SrcRect};
+
+        let mut fr = frame(lines);
+        fr.images.publish(9, solid_bitmap(CBG));
+        let sprite = InlineSprite {
+            sampler: ImageSampler::Single {
+                bitmap: 9,
+                src: SrcRect {
+                    x: 0,
+                    y: 0,
+                    width: 4,
+                    height: 4,
+                },
+            },
+            width: CBG_W,
+            height: line_h,
+            pos_x: 0,
+            pos_y: 0,
+        };
+        let mut plane = CbgLayer::default();
+        plane.set_image(sprite, CBG_X as i32, 0, zdepth);
+        fr.cbg = Arc::new(plane);
+        fr
+    }
+
+    /// One plane entry holding the whole 8×4 quad bitmap in a 32×16 box at
+    /// `y`, in front of the text.
+    fn cbg_quad_frame(y: i32) -> ConsoleFrame {
+        use erars_ui::cbg::CbgLayer;
+        use erars_ui::image::{ImageSampler, InlineSprite, Rect as SrcRect};
+
+        let mut fr = frame(vec![text_line("", WHITE)]);
+        fr.images.publish(7, quad_bitmap());
+        let sprite = InlineSprite {
+            sampler: ImageSampler::Single {
+                bitmap: 7,
+                src: SrcRect {
+                    x: 0,
+                    y: 0,
+                    width: 8,
+                    height: 4,
+                },
+            },
+            width: 32,
+            height: 16,
+            pos_x: 0,
+            pos_y: 0,
+        };
+        let mut plane = CbgLayer::default();
+        plane.set_image(sprite, CBG_X as i32, y, -1);
+        fr.cbg = Arc::new(plane);
+        fr
+    }
+
+    /// The plane is clipped at the console area's bottom edge, not at the
+    /// framebuffer's: Emuera paints it on `MainPicBox`, whose height *is*
+    /// `ClientHeight` (`GameView/EmueraConsole.cs:238`), so it can never
+    /// reach the input box — while erars draws its input strip into the same
+    /// surface, so the edge has to be applied by hand (`draw.rs`,
+    /// `clip_below`).
+    ///
+    /// Two renders of the same entry, 8 px apart: the lower one is cut at the
+    /// edge, and its surviving rows must be *pixel-identical* to the same rows
+    /// of the higher one. That is what pins the UV window to the clipped box —
+    /// scaling one without the other would stretch or shift the image
+    /// instead of trimming it.
+    #[test]
+    fn the_plane_is_clipped_at_the_console_areas_bottom_edge() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let (w, h) = (64, 3 * m.line_h);
+        let view_h = h - m.line_h;
+
+        let flush = render(&mut shaper, &dev, &cbg_quad_frame(0), w, h, None, None);
+        let over = render(&mut shaper, &dev, &cbg_quad_frame(8), w, h, None, None);
+
+        for dy in 0..8 {
+            for x in CBG_X..CBG_X + 32 {
+                assert_eq!(
+                    over.pixel(x, view_h - 8 + dy),
+                    flush.pixel(x, view_h - 16 + dy),
+                    "clipped row {dy} at x={x} must sample exactly what it did unclipped"
+                );
+            }
+        }
+        // The 8 rows the entry would have covered below the console area.
+        for y in view_h..view_h + 8 {
+            for x in [CBG_X, CBG_X + 16, CBG_X + 31] {
+                assert_eq!(
+                    over.pixel(x, y),
+                    [0, 0, 0, 255],
+                    "({x},{y}) is below the console area and must stay background"
+                );
+            }
+        }
+        // …and the entry really did reach that far: its top edge moved down by
+        // the same 8 px, so this is a clip and not a smaller draw.
+        let top = view_h - 16;
+        assert_eq!(
+            over.pixel(CBG_X, top + 8),
+            flush.pixel(CBG_X, top),
+            "the box's own top row moved down by 8"
+        );
+        assert_eq!(
+            over.pixel(CBG_X, top + 7),
+            [0, 0, 0, 255],
+            "one pixel above the moved box must be background"
+        );
+    }
+
+    /// The plane draws on both sides of the text: a positive `zdepth` is
+    /// behind it and a negative one in front, which is Emuera's merged depth
+    /// loop (`GameView/EmueraConsole.cs:1557-1599`) and the only way anything
+    /// in erars can cover a glyph.
+    ///
+    /// Both renders share one fully-covered glyph pixel, found in a text-only
+    /// render, so the two assertions differ *only* in the sign of the depth.
+    #[test]
+    fn the_plane_draws_behind_or_in_front_of_the_text_by_depth() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let (w, h) = (64, 3 * m.line_h);
+        let row = row_y(1, 0, h, m.line_h);
+
+        let text = || vec![text_line("MMMM", WHITE)];
+        let plain = render(&mut shaper, &dev, &frame(text()), w, h, None, None);
+        let (ix, iy) = (row..row + m.line_h)
+            .flat_map(|y| (CBG_X..CBG_X + CBG_W).map(move |x| (x, y)))
+            .find(|&(x, y)| plain.pixel(x, y) == [255, 255, 255, 255])
+            .expect("some glyph pixel under the plane's box must be fully covered");
+
+        let back = render(
+            &mut shaper,
+            &dev,
+            &cbg_frame(text(), 2, m.line_h),
+            w,
+            h,
+            None,
+            None,
+        );
+        let front = render(
+            &mut shaper,
+            &dev,
+            &cbg_frame(text(), -2, m.line_h),
+            w,
+            h,
+            None,
+            None,
+        );
+        assert_eq!(
+            back.pixel(ix, iy),
+            [255, 255, 255, 255],
+            "zdepth 2 must stay behind the glyph at ({ix},{iy})"
+        );
+        let [r, g, b, _] = front.pixel(ix, iy);
+        assert_eq!(
+            [r, g, b], CBG,
+            "zdepth -2 must cover the glyph at ({ix},{iy})"
+        );
+
+        // The plane drew at all, on both sides of the text: a box pixel the
+        // glyphs never reach (the row's top-left corner, left of `m.shift`).
+        for (img, name) in [(&back, "zdepth 2"), (&front, "zdepth -2")] {
+            let [r, g, b, _] = img.pixel(CBG_X, row);
+            assert_eq!([r, g, b], CBG, "{name} must paint its box");
+        }
+    }
+
+    /// The box is placed in client pixels from the **bottom-left** corner of
+    /// the console area (`:1573`, `y + ClientHeight - DestBaseSize.Height`),
+    /// and the text layout does not move it: an entry at `y = 0` sized to one
+    /// line sits on the last log row whether the log holds one line or twenty.
+    ///
+    /// Measured as the exact box: every corner is the plane's colour and
+    /// every neighbour one pixel outside it is not. A plane measured against
+    /// the whole surface instead of the console area would sit a line lower
+    /// and fail the bottom edge; one drawn from the top-left would miss
+    /// entirely.
+    #[test]
+    fn the_plane_sits_on_the_console_areas_bottom_left_corner() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+        let m = *shaper.metrics();
+        let (w, h) = (64, 6 * m.line_h);
+        let view_h = h - m.line_h;
+        let top = view_h - m.line_h;
+
+        for rows in [1usize, 20] {
+            let lines = (0..rows).map(|_| text_line("MMMM", WHITE)).collect();
+            // In front of the text, so a box pixel cannot be a glyph pixel
+            // and the bounds are unambiguous however the log is laid out.
+            let img = render(
+                &mut shaper,
+                &dev,
+                &cbg_frame(lines, -1, m.line_h),
+                w,
+                h,
+                None,
+                None,
+            );
+            let is_cbg = |x: u32, y: u32| {
+                let [r, g, b, _] = img.pixel(x, y);
+                [r, g, b] == CBG
+            };
+            for (x, y, corner) in [
+                (CBG_X, top, "top-left"),
+                (CBG_X + CBG_W - 1, top, "top-right"),
+                (CBG_X, view_h - 1, "bottom-left"),
+                (CBG_X + CBG_W - 1, view_h - 1, "bottom-right"),
+            ] {
+                assert!(is_cbg(x, y), "{rows} rows: {corner} corner ({x},{y})");
+            }
+            for (x, y, side) in [
+                (CBG_X - 1, top, "left of"),
+                (CBG_X + CBG_W, top, "right of"),
+                (CBG_X, top - 1, "above"),
+                (CBG_X, view_h, "below"),
+            ] {
+                assert!(
+                    !is_cbg(x, y),
+                    "{rows} rows: ({x},{y}) is {side} the box and must not be painted"
+                );
+            }
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Positioned `<div>` boxes and island overlays
+    // (`_Library/EvilMask/ConsoleDivPart.cs`)
+    // -----------------------------------------------------------------------
+
+    /// A render tall enough for exactly five log rows above the input strip,
+    /// so row `r` of a five-line log starts at `r · line_h` with no top slack
+    /// and every asserted coordinate is a plain multiple of 19.
+    const DIV_H: u32 = 19 * 6;
+    const DIV_VIEW_H: u32 = DIV_H - 19;
+    const DIV_W: u32 = 200;
+
+    fn div_part(
+        anchor: erars_ui::DivAnchor,
+        (x, y): (i32, i32),
+        (width, height): (Option<u32>, Option<u32>),
+        style: erars_ui::DivBox,
+        lines: Vec<ConsoleLine>,
+    ) -> ConsoleLinePart {
+        ConsoleLinePart::Div(Arc::new(erars_ui::ConsoleDiv {
+            anchor,
+            x,
+            y,
+            width,
+            height,
+            style,
+            lines,
+            alt_head: String::new(),
+        }))
+    }
+
+    /// One console line holding a single `w`×`h` block of flat `color`,
+    /// published under `id`: a box's content whose every pixel is known, so a
+    /// placement can be asserted at exact coordinates instead of "some ink".
+    fn block_line(
+        store: &erars_ui::image::ImageStore,
+        id: u32,
+        color: [u8; 3],
+        w: u32,
+        h: u32,
+    ) -> ConsoleLine {
+        use erars_ui::image::{
+            ImageGeometry, ImageSampler, InlineImage, InlineSprite, MixedNum, Rect as SrcRect,
+        };
+
+        store.publish(id, solid_bitmap(color));
+        let sprite = InlineSprite {
+            sampler: ImageSampler::Single {
+                bitmap: id,
+                src: SrcRect {
+                    x: 0,
+                    y: 0,
+                    width: 4,
+                    height: 4,
+                },
+            },
+            width: 4,
+            height: 4,
+            pos_x: 0,
+            pos_y: 0,
+        };
+        let px = |num| Some(MixedNum { num, is_px: true });
+        ConsoleLine {
+            align: Alignment::Left,
+            button_start: None,
+            parts: vec![ConsoleLinePart::Image(Arc::new(InlineImage {
+                name: "BLOCK".into(),
+                button: None,
+                mask: None,
+                sprite,
+                geometry: ImageGeometry::new(18, 4, 4, px(w as i32), px(h as i32), None),
+                alt: "<img src='BLOCK'>".into(),
+            }))],
+        }
+    }
+
+    /// One line whose only part is `div`.
+    fn div_line(div: ConsoleLinePart) -> ConsoleLine {
+        ConsoleLine {
+            align: Alignment::Left,
+            button_start: None,
+            parts: vec![div],
+        }
+    }
+
+    const RED: [u8; 3] = [255, 0, 0];
+    const GREEN: [u8; 3] = [0, 255, 0];
+    const BLUE: [u8; 3] = [0, 0, 255];
+
+    fn is(img: &Rendered, x: u32, y: u32, color: [u8; 3]) -> bool {
+        let [r, g, b, _] = img.pixel(x, y);
+        [r, g, b] == color
+    }
+
+    /// The bug this whole slice fixes: eramegaten_p_kr reserves blank lines
+    /// with `PRINTL` and lifts a picture into them with a negative `ypos`
+    /// (`PRINT_EVENT_PICTURE.ERB:12-70`). The box hangs off the row it was
+    /// printed on (`ConsoleDivPart.cs:142`), so its content lands exactly 38
+    /// px — two rows — above that row's top, and the part advances no pen
+    /// (`:47`), so the row it sits on is untouched.
+    #[test]
+    fn a_relative_div_lifts_its_content_above_its_own_row() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+
+        let fr = frame(Vec::new());
+        let block = block_line(&fr.images, 11, RED, 20, 10);
+        let fr = ConsoleFrame {
+            lines: vec![
+                text_line("", WHITE),
+                text_line("", WHITE),
+                div_line(div_part(
+                    erars_ui::DivAnchor::Relative,
+                    (10, -38),
+                    (Some(40), Some(19)),
+                    erars_ui::DivBox::default(),
+                    vec![block],
+                )),
+            ],
+            ..fr
+        };
+        let img = render(&mut shaper, &dev, &fr, DIV_W, DIV_H, None, None);
+
+        // Three rows, bottom-anchored: row 2 starts at 95 − 19 = 76, and the
+        // box's content origin is `shift + 10 = 13` across, `76 − 38 = 38` down.
+        assert_eq!(row_y(3, 2, DIV_H, 19), 76);
+        for (x, y) in [(13, 38), (32, 38), (13, 47), (32, 47)] {
+            assert!(is(&img, x, y, RED), "block corner ({x},{y})");
+        }
+        for (x, y, side) in [
+            (12, 38, "left of"),
+            (33, 38, "right of"),
+            (13, 37, "above"),
+            (13, 48, "below"),
+        ] {
+            assert!(!is(&img, x, y, RED), "({x},{y}) is {side} the block");
+        }
+        // Nothing was drawn on the row the box was printed on.
+        assert!(!is(&img, 13, 76, RED));
+    }
+
+    /// `display: absolute-lefttop` (`GameView/HtmlManager.cs:1155-1160`)
+    /// measures from the console area's top-left, so the content lands at
+    /// `(xpos, ypos)` plus nothing else — no `shift`, no row.
+    #[test]
+    fn an_absolute_lefttop_div_lands_at_its_own_coordinates() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+
+        let fr = frame(Vec::new());
+        let block = block_line(&fr.images, 12, GREEN, 20, 10);
+        let fr = ConsoleFrame {
+            lines: vec![div_line(div_part(
+                erars_ui::DivAnchor::LeftTop,
+                (17, 5),
+                (Some(40), Some(19)),
+                erars_ui::DivBox::default(),
+                vec![block],
+            ))],
+            ..fr
+        };
+        let img = render(&mut shaper, &dev, &fr, DIV_W, DIV_H, None, None);
+
+        for (x, y) in [(17, 5), (36, 5), (17, 14), (36, 14)] {
+            assert!(is(&img, x, y, GREEN), "block corner ({x},{y})");
+        }
+        for (x, y, side) in [
+            (16, 5, "left of"),
+            (37, 5, "right of"),
+            (17, 4, "above"),
+            (17, 15, "below"),
+        ] {
+            assert!(!is(&img, x, y, GREEN), "({x},{y}) is {side} the block");
+        }
+    }
+
+    /// `display: absolute-leftbottom` with the corpus's negative `ypos`
+    /// measures up from the console area's bottom edge, so the content lands
+    /// at `view_h + ypos = 95 − 30 = 65`.
+    ///
+    /// DELIBERATE: this fork computes `MainPicBox.Height − PointY − Height`
+    /// (`ConsoleDivPart.cs:143`), i.e. a positive `ypos` measured down from
+    /// the bottom of the box. Every corpus site passes a negative one, built
+    /// by `CONVERT_YPOS_TOP_TO_BUTTOM.ERB` as `ypos + (−height·100 + 100)`,
+    /// which only lands correctly under the rule asserted here.
+    #[test]
+    fn an_absolute_leftbottom_div_measures_up_from_the_bottom_edge() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+
+        let fr = frame(Vec::new());
+        let block = block_line(&fr.images, 13, BLUE, 20, 10);
+        let fr = ConsoleFrame {
+            lines: vec![div_line(div_part(
+                erars_ui::DivAnchor::LeftBottom,
+                (7, -30),
+                (Some(40), Some(19)),
+                erars_ui::DivBox::default(),
+                vec![block],
+            ))],
+            ..fr
+        };
+        let img = render(&mut shaper, &dev, &fr, DIV_W, DIV_H, None, None);
+
+        assert_eq!(DIV_VIEW_H, 95);
+        for (x, y) in [(7, 65), (26, 65), (7, 74), (26, 74)] {
+            assert!(is(&img, x, y, BLUE), "block corner ({x},{y})");
+        }
+        for (x, y, side) in [
+            (6, 65, "left of"),
+            (27, 65, "right of"),
+            (7, 64, "above"),
+            (7, 75, "below"),
+        ] {
+            assert!(!is(&img, x, y, BLUE), "({x},{y}) is {side} the block");
+        }
+    }
+
+    /// `HTML_PRINT_ISLAND` overlays cover the log, and a later entry covers an
+    /// earlier one — `MESSAGE_POPUP.ERB` dims the screen with layer 98 under
+    /// its popup on layer 99, and `SYSTEM_DUNGEON.ERB:2630-2641` stacks two
+    /// islands *on the same layer*, which is why `ConsoleFrame::islands` is a
+    /// paint-ordered list and not a map.
+    #[test]
+    fn island_entries_cover_the_log_and_each_other_in_order() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+
+        // Five lines fill the row area exactly, so line 0 occupies y 0..19 —
+        // the rows an island at (0, 0) covers.
+        let lines = || {
+            let mut v = vec![text_line("MMMM", WHITE)];
+            v.extend((0..4).map(|_| text_line("", WHITE)));
+            v
+        };
+        let bare = render(&mut shaper, &dev, &frame(lines()), DIV_W, DIV_H, None, None);
+        assert_eq!(row_y(5, 0, DIV_H, 19), 0);
+
+        // An empty box paints only its frame: a flat fill 20 px wide first,
+        // then a narrower one over it.
+        let island = |w: u32, color: [u8; 3]| {
+            vec![div_line(div_part(
+                erars_ui::DivAnchor::LeftTop,
+                (0, 0),
+                (Some(w), Some(19)),
+                erars_ui::DivBox {
+                    background: Some(erars_ui::Color(color)),
+                    ..erars_ui::DivBox::default()
+                },
+                Vec::new(),
+            ))]
+        };
+        let fr = ConsoleFrame {
+            islands: vec![(98, island(20, BLUE)), (98, island(10, RED))],
+            ..frame(lines())
+        };
+        let img = render(&mut shaper, &dev, &fr, DIV_W, DIV_H, None, None);
+
+        // The log really had ink under both boxes.
+        let under = bare.ink_columns(0, 19, INK);
+        assert!(under[3..10].iter().any(|&c| c), "no log ink under the 2nd island");
+        assert!(under[10..20].iter().any(|&c| c), "no log ink under the 1st island");
+        // The later entry wins where they overlap, at pinned pixels.
+        assert!(is(&img, 2, 10, RED), "the 2nd island must be on top at (2,10)");
+        assert!(is(&img, 9, 18, RED));
+        assert!(is(&img, 10, 10, BLUE), "the 1st island shows where the 2nd ends");
+        assert!(is(&img, 19, 0, BLUE));
+        // Neither box reaches past its own width, and the log survives there.
+        assert!(!is(&img, 20, 10, BLUE));
+        assert_eq!(
+            &under[20..40],
+            &img.ink_columns(0, 19, INK)[20..40],
+            "the islands disturbed the log outside their boxes"
+        );
+    }
+
+    /// The content clip (`ConsoleDivPart.cs:159`): a child wider and taller
+    /// than the box is cut at the padding rect on both axes, and only there.
+    #[test]
+    fn a_sized_div_clips_its_content_on_both_axes() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+
+        let fr = frame(Vec::new());
+        // 40×20 of content in a 20×6 box at (10, 10).
+        let block = block_line(&fr.images, 14, GREEN, 40, 20);
+        let fr = ConsoleFrame {
+            lines: vec![div_line(div_part(
+                erars_ui::DivAnchor::LeftTop,
+                (10, 10),
+                (Some(20), Some(6)),
+                erars_ui::DivBox::default(),
+                vec![block],
+            ))],
+            ..fr
+        };
+        let img = render(&mut shaper, &dev, &fr, DIV_W, DIV_H, None, None);
+
+        for (x, y) in [(10, 10), (29, 10), (10, 15), (29, 15)] {
+            assert!(is(&img, x, y, GREEN), "kept corner ({x},{y})");
+        }
+        for (x, y, why) in [
+            (30, 10, "past the box width"),
+            (39, 10, "past the box width"),
+            (10, 16, "past the box height"),
+            (10, 29, "past the box height"),
+        ] {
+            assert!(
+                !is(&img, x, y, GREEN),
+                "({x},{y}) is {why} and must be clipped"
+            );
+        }
+        assert_eq!(
+            img.ink_bbox(0, DIV_W, 0, DIV_VIEW_H, INK),
+            Some([10, 10, 30, 16]),
+            "the block's ink is exactly the box's content rect [x0, y0, x1, y1)"
+        );
+    }
+
+    /// `BoxBorder.DrawBorder` (`ConsoleDivPart.cs:150`,
+    /// `_Library/EvilMask/Shape.cs:19-107`): the background fills the rect the
+    /// margin leaves, then each edge is painted `border[e]` thick inside it,
+    /// in `bcolor[e]` or — when that edge has none — the frame's fore colour
+    /// (`Shape.cs:63`).
+    #[test]
+    fn a_div_paints_its_background_and_four_borders() {
+        let _gpu = gpu_lock();
+        let Some(dev) = gpu_device() else { return };
+        let mut shaper = jp_shaper(&[bundled_font()]);
+
+        const FILL: [u8; 3] = [0, 0, 128];
+        let style = erars_ui::DivBox {
+            margin: [1, 1, 1, 1],
+            border: [2, 3, 4, 5],
+            padding: [0; 4],
+            border_color: [Some(erars_ui::Color(RED)), None, Some(erars_ui::Color(GREEN)), Some(erars_ui::Color(BLUE))],
+            background: Some(erars_ui::Color(FILL)),
+        };
+        let fr = ConsoleFrame {
+            lines: vec![div_line(div_part(
+                erars_ui::DivAnchor::LeftTop,
+                (20, 20),
+                (Some(30), Some(24)),
+                style,
+                Vec::new(),
+            ))],
+            ..frame(Vec::new())
+        };
+        let img = render(&mut shaper, &dev, &fr, DIV_W, DIV_H, None, None);
+
+        // The 1 px margin leaves a 28 × 22 rect at (21, 21): x 21..49, y 21..43.
+        const FG: [u8; 3] = [192, 192, 192];
+        for (x, y, want, what) in [
+            (30, 21, RED, "top border, first row"),
+            (30, 22, RED, "top border, last row"),
+            (30, 23, FILL, "background under the top border"),
+            (30, 42, GREEN, "bottom border, last row"),
+            (30, 39, GREEN, "bottom border, first row"),
+            (30, 38, FILL, "background above the bottom border"),
+            (21, 30, BLUE, "left border, first column"),
+            (25, 30, BLUE, "left border, last column"),
+            (26, 30, FILL, "background right of the left border"),
+            (48, 30, FG, "right border, last column, in the fore colour"),
+            (46, 30, FG, "right border, first column"),
+            (45, 30, FILL, "background left of the right border"),
+            // Left and right are full bands drawn over top and bottom.
+            (21, 21, BLUE, "top-left corner"),
+            (48, 42, FG, "bottom-right corner"),
+        ] {
+            let [r, g, b, _] = img.pixel(x, y);
+            assert_eq!([r, g, b], want, "({x},{y}): {what}");
+        }
+        // The margin is outside everything the box paints.
+        for (x, y) in [(20, 21), (21, 20), (49, 30), (30, 43)] {
+            assert_eq!(img.pixel(x, y), [0, 0, 0, 255], "margin at ({x},{y})");
         }
     }
 }

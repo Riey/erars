@@ -20,6 +20,15 @@ In my machine (r7 5800x) loading eraTHYMKR(about 1,445,295 ERB lines) with Emuer
 
 And with erars, it takes 0.5 second. Note that this program supports multi threading. 
 
+## Emuera parity
+
+`docs/research/2026-09-03-emuera-command-gap.md` tracks command/function coverage against the Emuera
+C# source. As of 2026-09-03 every `InstructionCode` has an explicit parser arm (the `match` is
+exhaustive and compiler-enforced), and no executor arm is a stub. §5 of that document is the single
+consolidated list of **deliberate deviations** from Emuera — mostly places where a text console has no
+pixel surface, a VM has no host locale, or erars tightens an ordering Emuera leaves unspecified. Each
+entry is also marked in the source with a `DELIBERATE …` comment naming the Emuera line and the reason.
+
 ## GUI renderer (`erars-renderer`)
 
 `cargo run -p erars-renderer -- <game dir>` opens the winit/wgpu console. Text

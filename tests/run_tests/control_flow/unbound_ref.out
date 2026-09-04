@@ -1,0 +1,6 @@
+start
+bound 3
+refused 0
+VM error occurred: 참조 변수 R는 아무것도 참조하고 있지 않습니다
+At function REF_UNBIND tests/run_tests/control_flow/unbound_ref.erb@17
+At function SYSTEM_TITLE tests/run_tests/control_flow/unbound_ref.erb@3

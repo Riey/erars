@@ -1,0 +1,19 @@
+assert ok
+list target 7
+after calllist
+calllist fell through
+list form 2
+jump target
+after jumplist
+goto label hit
+gotolist fell through
+eventcom ran
+after callevent
+ref result 1
+through ref 42 size 4
+refbyname result 1
+through refbyname 7
+ref missing 0
+ref chara 0
+ref const 0
+refbyname missing 0

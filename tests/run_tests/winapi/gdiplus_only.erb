@@ -1,0 +1,9 @@
+@SYSTEM_TITLE
+; 描画インターフェース:WINAPI selects Emuera's Win32 text backend, and with it
+; the whole GDI+ method surface becomes unusable: 35 method bodies in
+; `GameData/Function/Creator.Method.cs` open with
+; `if (Config.TextDrawingMode == TextDrawingMode.WINAPI) throw new
+; CodeEE(GDIPlusOnly)`. `GCREATE` is one of them (`:5875`), and the guard is
+; the first statement, so the bitmap is not created either.
+PRINTFORML start
+PRINTFORML created={GCREATE(0, 4, 4)}

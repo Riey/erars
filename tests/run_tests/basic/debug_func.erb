@@ -1,0 +1,35 @@
+; The DEBUG_FUNC family under Emuera's `-DEBUG`
+; (`Program.cs:82-88`, `Program.cs:219-220`). Compare with
+; `basic/print_misc_commands.erb`, which runs the same commands *without*
+; debug mode and gets nothing from any of them, and with
+; `control_flow/assert_zero.erb`, where a failing ASSERT cannot fire.
+@SYSTEM_TITLE
+PRINTL start
+
+; The debug console is one flat StringBuilder: DebugPrint appends the text and
+; DebugNewLine appends a line break (`EmueraConsole.cs:1837-1854`), so the bare
+; forms continue the pending line and only the `L` forms end it.
+DEBUGPRINT one-
+DEBUGPRINTL two
+DEBUGPRINTFORM three-{1 + 2}-
+DEBUGPRINTFORML four
+
+; DEBUGCLEAR empties that console and nothing else (`EmueraConsole.cs:1856`),
+; so the normal console below keeps everything printed so far.
+DEBUGPRINTL discarded
+DEBUGCLEAR
+DEBUGPRINTL kept
+
+; ASSERT carries DEBUG_FUNC too, so in debug mode its argument IS built and a
+; non-zero one passes (`FunctionIdentifier.cs:372`).
+ASSERT 1
+ASSERT 2 - 1
+
+; A skipped DEBUG_FUNC line still occupies a statement slot outside debug mode;
+; inside it, the same SIF binds to a line that really runs.
+SIF 1
+	DEBUGPRINTL sif-body
+SIF 0
+	DEBUGPRINTL never
+
+PRINTL end

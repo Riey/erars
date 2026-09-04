@@ -1,0 +1,3 @@
+start
+VM error occurred: CALLTRAIN 명령의 인수가 SELECTCOM의 요소수를 넘었습니다. 1000
+At function SYSTEM_TITLE tests/run_tests/control_flow/calltrain_bound.erb@3

@@ -1,0 +1,26 @@
+@SYSTEM_TITLE
+ADDCHARA 3
+TARGET = 0
+; A CSV name stands in for an index at exactly one dimension: Emuera's
+; `GetKeywordDictionary` hands back the table together with an `allowIndex`
+; (`GameData/ConstantData.cs:892-1090`). For a character variable that
+; dimension is 1, because dimension 0 selects the character.
+TALENT:0:VIRGIN = 1
+PRINTFORML {TALENT:0:1}
+; A one-argument character variable writes dimension 0, but Emuera prepends
+; TARGET before it decides which dimension may carry a name
+; (`GameData/Variable/VariableParser.cs:113-121`), so this reaches the same
+; table and the same element.
+PRINTFORML {TALENT:VIRGIN}
+TALENT:DARKHAIR = 1
+PRINTFORML {TALENT:0:2}
+; CDFLAG is the one variable with a table per dimension (`:1019-1039`):
+; dimension 1 reads CDFLAG1.CSV and dimension 2 reads CDFLAG2.CSV, so the same
+; word may mean different indices on either side.
+CDFLAG:0:RELATION_KIND:LEVEL = 5
+PRINTFORML {CDFLAG:0:1:1}
+CDFLAG:0:BOND:DEPTH = 7
+PRINTFORML {CDFLAG:0:2:3}
+; A non-character variable takes its name at dimension 0.
+FLAG:플래그 = 9
+PRINTFORML {FLAG:1}

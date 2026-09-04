@@ -1,0 +1,127 @@
+@SYSTEM_TITLE
+ADDCHARA 3
+ADDCHARA 3
+ADDCHARA 3
+ADDCHARA 3
+ADDCHARA 3
+PRINTFORML CHARANUM {CHARANUM}
+
+; ---- ascending, MASTER out of range so every chara may move ---------------
+CALL SETUP
+MASTER = -1
+TARGET = 2
+ASSI = 4
+SORTCHARA CFLAG:10
+CALL DUMP
+PRINTFORML asc ptr {MASTER} {TARGET} {ASSI}
+
+; ---- descending: equal keys keep their original order (stable, not reversed)
+CALL SETUP
+MASTER = -1
+TARGET = 0
+ASSI = 1
+SORTCHARA CFLAG:10, BACK
+CALL DUMP
+PRINTFORML desc ptr {MASTER} {TARGET} {ASSI}
+
+; ---- MASTER pinned to its slot, TARGET follows it ------------------------
+CALL SETUP
+MASTER = 2
+TARGET = 2
+ASSI = 0
+SORTCHARA CFLAG:10
+CALL DUMP
+PRINTFORML pin ptr {MASTER} {TARGET} {ASSI}
+
+; ---- default key is NO ---------------------------------------------------
+CALL SETUP
+MASTER = -1
+TARGET = -1
+ASSI = -1
+NO:0 = 5
+NO:1 = 1
+NO:2 = 3
+NO:3 = 1
+NO:4 = 2
+SORTCHARA
+CALL DUMP
+PRINTFORML no {NO:0} {NO:1} {NO:2} {NO:3} {NO:4}
+PRINTFORML no ptr {MASTER} {TARGET} {ASSI}
+
+SORTCHARA NO, BACK
+CALL DUMP
+PRINTFORML noback {NO:0} {NO:1} {NO:2} {NO:3} {NO:4}
+
+; ---- string key ---------------------------------------------------------
+CALL SETUP
+MASTER = -1
+NAME:0 '= "d"
+NAME:1 '= "a"
+NAME:2 '= "c"
+NAME:3 '= "a"
+NAME:4 '= "b"
+SORTCHARA NAME
+CALL DUMP
+PRINTFORML name %NAME:0% %NAME:1% %NAME:2% %NAME:3% %NAME:4%
+
+; ---- explicit FORWARD is the same as omitting the order -----------------
+CALL SETUP
+MASTER = -1
+SORTCHARA CFLAG:10, FORWARD
+CALL DUMP
+
+; ---- the exact shapes eraTHYMKR@CHARA_SORT_INPUT uses: a runtime subscript
+; ---- expression, ascending and descending -------------------------------
+CALL SETUP
+MASTER = -1
+TFLAG:2 = 10
+SORTCHARA CFLAG:(TFLAG:2)
+CALL DUMP
+CALL SETUP
+SORTCHARA CFLAG:(TFLAG:2), BACK
+CALL DUMP
+
+CALL SETUP
+ABL:0:7 = 1
+ABL:1:7 = 5
+ABL:2:7 = 3
+ABL:3:7 = 5
+ABL:4:7 = 2
+TFLAG:2 = 7
+SORTCHARA ABL:(TFLAG:2), BACK
+CALL DUMP
+
+; ---- a pinned MASTER leaves one movable chara in a 2 element list -------
+DELCHARA 4
+DELCHARA 3
+DELCHARA 2
+CFLAG:0:10 = 1
+CFLAG:1:10 = 0
+CFLAG:0:11 = 100
+CFLAG:1:11 = 101
+MASTER = 0
+SORTCHARA CFLAG:10
+PRINTFORML pinned2 {CFLAG:0:11} {CFLAG:1:11}
+MASTER = -1
+SORTCHARA CFLAG:10
+PRINTFORML free2 {CFLAG:0:11} {CFLAG:1:11}
+
+; ---- a single chara never moves -----------------------------------------
+DELCHARA 1
+SORTCHARA CFLAG:10
+PRINTFORML one {CHARANUM} {CFLAG:0:11}
+
+@SETUP
+CFLAG:0:10 = 40
+CFLAG:1:10 = 10
+CFLAG:2:10 = 30
+CFLAG:3:10 = 10
+CFLAG:4:10 = 20
+CFLAG:0:11 = 0
+CFLAG:1:11 = 1
+CFLAG:2:11 = 2
+CFLAG:3:11 = 3
+CFLAG:4:11 = 4
+
+@DUMP
+PRINTFORML tag {CFLAG:0:11} {CFLAG:1:11} {CFLAG:2:11} {CFLAG:3:11} {CFLAG:4:11}

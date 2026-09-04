@@ -1,0 +1,42 @@
+before-clear-no-newlineEMPTY=0
+[***.......]
+     X
+███
+ ████
+<shape type='rect' param='1, 2'>
+PRINTCPERLINE=3
+dbg-before
+dbg-after
+あいう
+アイウ
+あいう
+はんかく
+あいう
+ALIGN=CENTER
+SIGN 1 -1 0 -1
+SIGNSTMT=1
+MONEY1=12345원
+MONEY2=12,345원
+MONEY3=12345.00원
+MONEY4=007원
+MONEY5=FF원
+MONEY6=12,345원
+MONEY7=5.00원
+MONEY8=0원
+MONEY9=1,234,567.00원
+MONEY10=5.00원
+<img src='face'>
+<img src='face' srcb='focus' height='36' width='27' ypos='-9'>
+<img src='face'>
+<img src='face' srcb='focus' srcm='mask' height='36' width='-27'>
+<img src='face' height='4'>ENDIMG
+only
+idx=0
+same
+inrange=1
+p1
+p2
+after
+got=[s1
+s2]
+localS=plain

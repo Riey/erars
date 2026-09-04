@@ -1,0 +1,13 @@
+@DEBUG
+*実行中の行
+ファイル名:tests/run_tests/basic/debug_console_window.erb
+行番号:20 関数名:SHOWDEBUG
+
+*スタックトレース
+CALL :@SHOWDEBUG:tests/run_tests/basic/debug_console_window.erb:20行目
+CALL :@SYSTEM_TITLE:tests/run_tests/basic/debug_console_window.erb:16行目
+buffered
+[answered]
+
+--- debug console ---
+buffered

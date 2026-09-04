@@ -1,0 +1,12 @@
+@SYSTEM_TITLE
+PRINTL before
+[SKIPSTART]
+PRINTL dropped
+{
+PRINTL a brace inside a skipped region is text
+}
+[IF TRUE]
+PRINTL a region inside a skipped one stays skipped
+[ENDIF]
+[SKIPEND]
+PRINTL after

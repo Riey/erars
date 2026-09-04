@@ -1,5 +1,13 @@
 @SYSTEM_TITLE
 #DIM TEST_VARS = 1,2,3,4,5,6
+#DIM SHIFT = 1,2,3,4,5,6,7,8
+#DIM MOV = 1,2,3,4,5
+#DIM MS_A = 3,1,2
+#DIM MS_B = 9,8,7
+#DIM MS_C = 2,1,0
+#DIM MS_D = 9,8,7
+#DIM MS_E = 3,1,2
+#DIM MS_SHORT, 2
 ARRAYREMOVE TEST_VARS, 2, 3
 REPEAT 6
     PRINTV TEST_VARS:COUNT
@@ -29,8 +37,60 @@ REPEAT 6
 REND
 PRINTL
 
-ARRAYCOPY TEST_VARS, LOCAL
+; Emuera's ARRAYCOPY takes the two variable *names* as strings
+; (SP_COPY_ARRAY, ArgumentBuilder.cs:2236-2242).
+ARRAYCOPY "TEST_VARS", "LOCAL"
 REPEAT 10
     PRINTV LOCAL:COUNT
+REND
+PRINTL
+
+; ARRAYSHIFT's shift is signed (VariableEvaluator.cs:522-593): a negative one
+; slides the window toward lower indices and refills its tail. The live corpus
+; relies on it at ERB/SYS/EVENT/EVENT_NIGHT2.ERB:2453.
+ARRAYSHIFT SHIFT, -1, 9, 1, 5
+REPEAT 8
+    PRINTV SHIFT:COUNT
+REND
+PRINTL
+
+; ARRAYMOVE is an erars-only extension with no Emuera counterpart: an in-place
+; block move of `count` elements from `start` to `move_to`.
+ARRAYMOVE MOV, 0, 2, 2
+REPEAT 5
+    PRINTV MOV:COUNT
+REND
+PRINTL
+
+; ARRAYMSORT sorts by the first argument's leading non-zero run and applies
+; that permutation to every later argument (Creator.Method.cs:4056-4118).
+ARRAYMSORT MS_A, MS_B
+PRINTFORM MSORT1=
+REPEAT 3
+    PRINTV MS_A:COUNT
+REND
+PRINTFORM /
+REPEAT 3
+    PRINTV MS_B:COUNT
+REND
+PRINTFORML /R={RESULT}
+
+; The run stops at the first zero, so only the first two rows are permuted.
+ARRAYMSORT MS_C, MS_D
+PRINTFORM MSORT2=
+REPEAT 3
+    PRINTV MS_C:COUNT
+REND
+PRINTFORM /
+REPEAT 3
+    PRINTV MS_D:COUNT
+REND
+PRINTFORML /R={RESULT}
+
+; The expression form returns 0 as soon as an argument is shorter than the
+; permutation — after the arguments before it have already been reordered.
+PRINTFORM MSORT3={ARRAYMSORT(MS_E, MS_SHORT)}/
+REPEAT 3
+    PRINTV MS_E:COUNT
 REND
 PRINTL

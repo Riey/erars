@@ -1,0 +1,31 @@
+--- /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/expr.V0.rs	2026-09-03 01:08:45.158083435 +0900
++++ /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/expr.V1.rs	2026-09-03 01:09:27.900411873 +0900
+@@ -12,7 +12,7 @@
+     bytes::complete::{tag, tag_no_case, take_while, take_while1},
+     character::complete::*,
+     combinator::{cut, eof, map, opt, value},
+-    error::{context, ErrorKind, VerboseError},
++    error::{context, ErrorKind},
+     error_position,
+     multi::{many0, separated_list0, separated_list1},
+     number::complete::float,
+@@ -20,7 +20,7 @@
+     Parser,
+ };
+ 
+-type Error<'a> = nom::error::VerboseError<&'a str>;
++type Error<'a> = nom::error::Error<&'a str>;
+ type IResult<'a, T> = nom::IResult<&'a str, T, Error<'a>>;
+ 
+ fn sp<'a>(i: &'a str) -> IResult<'a, ()> {
+@@ -398,9 +398,7 @@
+                                     Ok((i, expr))
+                                 }
+                             }
+-                            Err(err) => Err(err.map(|e| VerboseError {
+-                                errors: e.errors.into_iter().map(|(_i, kind)| (i, kind)).collect(),
+-                            })),
++                            Err(err) => Err(err.map(|e| nom::error::Error::new(i, e.code))),
+                         }
+                     }
+                 }

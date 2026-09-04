@@ -1,0 +1,17 @@
+@SYSTEM_TITLE
+PRINTFORML start
+CALL REF_UNBIND
+
+@REF_UNBIND
+#DIM REF R
+#DIM MYLOCAL, 4
+
+REF R, MYLOCAL
+R:0 = 3
+PRINTFORML bound {MYLOCAL:0}
+
+; MatchType reaches RESULT = 0 only through SetRef(null), so a refused
+; rebinding leaves the reference pointing at nothing at all.
+REF R, CFLAG
+PRINTFORML refused {RESULT}
+R:0 = 9

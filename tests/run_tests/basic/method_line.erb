@@ -1,0 +1,17 @@
+@SYSTEM_TITLE
+; Emuera registers every method as a line-head instruction as well, unless a
+; hand-written instruction already owns the name
+; (`GameProc/Function/FunctionIdentifier.cs:428-436`), and leaves the value in
+; RESULT or RESULTS. The corpus relies on it: `GCREATED 1` and `SPRITECREATED
+; "x"` are written as statements.
+GCREATE 1, 4, 4
+GCREATED 1
+PRINTFORML {RESULT}
+GCREATED 2
+PRINTFORML {RESULT}
+; A string-returning method lands in RESULTS.
+TOSTR 12
+PRINTFORML %RESULTS%
+; Arguments are passed positionally, exactly as in the call form.
+GWIDTH 1
+PRINTFORML {RESULT}

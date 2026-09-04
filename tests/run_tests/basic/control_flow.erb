@@ -1,0 +1,106 @@
+@SYSTEM_TITLE
+#DIM N
+
+; ---- ASSERT only rejects a zero argument --------------------------------
+ASSERT 1
+PRINTFORML assert ok
+
+; ---- TRYCALLLIST enters the first candidate that exists -----------------
+TRYCALLLIST
+FUNC LIST_MISSING, 1
+FUNC LIST_TARGET, 7
+FUNC LIST_OTHER, 9
+ENDFUNC
+PRINTFORML after calllist
+
+; ---- and falls through past ENDFUNC when none of them do ----------------
+TRYCALLLIST
+FUNC LIST_MISSING
+FUNC LIST_ALSO_MISSING
+ENDFUNC
+PRINTFORML calllist fell through
+
+; ---- FUNC names its candidate with a form string ------------------------
+N = 2
+TRYCALLLIST
+FUNC LIST_FORM_{N}
+ENDFUNC
+
+; ---- TRYJUMPLIST never comes back to the function that ran it -----------
+CALL JUMPLIST_HOST
+PRINTFORML after jumplist
+
+; ---- TRYGOTOLIST moves the cursor inside the running function -----------
+CALL GOTOLIST_HOST
+CALL GOTOLIST_MISS
+
+; ---- CALLEVENT runs an event function by name ---------------------------
+CALLEVENT EVENTCOM
+PRINTFORML after callevent
+
+; ---- REF / REFBYNAME alias one variable under another name --------------
+CALL REF_HOST
+
+@LIST_TARGET, ARG
+PRINTFORML list target {ARG}
+
+@LIST_OTHER, ARG
+PRINTFORML list other {ARG}
+
+@LIST_FORM_2
+PRINTFORML list form 2
+
+@JUMPLIST_HOST
+TRYJUMPLIST
+FUNC LIST_MISSING
+FUNC JUMP_TARGET
+ENDFUNC
+PRINTFORML jumplist did not jump
+
+@JUMP_TARGET
+PRINTFORML jump target
+
+@GOTOLIST_HOST
+TRYGOTOLIST
+FUNC NO_SUCH_LABEL
+FUNC HIT
+ENDFUNC
+PRINTFORML gotolist did not jump
+$HIT
+PRINTFORML goto label hit
+
+@GOTOLIST_MISS
+TRYGOTOLIST
+FUNC NO_SUCH_LABEL
+FUNC ALSO_NO_SUCH_LABEL
+ENDFUNC
+PRINTFORML gotolist fell through
+
+@EVENTCOM
+PRINTFORML eventcom ran
+
+@REF_HOST
+#DIM REF R
+#DIM MYLOCAL, 4
+#DIM CONST MYCONST = 5
+
+REF R, MYLOCAL
+PRINTFORML ref result {RESULT}
+R:1 = 42
+PRINTFORML through ref {MYLOCAL:1} size {VARSIZE("R")}
+
+; a reference may be re-pointed, here at a global
+REFBYNAME R, "FLAG"
+PRINTFORML refbyname result {RESULT}
+R:3 = 7
+PRINTFORML through refbyname {FLAG:3}
+
+; every MatchType refusal answers 0 instead of raising
+REF R, NO_SUCH_VARIABLE
+PRINTFORML ref missing {RESULT}
+REF R, CFLAG
+PRINTFORML ref chara {RESULT}
+REF R, MYCONST
+PRINTFORML ref const {RESULT}
+REFBYNAME R, "NOPE" + "_XYZ"
+PRINTFORML refbyname missing {RESULT}

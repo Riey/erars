@@ -1,0 +1,53 @@
+@SYSTEM_TITLE
+ADDDEFCHARA
+
+; ---- PRINT_ABL: "{name}LV{value} " for every named, non-zero slot ------
+ABL:0:0 = 3
+ABL:0:1 = 0
+ABL:0:2 = 7
+ABL:0:3 = 5
+PRINT_ABL 0
+
+; ---- PRINT_MARK shares that shape ------------------------------------
+MARK:0:0 = 2
+MARK:0:1 = 9
+MARK:0:2 = 1
+PRINT_MARK 0
+
+; ---- PRINT_EXP drops the "LV" ----------------------------------------
+EXP:0:0 = 120
+EXP:0:1 = 4
+PRINT_EXP 0
+
+; ---- PRINT_TALENT prints "[{name}]" only, negatives included ---------
+TALENT:0:0 = 1
+TALENT:0:1 = 1
+TALENT:0:2 = -1
+PRINT_TALENT 0
+
+; ---- an omitted argument means chara 0, not TARGET -------------------
+TARGET = -1
+PRINT_ABL
+
+; ---- nothing owned yet -----------------------------------------------
+PRINT_ITEM
+
+ITEM:1 = 2
+ITEM:2 = 0
+ITEM:3 = 1
+PRINT_ITEM
+
+; ---- PRINT_PALAM: PALAMLV grades the bar, printc_count wraps ----------
+PALAM:0:0 = 50
+PALAM:0:1 = 600
+PALAM:0:2 = 77
+PALAM:0:3 = 0
+PRINT_PALAM 0
+
+; ---- PRINT_SHOPITEM needs both a sale flag and a name -----------------
+ITEMSALES:1 = 1
+ITEMSALES:2 = 1
+ITEMSALES:3 = 1
+ITEMSALES:5 = 1
+ITEMSALES:6 = 1
+PRINT_SHOPITEM

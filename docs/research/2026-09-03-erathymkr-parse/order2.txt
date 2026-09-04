@@ -1,0 +1,79 @@
+order: len a=16859 b=16859
+order: identical=false
+order: first divergence at Some(0), 16859 of 16859 positions differ
+order: 16462 distinct names, 21 duplicated names, 391 event-fn instances (6 event names duplicated)
+order: same multiset after sort = true
+order: distinct (file,name) pairs = 16712
+order: event census (9 names, 391 instances):
+    EVENT EVENTBUY x1
+    EVENT EVENTCOM x10
+    EVENT EVENTCOMEND x8
+    EVENT EVENTEND x163
+    EVENT EVENTFIRST x1
+    EVENT EVENTLOAD x1
+    EVENT EVENTSHOP x5
+    EVENT EVENTTRAIN x191
+    EVENT EVENTTURNEND x11
+order: duplicated non-event definitions (name -> files):
+    DICTIONARY_DRUG_43 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/SYS/INFO/HELP4.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/SYS/INFO/HELP4.ERB
+    DICTIONARY_NETABARE_Q147 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/SYS/INFO/HELP5.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/SYS/INFO/HELP5.ERB
+    DICTIONARY_NETABARE_Q148 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/SYS/INFO/HELP5.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/SYS/INFO/HELP5.ERB
+    K243_MESSAGE_EJAC_PLAYER_15 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/243 사구메/EVENT_K243.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/243 사구메/EVENT_K243.ERB
+    K249_MESSAGE_COM_339 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/249 시온/EVENT_K249.erb
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/249 시온/EVENT_K249.erb
+    K249_MESSAGE_COM_347 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/249 시온/EVENT_K249.erb
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/249 시온/EVENT_K249.erb
+    K51_MESSAGE_EJAC_PLAYER_14 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/051 이쿠/YM/EVENT_K51.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/051 이쿠/YM/EVENT_K51.ERB
+    KOJO_243_TRAIN_MESSAGE_S_COM_243 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/243 사구메/EVENT_K243_C0.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/243 사구메/EVENT_K243_C2.ERB
+    KOJO_B_3_72 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/072 코가사/EVENT_K72_B.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/072 코가사/EVENT_K72_B.ERB
+    KOJO_MESSAGE_MARKCNG_19 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/074 운잔/EVENT_K74.erb
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/019 요우무/EVENT_K19.erb
+    SLAVE_ENDING_K72 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/072 코가사/EVENT_K72_A.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/072 코가사/EVENT_K72_A.ERB
+    TRY_13 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/013 첸/RR판/EVENT_K13_RR.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/013 첸/EVENT_K13.ERB
+    TRY_51 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/051 이쿠/YM/EVENT_K51.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/051 이쿠/EVENT_K51.erb
+    TRY_52 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/052 텐시/EVENT_K52.erb
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/052 텐시/YM/EVENT_K52.ERB
+    TRY_59 x2
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/059 파르시/EVENT_K59.ERB
+        /tmp/claude-1000/-home-riey-repos-erars/6648b565-fad0-4a94-b80a-ec88c824873c/scratchpad/opus/game/ERB/CHARA/059 파르시/EVENT_ASSI_K59.ERB
+order: FINAL duplicated non-event name count = 15
+order: duplicated NON-event functions (15):
+    DICTIONARY_DRUG_43 x2
+    DICTIONARY_NETABARE_Q147 x2
+    DICTIONARY_NETABARE_Q148 x2
+    K243_MESSAGE_EJAC_PLAYER_15 x2
+    K249_MESSAGE_COM_339 x2
+    K249_MESSAGE_COM_347 x2
+    K51_MESSAGE_EJAC_PLAYER_14 x2
+    KOJO_243_TRAIN_MESSAGE_S_COM_243 x2
+    KOJO_B_3_72 x2
+    KOJO_MESSAGE_MARKCNG_19 x2
+    SLAVE_ENDING_K72 x2
+    TRY_13 x2
+    TRY_51 x2
+    TRY_52 x2
+    TRY_59 x2

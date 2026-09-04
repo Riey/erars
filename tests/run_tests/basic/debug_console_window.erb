@@ -1,0 +1,20 @@
+; `@DEBUG` opens Emuera's three-tab debug dialog, but only in a run started
+; with -Debug — otherwise doSystemCommand refuses it
+; (GameView/EmueraConsole.cs:1367-1375, and again silently at :1816-1817).
+; The sibling `.debug` marker starts this fixture that way.
+;
+; erars has no dialog, so the two tabs whose content the engine owns are
+; printed instead: the stack-trace tab, label for label from GetDebugTraceLog
+; (:1788-1812), and the console tab, which is the DEBUGPRINT buffer (:1783).
+; The variable-watch tab needs the dialog's interactive grid and is not
+; reproduced. §5.16 of docs/research/2026-09-03-emuera-command-gap.md records
+; that, and records that each frame reports its own current position — the
+; call site, for an outer frame — where Emuera logs the declaration line of
+; the function being entered.
+@SYSTEM_TITLE
+DEBUGPRINTL buffered
+CALL SHOWDEBUG
+PRINTFORML [%RESULTS%]
+
+@SHOWDEBUG
+INPUTS

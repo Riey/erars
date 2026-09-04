@@ -9,6 +9,7 @@ members = [
     "./crates/erars-ast",
     "./crates/erars-bytecode",
     "./crates/erars-compiler",
+    "./crates/erars-font",
     "./crates/erars-renderer",
     "./crates/erars-proxy-system",
     "./crates/erars-reader",
@@ -22,7 +23,10 @@ members = [
 
 [workspace.dependencies]
 flume = "0.11.0"
-serde = { version = "1", features = ["derive"] }
+# `rc` lets `ConsoleLinePart::Image(Arc<InlineImage>)` round-trip: the console
+# frame is cloned per redraw, so the image payload is shared rather than deep
+# copied, and it still has to serialise for the HTTP front-end.
+serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
 strum = { version = "0.26", features = ["derive", "phf"] }
 thiserror = "1"
@@ -40,6 +44,8 @@ erars-ui = { path = "./crates/erars-ui" }
 erars-vm = { path = "./crates/erars-vm" }
 
 serde.workspace = true
+anyhow.workspace = true
+encoding_rs.workspace = true
 
 codespan = "0.11.1"
 codespan-reporting = "0.11.1"

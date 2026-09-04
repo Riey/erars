@@ -1,0 +1,3 @@
+outside -1 -1
+VM error occurred: 메소드 SPRITEGETCOLOR는 애니메이션 스프라이트에 사용할 수 없습니다: ANI
+At function SYSTEM_TITLE tests/run_tests/basic/sprite_get_color_anime.erb@14

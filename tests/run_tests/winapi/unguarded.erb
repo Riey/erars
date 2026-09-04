@@ -1,0 +1,17 @@
+@SYSTEM_TITLE
+; Emuera's WINAPI refusal covers 35 named methods, not every method that
+; touches a bitmap. `SpriteStateMethod` (`Creator.Method.cs:5759`, behind
+; SPRITECREATED/SPRITEWIDTH/SPRITEHEIGHT/SPRITEPOSX/SPRITEPOSY),
+; `SpriteGetColorMethod` (`:5818`) and `SpriteDisposeMethod` (`:6063`) were
+; never given the guard, and `CBGClearMethod` (`:6479`) has one that the fork
+; commented out (`:6489`, as at `:6532` for CBGCLEARBUTTON, `:6551` for
+; CBGREMOVEBMAP, `:6627` for CBGSETCIMG and `:5647` for GROTATE). All of them
+; answer in WINAPI mode exactly as they do in GDI+ mode.
+; Nothing exists to query here, so these are the "no such sprite" answers: 0
+; everywhere and -1 from SPRITEGETCOLOR, whose failure is negative (`:5828`).
+PRINTFORML created={SPRITECREATED("nope")}
+PRINTFORML width={SPRITEWIDTH("nope")}
+PRINTFORML posx={SPRITEPOSX("nope")}
+PRINTFORML color={SPRITEGETCOLOR("nope", 0, 0)}
+PRINTFORML disposed={SPRITEDISPOSE("nope")}
+PRINTFORML cbg={CBGCLEAR()}

@@ -38,12 +38,19 @@ impl Event {
     }
 }
 
+/// Emuera's `#PRI`/`#LATER`/`#SINGLE`/`#ONLY` (`LogicalLineParser.cs:36-144`),
+/// which decide the order the bodies of one event name run in
+/// (`LabelDictionary.cs:99-115`: only, pri, normal, later).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum EventFlags {
     None,
     Pre,
     Later,
     Single,
+    /// `#ONLY`: this body runs first and the event ends when it returns
+    /// (`Process.State.cs:399-400` — `called.IsOnly` → `FinishEvent()`), so no
+    /// other body of the same event runs at all.
+    Only,
 }
 
 #[derive(

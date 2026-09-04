@@ -27,7 +27,11 @@ impl SystemFunctions for Scripted {
         })
     }
 
-    fn redraw(&mut self, _vconsole: &mut VirtualConsole) -> anyhow::Result<()> {
+    fn redraw(
+        &mut self,
+        _vconsole: &mut VirtualConsole,
+        _painted: erars_vm::graphics::Painted<'_>,
+    ) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -58,6 +62,7 @@ fn run_train_menu(printc_count: usize) -> Vec<String> {
         Arc::new(config),
         Box::new(Scripted(vec![0])),
         "sav".into(),
+        "resources".into(),
     );
 
     let parser = ParserContext::new(header.clone(), StrKey::new("TRAIN_MENU.ERB"));

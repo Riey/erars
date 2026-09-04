@@ -1,0 +1,19 @@
+12
+ff
+0000FF
+012
+42
+1234
+1,234,567
+12.34
+0.12
+1200%
+1
+2
+7
+(5)
+zero
+0
+-005
+VM error occurred: TOSTR 메소드: 제2인수의 서식 지정이 잘못되었습니다: Q
+At function SYSTEM_TITLE tests/run_tests/basic/tostr.erb@45

@@ -1,0 +1,26 @@
+@SYSTEM_TITLE
+GCREATE 1, 20, 10
+; The animated sprite of `SpriteAnimeCreateMethod` /
+; `SpriteAnimeAddFrameMethod` (`Creator.Method.cs:6395-6472`): a named sprite
+; that owns no source of its own, plus one frame per call.
+PRINTFORML {SPRITEANIMECREATE("anim", 8, 6)}
+PRINTFORML {SPRITEANIMEADDFRAME("anim", 1, 0, 0, 8, 6, 0, 0, 100)}
+PRINTFORML {SPRITEANIMEADDFRAME("anim", 1, 8, 0, 8, 6, 1, 2, 50)}
+; The delay has to be positive and fit in an `int` (`:6467-6469`).
+PRINTFORML {SPRITEANIMEADDFRAME("anim", 1, 0, 0, 8, 6, 0, 0, 0)}
+; The source rectangle has to be positive and lie inside the parent graphic
+; (`:6461-6464`).
+PRINTFORML {SPRITEANIMEADDFRAME("anim", 1, 16, 0, 8, 6, 0, 0, 100)}
+; An empty name is a soft 0 (`:6451-6452`), and so is a name that was never
+; created: `:6455-6456` reads `if (img == null && !img.IsCreated)`, which
+; dereferences the null it just tested for, so erars follows the `return 0`
+; the branch was written to reach.
+PRINTFORML {SPRITEANIMEADDFRAME("", 1, 0, 0, 8, 6, 0, 0, 100)}
+PRINTFORML {SPRITEANIMEADDFRAME("nope", 1, 0, 0, 8, 6, 0, 0, 100)}
+; The animated sprite answers the ordinary sprite queries with the size it was
+; created at, not with any frame's size.
+PRINTFORML {SPRITECREATED("anim")}{SPRITEWIDTH("anim")}{SPRITEHEIGHT("anim")}
+; A second create under a name in use fails, exactly as for a still sprite.
+PRINTFORML {SPRITEANIMECREATE("anim", 4, 4)}
+SPRITEDISPOSE "anim"
+PRINTFORML {SPRITECREATED("anim")}

@@ -1,0 +1,18 @@
+@SYSTEM_TITLE
+; Emuera reads `p`/`P` as a base-2 exponent and `e`/`E` as a base-10 one after
+; any significand, evaluates `significand * pow(base, exponent)` in `double`
+; and range-checks it against Int64 (`Sub/LexicalAnalyzer.cs:172-190`).
+PRINTFORML {1P31}
+PRINTFORML {1p31}
+; The significand multiplies the power, so `2P16` is 2 * 2^16.
+PRINTFORML {2P16}
+PRINTFORML {3E4}
+PRINTFORML {3e4}
+; An exponent of zero leaves the significand alone instead of going through
+; `double`, so a value `double` cannot hold exactly still survives.
+PRINTFORML {1P0}
+PRINTFORML {9007199254740993P0}
+; `1P63` passes Emuera's `d > Int64.MaxValue` check, because the comparison
+; promotes `Int64.MaxValue` to 2^63, and then reaches the *unchecked*
+; `(Int64)d` cast, which yields `long.MinValue`.
+PRINTFORML {1P63}

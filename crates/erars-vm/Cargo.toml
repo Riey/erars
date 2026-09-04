@@ -7,6 +7,7 @@ license = "GPL-3.0-or-later"
 [dependencies]
 erars-ast = { path = "../erars-ast" }
 erars-compiler = { path = "../erars-compiler" }
+erars-font = { path = "../erars-font" }
 erars-ui = { path = "../erars-ui" }
 
 serde.workspace = true
@@ -22,18 +23,23 @@ rayon = { version = "1.5.3", optional = true }
 encoding_rs.workspace = true
 rand = { version = "0.8.5", default-features = false, features = ["getrandom"] }
 rand_chacha = { version = "0.3.1", default-features = false }
-time = { version = "0.3.14", features = ["local-offset", "serde"] }
+# 0.3.37 dropped the `num_threads::is_single_threaded()` gate on
+# `local_offset_at`. Before it, `OffsetDateTime::now_local()` — and so GETTIME,
+# GETTIMES and the whole save-description path — always failed with
+# "The system's UTC offset could not be determined", because the VM never runs
+# alone in the process.
+time = { version = "0.3.37", features = ["local-offset", "serde"] }
 css-color = "0.2.4"
 regex = "1.6.0"
 derivative = "2.2.0"
 tinyvec = "1.6.0"
 static_assertions = "1.1.0"
-unicode_hfwidth = "0.2.0"
 rmp-serde = "1.1.1"
 flate2 = "1.0.25"
-html5ever = "0.26.0"
-markup5ever_rcdom = "0.2.0"
 bytemuck = "1.13.0"
+# GDI+ decodes whatever `Image.FromFile` recognises; the corpus ships `.webp`
+# title art (`タイトル表示/PRINT_TITLE.ERB:50`) and `.jpg` event art.
+image = { version = "0.25", default-features = false, features = ["png", "bmp", "webp", "jpeg"] }
 
 [dev-dependencies]
 k9 = "0.11.5"
@@ -41,7 +47,7 @@ serde_yaml = "0.9"
 
 [target.'wasm32-unknown-unknown'.dependencies]
 getrandom = { version = "0.2.7", features = ["js"] }
-time = { version = "0.3.14", features = ["wasm-bindgen"] }
+time = { version = "0.3.37", features = ["wasm-bindgen"] }
 
 [features]
 multithread = ["rayon", "hashbrown/rayon"]
