@@ -17,14 +17,23 @@ pub fn cut_ident(line: &str) -> (&str, &str) {
     // bytes decide; both differ for every other character in the range.
     let bytes = line.as_bytes();
     let mut pos = 0;
-    while let Some(&b) = bytes.get(pos) {
-        if !is_ident_body_byte(b) || (b == 0xE3 && bytes[pos + 1..].starts_with(b"\x80\x80")) {
-            return (&line[..pos], &line[pos..]);
-        }
+    while !ends_ident(&bytes[pos..]) {
         pos += 1;
     }
 
-    (line, "")
+    (&line[..pos], &line[pos..])
+}
+
+/// Whether [`cut_ident`] would end an identifier at the head of `bytes`.
+///
+/// Anyone asking whether some text really is a whole word — rather than the
+/// head of a longer one — has to ask it with the lexer's own byte class, so
+/// this is that class, not a second copy of it.
+pub fn ends_ident(bytes: &[u8]) -> bool {
+    match bytes.first() {
+        None => true,
+        Some(&b) => !is_ident_body_byte(b) || (b == 0xE3 && bytes[1..].starts_with(b"\x80\x80")),
+    }
 }
 
 /// Drops the one separator character that follows an instruction name.
@@ -87,6 +96,21 @@ fn concat_in<'a>(parts: &[&str], b: &'a Bump) -> &'a str {
 /// A marker ([`marker_len`]) is not a comment at all, and the line continues
 /// past it, so it has to be removed from the middle of the text. That is the
 /// only path here that allocates, and no line in either game triggers it.
+///
+/// DELIBERATE: this second pass is not fused into the physical-line scan.
+/// Fusing it is the obvious move — [`crate::Preprocessor`] already walks each
+/// line with `memchr` to find its `\n`, so `memchr2(b'\n', b';')` finds the
+/// comment for free and a hint carried on the preprocessor (invalidated for
+/// disabled lines, `{`…`}` joins and `[[…]]` splices, and rebased onto every
+/// suffix the instruction arms take) lets this function skip its own search.
+/// It was built and verified — per-function digest parity on both corpora
+/// with the stale-hint `debug_assert`s live over 2M+ lines — and it lost:
+/// preprocess+lex serial -1.6 ms, parse+compile serial **+2.5 ms**, 6/6
+/// paired rounds. That is the trap here: fusing makes the isolated lex phase
+/// faster and the whole load slower, because the hint has to survive the
+/// parser's re-entry into the preprocessor and every arm that re-slices the
+/// line, and carrying it on all 890_801 lines costs more than the `memchr` it
+/// saves.
 pub fn cut_comment<'a>(line: &'a str, debug_mode: bool, b: &'a Bump) -> &'a str {
     let bytes = line.as_bytes();
     let Some(semi) = memchr::memchr(b';', bytes) else {
@@ -413,6 +437,31 @@ mod tests {
             (";comment", ("", ";comment")),
         ] {
             assert_eq!(cut_ident(line), want, "{line:?}");
+        }
+    }
+
+    /// [`ends_ident`] is the boundary `cut_ident` stops at, and a caller that
+    /// only wants to know whether some text is a whole word — the compiler's
+    /// `VARS` scan — depends on the two answering alike.
+    #[test]
+    fn ends_ident_agrees_with_where_cut_ident_stops() {
+        for line in [
+            "",
+            "VARS S",
+            "VARSET N, 0",
+            "VARS\u{3000}S",
+            "VARS=1",
+            "VARS;c",
+            "VARS안녕",
+            ";comment",
+            "\u{3000}A",
+        ] {
+            let (ident, _) = cut_ident(line);
+            let bytes = line.as_bytes();
+            for at in 0..ident.len() {
+                assert!(!ends_ident(&bytes[at..]), "{line:?} at {at}");
+            }
+            assert!(ends_ident(&bytes[ident.len()..]), "{line:?} ends at {}", ident.len());
         }
     }
 }

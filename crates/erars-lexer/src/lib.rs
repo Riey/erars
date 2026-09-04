@@ -166,6 +166,9 @@ fn find_open(s: &str) -> Option<usize> {
 /// per call, 890_801 times per pass over the corpus, and the profile charged
 /// 5.2% of parse+compile self time to `core::slice::memchr::memchr_aligned`
 /// plus 2.9% to `CharSearcher::next_match`.
+///
+/// Folding the comment search in here — `memchr2(b'\n', b';')` — was measured
+/// and rejected; see [`utils::cut_comment`] for the numbers.
 fn split_nl(s: &str) -> Option<(&str, &str)> {
     let at = memchr::memchr(b'\n', s.as_bytes())?;
     // `\n` is ASCII, so `at` and `at + 1` are both char boundaries.

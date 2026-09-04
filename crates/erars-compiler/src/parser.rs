@@ -733,12 +733,30 @@ fn parse_color(s: &str) -> Option<[u8; 3]> {
     Some(out)
 }
 
-/// Offset of the file's last `VARS`, in any case, or `None` when it has none.
+/// Offset of the file's last `VARS` *word*, in any case, or `None` when it has
+/// none.
 ///
 /// [`ParserContext::hoist_var_decls`] re-lexes a whole function body to find
 /// the `VARS` declarations that have to be visible before their own line, so
 /// [`VarsGate`] asks this once per file and skips that second lex for every
 /// function that begins after the answer.
+///
+/// A four-byte match alone is a far looser needle than the lexer's: it fires
+/// on `VARSET`, `CVARSET` and `VARSIZE`, which the corpus writes constantly,
+/// and those accounted for all but 63 of the bodies the gate used to ask for.
+/// The lexer reads an instruction name with `erars_lexer::utils::cut_ident`
+/// (`erars-lexer/src/lib.rs:786`), so `VARS` is only ever that instruction
+/// when the identifier ends right after it — hence `utils::ends_ident`, which
+/// is that same byte class rather than a second copy of it.
+///
+/// DELIBERATE: only the trailing side is checked. The scan reads the file as
+/// the preprocessor was handed it, before `[[NAME]]` renames are spliced in
+/// and with disabled `[IF]` regions still present, so what precedes a `VARS`
+/// here need not be what precedes it once lexed — a leading boundary would be
+/// a guess about text that is still going to change. The byte after the word
+/// carries no such doubt: a rename splices whole `[[…]]` tokens, so it can
+/// neither remove an identifier byte that sits there nor add one that does
+/// not.
 ///
 /// The naive `s.as_bytes().windows(4).any(…)` this replaces compared four
 /// bytes at every one of the corpus's 61_843_825 offsets, once per file, and
@@ -748,16 +766,20 @@ fn parse_color(s: &str) -> Option<[u8; 3]> {
 /// leaves only a handful of three-byte compares. Seeking *backwards* answers
 /// this question in one pass: the first match met from the end is the last
 /// one in the file, so a file whose `VARS` sits near its end is not read
-/// through, and a file with none — 86% (eraTHYMKR) and 94% (eraMegaten) of
-/// them — costs exactly the same scan it did before.
+/// through, and a file with none costs exactly the same scan it did before.
 fn last_vars(bytes: &[u8]) -> Option<usize> {
     let mut end = bytes.len();
 
     while let Some(pos) = memchr::memrchr2(b'V', b'v', &bytes[..end]) {
         match bytes.get(pos + 1..pos + 4) {
-            Some(tail) if tail.eq_ignore_ascii_case(b"ARS") => return Some(pos),
-            // A false start, or fewer than three bytes left: keep looking
-            // before it.
+            Some(tail)
+                if tail.eq_ignore_ascii_case(b"ARS")
+                    && erars_lexer::utils::ends_ident(&bytes[pos + 4..]) =>
+            {
+                return Some(pos)
+            }
+            // A longer word, a false start, or fewer than three bytes left:
+            // keep looking before it.
             _ => end = pos,
         }
     }
@@ -768,25 +790,29 @@ fn last_vars(bytes: &[u8]) -> Option<usize> {
 /// Whether the function that is about to be compiled can hold a `VARS`
 /// declaration at all.
 ///
-/// The gate this replaces asked one question of the whole file, which is the
-/// wrong grain: [`ParserContext::hoist_var_decls`] stops at the next function
-/// line, so a single `VARS` anywhere re-lexed *every* function in that file —
-/// 3368 bodies in eraTHYMKR (121_468 lines, 6.91 MB, 11.2% of the corpus read
-/// twice) and 6353 in eraMegaten (290_248 lines, 14.48 MB, 23.8%).
+/// Two questions decide it, and each one used to be asked too loosely. The
+/// first gate asked one question of the whole file, which is the wrong grain:
+/// [`ParserContext::hoist_var_decls`] stops at the next function line, so a
+/// single `VARS` anywhere re-lexed *every* function in that file — 3368 bodies
+/// in eraTHYMKR (6.91 MB, 11.2% of the corpus read twice) and 6353 in
+/// eraMegaten (14.48 MB, 23.8%). A body can only declare a name the hoist
+/// finds *ahead* of where that body begins, so the file's last `VARS` bounds
+/// all of the work: once the preprocessor has read past it, no function after
+/// it has anything to hoist. That left 1897 bodies (4.99 MB, 8.1%) and 4625
+/// (11.68 MB, 19.2%).
 ///
-/// A body can only declare a name the hoist finds *ahead* of where that body
-/// begins, so the file's last `VARS` bounds all of the work: once the
-/// preprocessor has read past it, no function after it has anything to hoist.
-/// That leaves 1897 bodies (88_145 lines, 4.99 MB, 8.1%) and 4625 (232_548
-/// lines, 11.68 MB, 19.2%). This can only ever ask for more hoisting than is
-/// needed — every declaration the hoist could find sits at or after the body's
-/// start and at or before the last `VARS` — and it costs one backward scan per
-/// file plus one comparison per function.
+/// The rest was the needle, not the grain: with the trailing boundary
+/// [`last_vars`] now requires, eraTHYMKR asks for no hoist at all — not one of
+/// its 857 files contains the instruction — and eraMegaten for 347 bodies
+/// (29_614 lines, 1.39 MB, 2.3%) in 48 of its 8779 files. Forcing the hoist
+/// everywhere finds a declaration in 0 of eraTHYMKR's 16_859 functions and 63
+/// of eraMegaten's 125_553, so what is left is within a small factor of the
+/// work that is genuinely needed.
 ///
-/// What is left is still nearly all waste, and the needle is why: forcing the
-/// hoist for every function finds a declaration in 0 of eraTHYMKR's 16_859 and
-/// 63 of eraMegaten's 125_553, because most `VARS` hits are `VARSET`/`VARSIZE`
-/// spelled at a position no declaration can occupy.
+/// This can only ever ask for more hoisting than is needed — every declaration
+/// the hoist could find sits at or after the body's start and at or before the
+/// last `VARS` — and it costs one backward scan per file plus one comparison
+/// per function.
 ///
 /// DELIBERATE: bounding each body by its own next `\n@` would gate far more
 /// out, and is unsound. A line-start `@` inside a disabled `[IF]`/`[SKIPSTART]`
@@ -4293,9 +4319,23 @@ mod config_tests {
 mod scan_tests {
     use super::{last_vars, VarsGate};
 
-    /// The naive `windows(4)` scan this replaced, kept as the oracle.
+    /// The naive `windows(4)` scan, plus the boundary the lexer applies —
+    /// spelled with the *character* predicate `cut_ident` is checked against
+    /// (`erars-lexer/src/utils.rs:394-398`) rather than the byte one
+    /// `last_vars` uses, so the two derivations have to agree.
     fn naive_last(s: &str) -> Option<usize> {
-        s.as_bytes().windows(4).rposition(|w| w.eq_ignore_ascii_case(b"vars"))
+        s.as_bytes()
+            .windows(4)
+            .enumerate()
+            .filter(|&(at, w)| {
+                w.eq_ignore_ascii_case(b"vars")
+                    && s[at + 4..]
+                        .chars()
+                        .next()
+                        .is_none_or(|c| !erars_lexer::utils::is_ident_body(c))
+            })
+            .map(|(at, _)| at)
+            .next_back()
     }
 
     #[test]
@@ -4325,6 +4365,22 @@ mod scan_tests {
             // Non-ASCII around the match, and a `V` inside a UTF-8 sequence.
             "PRINTL 안녕 VARS 하세요",
             "PRINTL 안녕하세요",
+            // The needle is only the instruction when the name ends there:
+            // these are the words that used to open every body in the file.
+            "VARSET NAME, 0",
+            "CVARSET NAME, 0",
+            "PRINTV VARSIZE(NAME)",
+            "VARS_LOCAL = 1",
+            "VARSS",
+            // Boundaries that do end the name, including the one non-ASCII
+            // terminator and the case with nothing after it at all.
+            "VARS\u{3000}S",
+            "VARS=1",
+            "VARS;comment",
+            "PRINTL a\nVARS",
+            // A character that continues the name, ASCII or not.
+            "VARS안녕",
+            "@A\nVARSET N, 0\nVARS S\n@B\nVARSIZE(N)\n",
         ] {
             assert_eq!(last_vars(s.as_bytes()), naive_last(s), "{s:?}");
         }
@@ -4356,6 +4412,11 @@ mod scan_tests {
         assert_eq!(decisions("@A\nS = %FORM%\nvars s\n"), [true]);
         // A `VARS` on the body's own first line still belongs to it.
         assert_eq!(decisions("@A\nPRINTL a\n@B\nVARS S\n"), [true, true]);
+        // `VARSET`/`VARSIZE` are not the declaration, and a file that only
+        // writes those — nearly every file that matched the bare needle —
+        // hoists nothing at all.
+        let only_calls = "@A\nVARSET N, 0\n@B\nPRINTV VARSIZE(N)\n@C\nCVARSET C, 0\n";
+        assert_eq!(decisions(only_calls), [false, false, false]);
     }
 
     /// A `@` the lexer never hands back — inside a disabled region or inside
