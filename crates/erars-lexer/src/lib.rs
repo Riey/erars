@@ -158,6 +158,20 @@ fn find_open(s: &str) -> Option<usize> {
     }
 }
 
+/// `s.split_once('\n')`, vectorised.
+///
+/// `str`'s own single-character search goes through `CharSearcher`, which
+/// calls `core`'s `memchr` — a word-at-a-time loop with an alignment prologue,
+/// not the AVX2 one the `memchr` crate compiles to. The lexer cuts one line
+/// per call, 890_801 times per pass over the corpus, and the profile charged
+/// 5.2% of parse+compile self time to `core::slice::memchr::memchr_aligned`
+/// plus 2.9% to `CharSearcher::next_match`.
+fn split_nl(s: &str) -> Option<(&str, &str)> {
+    let at = memchr::memchr(b'\n', s.as_bytes())?;
+    // `\n` is ASCII, so `at` and `at + 1` are both char boundaries.
+    Some(unsafe { (s.get_unchecked(..at), s.get_unchecked(at + 1..)) })
+}
+
 /// Splices in every `_Rename.csv` entry the line mentions.
 ///
 /// Emuera applies the rename table as a raw *text* substitution on each
@@ -405,7 +419,7 @@ impl<'s> Preprocessor<'s> {
 
                     if utils::marker_tail(rest.as_bytes(), self.debug_mode) {
                         chars = rest[2..].chars();
-                    } else if let Some(s) = rest.split_once('\n') {
+                    } else if let Some(s) = split_nl(rest) {
                         self.line_pos += 1;
                         chars = s.1.chars();
                     } else {
@@ -465,7 +479,7 @@ impl<'s> Preprocessor<'s> {
                 // inside a skipped region is text, not a block opener, and a
                 // directive that follows it is still read.
                 self.line_pos += 1;
-                let (line, left) = self.s.split_once('\n').unwrap_or((self.s, ""));
+                let (line, left) = split_nl(self.s).unwrap_or((self.s, ""));
                 self.s = left;
                 self.rename_line(line.trim_end_matches('\r'), b)
             } else if let Some(open_brace) = self.s.strip_prefix('{') {
@@ -513,7 +527,7 @@ impl<'s> Preprocessor<'s> {
                 }
             } else {
                 self.line_pos += 1;
-                let (line, left) = self.s.split_once('\n').unwrap_or((self.s, ""));
+                let (line, left) = split_nl(self.s).unwrap_or((self.s, ""));
                 self.s = left;
                 self.rename_line(line.trim_end_matches('\r'), b)
             };
@@ -771,10 +785,11 @@ impl<'s> Preprocessor<'s> {
 
         let (ident, args) = utils::cut_ident(line);
 
-        let ident_upper = ident.cow_to_ascii_uppercase();
         // Bound before the `if let` so the `&mut self` reborrow ends here and
-        // the branches below can still call `self.span()`.
-        let inst = self.inst_memo.get(&ident_upper);
+        // the branches below can still call `self.span()`. The memo folds case
+        // itself, so the word does not have to be uppercased — which used to
+        // allocate on every line whose first word had a lowercase letter.
+        let inst = self.inst_memo.get(ident);
 
         if let Some(code) = inst {
             let args = match code {
@@ -900,7 +915,7 @@ impl<'s> Preprocessor<'s> {
                     is_pre: false,
                     is_inc: false,
                 }))
-            } else if let Ok(meth) = ident_upper.parse::<BuiltinMethod>() {
+            } else if let Ok(meth) = ident.cow_to_ascii_uppercase().parse::<BuiltinMethod>() {
                 // Emuera's method-as-instruction fallback
                 // (`FunctionIdentifier.cs:428-436`). It sits after the
                 // assignment and increment forms so that it can only give a

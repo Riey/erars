@@ -26,6 +26,8 @@ use erars_vm::{console_config, FunctionDic, SystemFunctions, TerminalVm, VmConte
 use hashbrown::HashMap;
 
 pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
+    let target = resolve_game_path(target_path);
+    let target_path = target.to_str().unwrap_or(target_path);
     let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);
     erars_bytecode::write_to(&mut out, &vm.dic)?;
     let local_infos: HashMap<StrKey, Vec<(StrKey, &VariableInfo)>> =

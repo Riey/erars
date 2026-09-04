@@ -9,7 +9,7 @@ use erars_ast::{
 };
 use nom::{
     branch::alt,
-    bytes::complete::{tag, tag_no_case, take_while, take_while1},
+    bytes::complete::{tag, tag_no_case, take_while1},
     character::complete::*,
     combinator::{cut, eof, map, opt, value},
     error::{context, ErrorKind, ParseError},
@@ -134,8 +134,40 @@ impl std::fmt::Display for ExprError<'_> {
 type Error<'a> = ExprError<'a>;
 type IResult<'a, T> = nom::IResult<&'a str, T, Error<'a>>;
 
+/// Skip the whitespace Emuera ignores between tokens.
+///
+/// Space, tab, CR, and U+3000 IDEOGRAPHIC SPACE — the last counts as it does in
+/// Emuera whenever `SystemAllowFullSpace` is on (`Sub/LexicalAnalyzer.cs:749-752`,
+/// `GameProc/LogicalLineParser.cs:428-431`), which it is by default
+/// (`Config/ConfigData.cs:112`).
+///
+/// The two ways to spell this before were `nom::take_while(is_sp)`, which walks
+/// `char_indices` and decodes a `char` per byte to hand to the predicate, and
+/// `trim_start_matches(SP)`, whose pattern is a *function pointer* and so
+/// cannot inline the predicate at all. Between them the profile charged ~4% of
+/// parse+compile self time to skipping spaces. Every character accepted here
+/// is either ASCII or U+3000, whose lead byte `0xE3` it shares with all of
+/// hiragana and katakana, so its two continuation bytes decide — the same test
+/// [`erars_lexer::utils::cut_ident`] makes.
+fn skip_sp(i: &str) -> &str {
+    let bytes = i.as_bytes();
+    let mut pos = 0;
+
+    while let Some(&b) = bytes.get(pos) {
+        match b {
+            b' ' | b'\t' | b'\r' => pos += 1,
+            // U+3000 is `E3 80 80`; no other character starts with those bytes.
+            0xE3 if bytes[pos + 1..].starts_with(b"\x80\x80") => pos += 3,
+            _ => break,
+        }
+    }
+
+    // `pos` only ever advances over whole characters.
+    unsafe { i.get_unchecked(pos..) }
+}
+
 fn sp<'a>(i: &'a str) -> IResult<'a, ()> {
-    map(take_while(is_sp), |_| ())(i)
+    Ok((skip_sp(i), ()))
 }
 
 // fn sp_nl<'a>(i: &'a str) -> IResult<'a, ()> {
@@ -167,10 +199,18 @@ fn cut_delimited<'a, T>(
 }
 
 pub fn ident<'a>(i: &'a str) -> IResult<'a, &'a str> {
-    if i.starts_with(|c| matches!(c, '0'..='9')) {
-        Err(nom::Err::Error(error_position!(i, ErrorKind::AlphaNumeric)))
+    if i.as_bytes().first().is_some_and(u8::is_ascii_digit) {
+        return Err(nom::Err::Error(error_position!(i, ErrorKind::AlphaNumeric)));
+    }
+
+    // Same predicate as `take_while1(is_ident_body)`, scanned a byte at a time
+    // rather than a decoded `char` at a time: 2.1% of parse+compile self time
+    // went to nom's `char_indices` walk over this one predicate.
+    let (ident, rest) = erars_lexer::utils::cut_ident(i);
+    if ident.is_empty() {
+        Err(nom::Err::Error(nom::error::make_error(i, ErrorKind::TakeWhile1)))
     } else {
-        take_while1(erars_lexer::utils::is_ident_body)(i)
+        Ok((rest, ident))
     }
 }
 
@@ -415,7 +455,7 @@ fn form_str_cond_form<'c, 'a>(
             let i = i.strip_prefix("\\@").unwrap();
             Ok((i, Expr::cond(cond, if_true, or_false)))
         } else if let Some(i) = i.strip_prefix("\\@") {
-            Ok((i, Expr::cond(cond, if_true, Expr::str(ctx.interner, ""))))
+            Ok((i, Expr::cond(cond, if_true, Expr::str(""))))
         } else {
             unreachable!()
         }
@@ -432,7 +472,7 @@ pub fn form_str<'c, 'a>(
         let normal_str = parse_form_normal_str(ty);
         let (mut i, (normal, mut ty)) = normal_str(i)?;
 
-        let mut form = FormText::new(ctx.interner.get_or_intern(&normal));
+        let mut form = FormText::new(erars_ast::intern_cached(&normal));
 
         loop {
             let (left, expr, padding, align) = match ty {
@@ -483,7 +523,7 @@ pub fn form_str<'c, 'a>(
             i = left;
             ty = next_ty;
 
-            form.push(expr, padding, align, ctx.interner.get_or_intern(&normal));
+            form.push(expr, padding, align, erars_ast::intern_cached(&normal));
         }
 
         ctx.is_arg.set(is_arg_init_value);
@@ -609,18 +649,6 @@ fn ident_or_method_expr<'c, 'a>(
     }
 }
 
-/// Whitespace `sp` skips: `nom`'s `delimited(sp, .., sp)` without the combinator.
-///
-/// U+3000 IDEOGRAPHIC SPACE counts, as it does in Emuera whenever
-/// `SystemAllowFullSpace` is on (`Sub/LexicalAnalyzer.cs:749-752`,
-/// `GameProc/LogicalLineParser.cs:428-431`). It defaults to on
-/// (`Config/ConfigData.cs:112`).
-fn is_sp(c: char) -> bool {
-    c == ' ' || c == '\t' || c == '\r' || c == '\u{3000}'
-}
-
-const SP: fn(char) -> bool = is_sp;
-
 /// ASCII-case-insensitive `strip_prefix`. `nom::bytes::complete::tag_no_case`
 /// decodes and case-folds char by char through `char::to_lowercase`, which the
 /// profile showed costing more than the branches it guards.
@@ -725,7 +753,7 @@ fn single_expr_atom<'c, 'a>(ctx: &'c ParserContext, i: &'a str) -> IResult<'a, E
             cut_delimited("@\"", form_str(FormStrType::Str, ctx), "\""),
         )(i),
         Some(b'\\') if bytes.get(1) == Some(&b'@') => form_str_cond_form(ctx)(&i["\\@".len()..]),
-        Some(b'"') => map(string, |s| Expr::str(ctx.interner, s))(i),
+        Some(b'"') => map(string, |s| Expr::str(s))(i),
         Some(b'0'..=b'9') => number(i),
         Some(b'(') => paran_expr(ctx)(i),
         Some(_) => ident_or_method_expr(ctx)(i),
@@ -760,12 +788,12 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
         } else {
             (i, None)
         };
-        let i = i.trim_start_matches(' ');
-
-        let i = i.trim_start_matches(SP);
+        // `skip_sp` subsumes the ASCII-space trims that used to sit on either
+        // side of it: it accepts `' '` too, so trimming spaces first changes
+        // nothing, and after it the next character is by construction not one.
+        let i = skip_sp(i);
         let (i, expr) = single_expr_atom(ctx, i)?;
-        let i = i.trim_start_matches(SP);
-        let i = i.trim_start_matches(' ');
+        let i = skip_sp(i);
 
         let expr = match op {
             Unary(op) => Expr::unary(expr, op),
@@ -1539,4 +1567,59 @@ fn calculate_binop_expr(first: Expr, stack: &mut Vec<(BinaryOperator, Expr)>) ->
     debug_assert!(expr_stack.is_empty());
 
     ret
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::{ident, skip_sp};
+
+    /// The predicate `take_while(is_sp)` and `trim_start_matches(SP)` used.
+    fn is_sp(c: char) -> bool {
+        c == ' ' || c == '\t' || c == '\r' || c == '\u{3000}'
+    }
+
+    #[test]
+    fn skipping_spaces_answers_exactly_like_the_char_predicate() {
+        for s in [
+            "",
+            " ",
+            "   \t\r  ",
+            "\u{3000}",
+            " \u{3000}\t\u{3000} X",
+            "X   ",
+            // `0xE3` leads hiragana, katakana and CJK punctuation too; only
+            // U+3000 may be skipped.
+            "\u{3001}X",
+            "\u{3042}X",
+            "\u{30FB}X",
+            "\u{3000}\u{3042}",
+            // A lone lead byte cannot be mistaken for U+3000.
+            "\u{3000}가",
+            "안녕",
+        ] {
+            assert_eq!(skip_sp(s), s.trim_start_matches(is_sp), "{s:?}");
+        }
+    }
+
+    #[test]
+    fn an_identifier_stops_where_the_char_predicate_would() {
+        for s in ["A", "COUNT", "A_1", "가나다", "NAME rest", "N\u{3000}X", "A+B", ""] {
+            let want = s.split_at(
+                s.char_indices()
+                    .find(|&(_, c)| !erars_lexer::utils::is_ident_body(c))
+                    .map_or(s.len(), |(at, _)| at),
+            );
+            match ident(s) {
+                Ok((rest, got)) => assert_eq!((got, rest), want, "{s:?}"),
+                Err(_) => assert!(want.0.is_empty(), "{s:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn an_identifier_may_not_start_with_a_digit() {
+        assert!(ident("1A").is_err());
+        assert!(ident("0").is_err());
+        assert!(ident("A1").is_ok());
+    }
 }

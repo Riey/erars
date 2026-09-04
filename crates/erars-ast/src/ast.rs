@@ -7,7 +7,7 @@ use strum::{Display, EnumString};
 
 use crate::{
     command::BuiltinMethod, Alignment, BinaryOperator, BuiltinCommand, BuiltinVariable, EventFlags,
-    EventType, InlineValue, Interner, LocalVariable, StrKey, UnaryOperator, Variable,
+    EventType, InlineValue, LocalVariable, StrKey, UnaryOperator, Variable,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -160,8 +160,8 @@ impl Expr {
         Self::Int(i.into())
     }
 
-    pub fn str(interner: &Interner, s: impl AsRef<str>) -> Self {
-        Self::String(interner.get_or_intern(s))
+    pub fn str(s: impl AsRef<str>) -> Self {
+        Self::String(crate::intern_cached(s.as_ref()))
     }
 
     pub fn unary(op1: Self, op: UnaryOperator) -> Self {

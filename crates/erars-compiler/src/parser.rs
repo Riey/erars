@@ -733,6 +733,36 @@ fn parse_color(s: &str) -> Option<[u8; 3]> {
     Some(out)
 }
 
+/// Does `s` hold `VARS`, in any case, anywhere?
+///
+/// [`ParserContext::hoist_var_decls`] re-lexes a whole function to find the
+/// `VARS` declarations that have to be visible before their own line, so
+/// `parse_and_compile` asks this first and skips the second pass for the files
+/// — the large majority — that declare no dynamic string local.
+///
+/// The naive `s.as_bytes().windows(4).any(…)` this replaces compared four
+/// bytes at every one of the corpus's 61_843_825 offsets, once per file, and
+/// was most of the 6.4% of parse+compile self time charged to
+/// `parse_and_compile` itself. `V` is rare in text that is overwhelmingly
+/// Korean and Japanese, so seeking to the next one vectorises the scan and
+/// leaves only a handful of three-byte compares.
+fn contains_vars(s: &str) -> bool {
+    let bytes = s.as_bytes();
+    let mut at = 0;
+
+    while let Some(off) = memchr::memchr2(b'V', b'v', &bytes[at..]) {
+        let pos = at + off;
+        match bytes.get(pos + 1..pos + 4) {
+            Some(tail) if tail.eq_ignore_ascii_case(b"ARS") => return true,
+            // Fewer than three bytes left: no window can match.
+            None => return false,
+            Some(_) => at = pos + 1,
+        }
+    }
+
+    false
+}
+
 /// `0xRRGGBB`, the form Emuera's `GETCONFIG` returns for colour items
 /// (`ConfigData.GetConfigValueInERB`: `((R * 256) + G) * 256 + B`).
 fn color_to_int(c: [u8; 3]) -> i64 {
@@ -2265,26 +2295,6 @@ pub struct ParserContext<'p> {
     pub is_arg: Cell<bool>,
     pub ban_percent: Cell<bool>,
     pub file_path: StrKey,
-    /// Per-file memo in front of the global interner, for *identifiers* only.
-    ///
-    /// Profile of serial parse+compile blamed ~13% of self time on
-    /// `lasso::ThreadedRodeo::get_or_intern` — a dashmap shard lock (atomic
-    /// CAS to take it, atomic sub to release), an ahash of the string and a
-    /// table probe — paid once per *occurrence*. On the eraTHYMKR corpus
-    /// 1_301_980 of those occurrences are identifiers and 96.9% of them
-    /// repeat within the same file, so a single-threaded map in front of the
-    /// concurrent one removes the lock and the slower hasher for nearly all
-    /// of them (measured 2.0% of parse+compile CPU).
-    ///
-    /// It does *not* pay for literal text (PRINT/DATA lines, form-string
-    /// segments, string literals): of 465_349 such occurrences only 28.9%
-    /// repeat, so the local lookup is mostly a second hash of a long string
-    /// that then misses. Caching those too measured 4.5% *slower*.
-    ///
-    /// The keys are the interner's own strings: a `StrKey` resolves to a
-    /// `&'static str` (the interner lives for the process), so neither a hit
-    /// nor a miss allocates or copies here.
-    ident_cache: RefCell<HashMap<&'static str, StrKey>>,
     /// Emuera's `-DEBUG` (`Program.cs:219-220`). It decides the whole debug
     /// family at load time — `[IF_DEBUG]`/`[IF_NDEBUG]`, the `;#;` marker,
     /// and whether `DEBUGPRINT`/`ASSERT` lines are compiled at all — because
@@ -2305,7 +2315,6 @@ impl<'p> ParserContext<'p> {
             local_dims: RefCell::default(),
             is_arg: Cell::new(false),
             ban_percent: Cell::new(false),
-            ident_cache: RefCell::default(),
             debug_mode: false,
         }
     }
@@ -2328,16 +2337,14 @@ impl<'p> ParserContext<'p> {
         Preprocessor::new_erb(&header.rename, &header.macros, self.debug_mode, s)
     }
 
-    /// Intern an identifier through the per-file `ident_cache`.
+    /// Intern an identifier through the calling thread's memo.
+    ///
+    /// The memo is thread-local rather than a field here because a
+    /// `ParserContext` is built fresh for every ERB, so a per-file map spent
+    /// each file re-learning the identifiers — `LOCAL`, `ARG`, `RESULT`, the
+    /// CSV variable names — that every other file also uses.
     fn intern_ident(&self, s: &str) -> StrKey {
-        if let Some(&key) = self.ident_cache.borrow().get(s) {
-            return key;
-        }
-
-        let key = self.interner.get_or_intern(s);
-        // `resolve` hands back the interner's own copy, which outlives us.
-        self.ident_cache.borrow_mut().insert(self.interner.resolve(&key), key);
-        key
+        erars_ast::intern_cached(s)
     }
 
     pub fn is_str_var(&self, key: StrKey) -> bool {
@@ -2401,7 +2408,7 @@ impl<'p> ParserContext<'p> {
                 Some(EraLine::InstLine {
                     inst: InstructionCode::DATA,
                     args,
-                }) => list.push(vec![Expr::str(self.interner, args)]),
+                }) => list.push(vec![Expr::str(args)]),
                 Some(EraLine::InstLine {
                     inst: InstructionCode::DATAFORM,
                     args,
@@ -2420,7 +2427,7 @@ impl<'p> ParserContext<'p> {
                             Some(EraLine::InstLine {
                                 inst: InstructionCode::DATA,
                                 args,
-                            }) => cur_list.push(Expr::str(self.interner, args)),
+                            }) => cur_list.push(Expr::str(args)),
                             Some(EraLine::InstLine {
                                 inst: InstructionCode::DATAFORM,
                                 args,
@@ -2512,7 +2519,7 @@ impl<'p> ParserContext<'p> {
                 ty,
                 args: form,
             } => match ty {
-                PrintType::Plain => Stmt::Print(flags, Expr::str(self.interner, form)),
+                PrintType::Plain => Stmt::Print(flags, Expr::str(form)),
                 PrintType::Data => {
                     let form = form.trim();
                     // The argument is the variable that *receives* the chosen
@@ -2619,11 +2626,11 @@ impl<'p> ParserContext<'p> {
                         PrintFlags::PLAIN,
                         try_nom!(pp, self::expr::normal_form_str(self)(args)).1,
                     ),
-                    PRINTPLAIN => Stmt::Print(PrintFlags::PLAIN, Expr::str(self.interner, args)),
-                    DEBUGPRINT => Stmt::Print(PrintFlags::DEBUG, Expr::str(self.interner, args)),
+                    PRINTPLAIN => Stmt::Print(PrintFlags::PLAIN, Expr::str(args)),
+                    DEBUGPRINT => Stmt::Print(PrintFlags::DEBUG, Expr::str(args)),
                     DEBUGPRINTL => Stmt::Print(
                         PrintFlags::DEBUG | PrintFlags::NEWLINE,
-                        Expr::str(self.interner, args),
+                        Expr::str(args),
                     ),
                     DEBUGPRINTFORM => Stmt::Print(
                         PrintFlags::DEBUG,
@@ -2651,7 +2658,7 @@ impl<'p> ParserContext<'p> {
                     DRAWLINEFORM => strform_command!(BuiltinCommand::CustomDrawLine),
                     CUSTOMDRAWLINE => Stmt::Command(
                         BuiltinCommand::CustomDrawLine,
-                        vec![Some(Expr::str(self.interner, args.trim_start()))],
+                        vec![Some(Expr::str(args.trim_start()))],
                     ),
                     ALIGNMENT => match args.trim().parse() {
                         Ok(align) => Stmt::Alignment(align),
@@ -3258,7 +3265,7 @@ impl<'p> ParserContext<'p> {
                         // A chosen entry's lines are joined with `\n`
                         // (`Process.ScriptProc.cs:762-771`), unlike
                         // `PRINTDATA`, which gives each its own console line.
-                        let newline = Expr::str(self.interner, "\n");
+                        let newline = Expr::str("\n");
                         for part in list.iter_mut() {
                             if part.len() < 2 {
                                 continue;
@@ -3762,7 +3769,7 @@ impl<'p> ParserContext<'p> {
         b: &mut Bump,
     ) -> ParserResult<CompiledErb> {
         let s = pp.left_text();
-        let has_vars = s.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars"));
+        let has_vars = contains_vars(s);
         // `CompiledFunction` is 112 bytes, so the old `with_capacity(1024)`
         // reserved 112 KiB per file. Measured over the corpus a file defines
         // 20.5 functions on average (median 5, p90 64, p99 221) and exactly
@@ -4225,5 +4232,42 @@ mod config_tests {
             Ok(EraConfigKey::FocusColor)
         ));
         assert_eq!(EraConfigKey::ForeColor.to_string(), "文字色");
+    }
+}
+
+#[cfg(test)]
+mod scan_tests {
+    use super::contains_vars;
+
+    /// The naive `windows(4).any(…)` this replaced, kept as the oracle.
+    fn naive(s: &str) -> bool {
+        s.as_bytes().windows(4).any(|w| w.eq_ignore_ascii_case(b"vars"))
+    }
+
+    #[test]
+    fn answers_exactly_like_a_window_scan() {
+        for s in [
+            "",
+            "V",
+            "VAR",
+            "VARS",
+            "vars",
+            "VaRs",
+            "\tVARS NAME",
+            "@FUNC\nVARI N\nVARS S\n",
+            "@FUNC\nVARI N\n",
+            // `V` right at the end, with fewer than three bytes after it.
+            "PRINTL AV",
+            "PRINTL AVA",
+            "PRINTL AVAR",
+            // A false start has to keep scanning.
+            "VAVARS",
+            "vvvvvars",
+            // Non-ASCII around the match, and a `V` inside a UTF-8 sequence.
+            "PRINTL 안녕 VARS 하세요",
+            "PRINTL 안녕하세요",
+        ] {
+            assert_eq!(contains_vars(s), naive(s), "{s:?}");
+        }
     }
 }
