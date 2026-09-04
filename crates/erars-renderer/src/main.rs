@@ -64,6 +64,7 @@ fn spawn_vm(
         .stack_size(8 * 1024 * 1024)
         .name("erars-runtime".into())
         .spawn(move || {
+            let console_cfg = erars_vm::console_config(&config);
             let system_back = system.clone();
             let system = Box::new(system);
             let ret = if load {
@@ -71,15 +72,21 @@ fn spawn_vm(
             } else {
                 run_script(&target_path, system, config, false, lint, debug)
             };
-            let _normal = match ret {
+            let normal = match ret {
                 Ok((vm, mut ctx, mut tx)) => vm.start(&mut tx, &mut ctx),
                 Err(err) => {
                     log::error!("Game loading failed: {err}");
                     eprintln!("Failed to load {target_path}: {err}");
+                    let mut tx = erars_ui::VirtualConsole::new(&console_cfg);
+                    tx.set_color(255, 100, 100);
+                    tx.print_line(format!("Failed to load {target_path}: {err}"));
+                    system_back.send_frame(ConsoleFrame::from_vconsole(&tx));
                     false
                 }
             };
-            system_back.send_quit();
+            if normal {
+                system_back.send_quit();
+            }
         })
         .unwrap();
 }
@@ -207,16 +214,10 @@ fn main() {
     };
     log_panics::init();
 
-    let mut target_path = args.target_path.clone();
-    if !Path::new(&target_path).join("ERB").exists()
-        && Path::new(&target_path).join("Data").join("ERB").exists()
-    {
-        target_path = Path::new(&target_path)
-            .join("Data")
-            .to_str()
-            .unwrap()
-            .to_owned();
-    }
+    let target_path = erars_loader::resolve_game_path(&args.target_path)
+        .to_str()
+        .unwrap_or(&args.target_path)
+        .to_owned();
     let config = load_config(&target_path);
     let init_size = (config.window_width, config.window_height);
     let app_cfg = AppConfig {

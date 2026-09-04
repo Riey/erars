@@ -51,7 +51,23 @@ pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow:
 /// A file that does not exist is skipped silently, exactly as Emuera's
 /// `loadConfig` returns `false` on a failed open (`:666-670`) — a game shipping
 /// none of the three is not an error.
+/// Resolve the root directory of an ERA game.
+///
+/// Games like eraMegaten keep their scripts and CSVs under a `Data/` subdirectory
+/// rather than the repository root. If `target_path/ERB` does not exist but
+/// `target_path/Data/ERB` does, this resolves to `target_path/Data`.
+pub fn resolve_game_path<P: AsRef<Path>>(path: P) -> PathBuf {
+    let p = path.as_ref();
+    if !p.join("ERB").exists() && p.join("Data").join("ERB").exists() {
+        p.join("Data")
+    } else {
+        p.to_path_buf()
+    }
+}
+
 pub fn load_config(target_path: &str) -> EraConfig {
+    let target = resolve_game_path(target_path);
+    let target_path = target.to_str().unwrap_or(target_path);
     log::info!("Load config");
 
     let mut config = EraConfig::default();
@@ -113,6 +129,8 @@ pub unsafe fn load_script(
     system: Box<dyn SystemFunctions>,
     config: EraConfig,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+    let target = resolve_game_path(target_path);
+    let target_path = target.to_str().unwrap_or(target_path);
     let start = Instant::now();
 
     log::info!("Load game script");
@@ -175,6 +193,8 @@ pub fn run_script(
     lint: bool,
     debug_mode: bool,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
+    let target = resolve_game_path(target_path);
+    let target_path = target.to_str().unwrap_or(target_path);
     erars_ast::init_interner();
 
     let interner = erars_ast::get_interner();

@@ -51,6 +51,11 @@ impl ProxySystem {
         self.req_tx.send(SystemRequest::Quit).ok();
         (self.notify)();
     }
+
+    pub fn send_frame(&self, frame: ConsoleFrame) {
+        self.req_tx.send(SystemRequest::Redraw(frame)).ok();
+        (self.notify)();
+    }
 }
 
 impl SystemFunctions for ProxySystem {
