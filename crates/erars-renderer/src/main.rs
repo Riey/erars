@@ -71,16 +71,15 @@ fn spawn_vm(
             } else {
                 run_script(&target_path, system, config, false, lint, debug)
             };
-            let normal = match ret {
+            let _normal = match ret {
                 Ok((vm, mut ctx, mut tx)) => vm.start(&mut tx, &mut ctx),
                 Err(err) => {
                     log::error!("Game loading failed: {err}");
+                    eprintln!("Failed to load {target_path}: {err}");
                     false
                 }
             };
-            if normal {
-                system_back.send_quit();
-            }
+            system_back.send_quit();
         })
         .unwrap();
 }
@@ -208,8 +207,17 @@ fn main() {
     };
     log_panics::init();
 
-    let config = load_config(&args.target_path);
-    let target_path = args.target_path.clone();
+    let mut target_path = args.target_path.clone();
+    if !Path::new(&target_path).join("ERB").exists()
+        && Path::new(&target_path).join("Data").join("ERB").exists()
+    {
+        target_path = Path::new(&target_path)
+            .join("Data")
+            .to_str()
+            .unwrap()
+            .to_owned();
+    }
+    let config = load_config(&target_path);
     let init_size = (config.window_width, config.window_height);
     let app_cfg = AppConfig {
         font_size: config.font_size,
