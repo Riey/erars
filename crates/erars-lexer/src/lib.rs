@@ -15,7 +15,7 @@ use std::str::FromStr;
 
 pub use bumpalo::Bump;
 pub use inst::InstructionCode;
-use inst_memo::InstMemo;
+use inst_memo::{FirstWord, InstMemo};
 pub use sharp::SharpCode;
 pub use square::SquareCode;
 pub use strum::IntoEnumIterator;
@@ -785,13 +785,15 @@ impl<'s> Preprocessor<'s> {
 
         let (ident, args) = utils::cut_ident(line);
 
-        // Bound before the `if let` so the `&mut self` reborrow ends here and
-        // the branches below can still call `self.span()`. The memo folds case
+        // Bound before the `match` so the `&mut self` reborrow ends here and
+        // the arms below can still call `self.span()`. The memo folds case
         // itself, so the word does not have to be uppercased — which used to
-        // allocate on every line whose first word had a lowercase letter.
-        let inst = self.inst_memo.get(ident);
+        // allocate on every line whose first word had a lowercase letter — and
+        // it answers `PRINT*` too, so a print line's flags and type cost the
+        // same one slot compare as an instruction's code.
+        let first = self.inst_memo.get(ident);
 
-        if let Some(code) = inst {
+        if let FirstWord::Inst(code) = first {
             let args = match code {
                 InstructionCode::REUSELASTLINE | InstructionCode::THROW => {
                     utils::strip_inst_separator(args)
@@ -816,8 +818,7 @@ impl<'s> Preprocessor<'s> {
                 }
                 _ => Ok(Some(EraLine::InstLine { inst: code, args })),
             }
-        } else if let Some(left) = utils::strip_prefix_ignore_case(ident, "PRINT") {
-            let (flags, ty) = utils::parse_print_left(left);
+        } else if let FirstWord::Print(flags, ty) = first {
             let args = if !(ty == PrintType::Plain || ty == PrintType::Form) {
                 utils::cut_comment(args, self.debug_mode, b)
             } else {

@@ -1,4 +1,44 @@
-use crate::InstructionCode;
+use erars_ast::PrintFlags;
+
+use crate::{utils, InstructionCode, PrintType};
+
+/// What a line's first word makes the line.
+///
+/// `PRINT*` is not in the `InstructionCode` table — its flags and its type are
+/// spelled into the word itself, `PRINTSINGLEFORMSDW` and all — so classifying
+/// one used to cost a second walk of the word after the table said no
+/// (`parse_print_left` plus `parse_print_flags`, 5.95% of the lexer's self
+/// time on eraTHYMKR, where 38% of the lines are `PRINT*`). Both answers are
+/// pure functions of the word, so the memo holds either.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum FirstWord {
+    Inst(InstructionCode),
+    Print(PrintFlags, PrintType),
+    /// Neither: a `#`/`@`/`$` line, an assignment, a bare call.
+    Other,
+}
+
+impl FirstWord {
+    /// The answer the memo caches, computed from scratch.
+    fn classify(bytes: &[u8]) -> Self {
+        if let Some(code) = parse_upper(bytes) {
+            return Self::Inst(code);
+        }
+
+        // `bytes` came from a `&str`, and `PRINT` is ASCII, so a match leaves
+        // the tail on a character boundary.
+        match std::str::from_utf8(bytes)
+            .ok()
+            .and_then(|word| utils::strip_prefix_ignore_case(word, "PRINT"))
+        {
+            Some(left) => {
+                let (flags, ty) = utils::parse_print_left(left);
+                Self::Print(flags, ty)
+            }
+            None => Self::Other,
+        }
+    }
+}
 
 /// Number of slots. 64 is enough for one ERB file's vocabulary: measured over
 /// the eraTHYMKR corpus with a fresh memo per file, 64 slots answer 97.4% of
@@ -19,14 +59,15 @@ const EMPTY: u8 = u8::MAX;
 struct Slot {
     word: [u8; MAX_LEN],
     len: u8,
-    code: Option<InstructionCode>,
+    kind: FirstWord,
 }
 
-/// Direct-mapped, case-insensitive memo for `InstructionCode::from_str`.
+/// Direct-mapped, case-insensitive memo for a line's first word.
 ///
 /// `InstructionCode` is a `phf` map, so every question costs a SipHash-1-3
 /// over the whole word plus a probe and a key compare (`phf_shared::get_index`
-/// 3.2% + `phf::Map::get_entry` 1.9% of parse+compile self time). The lexer
+/// 3.2% + `phf::Map::get_entry` 1.9% of parse+compile self time), and a word
+/// the table rejects then has to be tried as a `PRINT*` spelling. The lexer
 /// asks once per line — 890_801 times per pass over the corpus — and the
 /// questions are extremely repetitive: those lines begin with only 230
 /// distinct words, 27% of them with `PRINTFORMW` alone, and 52% of the words
@@ -38,7 +79,7 @@ struct Slot {
 ///
 /// * A slot stores the word's bytes, not a pointer to them, so a bump
 ///   allocation that has since been reset can never be mistaken for a match.
-/// * The memoized value includes "not an instruction", so failed lookups are
+/// * The memoized value includes [`FirstWord::Other`], so failed lookups are
 ///   memoized too.
 ///
 /// Both the slot index and the compare fold ASCII case, so the caller hands
@@ -57,30 +98,30 @@ impl InstMemo {
             slots: [Slot {
                 word: [0; MAX_LEN],
                 len: EMPTY,
-                code: None,
+                kind: FirstWord::Other,
             }; SLOTS],
         }
     }
 
-    /// `word.to_ascii_uppercase().parse::<InstructionCode>().ok()`, answered
-    /// from the memo when the slot for `word` already holds it.
-    pub fn get(&mut self, word: &str) -> Option<InstructionCode> {
+    /// [`FirstWord::classify`], answered from the memo when the slot for
+    /// `word` already holds it.
+    pub fn get(&mut self, word: &str) -> FirstWord {
         let bytes = word.as_bytes();
         if bytes.len() > MAX_LEN {
-            return parse_upper(bytes);
+            return FirstWord::classify(bytes);
         }
 
         let slot = &mut self.slots[slot_index(bytes)];
         if slot.len as usize == bytes.len() && slot.word[..bytes.len()].eq_ignore_ascii_case(bytes)
         {
-            return slot.code;
+            return slot.kind;
         }
 
-        let code = parse_upper(bytes);
+        let kind = FirstWord::classify(bytes);
         slot.word[..bytes.len()].copy_from_slice(bytes);
         slot.len = bytes.len() as u8;
-        slot.code = code;
-        code
+        slot.kind = kind;
+        kind
     }
 }
 
@@ -123,9 +164,22 @@ fn slot_index(bytes: &[u8]) -> usize {
 mod tests {
     use super::*;
 
-    /// The memo must be indistinguishable from uppercasing the word and asking
-    /// the phf map every time, whatever mix of words it is asked about and in
-    /// whatever order.
+    /// What the memo replaces: the `phf` map, then the `PRINT*` spelling.
+    fn oracle(word: &str) -> FirstWord {
+        match word.to_ascii_uppercase().parse::<InstructionCode>().ok() {
+            Some(code) => FirstWord::Inst(code),
+            None => match utils::strip_prefix_ignore_case(word, "PRINT") {
+                Some(left) => {
+                    let (flags, ty) = utils::parse_print_left(left);
+                    FirstWord::Print(flags, ty)
+                }
+                None => FirstWord::Other,
+            },
+        }
+    }
+
+    /// The memo must be indistinguishable from asking from scratch every time,
+    /// whatever mix of words it is asked about and in whatever order.
     #[test]
     fn answers_exactly_like_from_str() {
         let mut memo = InstMemo::new();
@@ -135,6 +189,12 @@ mod tests {
             "printformw",
             "PrintFormW",
             "PRINTFORML",
+            "PRINT",
+            "PRINTV",
+            "PRINTSINGLEFORMSDW",
+            "printsingleformsdw",
+            "PRINTFOO",
+            "PRIN",
             "IF",
             "if",
             "If",
@@ -146,14 +206,16 @@ mod tests {
             "print_shopitem",
             "A_WORD_LONGER_THAN_THE_MEMO_LIMIT",
             "a_word_longer_than_the_memo_limit",
+            "PRINTFORM_A_WORD_LONGER_THAN_THE_LIMIT",
             "TALENT",
             "RETURN",
             "리ETURN",
+            "PRINT만트라",
         ];
 
         for _ in 0..4 {
             for w in words {
-                assert_eq!(memo.get(w), w.to_ascii_uppercase().parse().ok(), "{w:?}");
+                assert_eq!(memo.get(w), oracle(w), "{w:?}");
             }
         }
     }
@@ -163,14 +225,19 @@ mod tests {
     #[test]
     fn case_variants_share_an_answer() {
         let mut memo = InstMemo::new();
-        assert_eq!(memo.get("RETURN"), Some(InstructionCode::RETURN));
-        assert_eq!(memo.get("return"), Some(InstructionCode::RETURN));
-        assert_eq!(memo.get("Return"), Some(InstructionCode::RETURN));
+        assert_eq!(memo.get("RETURN"), FirstWord::Inst(InstructionCode::RETURN));
+        assert_eq!(memo.get("return"), FirstWord::Inst(InstructionCode::RETURN));
+        assert_eq!(memo.get("Return"), FirstWord::Inst(InstructionCode::RETURN));
         assert_eq!(
             slot_index(b"return"),
             slot_index(b"RETURN"),
             "case variants must pick the same slot"
         );
+
+        let printl = FirstWord::Print(PrintFlags::NEWLINE, PrintType::Plain);
+        assert_eq!(memo.get("PRINTL"), printl);
+        assert_eq!(memo.get("printl"), printl);
+        assert_eq!(memo.get("PrintL"), printl);
     }
 
     /// Words that collide into the same slot must not shadow each other's
@@ -187,9 +254,17 @@ mod tests {
         }
         assert!(collisions.len() > 1, "expected a colliding pair to test");
 
+        // A `PRINT*` word landing in the same slot as an instruction is the
+        // collision this memo newly has to keep apart.
+        for print in ["PRINT", "PRINTL", "PRINTW", "PRINTFORM", "PRINTFORMW", "PRINTV"] {
+            if slot_index(print.as_bytes()) == slot_index(b"IF") {
+                collisions.push(print);
+            }
+        }
+
         for _ in 0..3 {
             for name in &collisions {
-                assert_eq!(memo.get(name), name.parse().ok(), "{name:?}");
+                assert_eq!(memo.get(name), oracle(name), "{name:?}");
             }
         }
     }
