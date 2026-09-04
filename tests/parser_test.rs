@@ -1745,6 +1745,55 @@ mod expr {
     use crate::test_util::do_test;
     use erars_compiler::ParserContext;
 
+    /// Every binary operator is left-associative, so a chain of equal-priority
+    /// operators folds leftwards and a higher-priority run in the middle
+    /// becomes one operand of the surrounding chain:
+    /// `((1 - 2) - ((3 * 4) % 5)) + 6`.
+    #[test]
+    fn test_assoc_chain() {
+        k9::snapshot!(
+            do_test(
+                r#"tests/parse_tests/exprs/assoc_chain.erb"#,
+                ParserContext::parse_expr_str
+            ),
+            "
+BinopExpr(
+    BinopExpr(
+        BinopExpr(
+            Int(
+                1,
+            ),
+            Sub,
+            Int(
+                2,
+            ),
+        ),
+        Sub,
+        BinopExpr(
+            BinopExpr(
+                Int(
+                    3,
+                ),
+                Mul,
+                Int(
+                    4,
+                ),
+            ),
+            Rem,
+            Int(
+                5,
+            ),
+        ),
+    ),
+    Add,
+    Int(
+        6,
+    ),
+)
+"
+        );
+    }
+
     #[test]
     fn test_boolean() {
         k9::snapshot!(

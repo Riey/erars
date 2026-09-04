@@ -898,46 +898,64 @@ fn binop(i: &str) -> IResult<'_, BinaryOperator> {
     Ok((&i[len..], op))
 }
 
-fn bin_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
-    move |i| {
-        let (mut i, first) = de_sp(single_expr(ctx))(i)?;
-        // Most operands have no operator after them; keep this path allocation-free.
-        let mut stack: Vec<(BinaryOperator, Expr)> = Vec::new();
+/// The binary operator at `i`, consumed, or `None` where a binary expression
+/// has to stop. The three refusals are the ones the operand loop has always
+/// made:
+/// * under `is_arg`, `++`/`--` open the *next* argument instead of being
+///   `+`/`-` applied to a signed operand;
+/// * a `=` right after the operator makes it a compound assignment
+///   (`+=`, `<<=`, …), whose left side the caller has already parsed;
+/// * `%` under `ban_percent`, where it closes a form-string interpolation.
+#[inline]
+fn peek_binop<'a>(ctx: &ParserContext, i: &'a str) -> Option<(&'a str, BinaryOperator)> {
+    if ctx.is_arg.get() && (i.starts_with("++") || i.starts_with("--")) {
+        return None;
+    }
 
-        loop {
-            #[allow(clippy::collapsible_if)]
-            if ctx.is_arg.get() {
-                if i.starts_with("++") || i.starts_with("--") {
-                    break;
-                }
-            }
+    let (rest, op) = binop(i).ok()?;
 
-            let (new_i, op) = match binop(i) {
-                Ok((new_i, op)) => (new_i, Some(op)),
-                Err(_) => (i, None),
-            };
+    if rest.starts_with('=') || (matches!(op, BinaryOperator::Rem) && ctx.ban_percent.get()) {
+        return None;
+    }
 
-            if new_i.starts_with('=') {
-                break;
-            }
+    Some((rest, op))
+}
 
-            match op {
-                Some(BinaryOperator::Rem) if ctx.ban_percent.get() => break,
-                Some(op) => {
-                    let (new_i, expr) = single_expr(ctx)(new_i)?;
-                    i = new_i;
-                    if stack.is_empty() {
-                        stack.reserve(4);
-                    }
-                    stack.push((op, expr));
-                }
-                None => {
-                    break;
-                }
-            }
+/// Precedence climbing: folds every operator that binds at least as tightly as
+/// `min_prec` into `lhs`.
+///
+/// This is what replaced a shift-reduce loop that allocated three `Vec`s — the
+/// pending `(op, operand)` list plus an operator and an operand stack — for
+/// every expression that had an operator in it. All operators are
+/// left-associative, so the right operand climbs from `priority() + 1`; that
+/// also bounds the recursion, since each call descends with a strictly greater
+/// `min_prec` and [`BinaryOperator::priority`] only spans `2..=8`.
+fn climb_binop<'a>(
+    ctx: &ParserContext,
+    mut i: &'a str,
+    mut lhs: Expr,
+    min_prec: usize,
+) -> IResult<'a, Expr> {
+    while let Some((rest, op)) = peek_binop(ctx, i) {
+        if op.priority() < min_prec {
+            break;
         }
 
-        Ok((i, calculate_binop_expr(first, &mut stack)))
+        let (rest, rhs) = single_expr(ctx)(rest)?;
+        let (rest, rhs) = climb_binop(ctx, rest, rhs, op.priority() + 1)?;
+
+        i = rest;
+        lhs = Expr::binary(lhs, op, rhs);
+    }
+
+    Ok((i, lhs))
+}
+
+fn bin_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
+    move |i| {
+        let (i, first) = de_sp(single_expr(ctx))(i)?;
+
+        climb_binop(ctx, i, first, 0)
     }
 }
 
@@ -1533,40 +1551,6 @@ pub fn variable<'c, 'a>(
             }
         }
     }
-}
-
-fn calculate_binop_expr(first: Expr, stack: &mut Vec<(BinaryOperator, Expr)>) -> Expr {
-    let mut expr_stack = Vec::with_capacity(16);
-    let mut op_stack: Vec<BinaryOperator> = Vec::with_capacity(10);
-
-    expr_stack.push(first);
-
-    for (op, expr) in stack.drain(..) {
-        loop {
-            if op_stack.last().map_or(true, |o| o.priority() < op.priority()) {
-                expr_stack.push(expr);
-                op_stack.push(op);
-                break;
-            } else {
-                let op = op_stack.pop().unwrap();
-                let rhs = expr_stack.pop().unwrap();
-                let lhs = expr_stack.pop().unwrap();
-                expr_stack.push(Expr::binary(lhs, op, rhs));
-            }
-        }
-    }
-
-    for op in op_stack.into_iter().rev() {
-        let rhs = expr_stack.pop().unwrap();
-        let lhs = expr_stack.pop().unwrap();
-        expr_stack.push(Expr::binary(lhs, op, rhs));
-    }
-
-    let ret = expr_stack.pop().unwrap();
-
-    debug_assert!(expr_stack.is_empty());
-
-    ret
 }
 
 #[cfg(test)]
