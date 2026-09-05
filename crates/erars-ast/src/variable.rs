@@ -91,11 +91,15 @@ pub struct LocalVariable {
 ///   `tinyvec::ArrayVec<[u32; 3]>` with the `serde` feature serialises
 ///   byte-identical to `Vec<u32>` via `rmp_serde` in both directions and
 ///   for both the empty and populated case (verified directly against
-///   `rmp_serde`, not assumed from crate docs) — every existing `game.era`
-///   bytecode cache and every existing player save file
-///   (`erars-vm/src/save.rs`'s `SerializableVariableStorage` /
-///   `SerializableGlobalVariableStorage`, which embed `VariableInfo`
-///   directly) keeps loading unchanged.
+///   `rmp_serde`, not assumed from crate docs) — every existing wire
+///   consumer keeps loading unchanged: `.sav`/`global.rsav`
+///   (`erars-vm/src/save.rs`'s `SerializableVariableStorage`/
+///   `SerializableGlobalVariableStorage`, embedding `VariableInfo`
+///   directly) and `game.era` (the `HeaderInfo`/`VariableInfo` blob
+///   `erars-loader/src/lib.rs` appends via `rmp_serde` right after the
+///   `erars-bytecode`-encoded function bytecode — that crate never
+///   serialises a `VariableInfo` itself, so grepping it alone is
+///   misleading).
 /// - `init` is bounded by nothing (real data goes up to 100 elements) but
 ///   is almost always empty (>99.9% for locals; up to ~37% non-empty for
 ///   globals on the larger corpus, so it cannot be dropped). It is
@@ -213,10 +217,12 @@ fn index_test() {
 
 /// Reproduces the exact wire shape pre-`VariableInfo`-shrink code wrote:
 /// `init: Vec<Expr>` at the same struct position, encoded positionally by
-/// `rmp_serde`'s default (non-`struct_map`) `Serializer` — the same encoder
-/// `erars-vm/src/save.rs` uses for every save file and `game.era`. Field
-/// names never reach the wire in that mode, only order, so this only needs
-/// to match `VariableInfo`'s current field order and count.
+/// `rmp_serde`'s default (non-`struct_map`) `Serializer` — the same default
+/// encoding every save file and `game.era`'s trailing `VariableInfo` blob
+/// use (see the struct doc comment above for exactly where each is
+/// written). Field names never reach the wire in that mode, only order, so
+/// this only needs to match `VariableInfo`'s current field order and
+/// count.
 #[derive(Serialize)]
 struct OldShapeVariableInfo {
     is_chara: bool,
@@ -316,10 +322,11 @@ fn deserializing_an_old_shape_empty_size_compares_equal_to_a_fresh_one() {
 /// `tinyvec::ArrayVec<[u32; 3]>`, and `ArrayVec::push` past its capacity
 /// panics rather than growing — a process abort on malformed input, not a
 /// diagnostic, if `size`'s `Deserialize` impl ever pushed one element per
-/// sequence item without checking capacity first. A save file, `game.era`
-/// bytecode cache, or hand-edited `variable.yaml` carrying a corrupted or
-/// future *4*-dimension `size` (the language itself never writes more than
-/// 3, per `VariableInfo::calculate_single_idx`'s match arms and
+/// sequence item without checking capacity first. A save file, `game.era`'s
+/// trailing `VariableInfo` blob, or hand-edited `variable.yaml` carrying a
+/// corrupted or future *4*-dimension `size` (the language itself never
+/// writes more than 3, per
+/// `VariableInfo::calculate_single_idx`'s match arms and
 /// `finish_dim`'s `bail!` in `erars-compiler/src/parser.rs`) is exactly such
 /// malformed input.
 ///
