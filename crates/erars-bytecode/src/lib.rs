@@ -22,13 +22,6 @@ compile_error!("Doesn't support big endian");
 // identifier block is written as explicit `(key, string)` pairs instead of
 // strings alone in key order — an older reader would silently misassign
 // every key after the first gap.
-//
-// Bumped again for `FunctionBody` gaining `positions`: the `ReportPosition`
-// side table added after `body` in the raw memcpy'd layout. An older reader
-// stopped after `body`'s length-prefixed block and never expected the bytes
-// that follow, so without this bump it would silently succeed and hand back
-// a dictionary missing every function's tail data — this magic check is
-// what turns that into a clean rejection instead.
 const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 12];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
@@ -50,7 +43,6 @@ fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody
         write_arr!(goto_labels, FunctionGotoLabel);
         write_arr!(args, FunctionArgDef);
         write_arr!(body, Instruction);
-        write_arr!(positions, (u32, u32));
     }
 
     Ok(())
@@ -85,7 +77,6 @@ fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBod
         let goto_labels = read_arr!(FunctionGotoLabel);
         let args = read_arr!(FunctionArgDef);
         let insts = read_arr!(Instruction);
-        let positions = read_arr!((u32, u32));
 
         Ok(FunctionBody {
             file_path,
@@ -94,7 +85,6 @@ fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBod
             goto_labels,
             args,
             body: insts,
-            positions,
         })
     }
 }

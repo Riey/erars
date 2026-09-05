@@ -70,19 +70,6 @@ macro_rules! call_event {
     };
 }
 
-/// Write the current statement's line into the active frame's `Callstack`
-/// entry. Called only immediately before a cross-function control transfer
-/// or an interactive input wait — those, plus a genuine local error (handled
-/// in `terminal_vm.rs::run_body` itself), are the only points anyone ever
-/// reads a frame's `script_position` back.
-macro_rules! stamp_position {
-    ($ctx:expr, $body:expr, $cursor:expr) => {
-        if let Some(line) = $body.line_at($cursor) {
-            $ctx.update_position(ScriptPosition { line });
-        }
-    };
-}
-
 macro_rules! get_arg {
     ($arg:expr) => {
         get_arg!(@opt $arg).ok_or_else(|| anyhow!("매개변수가 부족합니다"))?
@@ -133,12 +120,14 @@ pub(super) fn run_instruction(
     inst: Instruction,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
-    cursor: u32,
-    body: &FunctionBody,
 ) -> Result<InstructionWorkflow> {
     crate::inst_counter::record(inst.ty());
 
     match inst.ty() {
+        InstructionType::ReportPosition => {
+            let pos = inst.as_report_position().unwrap();
+            ctx.update_position(pos);
+        }
         InstructionType::LoadInt => {
             let i = inst.as_load_int().unwrap();
             ctx.push(i as i64);
@@ -306,7 +295,6 @@ pub(super) fn run_instruction(
                 let gen = tx.input_gen();
                 // Emuera force-paints whenever the console settles into a wait
                 // (`EmueraConsole.cs:1184`), even with REDRAW off.
-                stamp_position!(ctx, body, cursor);
                 ctx.input_redraw(
                     tx,
                     InputRequest {
@@ -325,7 +313,6 @@ pub(super) fn run_instruction(
             let args = ctx.take_list(c).collect::<Vec<_>>();
             let func = ctx.pop_strkey()?;
 
-            stamp_position!(ctx, body, cursor);
             match vm.try_call(func, &args, tx, ctx)? {
                 Some(Workflow::Return) => {
                     if inst.is_try_jump() {
@@ -344,7 +331,6 @@ pub(super) fn run_instruction(
             let args = ctx.take_list(c).collect::<Vec<_>>();
             let func = ctx.pop_strkey()?;
 
-            stamp_position!(ctx, body, cursor);
             match vm.call(func, &args, tx, ctx)? {
                 Workflow::Return => {
                     if inst.is_jump() {
@@ -360,7 +346,6 @@ pub(super) fn run_instruction(
         }
         InstructionType::CallEvent => {
             let ty = inst.as_call_event().unwrap();
-            stamp_position!(ctx, body, cursor);
             call_event!(vm, ty, tx, ctx);
         }
         InstructionType::ConcatString => {
@@ -525,7 +510,7 @@ pub(super) fn run_instruction(
         }
         InstructionType::BuiltinCommand => {
             let com = inst.as_builtin_command().unwrap();
-            return run_builtin_command(com, func_name, vm, tx, ctx, cursor, body);
+            return run_builtin_command(com, func_name, vm, tx, ctx);
         }
         InstructionType::LoadDefaultArgument => {
             let idx = inst.as_load_default_argument().unwrap();
@@ -3188,8 +3173,6 @@ fn run_builtin_command(
     vm: &TerminalVm,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
-    cursor: u32,
-    body: &FunctionBody,
 ) -> Result<InstructionWorkflow> {
     let c = ctx.pop_int()? as u32;
     let mut args = ctx.take_list(c).collect::<Vec<_>>().into_iter();
@@ -3926,7 +3909,6 @@ fn run_builtin_command(
             };
 
             let gen = tx.input_gen();
-            stamp_position!(ctx, body, cursor);
             ctx.input_redraw(
                 tx,
                 InputRequest {
@@ -3944,7 +3926,6 @@ fn run_builtin_command(
         }
         BuiltinCommand::Wait | BuiltinCommand::WaitAnykey | BuiltinCommand::ForceWait => {
             let gen = tx.input_gen();
-            stamp_position!(ctx, body, cursor);
             ctx.input_redraw(
                 tx,
                 InputRequest::normal(
@@ -4053,7 +4034,6 @@ fn run_builtin_command(
 
             let ty = req.ty;
 
-            stamp_position!(ctx, body, cursor);
             let ret = ctx.input_redraw(tx, req)?;
 
             match (ty, ret) {
@@ -4403,7 +4383,6 @@ fn run_builtin_command(
         BuiltinCommand::DoTrain => {
             let com_no = get_arg!(@u32: args, ctx);
 
-            stamp_position!(ctx, body, cursor);
             conv_workflow!(run_call_train(vm, tx, ctx, vec![com_no], true)?);
         }
         BuiltinCommand::CallTrain => {
@@ -4425,7 +4404,6 @@ fn run_builtin_command(
                 .map(|c| u32::try_from(*c).context("CallTrain command convert"))
                 .collect::<Result<Vec<u32>>>()?;
 
-            stamp_position!(ctx, body, cursor);
             conv_workflow!(run_call_train(vm, tx, ctx, commands, false)?);
         }
         // Emuera `ADDCHARA_Instruction(flagDel: true)` also takes `INT_ANY`, and
@@ -4460,7 +4438,6 @@ fn run_builtin_command(
         BuiltinCommand::LoadData => {
             let idx = get_arg!(@u32: args, ctx);
 
-            stamp_position!(ctx, body, cursor);
             conv_workflow!(run_load_data(vm, tx, ctx, idx)?);
         }
         BuiltinCommand::DelData => {
@@ -4491,18 +4468,14 @@ fn run_builtin_command(
             ctx.set_var_ref(&v2, temp1)?;
         }
         BuiltinCommand::SaveGame => {
-            stamp_position!(ctx, body, cursor);
             conv_workflow!(run_save_game(vm, tx, ctx)?);
         }
-        BuiltinCommand::LoadGame => {
-            stamp_position!(ctx, body, cursor);
-            match run_load_game(tx, ctx)? {
-                Some(idx) => {
-                    conv_workflow!(run_load_data(vm, tx, ctx, idx)?);
-                }
-                None => {}
+        BuiltinCommand::LoadGame => match run_load_game(tx, ctx)? {
+            Some(idx) => {
+                conv_workflow!(run_load_data(vm, tx, ctx, idx)?);
             }
-        }
+            None => {}
+        },
         BuiltinCommand::PutForm => {
             let arg = get_arg!(@String: args, ctx);
 

@@ -9,7 +9,7 @@ use crate::{context::FunctionIdentifier, variable::StrKeyLike};
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use erars_ast::{
     BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable, EventType,
-    InlineValue, PrintFlags, ScriptPosition, StrKey, UnaryOperator, Value,
+    InlineValue, PrintFlags, StrKey, UnaryOperator, Value,
 };
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
 use erars_ui::{FontStyle, InputRequest, InputRequestType, Timeout, VirtualConsole};
@@ -61,14 +61,6 @@ impl TerminalVm {
         let mut cursor = 0;
         let insts = body.body();
         let func_name = func_identifier.get_key(&ctx.var);
-        // `call_internal` already pushed this frame's `Callstack` before
-        // calling in, so `call_stack().len()` right now is "one past every
-        // frame still un-popped above and including this one" — the anchor
-        // the error arm below uses to tell "my own instruction just failed"
-        // apart from "a nested call I made already failed and left its
-        // frame sitting there" (that frame short-circuited past its own
-        // `ctx.end_func` via `?`, so it's still on the stack).
-        let my_depth = ctx.call_stack().len();
 
         while let Some(inst) = insts.get(cursor).copied() {
             use InstructionWorkflow::*;
@@ -80,7 +72,7 @@ impl TerminalVm {
                 call_stack = ctx.call_stack(),
             );
 
-            match executor::run_instruction(self, func_name, inst, tx, ctx, cursor as u32, body) {
+            match executor::run_instruction(self, func_name, inst, tx, ctx) {
                 Ok(Normal) => {
                     cursor += 1;
                 }
@@ -107,15 +99,8 @@ impl TerminalVm {
                         }
                     };
 
-                    // The synthetic instructions compiled from the form
-                    // string have no `positions` entries of their own — they
-                    // are, source-wise, still the enclosing STRFORM
-                    // statement, so any transfer/error inside reuses this
-                    // statement's own `cursor`/`body`.
                     for inst in insts {
-                        match executor::run_instruction(
-                            self, func_name, inst, tx, ctx, cursor as u32, body,
-                        )? {
+                        match executor::run_instruction(self, func_name, inst, tx, ctx)? {
                             InstructionWorkflow::Normal => {}
                             _ => bail!("EvalFromString can't do flow control"),
                         }
@@ -157,18 +142,6 @@ impl TerminalVm {
                 }
                 Ok(Workflow(flow)) => return Ok(flow),
                 Err(err) => {
-                    // Only stamp when nothing has been pushed above this
-                    // frame since it started — otherwise a nested call's
-                    // frame is still sitting un-popped above us (its `?`
-                    // skipped `ctx.end_func`), and it was already stamped,
-                    // correctly, at its own point of failure; `last_mut()`
-                    // here would wrongly overwrite that deeper frame instead
-                    // of this one.
-                    if ctx.call_stack().len() == my_depth {
-                        if let Some(line) = body.line_at(cursor as u32) {
-                            ctx.update_position(ScriptPosition { line });
-                        }
-                    }
                     return Err(err);
                 }
             }

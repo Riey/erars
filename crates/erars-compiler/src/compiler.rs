@@ -11,12 +11,6 @@ pub struct CompiledFunction {
     pub header: FunctionHeader,
     pub goto_labels: HashMap<StrKey, u32>,
     pub body: Box<[Instruction]>,
-    /// `(pc, line)` pairs, one per statement, in ascending `pc` order —
-    /// the side table `ReportPosition` instructions used to encode inline.
-    /// `pc` is the index of that statement's first real instruction; a
-    /// runtime cursor walks this in lockstep instead of dispatching a
-    /// dedicated opcode per statement.
-    pub positions: Box<[(u32, u32)]>,
 }
 
 /// Everything one ERB file yielded.
@@ -46,10 +40,6 @@ pub struct Compiler {
     /// `ErbLoader.noError` alone). Drained by the caller, which turns each
     /// position into a source span.
     pub warnings: Vec<(String, ScriptPosition)>,
-    /// One `(pc, line)` entry per statement recorded by
-    /// [`Compiler::push_stmt_with_pos`] and the `Stmt::If` else-if
-    /// condition case; see [`CompiledFunction::positions`].
-    pub positions: Vec<(u32, u32)>,
     current_pos: ScriptPosition,
 }
 
@@ -61,22 +51,12 @@ impl Compiler {
             continue_marks: Vec::new(),
             break_marks: Vec::new(),
             warnings: Vec::new(),
-            positions: Vec::new(),
             current_pos: ScriptPosition::default(),
         }
     }
 
     pub fn current_pos(&self) -> ScriptPosition {
         self.current_pos
-    }
-
-    /// Record `pos` for the statement about to be compiled, at the pc it
-    /// will occupy — the runtime side table this feeds is walked in
-    /// lockstep with the instruction cursor instead of being interleaved
-    /// into the instruction stream as a `ReportPosition` opcode.
-    #[inline]
-    fn record_position(&mut self, pos: ScriptPosition) {
-        self.positions.push((self.current_no(), pos.line));
     }
 
     /// Compile a line that could not be interpreted the way Emuera keeps one:
@@ -496,7 +476,7 @@ impl Compiler {
 
     #[inline]
     pub fn push_stmt_with_pos(&mut self, stmt: StmtWithPos) -> CompileResult<()> {
-        self.record_position(stmt.1);
+        self.push(Instruction::report_position(stmt.1));
         self.current_pos = stmt.1;
         self.push_stmt(stmt.0)
     }
@@ -710,7 +690,7 @@ impl Compiler {
                 let mut end_stack = Vec::with_capacity(32);
 
                 for (cond, body) in else_ifs {
-                    self.record_position(cond.1);
+                    self.push(Instruction::report_position(cond.1));
                     self.push_if(cond.0, body)?;
                     end_stack.push(self.mark());
                 }
@@ -928,7 +908,6 @@ pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
         header: func.header,
         goto_labels: compiler.goto_labels,
         body: compiler.out.into_boxed_slice(),
-        positions: compiler.positions.into_boxed_slice(),
     })
 }
 

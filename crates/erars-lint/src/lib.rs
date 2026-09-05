@@ -87,10 +87,11 @@ fn check_variable_exist_inner(
     files: &Mutex<&mut ErarsFiles>,
     diagnostics: &Mutex<Vec<Diagnostic>>,
 ) {
-    let mut current_line = func.line_at(0).unwrap_or(1);
+    let mut current_line = 1;
     for (i, inst) in func.body().iter().enumerate() {
-        if let Some(line) = func.line_at(i as u32) {
-            current_line = line;
+        if let Some(pos) = inst.as_report_position() {
+            current_line = pos.line;
+            continue;
         }
 
         let (current_fn_name, name) = match inst.ty() {

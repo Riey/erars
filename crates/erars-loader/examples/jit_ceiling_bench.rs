@@ -103,11 +103,6 @@ fn main() {
     // unigram census (average of eraTHYMKR/eramegaten_p_kr, `/tmp/*_census3.txt`):
     // LoadStr ~23%, LoadInt ~19%, ReportPosition ~15%, LoadVarRef ~12%,
     // Print ~5%, BinaryOperator ~5%, Goto ~5%, GotoIfNot ~4%, StoreVar ~3%.
-    // (`ReportPosition` itself is gone since bytecode-opt Step 3 moved
-    // position tracking to a side table the compiler emits alongside the
-    // instruction stream instead of interleaving it as an opcode — its
-    // ~15% share is why every other category below now measures higher
-    // than this list, proportionally redistributed over what remains.)
     // `verify_instruction_mix` below checks the compiled result against this
     // table every run. The branch is a single-comparison `IF LOCAL < half`
     // (not e.g. a modulo test) deliberately: it keeps BinaryOperator usage
@@ -358,12 +353,17 @@ fn dynamic_instruction_histogram(body: &[Instruction], iters: i64) -> Histogram 
     Histogram { counts, total }
 }
 
-/// `InstructionType` derives `strum::Display`, printing the bare variant
-/// name regardless of payload — `Instruction::ty()` and `InstructionType`
-/// became public in Step 2, so this reads the discriminant directly
-/// instead of jit_census.rs's older Debug-string-parsing workaround.
+/// Mirrors `jit_census.rs`'s `variant_name`: `InstructionType`/`ty` are
+/// private to `erars-compiler`, so recover the variant name from `Debug`,
+/// which strum-derives to the bare enum name for empty variants and
+/// `Name(data)` otherwise. Both files will switch to a public discriminant
+/// once Step 2 lands one.
 fn instruction_kind_name(inst: &Instruction) -> String {
-    inst.ty().to_string()
+    let s = format!("{inst:?}");
+    match s.find('(') {
+        Some(idx) => s[..idx].to_string(),
+        None => s,
+    }
 }
 
 fn print_histogram(h: &Histogram, iters: i64) {
@@ -393,6 +393,7 @@ fn verify_instruction_mix(h: &Histogram) {
     let checks: &[(&str, f64, f64)] = &[
         ("LoadStr", 15.0, 35.0),
         ("LoadInt", 5.0, 30.0),
+        ("ReportPosition", 8.0, 22.0),
         ("LoadVarRef", 6.0, 25.0),
         ("Print", 0.5, 12.0),
         ("BinaryOperator", 2.0, 15.0),
