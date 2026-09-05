@@ -985,7 +985,6 @@ dependencies = [
  "byteorder",
  "enum-map",
  "erars-ast",
- "erars-compiler",
  "erars-vm",
  "hashbrown 0.15.1",
 ]
