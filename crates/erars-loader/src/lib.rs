@@ -147,8 +147,9 @@ pub unsafe fn load_script(
     let dic = erars_bytecode::read_from(&mut file_bytes)?;
 
     log::info!("Load game data");
-    let (header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
+    let (mut header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
         rmp_serde::decode::from_read(&mut file_bytes)?;
+    header.init_macro_filter();
     let vconsole = VirtualConsole::new(&console_config(&config));
 
     let elapsed = start.elapsed();

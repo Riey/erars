@@ -1354,9 +1354,28 @@ impl Default for DefaultLocalVarSize {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MacroFilter {
+    pub start_bytes: [u64; 4], // 256-bit set of starting bytes
+    pub min_len: usize,
+    pub max_len: usize,
+}
+
+impl Default for MacroFilter {
+    fn default() -> Self {
+        Self {
+            start_bytes: [0; 4],
+            min_len: usize::MAX,
+            max_len: 0,
+        }
+    }
+}
+
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct HeaderInfo {
     pub macros: HashMap<String, String>,
+    #[serde(default)]
+    pub macro_filter: MacroFilter,
     pub gamebase: Gamebase,
     pub rename: HashMap<String, String>,
     pub replace: ReplaceInfo,
@@ -1406,6 +1425,27 @@ pub struct PendingDim {
 }
 
 impl HeaderInfo {
+    pub fn init_macro_filter(&mut self) {
+        let mut start_bytes = [0u64; 4];
+        let mut min_len = usize::MAX;
+        let mut max_len = 0usize;
+
+        for key in self.macros.keys() {
+            if let Some(&first) = key.as_bytes().first() {
+                let b = first as usize;
+                start_bytes[b / 64] |= 1 << (b % 64);
+            }
+            min_len = min_len.min(key.len());
+            max_len = max_len.max(key.len());
+        }
+
+        self.macro_filter = MacroFilter {
+            start_bytes,
+            min_len,
+            max_len,
+        };
+    }
+
     /// The template `ADDCHARA`/`ADDSPCHARA` should use, following Emuera
     /// `ConstantData.GetCharacterTemplate_UseSp`: the SP/normal split only
     /// exists while `CompatiSPChara` is on, so with it off both maps are
@@ -2204,6 +2244,7 @@ impl HeaderInfo {
             b.reset();
         }
 
+        self.init_macro_filter();
         Ok(())
     }
 
@@ -2439,9 +2480,26 @@ impl<'p> ParserContext<'p> {
     }
 
     pub fn replace<'s>(&self, s: &'s str) -> Cow<'s, str> {
+        let header = self.header.as_ref();
+        if header.macros.is_empty() {
+            return Cow::Borrowed(s);
+        }
+
+        let filter = &header.macro_filter;
+        // If filter is uninitialized (min_len > max_len) but macros is non-empty, fallback to standard lookup without rejecting
+        if filter.min_len <= filter.max_len {
+            if s.is_empty() || s.len() < filter.min_len || s.len() > filter.max_len {
+                return Cow::Borrowed(s);
+            }
+            let b = s.as_bytes()[0] as usize;
+            if (filter.start_bytes[b / 64] & (1 << (b % 64))) == 0 {
+                return Cow::Borrowed(s);
+            }
+        }
+
         let mut ret = Cow::Borrowed(s);
 
-        while let Some(new) = self.header.as_ref().macros.get(ret.as_ref()) {
+        while let Some(new) = header.macros.get(ret.as_ref()) {
             ret = Cow::Owned(new.clone());
         }
 
