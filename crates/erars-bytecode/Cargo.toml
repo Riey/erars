@@ -10,3 +10,6 @@ erars-vm = { path = "../erars-vm" }
 byteorder = "1.4.3"
 enum-map = "2.4.1"
 hashbrown.workspace = true
+
+[dev-dependencies]
+erars-compiler = { path = "../erars-compiler" }

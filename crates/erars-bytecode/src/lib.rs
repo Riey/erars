@@ -29,7 +29,65 @@ compile_error!("Doesn't support big endian");
 // that follow, so without this bump it would silently succeed and hand back
 // a dictionary missing every function's tail data — this magic check is
 // what turns that into a clean rejection instead.
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 12];
+//
+// Bumped a third time for `positions`' per-function narrow/wide line
+// encoding (see `write_positions`/`read_positions`): each function's
+// position entries are now preceded by a 1-byte flag choosing a 6-byte
+// `(u32, u16)` or 8-byte `(u32, u32)` entry layout, instead of always being
+// a bare `(u32, u32)` array. An older reader has no concept of that flag
+// byte and would decode it as the low byte of the first entry's `pc`,
+// silently misaligning every entry in every function that follows — this
+// bump turns that into a clean rejection instead.
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 13];
+
+/// Writes `positions` behind a 1-byte per-function encoding flag: `0`
+/// (narrow) stores each `(pc, line)` entry as `(u32, u16)` — 6 bytes instead
+/// of the naive 8 — when every line in this function fits a `u16`; both real
+/// corpora measured (eraTHYMKR, eramegaten) have a max line number in the
+/// tens of thousands, comfortably under `u16::MAX` (65,535), so this is the
+/// overwhelmingly common case. `1` (wide) keeps the full `(u32, u32)`
+/// encoding for the rare function whose compiler-recorded line exceeds
+/// `u16::MAX` (a generated or concatenated ERB file could plausibly hit
+/// this) — overflow here is a supported, per-function encoding choice, not
+/// a silent truncation or a panic.
+fn write_positions<W: Write + WriteBytesExt>(mut out: W, positions: &[(u32, u32)]) -> Result<()> {
+    let wide = positions.iter().any(|&(_, line)| line > u16::MAX as u32);
+    out.write_u8(wide as u8)?;
+    out.write_u32::<LE>(positions.len() as u32)?;
+    if wide {
+        for &(pc, line) in positions {
+            out.write_u32::<LE>(pc)?;
+            out.write_u32::<LE>(line)?;
+        }
+    } else {
+        for &(pc, line) in positions {
+            out.write_u32::<LE>(pc)?;
+            out.write_u16::<LE>(line as u16)?;
+        }
+    }
+    Ok(())
+}
+
+/// Inverse of [`write_positions`].
+fn read_positions<R: Read + ReadBytesExt>(mut read: R) -> Result<Box<[(u32, u32)]>> {
+    let wide = read.read_u8()? != 0;
+    let len = read.read_u32::<LE>()? as usize;
+    let mut positions = Vec::with_capacity(len);
+    if wide {
+        for _ in 0..len {
+            let pc = read.read_u32::<LE>()?;
+            let line = read.read_u32::<LE>()?;
+            positions.push((pc, line));
+        }
+    } else {
+        for _ in 0..len {
+            let pc = read.read_u32::<LE>()?;
+            let line = read.read_u16::<LE>()? as u32;
+            positions.push((pc, line));
+        }
+    }
+    Ok(positions.into_boxed_slice())
+}
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {
@@ -50,8 +108,9 @@ fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody
         write_arr!(goto_labels, FunctionGotoLabel);
         write_arr!(args, FunctionArgDef);
         write_arr!(body, Instruction);
-        write_arr!(positions, (u32, u32));
     }
+
+    write_positions(&mut out, &body.positions)?;
 
     Ok(())
 }
@@ -85,7 +144,7 @@ fn read_function_body<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionBod
         let goto_labels = read_arr!(FunctionGotoLabel);
         let args = read_arr!(FunctionArgDef);
         let insts = read_arr!(Instruction);
-        let positions = read_arr!((u32, u32));
+        let positions = read_positions(&mut read)?;
 
         Ok(FunctionBody {
             file_path,
