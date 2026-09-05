@@ -1,0 +1,175 @@
+# Bytecode Interpreter Dispatch Optimization (`bytecode-opt` branch)
+
+Date: 2026-09-05
+Scope: `crates/erars-vm/src/terminal_vm.rs`, `crates/erars-vm/src/terminal_vm/executor.rs`, `crates/erars-vm/src/function.rs`, `crates/erars-vm/src/context.rs` (`VariableStorage::index_local_var`), `crates/erars-compiler/src/{compiler,instruction,parser}.rs`, `crates/erars-bytecode/src/lib.rs`, `crates/erars-lint/src/lib.rs`. Branch `bytecode-opt`, based on `master` at `35435b9`, four commits: `42840c7` (census tool), `b006989` (A/B harness), `e4723cf` (P0: dispatch match), `99c95fb` (P0 follow-up: `index_local_var` fix), `d0f1162` (P1v2: `ReportPosition` elimination).
+Method: real corpus census (`jit_census` example) against two production ERB corpora (`eraTHYMKR`, `eramegaten_p_kr/Data`) to find where dispatch cost concentrates; a real-`TerminalVm`-execution A/B microbenchmark (`jit_ceiling_bench` example) to measure whether a candidate change actually helps, with a dynamic-instruction-histogram correctness guard on every change so a speed measurement can never be trusted without first confirming it didn't also change *which* instructions run.
+
+**Caveat that applies to every timing number in this document except the corpus load-time and static-instruction-count sections**: `jit_ceiling_bench`'s interpreter-loop timings come from one synthetic ERB loop (`LOCAL`/`SUM`/`PRINTFORM`, statement mix tuned to approximate the census's corpus-observed unigram proportions — see §1 and §2) executed 3,000,000 times. This approximates, but does not equal, either real corpus's actual instruction mix or control-flow shape. `erars` has no corpus-driven *runtime execution* benchmark (running eraTHYMKR or eramegaten's actual game loop end-to-end is not automatable here — it is an interactive text game). The corpus numbers in §7 are a load-time/size/static-count cross-check against the real corpora, not a runtime-execution cross-check; they corroborate that nothing broke and that the static win is real, but they are not a second timing data point for the interpreter loop itself.
+
+---
+
+## 1. Where dispatch cost concentrates: the unigram/bigram census (`42840c7`)
+
+`crates/erars-loader/examples/jit_census.rs`, adapted from the `llvm-jit` branch's AOT-feasibility spike (`d5c9d68`), loads a real corpus's compiled `FunctionDic` and counts every instruction's static frequency (unigram) and every adjacent same-function-body instruction pair (bigram; pairs never cross a function boundary). Re-run against both corpora for this document (binaries built from `99c95fb`, the commit immediately before `ReportPosition`'s removal, so the census reflects the *before* state the optimization arc targeted):
+
+| Corpus | Total static instructions | `ReportPosition` count | `ReportPosition` share |
+|---|---|---|---|
+| eraTHYMKR | 5,404,279 | 812,935 | **15.04%** |
+| eramegaten_p_kr/Data | 6,249,981 | 896,068 | **14.34%** |
+
+`ReportPosition` was a dedicated instruction, emitted once per compiled statement purely to keep `VmContext`'s `ScriptPosition` current for error messages and the debug console — no data flow, no control flow, nothing but bookkeeping — and it was the single largest or second-largest instruction category in both corpora (behind only `LoadStr`/`LoadInt`, ahead of `LoadVarRef`).
+
+**Bigram/dispatch-order finding.** In both corpora, the pairs `ReportPosition -> LoadStr` and `ReportPosition -> LoadInt` are consistently among the top 5 most frequent bigrams out of 197-232 distinct pairs (eraTHYMKR: 7.76% and 5.69%; eramegaten: 9.18% and 4.61%). Summing every bigram with `ReportPosition` as its *first* element against `ReportPosition`'s own total count accounts for effectively all of it (eraTHYMKR: 812,934 of 812,935). This confirms `ReportPosition` was placed at the *start* of essentially every compiled statement, immediately preceding that statement's first data-load instruction — a producer sitting at a fixed, predictable point relative to statement boundaries, never interleaved mid-expression. That placement is exactly why an *on-demand, consumer-driven* replacement (§6) can recover the same information without a dedicated instruction: a statement boundary's line number is recoverable from the compiled body's own structure without the compiler having to say so explicitly on every step.
+
+The census's own "simulated post-Priority-1" pass (filtering `ReportPosition` out of the bigram stream and joining its former neighbors directly) previewed this: `LoadStr -> LoadVarRef` becomes the single most common pair post-removal in both corpora (eraTHYMKR 14.56%, eramegaten 14.69%), and new direct edges appear where `ReportPosition` used to sit (e.g. `Goto -> LoadInt` at 4.76% in eraTHYMKR, `Call -> LoadStr` at 1.79% in eramegaten) — exactly the shape §6's design produces.
+
+Category totals (eraTHYMKR, from the `99c95fb`-era census; `ReportPosition` counted under `pure` since it has no data/control dependency): `pure` 64.92%, `var_access` 14.94%, `control_local` 11.64%, `host` 7.49%, `control_call` 1.01%.
+
+## 2. The A/B harness (`b006989`)
+
+`jit_ceiling_bench.rs` (an existing file inherited from `llvm-jit`, repurposed here) compiles a fixed ERB loop and calls `TerminalVm::try_call` on it directly, 9 interleaved rounds per process, reporting min/median/max wall time. The loop body:
+
+```
+@BENCH
+#DIM SUM
+ISSKIP 1
+LOCAL = 0
+SUM = 0
+WHILE LOCAL < {iters}
+	IF LOCAL < {iters/2}
+		SUM = SUM + LOCAL
+	ELSE
+		PRINTFORM iter {LOCAL}
+	ENDIF
+	LOCAL = LOCAL + 1
+WEND
+```
+
+chosen (per §1's census) to mix variable reads/writes, arithmetic, a branch, and a `PRINTFORM` per iteration rather than one instruction type, so no candidate optimization could be mis-ranked by a benchmark that barely exercises the instruction it targets. `ISSKIP 1` keeps `Print`'s dispatch cost (pop, format, flag checks) in the mix without its `VirtualConsole` buffering cost swamping millions of iterations. No `black_box` is needed or used: `TerminalVm::try_call` is a real cross-crate call into a heap-backed interpreter that cannot be proven side-effect-free and elided — unlike the native-Rust comparison loop this file originally contained on `llvm-jit`, which needed `black_box` to avoid LLVM proving it closed-form (a mistake that once produced a bogus ~400,000,000× "speedup" there). A `dynamic_instruction_histogram` function computes exact (not sampled) per-type executed counts analytically, by walking the compiled body's own real `Goto`/`GotoIfNot` targets and multiplying by the known iteration split — this is the correctness guard used before and after every change in this document: if the histogram (minus whatever instruction the change legitimately removes) is not byte-for-byte identical, the change altered *what runs*, not just *how fast*, and any timing number is void until that is understood.
+
+This benchmark's loop body source has not changed since `b006989`; only its diagnostic/histogram-printing internals evolved alongside the production code (Step 2 added a public `Instruction::ty()` discriminant, replacing Debug-string parsing; Step 3 removed `ReportPosition` from the printed breakdown). The workload itself is invariant, which is what makes the cumulative measurement in §8 possible using the *same* script across widely separated commits.
+
+## 3. P0: dispatch chain to `match` (`e4723cf`)
+
+`run_instruction` dispatched on `Instruction`'s payload type via a chain of up to 36 sequential `is_x()`/`as_x()` calls, each re-deriving the discriminant check every earlier call in the chain had already failed — instruction types positioned last in the chain (`LoadDefaultArgument`, `BuiltinCommand`, `BuiltinMethod`) paid the full linear scan on every dispatch. Fixed by making `InstructionType` public and adding `Instruction::ty()` (`#[inline(always)]`, no encoding change, no `VERSION_MAGIC` bump), then converting the chain to `match inst.ty() { ... }` with one arm per variant (40 variants, no wildcard — the compiler now rejects a future instruction type added without a dispatch arm, where the old chain would have silently fallen through to dead-code `unreachable!`).
+
+Correctness guard: histogram byte-identical at iters=10 and iters=3,000,000 (the refactor changes only *how* an instruction is selected, never which one runs). `cargo test --workspace`: 450 passed, 0 failed.
+
+Measurement (5 interleaved pairs, baseline binary preserved before rebuilding "new," alternating within one batch, 3,000,000 iterations): all 5 pairs faster, deltas -253.2/-128.3/-116.6/-77.7/-57.0ms (min basis). Median pair delta **-116.6ms (-6.4%)**, strongest pair delta **-253.2ms (-12.9%)**; every pair agreed in sign, effect well above this box's ~8.7% same-build noise floor.
+
+## 4. `index_local_var`'s two-part fix (`99c95fb`)
+
+Found while investigating dispatch cost further: `VariableStorage::index_local_var`, on the hot `LoadVarRef`/`StoreVar` path for every `#DIM`-declared local access (`LOCAL`, `ARG`, any user `#DIM` — far more common than character-indexed global array access), had two stacked defects:
+
+1. `self.read_int("TARGET", &[])?` resolved the literal `"TARGET"` through `impl StrKeyLike for &str`, calling `interner().get_or_intern(self)` — a full hash, lock-protected shard read, and arena probe — on *every single call*, to re-derive a key `index_var` (two functions up in the same file) already had sitting in a fixed `known_key` lookup table. Fixed by using `self.known_key(KnownVariableNames::Target)`.
+2. That read was unconditional, but `target` is only consumed inside the `UniformVariable::Character` arm when `calculate_single_idx` returns `None` (an omitted index on a character-indexed local) — every `Normal`-variable access (the overwhelming majority: plain `#DIM` scratch variables are never character-indexed) paid the read and discarded the result. Fixed by peeking `VariableInfo::is_chara` and the index shape immutably first (new `LocalVarTable::get`, mirroring the existing `get_mut`), calling `read_int` only when a `Character` local's index is actually omitted.
+
+Correctness guard: histogram byte-identical at iters=10 and iters=3,000,000 — this change alters no instruction *selection*, only what a couple of instructions' handlers do internally. `cargo test --workspace`: 450 passed, 0 failed.
+
+Measurement, isolating the two fixes with a paired-interleaving protocol (5 rounds; the benchmark's `LOCAL`/`SUM` are both `Normal`, non-character, so fix 2 alone would already skip the read entirely for this workload — isolating fix 1's effect required a temporary `known_key`-but-still-eager variant, "variant A," measured once for this purpose and discarded, never committed):
+
+| Comparison | Median | Min | Sign agreement |
+|---|---|---|---|
+| baseline → `known_key` only (variant A) | -231.8ms (-12.64%) | -413.2ms | 5/5 negative |
+| `known_key` → +lazy read (both fixes) | -136.2ms (-8.50%) | -186.7ms | 5/5 negative |
+| baseline → both fixes combined | -370.7ms (-20.06%) | -511.3ms | 5/5 negative |
+
+Both components are separable and both matter: the interner-cost fix is the larger of the two, but the wasted eager read is a genuine second effect on top of it, not noise.
+
+## 5. Step 3, attempt 1: lockstep per-instruction stamping (discarded, never committed)
+
+The first design for removing `ReportPosition` kept `ctx.update_position` current by stamping a line on *every* instruction step: a `positions: Vec<(u32, u32)>` side table (pc → line, monotonic in pc) was added to `FunctionBody`, and `run_body`'s main loop walked `advance_position`/`seek_position` in lockstep with the instruction cursor, updating `ScriptPosition` unconditionally before every single dispatch.
+
+Measured 5/5 rounds *slower*: **median +8.024ms (+0.64%), min +4.956ms (+0.40%)**, 3,000,000 iterations. Small in relative terms, but unambiguous and consistent in sign — a regression, not noise.
+
+**Root-cause mechanism** (recorded here explicitly so it is not rediscovered expensively): `ReportPosition` cost one dispatch on a *conditional* ~13.5-15% of steps (§1). The lockstep stamp replaced that with a position-table lookup plus an `Option`-taking bookkeeping call on *literally 100%* of dispatches — itself almost as expensive per-call as the instruction it eliminated (same side table, same kind of write into `VmContext`), just paid unconditionally instead of conditionally. Trading a conditional ~13.5% cost for an unconditional 100% cost of comparable per-call weight is a net loss by construction, regardless of how cheap the individual lookup is made — the win from eliminating an instruction from the dispatch stream is only real if its replacement is paid on a **narrower** set of dispatches than the original, never a wider one. This is the trap: "the instruction is gone, so it must be faster" does not follow if what replaced it runs more often than the instruction did.
+
+## 6. Step 3, attempt 2 (v2): on-demand, consumer-driven stamping (committed as `d0f1162`)
+
+v2 instead stamps `ScriptPosition` only at the small set of points where a stale position could actually be *observed* — consumer-driven rather than producer-driven. An exhaustive audit of the codebase found exactly two position *consumers*: `debug_console::show_debug` and `TerminalVm::start`'s error-unwind print loop. Every point that could change what either of those would read is a stamp site; nothing else needs one.
+
+- `erars-bytecode/src/lib.rs`: kept the `positions` side table from attempt 1 (it was never the problem — the *unconditional per-step read* was) as the lookup backing store, serialized via `write_arr!`/`read_arr!` in `FunctionBody`'s own encoding. `VERSION_MAGIC` 11 → 12.
+- `erars-vm/src/function.rs`: replaced the lockstep `advance_position`/`seek_position` pair with one stateless accessor, `FunctionBody::line_at(&self, cursor: u32) -> Option<u32>` — binary search (`partition_point`) over the side table, no mutable walk state to keep synchronized with the cursor:
+
+  ```rust
+  pub fn line_at(&self, cursor: u32) -> Option<u32> {
+      let idx = self.positions.partition_point(|&(pc, _)| pc <= cursor).checked_sub(1)?;
+      Some(self.positions[idx].1)
+  }
+  ```
+
+- `erars-vm/src/terminal_vm/executor.rs`: `run_instruction` and `run_builtin_command` both gained `cursor: u32, body: &FunctionBody` trailing parameters. A `stamp_position!(ctx, body, cursor)` macro (`if let Some(line) = body.line_at(cursor) { ctx.update_position(...) }`) is called at exactly 11 sites found by the consumer audit: before every `ctx.input_redraw` (`Print`+`WAIT`, `Twait`, `Wait`/`WaitAnykey`/`ForceWait`, the `Input` family), before `TryCall`/`TryJump`'s `vm.try_call`, before `Jump`/`Call`'s `vm.call`, before `CallEvent`'s `call_event!`, before `DoTrain`/`CallTrain`'s `run_call_train`, before `LoadData`'s `run_load_data`, before `SaveGame`'s `run_save_game`, before `LoadGame`'s combined load block. `run_save_game`/`run_load_data`/`run_call_train`/`run_train_commands`/`run_load_game` keep unchanged signatures — none of them push their own call-stack frame, so one stamp at their `run_builtin_command` dispatch site covers their entire internal excursion.
+- `erars-vm/src/terminal_vm.rs`: `run_body` captures `let my_depth = ctx.call_stack().len();` right after `call_internal` pushes its frame; its `Err(err) => { ... }` arm stamps a line via `body.line_at(cursor as u32)` **only if** `ctx.call_stack().len() == my_depth`, before returning the error. Without this guard, an error thrown at call depth N+2 and propagated back through N+1 and N would get re-stamped with N+1's and then N's own cursor on the way out, silently discarding the innermost frame's true position — a correctness bug that would only manifest on a nested-call error path, easy to miss without deliberately reasoning about re-propagation.
+- `erars-lint/src/lib.rs` (`check_variable_exist_inner`): migrated to `func.line_at(0).unwrap_or(1)` / per-instruction `func.line_at(i as u32)` — stateless calls are acceptable here since lint is a cold, one-time pass, not the hot interpreter loop.
+- `erars-compiler/src/{compiler,instruction,parser}.rs`: `ReportPosition`/`report_position` removed outright — no instruction encodes a line number into the stream any more; the side table is now the only place line information lives.
+
+**Correctness guard**, three layers: (1) `jit_ceiling_bench`'s histogram byte-identical for every instruction other than `ReportPosition`, at iters=10 and iters=3,000,000; (2) re-confirmed at real-corpus scale via `jit_census` — on both eraTHYMKR and eramegaten, every non-`ReportPosition` row's raw count is identical between `99c95fb` and `d0f1162`, only `ReportPosition`'s row disappears (§7); (3) both oracle fixtures (`tests/run_tests/basic/debug_console_window.out`, `tests/run_tests/control_flow/unbound_ref.out`) pass verbatim. `cargo test --workspace`: 451 passed, 0 failed.
+
+**Measurement**: 10 interleaved rounds (5 old-first + 5 new-first, to rule out ordering bias), 3,000,000 iterations each. Deltas (NEW−OLD, ms): -81.428, -64.515, -22.149, -43.170, -70.395, -52.882, -86.371, -48.257, -82.303, -63.284. **10/10 sign agreement**, NEW always faster. Median -63.9ms (-5.1%), weakest effect -22.1ms (-1.8%), strongest -86.4ms (-6.8%). Load average rose 0.82 → 2.50 during the batch (another user on the box mid-run); noted for transparency — does not change the sign-agreement conclusion, since the effect holds under both interleave orderings and exceeds same-build noise by a wide margin.
+
+## 7. Corpus-level validation (real ERB corpora, `99c95fb` vs `d0f1162`)
+
+Static instruction count (`jit_census`), confirming the removal's size matches its own measured share from §1 exactly (nothing else about instruction selection changed):
+
+| Corpus | Before | After | Drop |
+|---|---|---|---|
+| eraTHYMKR | 5,404,279 | 4,591,344 | **-15.04%** |
+| eramegaten_p_kr/Data | 6,249,981 | 5,353,913 | **-14.34%** |
+
+Every other instruction category's raw count is byte-for-byte identical between the two builds on both corpora — verified by diffing the full census output, not by eyeballing percentages.
+
+`game.era` on-disk size (`erars-stdio --save --quite`, 3 runs per side per corpus, averaged — `game.era` is *not* byte-reproducible run-to-run under multithreaded parsing on either binary, a ~100-300 byte noise floor on 50-85MB files confirmed present on **both** `99c95fb` and `d0f1162`, four orders of magnitude below the effect below, so it does not affect the conclusion):
+
+| Corpus | Before (avg) | After (avg) | Delta |
+|---|---|---|---|
+| eraTHYMKR | 52,497,020 B | 55,003,392 B | **+2,506,372 B (+4.77%)** |
+| eramegaten_p_kr/Data | 79,367,178 B | 82,557,570 B | **+3,190,391 B (+4.02%)** |
+
+This is the expected, one-time cost of persisting the new `positions` side table — not a regression to chase down.
+
+Load time (`phases` example, `parse+compile serial` wall-min, 5 interleaved full-binary rounds per corpus — each round is itself one 5-round `phases` invocation reporting its own min):
+
+| Corpus (function count) | Before | After | Delta |
+|---|---|---|---|
+| eraTHYMKR (16,859 functions) | ~219.2ms | ~223.0ms | +1.76% |
+| eramegaten_p_kr/Data (125,549 functions) | ~348.7ms | ~358.7ms | +2.85% |
+
+A small, real, size-proportional compile-time cost from populating the positions table during compilation, scaling with function/statement count as expected — negligible in absolute terms (single-digit to low-double-digit milliseconds) against either corpus's total load time, and paid once at load rather than on every future interpreter step. **No load-time regression of consequence.** Both corpora's lint-warning sets are identical in content between the two binaries (order differs run-to-run under the multithreaded lint pass regardless of code, confirmed by sorting and diffing both outputs) — confirming no functional regression alongside the timing check.
+
+## 8. Cumulative effect: one direct `35435b9` → `d0f1162` measurement
+
+P0 (§3), the `index_local_var` fix (§4), and P1v2 (§6) each changed the *base cost* the next stage's percentage-of-dispatches savings applies against — summing their individually-measured medians would double-count or under-count depending on which base each was measured on. Per the branch owner's explicit instruction, the cumulative effect is instead one direct paired measurement from `master`'s tip (`35435b9`, before any of this branch's changes) straight to the final commit (`d0f1162`), using the *same* `jit_ceiling_bench` loop body (§2's script is unchanged since `b006989`; `35435b9`'s worktree does not contain this file at all — the pre-`Instruction::ty()` Step-1 version of the harness was used for the "old" build, since it drives the identical script through identical `TerminalVm::try_call` setup and its histogram/diagnostic internals, which do not exist in `35435b9`'s API, run entirely before the timed region and were not the thing rebuilt or measured).
+
+10 interleaved rounds (5 old-first + 5 new-first), 3,000,000 iterations each, both binaries prebuilt into distinct paths before any timing began:
+
+| Order | Before (`35435b9`) | After (`d0f1162`) | Delta | % |
+|---|---|---|---|---|
+| old-first | 1479.854ms | 1168.353ms | -311.501ms | -21.05% |
+| old-first | 1497.715ms | 1165.595ms | -332.120ms | -22.18% |
+| old-first | 1502.690ms | 1158.498ms | -344.192ms | -22.91% |
+| old-first | 1490.123ms | 1169.056ms | -321.067ms | -21.55% |
+| old-first | 1468.125ms | 1157.293ms | -310.832ms | -21.17% |
+| new-first | 1486.804ms | 1165.799ms | -321.005ms | -21.59% |
+| new-first | 1472.689ms | 1193.106ms | -279.583ms | -18.98% |
+| new-first | 1497.232ms | 1166.863ms | -330.369ms | -22.07% |
+| new-first | 1472.022ms | 1170.222ms | -301.800ms | -20.50% |
+| new-first | 1509.706ms | 1217.045ms | -292.661ms | -19.39% |
+
+**10/10 sign agreement, NEW always faster.** Median delta **-316.25ms (-21.25%)**, weakest effect -279.6ms (-18.98%), strongest effect -344.2ms (-22.91%). This is substantially larger than any single stage's own median (P0 alone: -6.4%; `index_local_var` alone: -20.06% but measured on P0's already-reduced base; P1v2 alone: -5.1%, also measured on an already-reduced base) — consistent with the interaction the branch owner flagged: each stage's saving is a percentage of a shrinking denominator, so the compounded effect of all three together is close to, but not a naive sum of, the individual percentages.
+
+**Instruction-selection sanity check** across the full `35435b9` → `d0f1162` span (more than one mechanism changed, so this is a sanity check rather than the single-mechanism byte-identity guarantee used in §3/§4/§6 individually): at iters=10, every non-`ReportPosition` instruction-type row's raw count in the dynamic histogram is identical between the two builds (`LoadStr` 73, `LoadVarRef` 63, `BinaryOperator` 36, `LoadInt` 35, `GotoIfNot` 21, `StoreVar` 17, `Goto` 15, `ConcatString` 5, `Print` 5, `BuiltinMethod` 1, `StoreResult` 1); only `ReportPosition` (44 at `35435b9`) disappears. Nothing else about *what* runs drifted across P0's dispatch-match conversion, the `index_local_var` internal fix, or `ReportPosition`'s removal — only how fast and by what mechanism it runs.
+
+## 9. Measurement protocol (for reproduction/audit)
+
+Every A/B number in this document follows the same rules:
+
+1. **Build every binary variant first**, into distinct paths (e.g. `/tmp/bench_x_old/bin`, `/tmp/bench_x_new/bin`), before any timing run begins — never rebuild mid-comparison.
+2. **Interleave, don't block.** Run old/new alternately within one batch (never all-old-then-all-new), and for the more consequential comparisons (§6, §8) run the alternation in *both* orders (5 old-first + 5 new-first = 10 total) to rule out any first-run/thermal/scheduler ordering bias.
+3. **Report per-round deltas, then min/median**, not just an aggregate. Every comparison in this document states its sign agreement explicitly (e.g. "10/10 rounds negative") — a real effect must hold under every round and both interleave orders, not just on average.
+4. `uptime` before and after each batch, to flag (not silently absorb) load-average contamination from other processes on the box — see §6's noted load spike, which did not change the conclusion because the effect size and sign agreement held regardless.
+5. **Correctness guard precedes every timing claim.** `BENCH_DEBUG=1 <binary> <iters>` dumps the compiled instruction stream and the analytically-computed dynamic histogram; compare old vs new with `diff` on the full histogram output (or, for corpus-scale checks, on `jit_census`'s full "Instruction census" section), never by eyeballing a handful of top rows. A change is only "faster," not "different," once every row outside the one(s) the change legitimately touches is confirmed byte-for-byte identical.
+6. Reproduction commands used throughout:
+   - `cargo build --release -p erars-loader --example jit_ceiling_bench` (per commit/worktree, into a distinct `target/` via `git worktree add /tmp/<name> <commit>`)
+   - `<binary> 3000000` for a timing round; `BENCH_DEBUG=1 <binary> 10` for the correctness-guard dump
+   - `cargo build --release --features multithread -p erars-loader --example phases --example jit_census` for the corpus tools; `phases <game-dir> <rounds>`, `jit_census <game-dir>`
+   - `erars-stdio <game-dir> --save --quite` for the `game.era` on-disk size measurement (`run_script` only loads/compiles/lints and returns before any game loop starts, confirmed non-interactive and safe to script)
