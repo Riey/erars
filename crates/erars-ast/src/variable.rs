@@ -311,3 +311,53 @@ fn deserializing_an_old_shape_empty_size_compares_equal_to_a_fresh_one() {
 
     k9::assert_equal!(deserialized, freshly_parsed);
 }
+
+/// The complementary risk to the two tests above: `size` is a
+/// `tinyvec::ArrayVec<[u32; 3]>`, and `ArrayVec::push` past its capacity
+/// panics rather than growing — a process abort on malformed input, not a
+/// diagnostic, if `size`'s `Deserialize` impl ever pushed one element per
+/// sequence item without checking capacity first. A save file, `game.era`
+/// bytecode cache, or hand-edited `variable.yaml` carrying a corrupted or
+/// future *4*-dimension `size` (the language itself never writes more than
+/// 3, per `VariableInfo::calculate_single_idx`'s match arms and
+/// `finish_dim`'s `bail!` in `erars-compiler/src/parser.rs`) is exactly such
+/// malformed input.
+///
+/// Confirmed directly rather than assumed: `tinyvec` 1.13.2's
+/// `ArrayVecVisitor::visit_seq` (`tinyvec-1.13.2/src/arrayvec.rs:2140`)
+/// checks `new_arrayvec.len() >= new_arrayvec.capacity()` *before* every
+/// push and returns a proper `serde::de::Error::invalid_length` instead —
+/// so this already can't panic, by construction of the dependency rather
+/// than anything erars itself guarantees. That guarantee is worth pinning
+/// with a real encode/decode round trip: a dependency version bump could
+/// change `ArrayVec`'s `Deserialize` impl without erars' own code changing
+/// at all, and the failure mode that would actually hurt a player is not a
+/// panic but silent truncation — dropping the fourth dimension and loading
+/// the save as if it only ever had three, corrupting the array's shape with
+/// no diagnostic. Asserting `Err` specifically (not just "does not panic")
+/// is what rules that out.
+#[test]
+fn deserializing_an_over_length_size_sequence_is_an_error_not_a_panic_or_truncation() {
+    let over_long = OldShapeVariableInfo {
+        is_chara: false,
+        is_str: false,
+        is_global: false,
+        is_const: false,
+        is_ref: false,
+        is_savedata: false,
+        is_dynamic: false,
+        default_int: 0,
+        size: vec![1, 2, 3, 4],
+        init: Vec::new(),
+    };
+    let bytes = rmp_serde::to_vec(&over_long).expect("over-length struct encodes");
+
+    let err = rmp_serde::from_slice::<VariableInfo>(&bytes)
+        .expect_err("a 4-dimension size must be rejected, not silently truncated to 3");
+
+    let message = err.to_string();
+    assert!(
+        message.contains("invalid length"),
+        "expected tinyvec's ArrayVec capacity check (`invalid length`) to fire, got: {message}"
+    );
+}
