@@ -25,6 +25,24 @@
 //! [`BLOCK`] so that appending is an uncontended thread-local increment
 //! fifteen times out of sixteen, exactly as measured safe for literals. No
 //! allocation ever doubles, so there is no tail to have.
+//!
+//! [`DEDUP`] itself was `DashMap` until it was measured against a synthetic
+//! per-call `rdtsc` timer on eraTHYMKR and eraMegaten: of every call that
+//! reaches this store, 56-79% are a *first-ever* insertion of a string no
+//! thread has interned before (confirmed by matching the miss counter
+//! exactly against `len()`'s growth across the measurement window), and that
+//! write path is what widens 3.4-4.1x under 32-thread contention — not a
+//! cache-shaped read problem any snapshot or bigger cache could recover.
+//! `DashMap`'s per-shard `RwLock` pays for that widening in cache-line
+//! bouncing on every insert; `papaya`'s lock-free table does not, at roughly
+//! 2-3x less aggregate CPU time in this path on both corpora under the same
+//! 32-thread load. The gain depends entirely on avoiding `papaya`'s
+//! incremental-resize tax, which taxes *every* concurrent operation while a
+//! resize is in flight, not just inserts — starting the table at its default
+//! empty capacity regressed both hit and miss costs by an order of
+//! magnitude versus `DashMap`, matching papaya's own documented weakness on
+//! insert-heavy workloads. [`DEDUP`] is built with a capacity chosen well
+//! above eraMegaten's ~200k identifiers up front instead.
 
 use std::{
     alloc::{alloc, handle_alloc_error, Layout},
@@ -36,7 +54,7 @@ use std::{
     },
 };
 
-use dashmap::{mapref::entry::Entry, DashMap};
+use papaya::{HashMap as PapayaMap, LocalGuard};
 
 use crate::StrKey;
 
@@ -82,9 +100,55 @@ thread_local! {
 
 /// Content-to-key index — the one map this store keeps, because identity is
 /// the one question [`crate::literal_store`] never has to answer.
-type Dedup = DashMap<&'static str, StrKey, ahash::RandomState>;
+type Dedup = PapayaMap<&'static str, StrKey, ahash::RandomState>;
 
-static DEDUP: LazyLock<Dedup> = LazyLock::new(|| DashMap::with_hasher(ahash::RandomState::default()));
+/// [`DEDUP`]'s starting capacity, and the reason it is not left at `papaya`'s
+/// default of zero.
+///
+/// `papaya`'s incremental resize means a table growing towards its capacity
+/// makes every concurrent operation — reads included — search both the old
+/// and new table while a resize is in flight; a table built at capacity zero
+/// is *always* mid-resize under a whole corpus load, since it never stops
+/// growing. Measured on both corpora: an unsized [`DEDUP`] cost 5-15x more
+/// per call than the `DashMap` it replaced, on *every* operation, hits
+/// included — not the improvement the module doc comment describes, its
+/// mirror image. Presizing past the load fixes it outright.
+///
+/// Unlike [`SLOTS`], this table is a real allocation, not a `.bss` array of
+/// zero pages that costs nothing unfilled — someone will otherwise assume
+/// the same reasoning that justifies [`ID_CAP`]'s twenty-times headroom
+/// transfers here and bump this for free. It does not: measured on
+/// eraMegaten (real corpus ~198k identifiers), peak RSS was 234 MB presized
+/// to a snug 300k, 253 MB at 1_000_000 (this constant, +19 MB), and 277 MB at
+/// 2_000_000 (+42 MB) — headroom costs real, if still modest, megabytes here.
+/// Five times the largest corpus measured, not [`ID_CAP`]'s twenty, is the
+/// balance struck: enough that nothing several times larger than eraMegaten
+/// would ever cross it, at roughly the cheaper end of that RSS curve.
+///
+/// If a corpus ever does exceed this, correctness is unaffected — `papaya`
+/// resizes and every key is still found — but every concurrent operation
+/// pays the incremental-resize tax above until the table catches up, i.e.
+/// this whole store degrades toward the "unsized" case measured above for
+/// as long as growth continues past this line. That is a performance cliff
+/// to notice happening, not a bug to fix reactively: raise the constant
+/// before eraMegaten's own identifier count gets within reach of it.
+const DEDUP_CAPACITY: usize = 1_000_000;
+
+static DEDUP: LazyLock<Dedup> = LazyLock::new(|| {
+    PapayaMap::builder()
+        .capacity(DEDUP_CAPACITY)
+        .hasher(ahash::RandomState::default())
+        .build()
+});
+
+thread_local! {
+    /// A `papaya` operation needs a guard, and pinning one per call measured
+    /// the same as pinning once: [`DEDUP`] only ever grows, so nothing this
+    /// store does can be blocked behind reclaiming a guard held too long,
+    /// and holding one for a whole thread's lifetime costs nothing a fresh
+    /// pin per call would not have paid anyway.
+    static DEDUP_GUARD: LocalGuard<'static> = DEDUP.guard();
+}
 
 /// Bytes handed out to arena chunks so far — the arena's reserved capacity,
 /// not the bytes actually written into it, matching what
@@ -190,25 +254,21 @@ fn store_new(s: &str) -> StrKey {
 /// wasted, exactly as a hole in a reservation block is: it costs the array
 /// entry it was never going to get back and nothing else.
 pub fn get_or_intern(s: &str) -> StrKey {
-    if let Some(key) = DEDUP.get(s) {
-        return *key;
-    }
-
-    let key = store_new(s);
-    let stored: &'static str = resolve(key.to_u32());
-
-    match DEDUP.entry(stored) {
-        Entry::Occupied(e) => *e.get(),
-        Entry::Vacant(e) => {
-            e.insert(key);
-            key
+    DEDUP_GUARD.with(|guard| {
+        if let Some(key) = DEDUP.get(s, guard) {
+            return *key;
         }
-    }
+
+        let key = store_new(s);
+        let stored: &'static str = resolve(key.to_u32());
+
+        *DEDUP.get_or_insert_with(stored, || key, guard)
+    })
 }
 
 /// The key for `s`, without registering it if it is not already known.
 pub fn get(s: &str) -> Option<StrKey> {
-    DEDUP.get(s).map(|key| *key)
+    DEDUP_GUARD.with(|guard| DEDUP.get(s, guard).copied())
 }
 
 /// Identifiers registered so far — the count of real entries in [`DEDUP`],
@@ -229,7 +289,12 @@ pub fn current_memory_usage() -> usize {
 /// here, because [`restore`] takes each key explicitly instead of replaying
 /// insertions positionally.
 pub fn iter() -> impl Iterator<Item = (StrKey, &'static str)> {
-    DEDUP.iter().map(|entry| (*entry.value(), *entry.key()))
+    let guard = DEDUP.guard();
+    DEDUP
+        .iter(&guard)
+        .map(|(k, v)| (*v, *k))
+        .collect::<Vec<_>>()
+        .into_iter()
 }
 
 /// Refill the store from `(key, string)` pairs written by [`iter`], so that
@@ -260,7 +325,7 @@ pub fn iter() -> impl Iterator<Item = (StrKey, &'static str)> {
 /// this store carries no `GENERATION` counter to support one.
 pub fn restore(pairs: &[(u32, &str)]) {
     assert!(
-        NEXT_SLOT.load(Ordering::Relaxed) <= 1 && DEDUP.is_empty(),
+        NEXT_SLOT.load(Ordering::Relaxed) <= 1 && DEDUP.len() == 0,
         "Interner::restore called on a non-empty interner ({} identifiers \
          already registered): restore writes directly into the live global \
          slots and dedup map instead of installing a fresh store, so a \
@@ -271,6 +336,7 @@ pub fn restore(pairs: &[(u32, &str)]) {
     );
 
     let mut next = 1u32;
+    let guard = DEDUP.guard();
 
     for &(key, s) in pairs {
         assert!(
@@ -283,7 +349,7 @@ pub fn restore(pairs: &[(u32, &str)]) {
         }
 
         next = next.max(key + 1);
-        DEDUP.insert(resolve(key), StrKey::from_u32(key));
+        DEDUP.insert(resolve(key), StrKey::from_u32(key), &guard);
     }
 
     NEXT_SLOT.store(next, Ordering::Release);

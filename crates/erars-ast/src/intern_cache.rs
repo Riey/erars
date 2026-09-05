@@ -10,6 +10,18 @@ use crate::{get_interner, StrKey};
 /// UTF-8 Korean and Japanese run three bytes to the character, so 24 bytes is
 /// eight of them. Anything longer is a sentence, and a sentence is almost
 /// always unique — caching those is what makes a memo lose (see below).
+///
+/// eraMegaten alone has 1,453 recurring identifiers over 24 bytes (CJK
+/// content inflates byte length past what looks like a short name), carrying
+/// 27,787 calls that bypass this cache — a plausible case for raising this
+/// constant. Measured instead of assumed: raising it to 28 or 32 admits
+/// those identifiers, but admits far more of the one-off sentence content
+/// alongside them, and the sentences win the trade. Hit rate fell on *both*
+/// corpora at every step — THYMKR 97.19%/96.51%/95.67%, eraMegaten
+/// 94.01%/93.20%/92.66% at 24/28/32 — while `size_of::<InternCache>()` grew
+/// 32,832/36,928/41,024 bytes doing it. Confirms this doc's own theory rather
+/// than overturning it: do not raise this without a fresh measurement across
+/// both corpora, the same way this one was.
 pub(crate) const WORD_LEN: usize = 24;
 
 /// Sets, a power of two, each holding two ways. 512 sets × 2 ways is 1024

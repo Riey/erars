@@ -316,4 +316,10 @@ fn main() {
         erars_bytecode::write_to(&mut out, &dic).unwrap();
         std::hint::black_box(out.len())
     });
+
+    if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+        if let Some(line) = status.lines().find(|l| l.starts_with("VmHWM:")) {
+            println!("peak RSS: {}", line.trim_start_matches("VmHWM:").trim());
+        }
+    }
 }
