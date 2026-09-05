@@ -86,61 +86,61 @@ fn check_variable_exist_inner(
     files: &Mutex<&mut ErarsFiles>,
     diagnostics: &Mutex<Vec<Diagnostic>>,
 ) {
-    let mut current_line = 1;
+    let mut current_line = func.line_at(0).unwrap_or(1);
     for (i, inst) in func.body().iter().enumerate() {
-        if let Some(pos) = inst.as_report_position() {
-            current_line = pos.line;
-        } else {
-            let (current_fn_name, name) = if inst.is_load_var_ref() {
-                // can only check with literal str
-                let Some(name) = func.body()[i - 1].as_load_str() else {
-                    continue;
-                };
-                (fn_name, name)
-            } else if inst.is_load_extern_varref() {
-                // can only check with literal str
-                let Some(name) = func.body()[i - 2].as_load_str() else {
-                    continue;
-                };
-                let Some(ex_fn_name) = func.body()[i - 1].as_load_str() else {
-                    continue;
-                };
-                (ex_fn_name, name)
-            } else {
+        if let Some(line) = func.line_at(i as u32) {
+            current_line = line;
+        }
+
+        let (current_fn_name, name) = if inst.is_load_var_ref() {
+            // can only check with literal str
+            let Some(name) = func.body()[i - 1].as_load_str() else {
                 continue;
             };
+            (fn_name, name)
+        } else if inst.is_load_extern_varref() {
+            // can only check with literal str
+            let Some(name) = func.body()[i - 2].as_load_str() else {
+                continue;
+            };
+            let Some(ex_fn_name) = func.body()[i - 1].as_load_str() else {
+                continue;
+            };
+            (ex_fn_name, name)
+        } else {
+            continue;
+        };
 
-            if !var.check_var_exists(current_fn_name, name) {
-                let msg = if current_fn_name == fn_name {
-                    // skip fn_name if current function's local var
-                    format!("Find LOADVAR `{name}` but `{name}` not exists.")
-                } else {
-                    format!("Find LOADEXVAR `{fn_name}@{name}` but `{fn_name}@{name}` not exists.")
-                };
+        if !var.check_var_exists(current_fn_name, name) {
+            let msg = if current_fn_name == fn_name {
+                // skip fn_name if current function's local var
+                format!("Find LOADVAR `{name}` but `{name}` not exists.")
+            } else {
+                format!("Find LOADEXVAR `{fn_name}@{name}` but `{fn_name}@{name}` not exists.")
+            };
 
-                let mut files = files.lock();
-                let file_id = func.file_path();
-                files.add_from_path(file_id);
-                let mut diagnostic = Diagnostic::warning()
-                    .with_code("W1001")
-                    .with_notes(vec![format!("In function @{fn_name}")])
-                    .with_message(msg)
-                    .with_labels(vec![Label::primary(
-                        file_id,
-                        files.line_range(file_id, current_line as usize - 1).unwrap(),
-                    )]);
+            let mut files = files.lock();
+            let file_id = func.file_path();
+            files.add_from_path(file_id);
+            let mut diagnostic = Diagnostic::warning()
+                .with_code("W1001")
+                .with_notes(vec![format!("In function @{fn_name}")])
+                .with_message(msg)
+                .with_labels(vec![Label::primary(
+                    file_id,
+                    files.line_range(file_id, current_line as usize - 1).unwrap(),
+                )]);
 
-                let name = name.resolve();
-                if name.chars().any(|c| c.is_ascii_lowercase()) {
-                    let upper = name.to_ascii_uppercase();
+            let name = name.resolve();
+            if name.chars().any(|c| c.is_ascii_lowercase()) {
+                let upper = name.to_ascii_uppercase();
 
-                    if var.check_var_exists(fn_name, var.interner().get_or_intern(&upper)) {
-                        diagnostic.notes.push(format!("Did you mean `{upper}`?"));
-                    }
+                if var.check_var_exists(fn_name, var.interner().get_or_intern(&upper)) {
+                    diagnostic.notes.push(format!("Did you mean `{upper}`?"));
                 }
-
-                diagnostics.lock().push(diagnostic);
             }
+
+            diagnostics.lock().push(diagnostic);
         }
     }
 }

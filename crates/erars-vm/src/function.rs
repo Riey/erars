@@ -42,6 +42,10 @@ pub struct FunctionBody {
     pub goto_labels: Box<[FunctionGotoLabel]>,
     pub args: Box<[FunctionArgDef]>,
     pub body: Box<[Instruction]>,
+    /// `(pc, line)` pairs in ascending `pc` order, one per statement —
+    /// see `CompiledFunction::positions`. `pc` is the index of that
+    /// statement's first real instruction in `body`.
+    pub positions: Box<[(u32, u32)]>,
 }
 
 impl FunctionBody {
@@ -55,6 +59,23 @@ impl FunctionBody {
 
     pub fn body(&self) -> &[Instruction] {
         &self.body
+    }
+
+    pub fn positions(&self) -> &[(u32, u32)] {
+        &self.positions
+    }
+
+    /// Look up the source line covering `cursor`, via binary search. Stateless
+    /// by design: callers that need this are rare (cross-function control
+    /// transfer, error propagation, a debug query) rather than every
+    /// instruction step, so there is no amortized walk state worth keeping.
+    #[inline]
+    pub fn line_at(&self, cursor: u32) -> Option<u32> {
+        let idx = self
+            .positions
+            .partition_point(|&(pc, _)| pc <= cursor)
+            .checked_sub(1)?;
+        Some(self.positions[idx].1)
     }
 
     pub fn file_path(&self) -> StrKey {
@@ -164,6 +185,7 @@ impl FunctionDic {
             file_path: func.header.file_path,
             is_function: false,
             is_functions: false,
+            positions: func.positions,
         };
 
         let mut flags = EventFlags::None;

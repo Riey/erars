@@ -3970,6 +3970,7 @@ impl<'p> ParserContext<'p> {
                                 },
                                 goto_labels: compiler.goto_labels,
                                 body: compiler.out.into_boxed_slice(),
+                                positions: compiler.positions.into_boxed_slice(),
                             });
                         }
                     };

@@ -2,7 +2,7 @@ use std::fmt;
 
 use erars_ast::{
     Alignment, BeginType, BinaryOperator, BuiltinCommand, BuiltinMethod, BuiltinVariable,
-    EventType, NotNan, PrintFlags, ScriptPosition, StrKey, UnaryOperator,
+    EventType, NotNan, PrintFlags, StrKey, UnaryOperator,
 };
 use paste::paste;
 use std::mem::transmute;
@@ -96,7 +96,6 @@ macro_rules! define_instruction {
 pub enum InstructionType {
     Nop = 0,
     Pop = 1,
-    ReportPosition = 2,
     Duplicate = 3,
     DuplicatePrev = 4,
     LoadInt = 5,
@@ -227,7 +226,4 @@ define_instruction! {
 
     @NotNan<f32>,
     (times, Times),
-
-    @ScriptPosition,
-    (report_position, ReportPosition),
 }
