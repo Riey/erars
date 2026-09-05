@@ -52,3 +52,10 @@ required-features = ["multithread"]
 # feature gate needed.
 [[example]]
 name = "jit_census"
+
+# `jit_ceiling_bench` runs a real interpreter-loop benchmark (loop body
+# statement mix matched to the jit_census corpus proportions) through
+# `TerminalVm::try_call`, for A/B-ing interpreter dispatch changes
+# (bytecode-opt Step 1). No rayon usage, so no feature gate needed.
+[[example]]
+name = "jit_ceiling_bench"
