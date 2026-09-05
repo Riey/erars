@@ -1,12 +1,22 @@
 # Bytecode Interpreter Dispatch Optimization (`bytecode-opt` branch)
 
 Date: 2026-09-05
-Scope: `crates/erars-vm/src/terminal_vm.rs`, `crates/erars-vm/src/terminal_vm/executor.rs`, `crates/erars-vm/src/function.rs`, `crates/erars-vm/src/context.rs` (`VariableStorage::index_local_var`), `crates/erars-compiler/src/{compiler,instruction,parser}.rs`, `crates/erars-bytecode/src/lib.rs`, `crates/erars-lint/src/lib.rs`. Branch `bytecode-opt`, based on `master` at `35435b9`, four commits: `42840c7` (census tool), `b006989` (A/B harness), `e4723cf` (P0: dispatch match), `99c95fb` (P0 follow-up: `index_local_var` fix), `d0f1162` (P1v2: `ReportPosition` elimination).
+Scope: `crates/erars-vm/src/terminal_vm.rs`, `crates/erars-vm/src/terminal_vm/executor.rs`, `crates/erars-vm/src/function.rs`, `crates/erars-vm/src/context.rs` (`VariableStorage::index_local_var`/`index_var`), `crates/erars-vm/src/variable.rs`, `crates/erars-vm/src/inst_counter.rs`, `crates/erars-compiler/src/{compiler,instruction,parser}.rs`, `crates/erars-bytecode/src/lib.rs`, `crates/erars-lint/src/lib.rs`, `crates/erars-stdio/src/{main,stdio_frontend}.rs`. Branch `bytecode-opt`, based on `master` at `35435b9`, six commits: `42840c7` (census tool), `b006989` (A/B harness), `e4723cf` (P0: dispatch match), `99c95fb` (P0 follow-up: `index_local_var` fix), `d0f1162` (P1v2: `ReportPosition` elimination), `1d5a8df` (`index_var`'s global-path fix, §9), `88cb4cc` (real-workload replay harness + dynamic instruction histogram, §11).
 Method: real corpus census (`jit_census` example) against two production ERB corpora (`eraTHYMKR`, `eramegaten_p_kr/Data`) to find where dispatch cost concentrates; a real-`TerminalVm`-execution A/B microbenchmark (`jit_ceiling_bench` example) to measure whether a candidate change actually helps, with a dynamic-instruction-histogram correctness guard on every change so a speed measurement can never be trusted without first confirming it didn't also change *which* instructions run.
 
-**Caveat that applies to every timing number in this document except the corpus load-time and static-instruction-count sections**: `jit_ceiling_bench`'s interpreter-loop timings come from one synthetic ERB loop (`LOCAL`/`SUM`/`PRINTFORM`, statement mix tuned to approximate the census's corpus-observed unigram proportions — see §1 and §2) executed 3,000,000 times. This approximates, but does not equal, either real corpus's actual instruction mix or control-flow shape. `erars` has no corpus-driven *runtime execution* benchmark (running eraTHYMKR or eramegaten's actual game loop end-to-end is not automatable here — it is an interactive text game). The corpus numbers in §7 are a load-time/size/static-count cross-check against the real corpora, not a runtime-execution cross-check; they corroborate that nothing broke and that the static win is real, but they are not a second timing data point for the interpreter loop itself.
+**Caveat that applies to every timing number in this document except the corpus load-time, static-instruction-count, and real-workload sections**: `jit_ceiling_bench`'s interpreter-loop timings come from one synthetic ERB loop (`LOCAL`/`SUM`/`PRINTFORM`, statement mix tuned to approximate the census's corpus-observed unigram proportions — see §1 and §2) executed 3,000,000 times. This approximates, but does not equal, either real corpus's actual instruction mix or control-flow shape. An earlier draft of this document claimed running a real corpus's actual game loop end-to-end "is not automatable here — it is an interactive text game"; that claim was false and unchecked (see §12's methodology note) — `erars-stdio --use-input <ron-file> --exit-when-input-exhausted` drives a real corpus fully headlessly, with no interactive terminal required (`< /dev/null` and all), and §11 does exactly that against eraTHYMKR. §7's corpus numbers are a load-time/size/static-count cross-check; §11 is the actual corpus-driven runtime-execution cross-check this document previously claimed did not exist.
 
 ---
+
+## Summary
+
+**What changed and what it costs.** Three stages (P0 dispatch-match, §3; `index_local_var`'s TARGET-read fix, §4/§6; `ReportPosition` elimination, §6; plus `index_var`'s matching global-path fix, §9) together cut the synthetic `jit_ceiling_bench` loop's dispatch time by a measured **-21.25% median** (§8) — but that number has a real, non-free counterpart, and burying it in a validation section (as an earlier draft of this document did) understates it:
+
+- **Load time: +0.92% (eraTHYMKR, weak/noisy signal, 8/10 round sign agreement) to +2.31% (eramegaten, 10/10)** (§7).
+- **Net +3 bytes per compiled statement, verified by byte-level reconciliation, not estimated**: the old `ReportPosition` instruction was 5 bytes; its replacement is an 8-byte `(u32, u32)` positions-table entry plus a 4-byte per-function length prefix the old format never had. Predicted vs. measured `game.era` growth agree to within the corpus's own ~100-300 byte run-to-run noise floor (eraTHYMKR: 2,506,181 B predicted vs. 2,506,243 B measured median, 62 B gap; eramegaten: 3,190,400 B predicted vs. 3,190,310 B measured median, 90 B gap — see §7). A verified-viable (not speculative) mitigation exists if this cost ever needs cutting: both corpora's line numbers fit comfortably in a `u16` (max observed 35,398 and 11,107, both well under 65,536), which would shrink the entry to 6 bytes and the net delta to roughly +1 byte/statement instead of +3.
+- **The synthetic -21.25% does not directly predict real play.** A real, played eraTHYMKR session (§11) shows a smaller, still-real, still-10/10-sign-agreeing improvement: **-9.45% median in game-loop-only time** (isolating post-load dispatch cost, 7.73-11.83% range) and **-3.15% median in full-session time** (load included). The gap exists because a real session's dynamic instruction mix is broader than the synthetic loop's `LOCAL`/`SUM`-heavy profile, and — the arc's central methodological point — because *static* instruction-occurrence counts (what §1's census measures) and *dynamic* execution-frequency (what actually happens when the code runs) are not the same measurement and do not even agree on which instructions dominate (§11).
+
+**Every timing claim in this document follows §12's measurement protocol** (build variants first, interleave both orders, ≥10 rounds, report per-round deltas and explicit sign agreement, `uptime` before/after). See §12 also for a methodology note on two now-corrected unchecked negative claims this arc made along the way.
 
 ## 1. Where dispatch cost concentrates: the unigram/bigram census (`42840c7`)
 
@@ -118,23 +128,23 @@ Static instruction count (`jit_census`), confirming the removal's size matches i
 
 Every other instruction category's raw count is byte-for-byte identical between the two builds on both corpora — verified by diffing the full census output, not by eyeballing percentages.
 
-`game.era` on-disk size (`erars-stdio --save --quite`, 3 runs per side per corpus, averaged — `game.era` is *not* byte-reproducible run-to-run under multithreaded parsing on either binary, a ~100-300 byte noise floor on 50-85MB files confirmed present on **both** `99c95fb` and `d0f1162`, four orders of magnitude below the effect below, so it does not affect the conclusion):
+`game.era` on-disk size (`erars-stdio --save --quite`, dual-order 10-round protocol, both prebuilt binaries — `game.era` is *not* byte-reproducible run-to-run under multithreaded parsing on either binary, a ~100-300 byte noise floor on 50-85MB files confirmed present on **both** `99c95fb` and `d0f1162`, four orders of magnitude below the effect below, so it does not affect the conclusion). Superseding an earlier draft's 3-run average, which did not meet this document's own measurement bar (§12):
 
-| Corpus | Before (avg) | After (avg) | Delta |
-|---|---|---|---|
-| eraTHYMKR | 52,497,020 B | 55,003,392 B | **+2,506,372 B (+4.77%)** |
-| eramegaten_p_kr/Data | 79,367,178 B | 82,557,570 B | **+3,190,391 B (+4.02%)** |
+| Corpus | Deltas (After−Before, B), old-first then new-first | Sign agreement | Median | Min | Max |
+|---|---|---|---|---|---|
+| eraTHYMKR | 2506309, 2506303, 2506243, 2506057, 2506115, 2506565, 2506121, 2506243, 2506245, 2506239 | 10/10 positive | **+2,506,243 B (+4.774%)** | +2,506,057 B | +2,506,565 B |
+| eramegaten_p_kr/Data | 3190464, 3190090, 3190082, 3190737, 3190204, 3190528, 3189943, 3190536, 3190360, 3190260 | 10/10 positive | **+3,190,310 B (+4.020%)** | +3,189,943 B | +3,190,737 B |
 
 This is the expected, one-time cost of persisting the new `positions` side table — not a regression to chase down.
 
-Load time (`phases` example, `parse+compile serial` wall-min, 5 interleaved full-binary rounds per corpus — each round is itself one 5-round `phases` invocation reporting its own min):
+Load time (`phases` example, `parse+compile serial` wall-min, dual-order 10-round protocol, each round one 5-round `phases` invocation reporting its own min). Superseding an earlier draft's single-order 5-round data, which did not meet this document's own measurement bar (§12):
 
-| Corpus (function count) | Before | After | Delta |
-|---|---|---|---|
-| eraTHYMKR (16,859 functions) | ~219.2ms | ~223.0ms | +1.76% |
-| eramegaten_p_kr/Data (125,549 functions) | ~348.7ms | ~358.7ms | +2.85% |
+| Corpus (function count) | Deltas (After−Before, ms), old-first then new-first | Sign agreement | Median | % of baseline |
+|---|---|---|---|---|
+| eraTHYMKR (16,859 functions per `phases`; 16,844 per §Summary's `FunctionBody`-level positions-table count — the two tools count slightly different units) | -2.9, +3.3, -1.5, +2.1, +3.2, +3.2, +2.9, +1.0, +1.5, +1.8 | 8/10 positive, 2/10 negative | +1.95ms | **+0.92%** |
+| eramegaten_p_kr/Data (125,549 functions) | +14.1, +7.4, +3.8, +8.5, +10.0, +10.8, +9.6, +4.6, +4.3, +4.7 | 10/10 positive | +7.95ms | **+2.31%** |
 
-A small, real, size-proportional compile-time cost from populating the positions table during compilation, scaling with function/statement count as expected — negligible in absolute terms (single-digit to low-double-digit milliseconds) against either corpus's total load time, and paid once at load rather than on every future interpreter step. **No load-time regression of consequence.** Both corpora's lint-warning sets are identical in content between the two binaries (order differs run-to-run under the multithreaded lint pass regardless of code, confirmed by sorting and diffing both outputs) — confirming no functional regression alongside the timing check.
+A small, real, size-proportional compile-time cost from populating the positions table during compilation, scaling with function/statement count as expected — negligible in absolute terms (a few milliseconds against either corpus's ~210-345ms total load time), and paid once at load rather than on every future interpreter step. eraTHYMKR's effect is real but weak and noisy (2 of 10 rounds went the other way, unlike every other paired comparison in this document); eramegaten's is unambiguous. **No load-time regression of consequence.** Both corpora's lint-warning sets are identical in content between the two binaries (order differs run-to-run under the multithreaded lint pass regardless of code, confirmed by sorting and diffing both outputs) — confirming no functional regression alongside the timing check.
 
 ## 8. Cumulative effect: one direct `35435b9` → `d0f1162` measurement
 
@@ -159,7 +169,65 @@ P0 (§3), the `index_local_var` fix (§4), and P1v2 (§6) each changed the *base
 
 **Instruction-selection sanity check** across the full `35435b9` → `d0f1162` span (more than one mechanism changed, so this is a sanity check rather than the single-mechanism byte-identity guarantee used in §3/§4/§6 individually): at iters=10, every non-`ReportPosition` instruction-type row's raw count in the dynamic histogram is identical between the two builds (`LoadStr` 73, `LoadVarRef` 63, `BinaryOperator` 36, `LoadInt` 35, `GotoIfNot` 21, `StoreVar` 17, `Goto` 15, `ConcatString` 5, `Print` 5, `BuiltinMethod` 1, `StoreResult` 1); only `ReportPosition` (44 at `35435b9`) disappears. Nothing else about *what* runs drifted across P0's dispatch-match conversion, the `index_local_var` internal fix, or `ReportPosition`'s removal — only how fast and by what mechanism it runs.
 
-## 9. Measurement protocol (for reproduction/audit)
+## 9. `index_var`'s global-path TARGET fix (`1d5a8df`)
+
+`VariableStorage::index_var` — the *global*-variable counterpart of §4's `index_local_var` (`FLAG`, `CFLAG`, `TALENT`, and every other character/global array, which dominate real game logic far more than `#DIM` locals do) — had the identical defect class as §4's fix 2: it unconditionally read `TARGET` via `self.read_int("TARGET", &[])?` before checking whether the access was even character-indexed, discarding the read on every `Normal`-variable access (the overwhelming majority). Fixed the same way: peek `self.variables.get(&name)` (a plain `HashMap::get`, no new accessor needed) for `is_chara && calculate_single_idx(args).0.is_none()` before conditionally reading `TARGET` via `known_key`. `TARGET`'s own `VariableInfo::is_chara` is `false`, so the recursion guard the original code carried (`name != target_key`) is now provably unreachable and was removed.
+
+**No timing number is claimed for this fix.** `jit_ceiling_bench`'s loop body (§2) only ever touches `LOCAL` and `SUM`, both `#DIM` locals — it never exercises `index_var`'s global path at all, so this fix is completely invisible to every synthetic measurement in this document. The histogram-identity correctness guard (byte-identical at iters=10 and iters=3,000,000) is therefore trivially true here, not meaningful evidence that the fix does anything — it is meaningful only in that it confirms the fix broke nothing the benchmark *does* exercise. This gap is exactly why §11's real-workload replay exists: a real game's actual `FLAG`/`TALENT` access pattern is precisely what this fix targets, and no synthetic loop in this document was ever going to see it. `cargo test --workspace`: 451 passed, 0 failed (unchanged from §6, no test count regression).
+
+## 10. The claimed `get_or_intern` 11.19% cost: investigated, does not reproduce
+
+An earlier pass at this arc claimed `get_or_intern` cost 11.19% of profiled samples via `pprof`, attributed to leaf self-time without tracing it to a real caller. That investigation is now complete, and the conclusion is negative: **this cost does not reproduce anywhere in the current codebase or benchmark, at any measurable percentage.**
+
+- Rebuilt `jit_ceiling_bench` with debug info (`CARGO_PROFILE_RELEASE_DEBUG=true`; the root `Cargo.toml` carries no `[profile.release]` block, so release binaries otherwise ship with zero DWARF info and pprof silently folds every inlined `get_or_intern`/`to_global` frame into its caller, which is almost certainly why the original claim was never traced further).
+- Re-profiled at 3,000,000 iterations with proper inline-frame resolution: **no `get_or_intern`/`to_global`/`Interner` frame appears anywhere in the leaf self-time output, at any percentage.** Top entries were `run_instruction` 24.09%, `run_body` 24.01%, `take_value_list` 6.74%, and small `hashbrown`/`foldhash` hash-probe noise (2.44%/1.68%/0.51%) from the `variables`/`local_variables` maps — unrelated to string interning.
+- Traced every `get_or_intern`/`get_or_intern_static`/`to_global`/`intern_cached` call site in the codebase. The actual mechanism: `Expr::String`/`Expr::FormText` compile to `Instruction::load_str(key.to_global())` **once per literal, at compile time** (`erars-compiler/src/compiler.rs`) — `LoadStr`'s runtime dispatch just pushes the already-global key, no re-interning. The only *runtime* call sites are `pop_strkey` (dynamic call/label targets computed at runtime), `get_arg!(@key ...)` (used only by the `VARSIZE`/`REFBYNAME` builtin family), and `LoadDefaultArgument`. `jit_ceiling_bench`'s loop exercises none of these — no dynamic calls, no `VARSIZE`/`REFBYNAME`, no default arguments — and `BENCH_PROFILE`'s profiled window is exactly `TerminalVm::try_call`, which excludes compile time entirely, so even the compile-time `to_global()` calls sit outside what was measured.
+- Reporting this plainly rather than continuing to chase it: the 11.19% figure is either stale, from a measurement context that no longer exists, or was never verified in the first place. It should not be relied on, and no further session time should be spent trying to reproduce it — this is itself a completed, useful investigation, not an abandoned one.
+
+## 11. Real-workload replay: dynamic histogram divergence and cumulative real-session measurement
+
+Every measurement above this point compares a synthetic `LOCAL`/`SUM` loop's dispatch cost, or a corpus's *static* instruction occurrence count. Neither is an execution-frequency measurement of a real played session. This section is that measurement.
+
+**The replay script.** `bench-inputs/eraTHYMKR_ordinary_play.ron` (committed alongside the harness that runs it): 8 setup answers through eraTHYMKR's title screen, mode/difficulty selection, and character creation, followed by 100× the `102` ("휴식"/rest) main-menu action — 2 rest actions per in-game day/night cycle, so 50 full in-game days. `102` was chosen over engaging every menu branch (e.g. `101`'s ability view opens a differently-numbered sub-menu) purely for reliability/validation cost — this is a real, played, representative-of-idle-play session, not an exhaustive tour of the game's content, and is reported as such rather than dressed up as more than it is. Validated end-to-end: exit code 0, reaches "50일째 1년 3월 18일 일요일(밤)" exactly as expected.
+
+**eramegaten_p_kr/Data was tried and excluded.** It crashes reproducibly at its own title screen under `erars-stdio`, with or without an input script, interactively or with `< /dev/null`: `VM error occurred: RAND: 인수에 0 이하의 값(0)이 지정됐습니다` (RAND given a non-positive argument) at `PRINT_TITLE.ERB@67`, called from `SYSTEM_TITLE.erb@171` — some `RAND(N)` call resolves `N` to zero or less outside a real terminal (plausibly a `WINDOW_WIDTH`-style value defaulting to 0 headlessly). This is a pre-existing corpus/engine interaction bug unrelated to this arc's dispatch changes, and out of scope to fix here. eraTHYMKR alone is used for this measurement.
+
+**Dynamic (executed) instruction histogram**, captured via the `inst-counter` feature (`cfg(feature = "inst-counter")`, `crates/erars-vm/src/inst_counter.rs`, committed alongside the replay harness) running the replay script above, 2,170,059 total dispatches over the 50-day session:
+
+| Instruction | Share | Instruction | Share |
+|---|---|---|---|
+| `LoadInt` | 20.76% | `LoadCountVarRef` | 1.78% |
+| `LoadStr` | 18.50% | `BuiltinMethod` | 0.74% |
+| `LoadVarRef` | 17.28% | `BuiltinCommand` | 0.68% |
+| `GotoIfNot` | 13.83% | `Call` | 0.62% |
+| `BinaryOperator` | 12.04% | `Print` | 0.19% |
+| `Goto` | 5.47% | (10 more, each <0.3%) | |
+| `DuplicatePrev` | 2.52% | | |
+| `StoreVar` | 2.43% | | |
+| `GotoIf` | 2.33% | | |
+
+Compared against §1's static eraTHYMKR census (`LoadStr` ~23%, `LoadInt` ~19%, `ReportPosition` ~15% [since removed], `LoadVarRef` ~12%, `BinaryOperator` ~5%, `GotoIfNot` ~4%, `Print` ~5%), the two measurements do not even agree on rank order: `GotoIfNot` is ~3.4x more prominent at runtime than its static occurrence suggested, `BinaryOperator` ~2.4x, and `LoadVarRef` — the exact instruction both §4's and §9's TARGET-read fixes target — is proportionally *more* common at runtime (17.28%) than in the static count (~12%). `Print`, conversely, is ~26x *less* common at runtime than its static presence implied: a source file can contain many `PRINT`-family statements across menus and events that a single 50-day idle-rest session never reaches, while loop/conditional logic inside the day-processing routines runs on every single action. **Static instruction-occurrence counting and dynamic execution-frequency weighting are not the same measurement, and prioritizing by the former can misrank exactly the kind of fix (§4, §9) that matters most by the latter.**
+
+**Cumulative real-session timing**, `35435b9` (harness-backported: `--exit-when-input-exhausted`/`--bench-timing` added via a `git worktree`-isolated, behavior-inert cherry-pick onto a pristine `35435b9` checkout, so the interpreter under test is unmodified `35435b9` and only the CLI driver gained the capability needed to script and time it — same precedent as §8's Step-1 harness backport) vs. the branch tip, `--load`-ing a pre-saved, version-matched `game.era` so neither side's compile time (already measured separately in §7) contaminates the comparison. `[bench] load complete`/`[bench] session complete` markers (both binaries) isolate game-loop-only time (`session - load`) from the fixed CSV/era-load floor. 10 interleaved rounds (5 old-first + 5 new-first), both binaries prebuilt into distinct paths, `inst-counter` feature off:
+
+| Round | Order | Old game-loop (ms) | New game-loop (ms) | Delta | % |
+|---|---|---|---|---|---|
+| 1 | old-first | 50.876 | 45.823 | -5.053 | -9.93% |
+| 2 | old-first | 50.849 | 45.973 | -4.876 | -9.59% |
+| 3 | old-first | 50.646 | 44.656 | -5.990 | -11.83% |
+| 4 | old-first | 49.902 | 45.254 | -4.648 | -9.31% |
+| 5 | old-first | 50.399 | 45.266 | -5.133 | -10.18% |
+| 6 | new-first | 51.021 | 46.322 | -4.699 | -9.21% |
+| 7 | new-first | 50.518 | 46.615 | -3.903 | -7.73% |
+| 8 | new-first | 50.301 | 46.353 | -3.949 | -7.85% |
+| 9 | new-first | 49.760 | 45.238 | -4.522 | -9.09% |
+| 10 | new-first | 50.330 | 45.174 | -5.156 | -10.24% |
+
+**10/10 sign agreement, NEW always faster.** Median **-9.45% game-loop-only** (min -7.73%, max -11.83%). The same 10 rounds' full-session time (load included) also agreed 10/10 but far more weakly — median **-3.15%** (range -1.03% to -7.97%) — because the ~80-90ms fixed CSV/era-load floor common to both binaries dilutes a dispatch-only effect once compile/load time is folded back in.
+
+**This does not match the synthetic §8 figure, and the real number is the one that governs.** §8's `35435b9` → `d0f1162` synthetic `jit_ceiling_bench` measurement showed **-21.25% median**; this real, played eraTHYMKR session shows **-9.45% game-loop-only** (or **-3.15%** including load). Both are real, both are 10/10 sign-agreeing, and both point the same direction — but they disagree by more than a factor of 2 on magnitude. The synthetic loop's `LOCAL`/`SUM`-only variable traffic and tight `WHILE`/`IF` shape concentrate exactly the instructions this arc's fixes target far more densely than a real, broad-mix game session does; the dynamic histogram above shows precisely why (`LoadVarRef` is prominent in both, but the real session's `GotoIfNot`/`BinaryOperator`/`LoadStr`/`LoadInt` mix is far more varied than the synthetic loop's). **Anyone deciding whether this arc was "worth it" for a real player should use -9.45%/-3.15%, not -21.25%.**
+
+## 12. Measurement protocol (for reproduction/audit)
 
 Every A/B number in this document follows the same rules:
 
@@ -173,3 +241,6 @@ Every A/B number in this document follows the same rules:
    - `<binary> 3000000` for a timing round; `BENCH_DEBUG=1 <binary> 10` for the correctness-guard dump
    - `cargo build --release --features multithread -p erars-loader --example phases --example jit_census` for the corpus tools; `phases <game-dir> <rounds>`, `jit_census <game-dir>`
    - `erars-stdio <game-dir> --save --quite` for the `game.era` on-disk size measurement (`run_script` only loads/compiles/lints and returns before any game loop starts, confirmed non-interactive and safe to script)
+   - `erars-stdio <game-dir> --quite --load --bench-timing --use-input <ron-file> --exit-when-input-exhausted < /dev/null` for §11's real-workload replay (requires a version-matched `game.era` already saved via `--save` from the *same* binary); `--features inst-counter` to additionally dump the dynamic instruction histogram
+
+**Methodology note: two unchecked negative claims, both corrected in this arc.** Twice now, this document (or a prior draft of it) asserted that something could not be done or did not carry certain data, without actually trying — both times the claim was false. First, an earlier draft claimed `game.era` did not carry `VariableInfo`; it does, and the claim was corrected before this revision. Second, an earlier draft of this document's own caveat (see the top of this document) claimed running a real corpus's game loop end-to-end "is not automatable... it is an interactive text game" — false, and §11 is the direct refutation: `erars-stdio --use-input` already drove real corpora headlessly before this arc even started, and the one genuinely missing piece (a clean way for a scripted queue to end the process, `--exit-when-input-exhausted`, added for §11) took under an hour to add. The pattern in both cases is the same: a negative claim about feasibility or data availability was treated as established fact without being tested against the actual tool. Every such claim in this document going forward should be treated as a hypothesis to check, not a conclusion to state, until it has actually been tried.
