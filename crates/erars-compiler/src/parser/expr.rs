@@ -224,19 +224,65 @@ pub fn ident_no_case<'a>(i: &'a str) -> IResult<'a, Cow<'a, str>> {
 /// `cow_to_uppercase` asks `char::to_uppercase` about every character, so it
 /// decodes each `char` and builds a `CaseMappingIter` over the Unicode case
 /// tables; that was ~4.5% of parse self time in the profile
-/// (`CaseMappingIter::new`, `ptr::read::<char>`, `encode_utf8_raw`). Nearly
-/// every identifier in an ERB is already ASCII uppercase, and an ASCII byte
-/// that is not a lowercase letter always uppercases to itself, so a byte scan
-/// proves the mapping is the identity and lets us borrow.
+/// (`CaseMappingIter::new`, `ptr::read::<char>`, `encode_utf8_raw`).
 ///
-/// Anything else — an ASCII lowercase letter, or any non-ASCII byte, which
-/// the game's Korean and Japanese identifiers are full of — falls through to
-/// the unchanged Unicode path.
+/// Nearly every identifier in an ERB is already ASCII uppercase, and non-ASCII
+/// identifiers in Japanese and Korean games are dominated by CJK Ideographs
+/// and Hangul syllables, none of which have uppercase variants.
+///
+/// `CASED_BYTE_TABLE` flags ASCII lowercase bytes and all UTF-8 lead bytes
+/// that can start any Unicode character where `c.to_uppercase() != c`.
+/// UTF-8 lead byte `0xEA` is specially checked: Hangul syllables
+/// (U+AC00..U+D7A3, starting with `0xEA 0xB0`) have second byte >= 0xB0 and
+/// are uncased, so only `0xEA` followed by `< 0xB0` triggers the uppercase pass.
+const CASED_BYTE_TABLE: [bool; 256] = {
+    let mut table = [false; 256];
+    let mut b = b'a';
+    while b <= b'z' {
+        table[b as usize] = true;
+        b += 1;
+    }
+    // All UTF-8 lead bytes that can start any Unicode character where c.to_uppercase() != c,
+    // except 0xEA which is handled specially to avoid triggering on Hangul syllables (>= 0xB0).
+    let leads: [u8; 23] = [
+        0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcd, 0xce, 0xcf,
+        0xd0, 0xd1, 0xd2, 0xd3, 0xd4, 0xd5, 0xd6, 0xe1, 0xe2, 0xef, 0xf0,
+    ];
+    let mut i = 0;
+    while i < leads.len() {
+        table[leads[i] as usize] = true;
+        i += 1;
+    }
+    table
+};
+
 fn upper_no_case(s: &str) -> Cow<'_, str> {
-    if s.bytes().all(|b| b.is_ascii() && !b.is_ascii_lowercase()) {
-        Cow::Borrowed(s)
-    } else {
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    let mut has_cased = false;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if CASED_BYTE_TABLE[b as usize] {
+            has_cased = true;
+            break;
+        }
+        if b == 0xEA {
+            // In UTF-8, characters starting with 0xEA are cased only up to U+ABBF (second byte <= 0xAE).
+            // All Hangul syllables (U+AC00..U+D7A3, starting at 0xEA 0xB0 0x80) have second byte >= 0xB0
+            // and are uncased.
+            if let Some(&next) = bytes.get(i + 1) {
+                if next < 0xB0 {
+                    has_cased = true;
+                    break;
+                }
+            }
+        }
+        i += 1;
+    }
+    if has_cased {
         s.cow_to_uppercase()
+    } else {
+        Cow::Borrowed(s)
     }
 }
 
