@@ -136,6 +136,8 @@ pub(super) fn run_instruction(
     cursor: u32,
     body: &FunctionBody,
 ) -> Result<InstructionWorkflow> {
+    crate::inst_counter::record(inst.ty());
+
     match inst.ty() {
         InstructionType::LoadInt => {
             let i = inst.as_load_int().unwrap();

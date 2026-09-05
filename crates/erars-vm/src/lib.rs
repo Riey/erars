@@ -10,6 +10,9 @@ mod function;
 /// in another crate and has to name the token in its `redraw` signature.
 pub mod graphics;
 mod html;
+/// `cfg(feature = "inst-counter")`-gated dynamic instruction histogram.
+/// Public so `erars-stdio` can call `dump()` after the game loop returns.
+pub mod inst_counter;
 mod save;
 /// The `resources/` startup loader. Public because `erars-loader` drives it.
 pub mod resources;

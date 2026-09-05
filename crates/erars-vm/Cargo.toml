@@ -51,3 +51,8 @@ time = { version = "0.3.37", features = ["wasm-bindgen"] }
 
 [features]
 multithread = ["rayon", "hashbrown/rayon"]
+# Zero-cost when off (see `src/inst_counter.rs`): a dynamic, execution-
+# frequency-weighted instruction histogram, dumped by the embedding binary
+# once the game loop returns. Off by default -- never enable for a timing
+# run, the atomic increment is real cost once compiled in.
+inst-counter = []

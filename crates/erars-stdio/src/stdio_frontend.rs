@@ -7,6 +7,7 @@ use erars_vm::SystemFunctions;
 use std::{
     collections::VecDeque,
     io::{self, Write},
+    time::Instant,
 };
 
 pub struct StdioFrontend {
@@ -17,16 +18,42 @@ pub struct StdioFrontend {
     /// A `\e` was seen in the line just read; the console turns it into
     /// message skip.
     mes_skip: bool,
+    /// `--exit-when-input-exhausted`: once `inputs` runs dry, exit the
+    /// process instead of falling through to real stdin. A scripted
+    /// `--use-input` replay driven by a fixed-length RON queue has no
+    /// other way to end cleanly -- the game itself has no "quit" menu
+    /// action, and falling through to real stdin under a non-interactive
+    /// (e.g. `< /dev/null`) invocation hangs forever the moment an
+    /// `Int`-typed request hits EOF (`"".parse::<i64>()` fails, and the
+    /// read-line loop above retries unconditionally). A full-session
+    /// replay for benchmarking needs the queue's end to be the run's end.
+    exit_when_exhausted: bool,
+    /// `--bench-timing`: print a `[bench] session complete: <elapsed>` marker
+    /// to stderr right before the `exit_when_exhausted` exit, so a real-
+    /// workload timing comparison can separate load time from game-loop
+    /// (post-load) time using the same clock `main` used for its own
+    /// `[bench] load complete` marker.
+    bench_timing: bool,
+    bench_start: Instant,
 }
 
 impl StdioFrontend {
-    pub fn new(json: bool, inputs: VecDeque<Value>) -> Self {
+    pub fn new(
+        json: bool,
+        inputs: VecDeque<Value>,
+        exit_when_exhausted: bool,
+        bench_timing: bool,
+        bench_start: Instant,
+    ) -> Self {
         Self {
             from: 0,
             input: String::new(),
             json,
             inputs,
             mes_skip: false,
+            exit_when_exhausted,
+            bench_timing,
+            bench_start,
         }
     }
 
@@ -135,6 +162,13 @@ impl SystemFunctions for StdioFrontend {
             } else {
                 return Ok(None);
             }
+        } else if self.exit_when_exhausted {
+            log::info!("[stdio] input queue exhausted, exiting");
+            if self.bench_timing {
+                eprintln!("[bench] session complete: {:?}", self.bench_start.elapsed());
+            }
+            erars_vm::inst_counter::dump();
+            std::process::exit(0);
         }
 
         if self.json {
