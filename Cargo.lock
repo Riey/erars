@@ -1222,6 +1222,7 @@ dependencies = [
  "rmp-serde",
  "serde",
  "serde_yaml",
+ "smallvec",
  "static_assertions",
  "strum",
  "time",

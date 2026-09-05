@@ -164,6 +164,7 @@ pub unsafe fn load_script(
         Path::new(target_path).join("resources"),
     );
 
+    ctx.var.reserve_local_functions(local_infos.len());
     for (key, vars) in local_infos {
         for var in vars {
             ctx.var.add_local_info(key, var.0, var.1);
@@ -632,6 +633,7 @@ pub fn run_script(
             log::warn!("{warning}");
         }
 
+        ctx.var.reserve_local_functions(funcs.len());
         for (_, func) in funcs {
             function_dic.insert_compiled_func(
                 &mut ctx.var,

@@ -49,6 +49,106 @@ pub enum DataEntryStyle {
     Bracket,
 }
 
+/// A single function's `#DIM` locals.
+///
+/// Across real corpora (eraTHYMKR, eraMegaten) practically every function
+/// carries exactly 4 entries — the builtin `LOCAL`/`LOCALS`/`ARG`/`ARGS`
+/// locals `erars-vm/src/function.rs` installs whenever `VariableSize.csv`
+/// enables the matching default size — plus a usually-empty tail of explicit
+/// `#DIM`s (measured: p90 total entries == 4 on both corpora; only 5.05% of
+/// eraMegaten's 125,549 functions and 0.04% of eraTHYMKR's 16,859 exceed 4).
+/// A `hashbrown::HashMap` per function turned that population into one small
+/// heap allocation per function, padded to a power-of-two bucket count with
+/// its own control-byte array.
+///
+/// This keeps entries inline up to `INLINE_CAP`, matching the common case
+/// with zero heap allocation, and spills to the heap only for the minority
+/// of functions with more locals than that. Keys and values are parallel
+/// arrays (struct-of-arrays) rather than one array of `(key, info, var)`
+/// tuples: a name lookup then only scans 16-32 bytes of `StrKey`s, never the
+/// 96-byte `(VariableInfo, Option<UniformVariable>)` payload, which matters
+/// because every access site here (`is_local_var`/`check_var_exists` before
+/// `get_local_var`) already does a lookup-then-fetch pair. Entries are kept
+/// unsorted and looked up with a linear scan: measured against a sorted
+/// binary search at n=1..32, linear scan wins decisively up to n≈10-16
+/// (binary search's unpredictable branches dominate at this size) and the
+/// two cross over only well past this population's p99.
+#[derive(Clone, Default, Debug)]
+pub struct LocalVarTable {
+    keys: smallvec::SmallVec<[StrKey; Self::INLINE_CAP]>,
+    values: smallvec::SmallVec<[(VariableInfo, Option<UniformVariable>); Self::INLINE_CAP]>,
+}
+
+impl LocalVarTable {
+    const INLINE_CAP: usize = 4;
+
+    #[inline]
+    fn position(&self, key: StrKey) -> Option<usize> {
+        self.keys.iter().position(|&k| k == key)
+    }
+
+    pub fn contains_key(&self, key: StrKey) -> bool {
+        self.position(key).is_some()
+    }
+
+    pub fn get_mut(&mut self, key: StrKey) -> Option<&mut (VariableInfo, Option<UniformVariable>)> {
+        match self.position(key) {
+            Some(i) => Some(&mut self.values[i]),
+            None => None,
+        }
+    }
+
+    pub fn insert(&mut self, key: StrKey, value: (VariableInfo, Option<UniformVariable>)) {
+        match self.position(key) {
+            Some(i) => self.values[i] = value,
+            None => {
+                self.keys.push(key);
+                self.values.push(value);
+            }
+        }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (StrKey, &(VariableInfo, Option<UniformVariable>))> {
+        self.keys.iter().copied().zip(self.values.iter())
+    }
+
+    pub fn iter_mut(
+        &mut self,
+    ) -> impl Iterator<Item = (StrKey, &mut (VariableInfo, Option<UniformVariable>))> {
+        self.keys.iter().copied().zip(self.values.iter_mut())
+    }
+
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut (VariableInfo, Option<UniformVariable>)> {
+        self.values.iter_mut()
+    }
+
+    /// Mutable access to two distinct entries at once.
+    ///
+    /// Panics if `key1 == key2`, mirroring the previous
+    /// `hashbrown::HashMap::get_many_mut`'s panic-on-duplicate-keys behavior.
+    pub fn get_many_mut(
+        &mut self,
+        [key1, key2]: [StrKey; 2],
+    ) -> [Option<&mut (VariableInfo, Option<UniformVariable>)>; 2] {
+        match (self.position(key1), self.position(key2)) {
+            (Some(i1), Some(i2)) => {
+                assert_ne!(i1, i2, "duplicate keys found");
+                let (a, b) = if i1 < i2 {
+                    let (left, right) = self.values.split_at_mut(i2);
+                    (&mut left[i1], &mut right[0])
+                } else {
+                    let (left, right) = self.values.split_at_mut(i1);
+                    (&mut right[0], &mut left[i2])
+                };
+                [Some(a), Some(b)]
+            }
+            (Some(i1), None) => [Some(&mut self.values[i1]), None],
+            (None, Some(i2)) => [None, Some(&mut self.values[i2])],
+            (None, None) => [None, None],
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct VariableStorage {
     interner: &'static Interner,
@@ -56,7 +156,7 @@ pub struct VariableStorage {
     character_len: u32,
     rng: ChaCha20Rng,
     variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
-    local_variables: HashMap<StrKey, HashMap<StrKey, (VariableInfo, Option<UniformVariable>)>>,
+    local_variables: HashMap<StrKey, LocalVarTable>,
     known_variables: EnumMap<KnownVariableNames, StrKey>,
     event_keys: EnumMap<EventType, StrKey>,
 }
@@ -114,10 +214,7 @@ impl VariableStorage {
 
     pub fn check_var_exists(&self, fn_name: StrKey, name: StrKey) -> bool {
         self.variables.contains_key(&name)
-            || self
-                .local_variables
-                .get(&fn_name)
-                .map_or(false, |v| v.contains_key(&name))
+            || self.local_variables.get(&fn_name).map_or(false, |v| v.contains_key(name))
     }
 
     pub fn clear_dynamic_vars(&mut self, name: StrKey) {
@@ -135,10 +232,7 @@ impl VariableStorage {
         &self,
     ) -> impl Iterator<Item = (StrKey, Vec<(StrKey, &'_ VariableInfo)>)> + '_ {
         self.local_variables.iter().map(|(func_name, vars)| {
-            (
-                *func_name,
-                vars.iter().map(|(key, (info, _))| (*key, info)).collect(),
-            )
+            (*func_name, vars.iter().map(|(key, (info, _))| (key, info)).collect())
         })
     }
 
@@ -175,7 +269,7 @@ impl VariableStorage {
                 if info.is_global != is_global {
                     return;
                 }
-                if let Some((sav_info, sav_var)) = sav_vars.remove(name) {
+                if let Some((sav_info, sav_var)) = sav_vars.remove(&name) {
                     if *info == sav_info {
                         *var = Some(sav_var);
                         return;
@@ -248,7 +342,7 @@ impl VariableStorage {
                             } else {
                                 return None;
                             };
-                            Some((*name, (info.clone(), var)))
+                            Some((name, (info.clone(), var)))
                         } else {
                             None
                         }
@@ -671,6 +765,18 @@ impl VariableStorage {
             .insert(var_name, (info, None));
     }
 
+    /// Reserve space for `additional` more functions' local-variable tables.
+    ///
+    /// Each entry's value is now a `LocalVarTable` (bigger than the old
+    /// `HashMap`'s 40-byte handle, since up to 4 locals live inline) so
+    /// letting this table grow one `entry().or_default()` at a time forces
+    /// repeated whole-table rehashes, each copying an increasingly heavy
+    /// per-row payload — call this once with the known function count
+    /// (callers already have it before their insertion loop) to avoid that.
+    pub fn reserve_local_functions(&mut self, additional: usize) {
+        self.local_variables.reserve(additional);
+    }
+
     pub fn ref_int(&mut self, name: impl StrKeyLike, args: &[u32]) -> Result<&mut i64> {
         let (_, var, idx) = self.index_var(name, args)?;
         Ok(&mut var.as_int()?[idx as usize])
@@ -844,7 +950,7 @@ impl VariableStorage {
             .local_variables
             .get_mut(&func_name)
             .unwrap()
-            .get_mut(&var)
+            .get_mut(var)
             .ok_or_else(|| anyhow!("Variable {:?} is not exists", var))?;
 
         let var = var.get_or_insert_with(|| {
@@ -855,7 +961,7 @@ impl VariableStorage {
 
     pub fn is_local_var(&self, func: impl StrKeyLike, var: impl StrKeyLike) -> bool {
         match self.local_variables.get(&func.get_key(self)) {
-            Some(v) => v.contains_key(&var.get_key(self)),
+            Some(v) => v.contains_key(var.get_key(self)),
             None => false,
         }
     }
@@ -881,7 +987,7 @@ impl VariableStorage {
                     .local_variables
                     .get_mut(&func1_name)
                     .unwrap()
-                    .get_many_mut([&var1, &var2])
+                    .get_many_mut([var1, var2])
                 else {
                     bail!("Variable {var1:?} and {var2:?} are not exist")
                 };
@@ -903,11 +1009,11 @@ impl VariableStorage {
                 };
 
                 let (info1, var1) = dic1
-                    .get_mut(&var1)
+                    .get_mut(var1)
                     .ok_or_else(|| anyhow!("Variable {var1:?} is not exist"))?;
 
                 let (info2, var2) = dic2
-                    .get_mut(&var2)
+                    .get_mut(var2)
                     .ok_or_else(|| anyhow!("Variable {var2:?} is not exist"))?;
 
                 let var1 = var1.get_or_insert_with(|| {
@@ -939,7 +1045,7 @@ impl VariableStorage {
                     .local_variables
                     .get_mut(&func_name)
                     .unwrap()
-                    .get_mut(&local_var)
+                    .get_mut(local_var)
                     .ok_or_else(|| anyhow!("Variable {local_var:?} is not exist"))?;
 
                 let local_var = local_var.get_or_insert_with(|| {

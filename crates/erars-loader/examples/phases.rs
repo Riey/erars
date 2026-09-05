@@ -305,6 +305,7 @@ fn main() {
     let funcs = parse_all();
     let mut var = VariableStorage::new(header.clone(), &header.global_variables);
     let mut dic = FunctionDic::new();
+    var.reserve_local_functions(funcs.len());
     bench("insert_compiled_func serial", 1, || {
         for f in funcs.clone() {
             dic.insert_compiled_func(&mut var, &header.default_local_size, f);
