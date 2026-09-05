@@ -521,7 +521,7 @@ pub(super) fn run_instruction(
         }
         InstructionType::BuiltinMethod => {
             let meth = inst.as_builtin_method().unwrap();
-            return run_builtin_method(meth, func_name, tx, ctx);
+            return run_builtin_method(meth, func_name, vm, tx, ctx);
         }
         InstructionType::BuiltinCommand => {
             let com = inst.as_builtin_command().unwrap();
@@ -541,22 +541,35 @@ pub(super) fn run_instruction(
                 _ => bail!("LoadDefaultArgument need function name"),
             };
 
-            let body = vm.dic.get_func(target_func_name)?;
+            // Emuera lets `TRY*CALL*FORM`/`TRY*JUMP*FORM` name a function
+            // that doesn't exist and skip silently (Emuera excom.md's
+            // TRYCALLFORM/TRYCCALLFORM entries). An omitted positional
+            // argument's default value is only meaningful if the callee is
+            // ever actually invoked, and a missing callee means `try_call`
+            // discards `args` outright without reading this slot — so when
+            // the name doesn't resolve, push a harmless placeholder instead
+            // of hard-failing here and pre-empting the try/catch semantics
+            // the surrounding `Call` instruction is about to apply.
+            match vm.dic.get_func_opt(target_func_name) {
+                Some(body) => {
+                    let arg = body
+                        .args()
+                        .get(idx as usize)
+                        .context("LoadDefaultArgument argument is out of range")?;
 
-            let arg = body
-                .args()
-                .get(idx as usize)
-                .context("LoadDefaultArgument argument is out of range")?;
-
-            match arg.2.as_ref() {
-                Some(default_value) => match default_value {
-                    InlineValue::Int(i) => ctx.push(*i),
-                    InlineValue::String(s, _) => ctx.push_strkey(*s),
-                },
-                None => match ctx.var.get_maybe_local_var(target_func_name, arg.0)?.0.is_str {
-                    true => ctx.push(String::new()),
-                    false => ctx.push(0i64),
-                },
+                    match arg.2.as_ref() {
+                        Some(default_value) => match default_value {
+                            InlineValue::Int(i) => ctx.push(*i),
+                            InlineValue::String(s, _) => ctx.push_strkey(*s),
+                        },
+                        None => match ctx.var.get_maybe_local_var(target_func_name, arg.0)?.0.is_str
+                        {
+                            true => ctx.push(String::new()),
+                            false => ctx.push(0i64),
+                        },
+                    }
+                }
+                None => ctx.push(0i64),
             }
         }
         InstructionType::Nop | InstructionType::Debug => {}
@@ -1371,6 +1384,7 @@ fn gdiplus_only(meth: BuiltinMethod) -> bool {
 fn run_builtin_method(
     meth: BuiltinMethod,
     func_name: StrKey,
+    vm: &TerminalVm,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
 ) -> Result<InstructionWorkflow> {
@@ -3095,6 +3109,22 @@ fn run_builtin_method(
             );
         }
 
+        BuiltinMethod::ExistFunction => {
+            check_arg_count!(1);
+            let name = get_arg!(@key args, ctx);
+            // Emuera `EXISTFUNCTION(name)`: 0 if `name` names no function or a
+            // system builtin, 1 for a normal `@`-function, 2 for a
+            // `#FUNCTION` numeric expression function, 3 for a `#FUNCTIONS`
+            // string expression function.
+            let ret = match vm.dic.normal.get(&name) {
+                None => 0,
+                Some(body) if body.is_function() => 2,
+                Some(body) if body.is_functions() => 3,
+                Some(_) => 1,
+            };
+            ctx.push(ret);
+        }
+
         BuiltinMethod::ChkData => {
             check_arg_count!(1);
             let idx = get_arg!(@u32: args, ctx);
@@ -3705,13 +3735,22 @@ fn run_builtin_command(
             let delimiter = get_arg!(@String: args, ctx);
             let mut var = get_arg!(@var args);
 
+            let mut count = 0u32;
             for (idx, part) in s.split(delimiter.as_str()).enumerate() {
                 var.idxs.push(idx as u32);
 
                 ctx.set_var_ref(&var, part.into())?;
 
                 var.idxs.pop();
+                count = idx as u32 + 1;
             }
+
+            // Emuera sets `RESULT` to the number of split elements
+            // (`SPLIT.html`'s reference doc: "分割された要素の総数（分割数）が
+            // システム変数 RESULT に自動的に代入されます") - callers rely on
+            // this to know how many slots of the destination array were
+            // filled, e.g. `RAND:RESULT` to pick a random element.
+            ctx.var.set_result(count as i64);
         }
         BuiltinCommand::Bar => {
             let var = get_arg!(@i64: args, ctx);

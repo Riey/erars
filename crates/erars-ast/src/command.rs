@@ -298,6 +298,11 @@ pub enum BuiltinMethod {
     /// point, as `0xAARRGGBB`, or `-1` (`Creator.cs:178`,
     /// `Creator.Method.cs:5818-5842`, `CroppedImage.cs:78-89`).
     SpriteGetColor,
+    /// Emuera `EXISTFUNCTION(name)` — whether a function named `name` is
+    /// declared: `0` absent or a system builtin, `1` a normal `@`-function,
+    /// `2` a `#FUNCTION` numeric expression function, `3` a `#FUNCTIONS`
+    /// string expression function.
+    ExistFunction,
 }
 
 #[derive(Display, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, IntoStaticStr)]
