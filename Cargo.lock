@@ -1098,6 +1098,7 @@ dependencies = [
  "pprof",
  "rayon",
  "rmp-serde",
+ "serde",
  "serde_yaml",
 ]
 
