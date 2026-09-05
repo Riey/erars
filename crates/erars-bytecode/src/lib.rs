@@ -6,7 +6,6 @@ use erars_ast::{
 };
 use hashbrown::HashMap;
 use std::{
-    collections::BTreeMap,
     io::{Read, Result, Write},
     mem::{size_of, MaybeUninit},
 };
@@ -18,10 +17,12 @@ use erars_vm::{
 #[cfg(target_endian = "big")]
 compile_error!("Doesn't support big endian");
 
-// Bumped when the literal store arrived: string literals no longer live in the
-// interner, so an older `game.era` has no literal block and its instructions
-// hold interner keys where this build expects slot indices.
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 10];
+// Bumped for the interner's move off `lasso`: an identifier's key can now
+// have gaps behind it (a thread's unfinished reservation block), so the
+// identifier block is written as explicit `(key, string)` pairs instead of
+// strings alone in key order — an older reader would silently misassign
+// every key after the first gap.
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 11];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {
@@ -135,30 +136,67 @@ fn write_literals<W: Write + WriteBytesExt>(mut out: W) -> Result<()> {
     Ok(())
 }
 
-pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionDic> {
-    let mut buf = vec![0u8; 1024];
+/// Read the identifier block and hand it back to the interner.
+///
+/// The block is `count`, then `count` `(key, string)` pairs. The key is
+/// explicit rather than positional: `Interner::iter` walks a dedup map that
+/// can have gaps behind any key — a thread's reservation block it never
+/// finished — so only the key `iter` actually reported for a string
+/// reproduces the key `restore` (and so every instruction compiled against
+/// it) still needs.
+fn read_interner<R: Read + ReadBytesExt>(mut read: R) -> Result<Interner> {
+    let count = read.read_u32::<LE>()? as usize;
+    let bytes = read.read_u32::<LE>()? as usize;
 
-    read.read_exact(&mut buf[..VERSION_MAGIC.len()])?;
+    let mut block = vec![0u8; bytes];
+    read.read_exact(&mut block)?;
 
-    if &buf[..VERSION_MAGIC.len()] != VERSION_MAGIC {
-        panic!("Invalid file: VERSION MAGIC mismatched")
+    let mut pairs = Vec::with_capacity(count);
+    let mut at = 0usize;
+
+    for _ in 0..count {
+        let key = u32::from_le_bytes(block[at..at + 4].try_into().unwrap());
+        at += 4;
+        let len = u32::from_le_bytes(block[at..at + 4].try_into().unwrap()) as usize;
+        at += 4;
+        pairs.push((key, std::str::from_utf8(&block[at..at + len]).unwrap()));
+        at += len;
     }
 
     let interner = Interner::new();
+    interner.restore(&pairs);
 
-    let strings_len = read.read_u32::<LE>()?;
+    Ok(interner)
+}
 
-    for _ in 0..strings_len {
-        let str_len = read.read_u32::<LE>()? as usize;
-        if buf.len() < str_len {
-            buf.resize(str_len, 0);
-        }
-        read.read_exact(&mut buf[..str_len])?;
-        interner.get_or_intern(std::str::from_utf8(&buf[..str_len]).unwrap());
+/// The identifier block, as [`read_interner`] expects it.
+fn write_interner<W: Write + WriteBytesExt>(mut out: W, interner: &Interner) -> Result<()> {
+    let pairs: Vec<(StrKey, &str)> = interner.iter().collect();
+    let bytes: usize = pairs.iter().map(|(_, s)| 4 + 4 + s.len()).sum();
+
+    out.write_u32::<LE>(pairs.len() as u32)?;
+    out.write_u32::<LE>(bytes as u32)?;
+
+    for (key, s) in pairs {
+        out.write_u32::<LE>(key.to_u32())?;
+        out.write_u32::<LE>(s.len() as u32)?;
+        out.write_all(s.as_bytes())?;
     }
 
-    update_interner(interner);
+    Ok(())
+}
 
+pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionDic> {
+    let mut buf = vec![0u8; VERSION_MAGIC.len()];
+
+    read.read_exact(&mut buf)?;
+
+    if buf != VERSION_MAGIC {
+        panic!("Invalid file: VERSION MAGIC mismatched")
+    }
+
+    let interner = read_interner(&mut read)?;
+    update_interner(interner);
     read_literals(&mut read)?;
 
     let mut normal = HashMap::new();
@@ -208,17 +246,9 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
 }
 
 pub fn write_to<W: Write + WriteBytesExt>(mut out: W, dic: &FunctionDic) -> Result<()> {
-    let len = dic.interner.len();
-
     out.write_all(VERSION_MAGIC)?;
-    out.write_u32::<LE>(len as _)?;
 
-    let strings = dic.interner.iter().collect::<BTreeMap<StrKey, &str>>();
-
-    for str in strings.values() {
-        out.write_u32::<LE>(str.len() as _)?;
-        out.write_all(str.as_bytes())?;
-    }
+    write_interner(&mut out, dic.interner)?;
 
     write_literals(&mut out)?;
 

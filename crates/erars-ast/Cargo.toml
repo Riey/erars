@@ -16,7 +16,8 @@ num-derive = "0.3.3"
 num-traits = "0.2.15"
 option_set = "0.1.4"
 ordered-float = { version = "3.0.0", features = ["serde"] }
-lasso = { version = "0.7.3", features = ["multi-threaded", "ahasher", "serialize"] }
+ahash = "0.8"
+dashmap = "6"
 
 [dev-dependencies]
 k9 = "0.11.1"

@@ -960,12 +960,13 @@ dependencies = [
 name = "erars-ast"
 version = "0.5.0"
 dependencies = [
+ "ahash",
  "anyhow",
  "bitflags 2.6.0",
+ "dashmap",
  "enum-map",
  "hashbrown 0.15.1",
  "k9",
- "lasso",
  "num-derive",
  "num-traits",
  "option_set",
@@ -1583,7 +1584,6 @@ checksum = "290f1a1d9242c78d09ce40a5e87e7554ee637af1351968159f4952f028f75604"
 dependencies = [
  "ahash",
  "allocator-api2",
- "serde",
 ]
 
 [[package]]
@@ -1833,18 +1833,6 @@ name = "khronos_api"
 version = "3.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2db585e1d738fc771bf08a151420d3ed193d9d895a36df7f6f8a9456b911ddc"
-
-[[package]]
-name = "lasso"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e14eda50a3494b3bf7b9ce51c52434a761e383d7238ce1dd5dcec2fbc13e9fb"
-dependencies = [
- "ahash",
- "dashmap",
- "hashbrown 0.14.3",
- "serde",
-]
 
 [[package]]
 name = "lazy_static"
