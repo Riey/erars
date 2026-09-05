@@ -161,7 +161,8 @@ fn category(name: &str) -> &'static str {
         // `VariableStorage::set_result`, so it belongs here, not with pure
         // stack ops.
         "LoadVarRef" | "LoadExternVarRef" | "LoadCountVarRef" | "ReadVar" | "StoreVar"
-        | "StoreResult" => "var_access",
+        | "StoreResult" | "LoadVarRefNamed0" | "LoadVarRefNamed1" | "LoadVarRefNamed2"
+        | "LoadVarRefNamed3" => "var_access",
 
         // (d) host calls: console I/O, commands, anything touching
         // SystemFunctions/VM state outside the pure stack machine.

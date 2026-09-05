@@ -210,6 +210,26 @@ pub(super) fn run_instruction(
             let args = ctx.take_arg_list(Some(name), c)?;
             ctx.push_var_ref(name, func_name, args)?;
         }
+        InstructionType::LoadVarRefNamed0 => {
+            let name = inst.as_load_var_ref_named0().unwrap();
+            let args = ctx.take_arg_list(Some(name), 0)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
+        InstructionType::LoadVarRefNamed1 => {
+            let name = inst.as_load_var_ref_named1().unwrap();
+            let args = ctx.take_arg_list(Some(name), 1)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
+        InstructionType::LoadVarRefNamed2 => {
+            let name = inst.as_load_var_ref_named2().unwrap();
+            let args = ctx.take_arg_list(Some(name), 2)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
+        InstructionType::LoadVarRefNamed3 => {
+            let name = inst.as_load_var_ref_named3().unwrap();
+            let args = ctx.take_arg_list(Some(name), 3)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
         InstructionType::LoadCountVarRef => {
             ctx.push_var_ref(ctx.var.known_key(Var::Count), func_name, ArgVec::new())?;
         }

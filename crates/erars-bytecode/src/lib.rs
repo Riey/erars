@@ -38,7 +38,7 @@ compile_error!("Doesn't support big endian");
 // byte and would decode it as the low byte of the first entry's `pc`,
 // silently misaligning every entry in every function that follows — this
 // bump turns that into a clean rejection instead.
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 13];
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 14];
 
 /// Writes `positions` behind a 1-byte per-function encoding flag: `0`
 /// (narrow) stores each `(pc, line)` entry as `(u32, u16)` — 6 bytes instead
