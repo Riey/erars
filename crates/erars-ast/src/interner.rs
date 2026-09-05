@@ -54,7 +54,7 @@ use std::{
     },
 };
 
-use papaya::{HashMap as PapayaMap, LocalGuard};
+use papaya::HashMap as PapayaMap;
 
 use crate::StrKey;
 
@@ -115,15 +115,44 @@ type Dedup = PapayaMap<&'static str, StrKey, ahash::RandomState>;
 /// mirror image. Presizing past the load fixes it outright.
 ///
 /// Unlike [`SLOTS`], this table is a real allocation, not a `.bss` array of
-/// zero pages that costs nothing unfilled — someone will otherwise assume
-/// the same reasoning that justifies [`ID_CAP`]'s twenty-times headroom
-/// transfers here and bump this for free. It does not: measured on
-/// eraMegaten (real corpus ~198k identifiers), peak RSS was 234 MB presized
-/// to a snug 300k, 253 MB at 1_000_000 (this constant, +19 MB), and 277 MB at
-/// 2_000_000 (+42 MB) — headroom costs real, if still modest, megabytes here.
-/// Five times the largest corpus measured, not [`ID_CAP`]'s twenty, is the
-/// balance struck: enough that nothing several times larger than eraMegaten
-/// would ever cross it, at roughly the cheaper end of that RSS curve.
+/// zero pages that costs nothing unfilled, so the headroom this constant
+/// buys is not free the way [`ID_CAP`]'s twenty-times margin is. A first cut
+/// picked `1_000_000` on the reasoning that five times eraMegaten's real
+/// ~198k identifiers was a conservative-but-affordable margin; measured
+/// against a proper sweep, it was neither. Presizing to 262_144, 524_288 and
+/// 1_048_576 and comparing peak RSS through the full `phases` pipeline and
+/// per-call cost through the isolated interner path (both corpora, serial
+/// and 32-thread) found:
+///
+/// - Peak RSS rises monotonically and by a real amount across that range —
+///   +16 MB on eraTHYMKR, +38 MB on eraMegaten between the smallest and
+///   largest candidate — because every one of these candidates is already
+///   far past the load `papaya` would ever resize at, so the only thing a
+///   bigger capacity buys past that point is more empty table.
+/// - Per-call cost does not improve past the smallest candidate. If
+///   anything it measured slightly *worse* at the largest: a bigger, sparser
+///   table spreads live entries over more cache lines and TLB entries for
+///   the same lookup, and there is no resize tax left to amortize away once
+///   every candidate is already sized well clear of that threshold.
+///
+/// So the smallest candidate measured, not the largest, is the balance
+/// struck: `262_144`, about 2.65x eraMegaten's real ~198k identifiers —
+/// enough that nothing several times larger would cross into resize range,
+/// at the cheapest point on both curves measured, with nothing traded away
+/// for it.
+///
+/// `papaya` does not allocate this many slots: `HashMap::builder().capacity`
+/// is a *load* target, converted to a table size internally as
+/// `next_power_of_two(capacity * 8 / 6)` (`papaya::raw::probe::entries_for`)
+/// so the table stays under its own resize threshold at the requested load.
+/// `262_144` requested is a `524_288`-slot table; the `1_000_000` this
+/// replaces was actually a `2_097_152`-slot table, more than double what its
+/// own name suggested — a rounder decimal constant does not buy a rounder
+/// allocation, `papaya` rounds it to the next power of two regardless, so a
+/// requested capacity that is not already a power of two is simply
+/// misleading about what it allocates. Picking `262_144` outright sidesteps
+/// that: what is requested is what the load-factor math would have rounded
+/// any nearby value to anyway.
 ///
 /// If a corpus ever does exceed this, correctness is unaffected — `papaya`
 /// resizes and every key is still found — but every concurrent operation
@@ -132,7 +161,7 @@ type Dedup = PapayaMap<&'static str, StrKey, ahash::RandomState>;
 /// as long as growth continues past this line. That is a performance cliff
 /// to notice happening, not a bug to fix reactively: raise the constant
 /// before eraMegaten's own identifier count gets within reach of it.
-const DEDUP_CAPACITY: usize = 1_000_000;
+const DEDUP_CAPACITY: usize = 262_144;
 
 static DEDUP: LazyLock<Dedup> = LazyLock::new(|| {
     PapayaMap::builder()
@@ -140,15 +169,6 @@ static DEDUP: LazyLock<Dedup> = LazyLock::new(|| {
         .hasher(ahash::RandomState::default())
         .build()
 });
-
-thread_local! {
-    /// A `papaya` operation needs a guard, and pinning one per call measured
-    /// the same as pinning once: [`DEDUP`] only ever grows, so nothing this
-    /// store does can be blocked behind reclaiming a guard held too long,
-    /// and holding one for a whole thread's lifetime costs nothing a fresh
-    /// pin per call would not have paid anyway.
-    static DEDUP_GUARD: LocalGuard<'static> = DEDUP.guard();
-}
 
 /// Bytes handed out to arena chunks so far — the arena's reserved capacity,
 /// not the bytes actually written into it, matching what
@@ -253,22 +273,44 @@ fn store_new(s: &str) -> StrKey {
 /// race to register — the arena slot `store_new` claimed for the loser is
 /// wasted, exactly as a hole in a reservation block is: it costs the array
 /// entry it was never going to get back and nothing else.
+///
+/// A `papaya` operation needs a guard (`DEDUP.guard()`), and this used to be
+/// a thread-local pinned once and reused for the thread's lifetime, on the
+/// reasoning that pinning once is cheaper than pinning per call and that
+/// [`DEDUP`] only ever grows, so nothing here could be blocked behind
+/// reclaiming a guard held too long. Measured against a fresh `DEDUP.guard()`
+/// per call — alternating which one ran first across repeated rounds after a
+/// warm-up pass, since testing them back to back once made whichever ran
+/// *second* look faster purely from the table already being warm in cache —
+/// the fresh guard was consistently ~2x faster, not merely close, on both
+/// corpora, serial and 32-thread alike. `papaya`'s guard is built to be
+/// cheap enough to pin per operation; a `thread_local!` with a non-`const`
+/// initializer pays a per-access state check (initialized? being
+/// initialized? already torn down?) that a plain fresh pin skips, and that
+/// check cost more than the pin it was supposed to save. Caching it was also
+/// the wrong call for reasons beyond speed: a long-held guard blocks
+/// reclaiming anything `papaya` retires while it is pinned, and a resize
+/// retires the table it replaces — so a cached guard would have quietly
+/// leaked the old table for the process's lifetime the first time [`DEDUP`]
+/// ever grew past [`DEDUP_CAPACITY`]. Pinning fresh removes that coupling
+/// entirely instead of documenting it as a hazard to watch for.
 pub fn get_or_intern(s: &str) -> StrKey {
-    DEDUP_GUARD.with(|guard| {
-        if let Some(key) = DEDUP.get(s, guard) {
-            return *key;
-        }
+    let guard = DEDUP.guard();
+    if let Some(key) = DEDUP.get(s, &guard) {
+        return *key;
+    }
 
-        let key = store_new(s);
-        let stored: &'static str = resolve(key.to_u32());
+    let key = store_new(s);
+    let stored: &'static str = resolve(key.to_u32());
 
-        *DEDUP.get_or_insert_with(stored, || key, guard)
-    })
+    *DEDUP.get_or_insert_with(stored, || key, &guard)
 }
 
-/// The key for `s`, without registering it if it is not already known.
+/// The key for `s`, without registering it if it is not already known. See
+/// [`get_or_intern`] for why the guard is pinned fresh here rather than
+/// cached.
 pub fn get(s: &str) -> Option<StrKey> {
-    DEDUP_GUARD.with(|guard| DEDUP.get(s, guard).copied())
+    DEDUP.get(s, &DEDUP.guard()).copied()
 }
 
 /// Identifiers registered so far — the count of real entries in [`DEDUP`],
