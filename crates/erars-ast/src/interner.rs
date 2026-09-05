@@ -242,8 +242,35 @@ pub fn iter() -> impl Iterator<Item = (StrKey, &'static str)> {
 /// identifier after the first gap onto the wrong number. Placing each string
 /// at the exact key `iter` reported side-steps that; the only cost is a
 /// second `u32` per identifier in the file.
+///
+/// Also unlike `restore_literals`, this never resets first: it writes
+/// straight into the live [`SLOTS`]/[`DEDUP`], so a key already in use before
+/// this call would have its slot silently overwritten with whatever `pairs`
+/// puts there instead, and any `StrKey` a caller already holds into that slot
+/// would start resolving to different content with no error at all — a
+/// literal key is thrown away every parse and nothing outlives that, but an
+/// identifier key is a permanent identity kept for the life of the process
+/// (a variable name, a function name, a `$LABEL`), so silently repointing one
+/// is a correctness bug, not a wasted allocation. Every real caller loads
+/// `game.era` as the very first thing that touches the interner in a fresh
+/// process (`load_script`, `crates/erars-loader/src/lib.rs`), so the store is
+/// always empty here; panic instead of merging if that is ever not true,
+/// rather than resolving wrong silently. There is no legitimate "restore
+/// again to replace what is already there" use, so unlike `literal_store`
+/// this store carries no `GENERATION` counter to support one.
 pub fn restore(pairs: &[(u32, &str)]) {
-    let mut next = NEXT_SLOT.load(Ordering::Relaxed).max(1);
+    assert!(
+        NEXT_SLOT.load(Ordering::Relaxed) <= 1 && DEDUP.is_empty(),
+        "Interner::restore called on a non-empty interner ({} identifiers \
+         already registered): restore writes directly into the live global \
+         slots and dedup map instead of installing a fresh store, so a \
+         caller already holding a StrKey into it would silently start \
+         resolving a different string. Load game.era as the first thing \
+         that touches the interner in a fresh process.",
+        DEDUP.len(),
+    );
+
+    let mut next = 1u32;
 
     for &(key, s) in pairs {
         assert!(
@@ -287,23 +314,6 @@ mod tests {
         let empty = get_or_intern("");
         assert_eq!(resolve(empty.to_u32()), "");
         assert_eq!(get_or_intern(""), empty);
-    }
-
-    #[test]
-    fn restore_preserves_exact_keys_across_a_gap() {
-        let pairs = [(500_000u32, "test_restore_a"), (500_002u32, "test_restore_b")];
-        restore(&pairs);
-
-        assert_eq!(resolve(500_000), "test_restore_a");
-        assert_eq!(resolve(500_001), "");
-        assert_eq!(resolve(500_002), "test_restore_b");
-
-        assert_eq!(get_or_intern("test_restore_a"), StrKey::from_u32(500_000));
-        assert_eq!(get_or_intern("test_restore_b"), StrKey::from_u32(500_002));
-
-        // A new identifier lands after the restored range, not in its gap.
-        let fresh = get_or_intern("test_restore_fresh_after_gap");
-        assert!(fresh.to_u32() > 500_002);
     }
 
     #[test]
