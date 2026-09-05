@@ -130,6 +130,11 @@ impl LocalVarTable {
         self.position(key).is_some()
     }
 
+    #[inline]
+    pub fn get(&self, key: StrKey) -> Option<&(VariableInfo, Option<UniformVariable>)> {
+        self.position(key).map(|i| &self.values[i])
+    }
+
     pub fn get_mut(&mut self, key: StrKey) -> Option<&mut (VariableInfo, Option<UniformVariable>)> {
         match self.position(key) {
             Some(i) => Some(&mut self.values[i]),
@@ -986,7 +991,25 @@ impl VariableStorage {
         let func_name = func_name.get_key(self);
         let name = name.get_key(self);
 
-        let target = self.read_int("TARGET", &[])?;
+        // TARGET only resolves an omitted character index on a Character-uniform
+        // local (below, `UniformVariable::Character` with `c_idx: None`) -- the
+        // common case (a Normal local, or an explicit index) never reads it. Peek
+        // `is_chara`/the index shape immutably first, mirroring `index_var`'s own
+        // `name != target_key` skip, so a plain local access never pays for a
+        // TARGET lookup it throws away, and never did with `&str`'s
+        // `StrKeyLike::get_key` re-interning the same constant on every call.
+        let needs_target = self
+            .local_variables
+            .get(&func_name)
+            .and_then(|t| t.get(name))
+            .is_some_and(|(info, _)| info.is_chara && info.calculate_single_idx(args).0.is_none());
+
+        let target = if needs_target {
+            let target_key = self.known_key(KnownVariableNames::Target);
+            Some(self.read_int(target_key, &[])?)
+        } else {
+            None
+        };
 
         let (info, var) = self.get_local_var(func_name, name)?;
 
@@ -994,7 +1017,10 @@ impl VariableStorage {
 
         let vm_var = match var {
             UniformVariable::Character(cvar) => {
-                let c_idx = c_idx.unwrap_or(target as u32);
+                let c_idx = match c_idx {
+                    Some(c_idx) => c_idx,
+                    None => target.expect("needs_target computed the same condition") as u32,
+                };
                 cvar.get_mut(c_idx as usize).ok_or_else(|| {
                     anyhow!("Variable {name:?}@{func_name:?} Character index {c_idx} not exists",)
                 })?
