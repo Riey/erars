@@ -950,19 +950,34 @@ impl VariableStorage {
         Ok(var.as_str()?[idx as usize].clone())
     }
 
+    /// TARGET only resolves an omitted character index on a Character-uniform
+    /// global (below, `UniformVariable::Character` with `c_idx: None`) -- the
+    /// common case (a Normal global like `FLAG`/`CFLAG`, or an explicit index)
+    /// never reads it. Peek `is_chara`/the index shape immutably first,
+    /// mirroring `index_local_var`'s own lazy read, so a plain global access
+    /// never pays for a TARGET lookup it throws away. The old unconditional
+    /// read needed a `name != target_key` guard to avoid recursing into
+    /// resolving TARGET's own character index; that guard is unnecessary now
+    /// -- TARGET itself is a plain (non-`is_chara`) global, so resolving it
+    /// never sets `needs_target` and the recursive `read_int` call below
+    /// bottoms out immediately.
     pub fn index_var(
         &mut self,
         name: impl StrKeyLike,
         args: &[u32],
     ) -> Result<(&mut VariableInfo, &mut VmVariable, u32)> {
         let name = name.get_key(self);
-        let target_key = self.known_key(KnownVariableNames::Target);
 
-        let target = if name != target_key {
-            self.read_int(target_key, &[])?
+        let needs_target = self
+            .variables
+            .get(&name)
+            .is_some_and(|(info, _)| info.is_chara && info.calculate_single_idx(args).0.is_none());
+
+        let target = if needs_target {
+            let target_key = self.known_key(KnownVariableNames::Target);
+            Some(self.read_int(target_key, &[])?)
         } else {
-            // NEED for break recursion
-            -1
+            None
         };
 
         let (info, var) = self.get_var(name)?;
@@ -971,7 +986,10 @@ impl VariableStorage {
 
         let vm_var = match var {
             UniformVariable::Character(cvar) => {
-                let c_idx = c_idx.unwrap_or_else(|| target as u32);
+                let c_idx = match c_idx {
+                    Some(c_idx) => c_idx,
+                    None => target.expect("needs_target computed the same condition") as u32,
+                };
                 cvar.get_mut(c_idx as usize).ok_or_else(|| {
                     anyhow!("Variable {name:?} Character index {c_idx} not exists")
                 })?
