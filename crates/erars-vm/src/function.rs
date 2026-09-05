@@ -215,7 +215,7 @@ impl FunctionDic {
             local_entries.push((
                 local,
                 VariableInfo {
-                    size: vec![local_size],
+                    size: tinyvec::array_vec!([u32; 3] => local_size),
                     ..Default::default()
                 },
             ));
@@ -226,7 +226,7 @@ impl FunctionDic {
                 locals,
                 VariableInfo {
                     is_str: true,
-                    size: vec![locals_size],
+                    size: tinyvec::array_vec!([u32; 3] => locals_size),
                     ..Default::default()
                 },
             ));
@@ -236,7 +236,7 @@ impl FunctionDic {
             local_entries.push((
                 arg,
                 VariableInfo {
-                    size: vec![arg_size],
+                    size: tinyvec::array_vec!([u32; 3] => arg_size),
                     ..Default::default()
                 },
             ));
@@ -247,7 +247,7 @@ impl FunctionDic {
                 args,
                 VariableInfo {
                     is_str: true,
-                    size: vec![args_size],
+                    size: tinyvec::array_vec!([u32; 3] => args_size),
                     ..Default::default()
                 },
             ));

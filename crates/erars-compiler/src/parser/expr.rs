@@ -1344,10 +1344,16 @@ pub fn dim_line<'c, 'a>(
                             // needs constant folding, so it is settled now and
                             // `finish_dim` leaves it alone.
                             if sizes.is_none() {
-                                info.size =
-                                    init.as_ref().map(|v| vec![v.len() as u32]).unwrap_or_default();
+                                info.size = init
+                                    .as_ref()
+                                    .map(|v| {
+                                        let mut size = tinyvec::ArrayVec::new();
+                                        size.push(v.len() as u32);
+                                        size
+                                    })
+                                    .unwrap_or_default();
                             }
-                            info.init = init.unwrap_or_default();
+                            info.init = init.map(Vec::into_boxed_slice);
 
                             break Ok((
                                 i,

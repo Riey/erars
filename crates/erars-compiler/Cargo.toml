@@ -32,6 +32,7 @@ paste = "1.0.9"
 itertools = "0.13"
 once_cell = { version = "1.16.0", features = ["parking_lot"] }
 cow-utils = "0.1.2"
+tinyvec = "1.6"
 
 [dev-dependencies]
 k9 = "0.11.1"

@@ -1566,7 +1566,7 @@ impl HeaderInfo {
                     None => self.global_variables.get(&var.var),
                 } {
                     if var_info.is_const {
-                        let Some(init) = var_info.init.get(0) else {
+                        let Some(init) = var_info.init_exprs().get(0) else {
                             bail!("No value");
                         };
                         let init = self.const_eval(init)?;
@@ -2159,14 +2159,20 @@ impl HeaderInfo {
             // path (`GameProc/UserDefinedVariable.cs:222-227`).
             info.is_dynamic = true;
             info.is_savedata = false;
-            info.size = Vec::new();
+            info.size = Default::default();
             info.is_str = false;
             info.is_chara = false;
             return Ok(LocalVariable { var, info });
         }
 
         if let Some(sizes) = sizes {
-            info.size = Vec::with_capacity(sizes.len());
+            if sizes.len() > 3 {
+                bail!(
+                    "Array {var} has {} dimensions, but erars supports at most 3",
+                    sizes.len()
+                );
+            }
+            info.size = Default::default();
             for size in sizes.iter() {
                 let size = self.const_eval(size)?.into_int_err().map_err(|s| {
                     anyhow::anyhow!("Array size of {var} is a string ({s:?}), not an integer")
@@ -4494,5 +4500,37 @@ mod scan_tests {
             decisions("@A\nVARS S\n[SKIPSTART]\n@B\n[SKIPEND]\n@C\nPRINTL c\n"),
             [true, false, false]
         );
+    }
+}
+
+#[cfg(test)]
+mod dim_tests {
+    use super::HeaderInfo;
+
+    // Requirement: `#DIM`'s size list must never be allowed to overrun
+    // `VariableInfo::size`'s 3-slot `tinyvec::ArrayVec` capacity by pushing
+    // past it — that would panic rather than report a diagnostic. A
+    // 4-dimension `#DIM` has to fail as an ordinary compile error instead.
+    #[test]
+    fn dim_with_more_than_three_dimensions_is_a_compile_error_not_a_panic() {
+        erars_ast::init_interner();
+        let mut header = HeaderInfo::default();
+        let err = header
+            .merge_header("#DIM A, 2, 2, 2, 2\n")
+            .expect_err("a 4-dimension #DIM must be rejected, not accepted or panic");
+        assert!(
+            err.0.contains('3'),
+            "error should name the dimension limit: {}",
+            err.0
+        );
+    }
+
+    #[test]
+    fn dim_with_exactly_three_dimensions_is_still_allowed() {
+        erars_ast::init_interner();
+        let mut header = HeaderInfo::default();
+        header
+            .merge_header("#DIM A, 2, 2, 2\n")
+            .expect("a 3-dimension #DIM must still be accepted");
     }
 }

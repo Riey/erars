@@ -77,21 +77,43 @@ pub enum DataEntryStyle {
 /// growable `Vec`/`SmallVec`, whose extra `capacity: usize` word exists only
 /// to support future growth this table never does) and no inline array
 /// (`Box<[T]>` is a 16-byte fat pointer regardless of `T`), so
-/// `size_of::<LocalVarTable>()` is 32 bytes versus 416 for an
-/// inline-capacity-4 `SmallVec` pair (24 + 392, the values array's capacity
+/// `size_of::<LocalVarTable>()` is 32 bytes versus 336 for an
+/// inline-capacity-4 `SmallVec` pair, the values array's capacity alone
 /// dwarfing everything once its 4 inline `(VariableInfo,
-/// Option<UniformVariable>)` slots, each 96 bytes, are counted).
+/// Option<UniformVariable>)` slots, each 80 bytes, are counted (measured
+/// with `size_of`, not estimated — this changes whenever `VariableInfo`'s
+/// own size does).
 ///
 /// Keys and values are parallel arrays (struct-of-arrays) rather than one
 /// array of `(key, info, var)` tuples: a name lookup then only scans 4-32
-/// bytes of `StrKey`s, never the 96-byte `(VariableInfo,
+/// bytes of `StrKey`s, never the 80-byte `(VariableInfo,
 /// Option<UniformVariable>)` payload, which matters because every access
 /// site here (`is_local_var`/`check_var_exists` before `get_local_var`)
 /// already does a lookup-then-fetch pair. Entries are kept unsorted and
-/// looked up with a linear scan: measured against a sorted binary search at
-/// n=1..32, linear scan wins decisively up to n≈10-16 (binary search's
-/// unpredictable branches dominate at this size) and the two cross over
-/// only well past this population's p99.
+/// looked up with a linear scan rather than a sorted binary search or a
+/// small `HashMap`. Measured directly (median of 3 runs,
+/// `taskset -c 24-31`, 2M iterations per `n`, worst-case miss lookup):
+///
+/// | n  | linear    | binary   | hash     |
+/// |----|-----------|----------|----------|
+/// | 1  | ~0.3-0.6ns | ~0.2ns   | ~1.1ns   |
+/// | 4  | ~0.5-0.6ns | ~0.8ns   | ~1.2ns   |
+/// | 8  | ~0.9-1.0ns | ~1.2-1.3ns | ~1.2ns |
+/// | 16 | ~1.6-1.8ns | ~1.7-2.2ns | ~1.2-1.4ns |
+/// | 32 | ~3.0-3.2ns | ~2.2-2.5ns | ~1.2ns   |
+/// | 64 | ~6.1-6.2ns | ~2.7-2.9ns | ~1.2-1.3ns |
+/// | 90 | ~11.1-11.3ns | ~3.5-3.8ns | ~1.2ns |
+///
+/// Linear wins outright through n=8 and is roughly a wash with binary
+/// search at n=16 (hashing is already ahead by then). It falls behind
+/// binary search by n=32 and keeps falling — 2.2x slower at n=64, 3x
+/// slower (and ~9x slower than hashed) at n=90, the largest population
+/// either corpus actually has. Linear stays the implementation anyway
+/// because 99.85% of functions (125,356 of 125,549 on the larger corpus)
+/// sit at n≤16, where it is competitive-to-superior; the n=90 tail is 193
+/// functions (0.15%) paying a real but absolutely tiny ~11ns, not the
+/// dominant cost of a lookup that also has to hash/probe a `HashMap<StrKey,
+/// LocalVarTable>` to find this table in the first place.
 #[derive(Clone, Default, Debug)]
 pub struct LocalVarTable {
     keys: Box<[StrKey]>,
@@ -1569,7 +1591,7 @@ impl VmVariable {
             true => Self::Str(vec![String::new(); size]),
         };
 
-        for (idx, init_var) in info.init.iter().enumerate() {
+        for (idx, init_var) in info.init_exprs().iter().enumerate() {
             let _ = ret.set(idx as u32, header.const_eval_log_error(init_var));
         }
 

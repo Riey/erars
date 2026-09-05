@@ -2554,11 +2554,13 @@ Function {
                         size: [
                             1,
                         ],
-                        init: [
-                            Int(
-                                2,
-                            ),
-                        ],
+                        init: Some(
+                            [
+                                Int(
+                                    2,
+                                ),
+                            ],
+                        ),
                     },
                 },
             ),
@@ -3227,7 +3229,7 @@ Function {
                         is_dynamic: false,
                         default_int: 0,
                         size: [],
-                        init: [],
+                        init: None,
                     },
                 },
             ),
@@ -3244,7 +3246,7 @@ Function {
                         is_dynamic: false,
                         default_int: 0,
                         size: [],
-                        init: [],
+                        init: None,
                     },
                 },
             ),

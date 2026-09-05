@@ -13,7 +13,7 @@ use erars_ast::StrKey;
 use erars_compiler::{HeaderInfo, PendingDim};
 
 fn size_of(header: &HeaderInfo, name: &str) -> Vec<u32> {
-    header.global_variables[&StrKey::new(name)].size.clone()
+    header.global_variables[&StrKey::new(name)].size.to_vec()
 }
 
 #[test]
