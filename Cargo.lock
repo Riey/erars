@@ -1071,6 +1071,7 @@ dependencies = [
  "log",
  "parking_lot",
  "rayon",
+ "serde_yaml",
 ]
 
 [[package]]

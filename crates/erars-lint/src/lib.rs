@@ -3,6 +3,7 @@ use codespan_reporting::{
     files::{self, Files as _},
 };
 use erars_vm::{FunctionBody, FunctionDic, VariableStorage};
+use erars_compiler::InstructionType;
 
 use erars_ast::StrKey;
 use hashbrown::HashMap;
@@ -92,23 +93,29 @@ fn check_variable_exist_inner(
             current_line = line;
         }
 
-        let (current_fn_name, name) = if inst.is_load_var_ref() {
-            // can only check with literal str
-            let Some(name) = func.body()[i - 1].as_load_str() else {
-                continue;
-            };
-            (fn_name, name)
-        } else if inst.is_load_extern_varref() {
-            // can only check with literal str
-            let Some(name) = func.body()[i - 2].as_load_str() else {
-                continue;
-            };
-            let Some(ex_fn_name) = func.body()[i - 1].as_load_str() else {
-                continue;
-            };
-            (ex_fn_name, name)
-        } else {
-            continue;
+        let (current_fn_name, name) = match inst.ty() {
+            InstructionType::LoadVarRef => {
+                // can only check with literal str
+                let Some(name) = func.body()[i - 1].as_load_str() else {
+                    continue;
+                };
+                (fn_name, name)
+            }
+            InstructionType::LoadVarRefNamed0 => (fn_name, inst.as_load_var_ref_named0().unwrap()),
+            InstructionType::LoadVarRefNamed1 => (fn_name, inst.as_load_var_ref_named1().unwrap()),
+            InstructionType::LoadVarRefNamed2 => (fn_name, inst.as_load_var_ref_named2().unwrap()),
+            InstructionType::LoadVarRefNamed3 => (fn_name, inst.as_load_var_ref_named3().unwrap()),
+            InstructionType::LoadExternVarRef => {
+                // can only check with literal str
+                let Some(name) = func.body()[i - 2].as_load_str() else {
+                    continue;
+                };
+                let Some(ex_fn_name) = func.body()[i - 1].as_load_str() else {
+                    continue;
+                };
+                (ex_fn_name, name)
+            }
+            _ => continue,
         };
 
         if !var.check_var_exists(current_fn_name, name) {
