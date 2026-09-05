@@ -46,3 +46,9 @@ multithread = [
 [[example]]
 name = "phases"
 required-features = ["multithread"]
+
+# `jit_census` is the instruction-frequency census used to guide bytecode
+# dispatch optimization (unigram/bigram counts). No rayon usage, so no
+# feature gate needed.
+[[example]]
+name = "jit_census"
