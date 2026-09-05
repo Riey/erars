@@ -93,7 +93,7 @@ macro_rules! define_instruction {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
 #[repr(u8)]
-enum InstructionType {
+pub enum InstructionType {
     Nop = 0,
     Pop = 1,
     ReportPosition = 2,
@@ -148,6 +148,16 @@ static_assertions::assert_eq_align!(Instruction, u8);
 pub struct Instruction {
     ty: InstructionType,
     data: [u8; 4],
+}
+
+impl Instruction {
+    /// The discriminant, for dispatch via a real `match` — one comparison
+    /// against a jump table instead of the `as_x()`/`is_x()` chain's linear
+    /// scan through every earlier variant.
+    #[inline(always)]
+    pub const fn ty(&self) -> InstructionType {
+        self.ty
+    }
 }
 
 define_instruction! {
