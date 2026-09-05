@@ -56,32 +56,49 @@ pub enum DataEntryStyle {
 /// locals `erars-vm/src/function.rs` installs whenever `VariableSize.csv`
 /// enables the matching default size — plus a usually-empty tail of explicit
 /// `#DIM`s (measured: p90 total entries == 4 on both corpora; only 5.05% of
-/// eraMegaten's 125,549 functions and 0.04% of eraTHYMKR's 16,859 exceed 4).
-/// A `hashbrown::HashMap` per function turned that population into one small
-/// heap allocation per function, padded to a power-of-two bucket count with
-/// its own control-byte array.
+/// eraMegaten's 125,549 functions and 0.04% of eraTHYMKR's 16,859 exceed 4;
+/// *none* have fewer than 4). A `hashbrown::HashMap` per function turned
+/// that population into one small heap allocation per function, padded to a
+/// power-of-two bucket count with its own control-byte array.
 ///
-/// This keeps entries inline up to `INLINE_CAP`, matching the common case
-/// with zero heap allocation, and spills to the heap only for the minority
-/// of functions with more locals than that. Keys and values are parallel
-/// arrays (struct-of-arrays) rather than one array of `(key, info, var)`
-/// tuples: a name lookup then only scans 16-32 bytes of `StrKey`s, never the
-/// 96-byte `(VariableInfo, Option<UniformVariable>)` payload, which matters
-/// because every access site here (`is_local_var`/`check_var_exists` before
-/// `get_local_var`) already does a lookup-then-fetch pair. Entries are kept
-/// unsorted and looked up with a linear scan: measured against a sorted
-/// binary search at n=1..32, linear scan wins decisively up to n≈10-16
-/// (binary search's unpredictable branches dominate at this size) and the
-/// two cross over only well past this population's p99.
+/// A table is built once, from a complete entry list, when its owning
+/// function is loaded (`VariableStorage::insert_local_table`) and never
+/// grows afterward — every other access site only reads or mutates existing
+/// entries in place (`get_mut`/`get_many_mut`/`iter_mut`), never inserts a
+/// new key. That makes an exact-size, non-growable allocation a strict win
+/// over anything carrying spare capacity: an inline/`SmallVec`-style
+/// representation was measured across `INLINE_CAP` values of 0, 1, 2 and 4
+/// to *lose* here specifically because this population's near-universal
+/// floor of 4 entries means almost every function spills to the heap
+/// regardless of inline capacity, so a larger inline array only inflates
+/// every `LocalVarTable`'s fixed size — inflating the outer
+/// `HashMap<StrKey, LocalVarTable>` — without ever avoiding an allocation.
+/// A boxed slice pays no such tax: it carries no capacity field (unlike a
+/// growable `Vec`/`SmallVec`, whose extra `capacity: usize` word exists only
+/// to support future growth this table never does) and no inline array
+/// (`Box<[T]>` is a 16-byte fat pointer regardless of `T`), so
+/// `size_of::<LocalVarTable>()` is 32 bytes versus 416 for an
+/// inline-capacity-4 `SmallVec` pair (24 + 392, the values array's capacity
+/// dwarfing everything once its 4 inline `(VariableInfo,
+/// Option<UniformVariable>)` slots, each 96 bytes, are counted).
+///
+/// Keys and values are parallel arrays (struct-of-arrays) rather than one
+/// array of `(key, info, var)` tuples: a name lookup then only scans 4-32
+/// bytes of `StrKey`s, never the 96-byte `(VariableInfo,
+/// Option<UniformVariable>)` payload, which matters because every access
+/// site here (`is_local_var`/`check_var_exists` before `get_local_var`)
+/// already does a lookup-then-fetch pair. Entries are kept unsorted and
+/// looked up with a linear scan: measured against a sorted binary search at
+/// n=1..32, linear scan wins decisively up to n≈10-16 (binary search's
+/// unpredictable branches dominate at this size) and the two cross over
+/// only well past this population's p99.
 #[derive(Clone, Default, Debug)]
 pub struct LocalVarTable {
-    keys: smallvec::SmallVec<[StrKey; Self::INLINE_CAP]>,
-    values: smallvec::SmallVec<[(VariableInfo, Option<UniformVariable>); Self::INLINE_CAP]>,
+    keys: Box<[StrKey]>,
+    values: Box<[(VariableInfo, Option<UniformVariable>)]>,
 }
 
 impl LocalVarTable {
-    const INLINE_CAP: usize = 4;
-
     #[inline]
     fn position(&self, key: StrKey) -> Option<usize> {
         self.keys.iter().position(|&k| k == key)
@@ -98,14 +115,31 @@ impl LocalVarTable {
         }
     }
 
-    pub fn insert(&mut self, key: StrKey, value: (VariableInfo, Option<UniformVariable>)) {
-        match self.position(key) {
-            Some(i) => self.values[i] = value,
-            None => {
-                self.keys.push(key);
-                self.values.push(value);
+    /// Builds from a complete entry list, deduplicating by key with the
+    /// *last* value for a repeated key winning — matching the semantics of
+    /// repeatedly calling `HashMap::insert` with the same key, which this
+    /// replaced. Real corpora rely on that: a handful of functions
+    /// explicitly re-`#DIM` a name that's also auto-injected as a builtin
+    /// (`LOCAL`/`LOCALS`/`ARG`/`ARGS`), and `insert_local_table` reuses this
+    /// to merge in the rare case a function name is compiled more than
+    /// once. Populations here are tiny (near-universally 4, up to ~90 in
+    /// the extreme, per this module's doc comment above), so an O(n^2)
+    /// scan is negligible and — unlike a `HashMap`-based dedup — allocates
+    /// nothing extra for the overwhelmingly common case with no duplicate
+    /// key at all.
+    fn from_entries(mut entries: Vec<(StrKey, VariableInfo)>) -> Self {
+        let mut i = 0;
+        while i < entries.len() {
+            let key = entries[i].0;
+            if entries[i + 1..].iter().any(|(k, _)| *k == key) {
+                entries.remove(i);
+            } else {
+                i += 1;
             }
         }
+        let (keys, values): (Vec<StrKey>, Vec<(VariableInfo, Option<UniformVariable>)>) =
+            entries.into_iter().map(|(key, info)| (key, (info, None))).unzip();
+        Self { keys: keys.into_boxed_slice(), values: values.into_boxed_slice() }
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (StrKey, &(VariableInfo, Option<UniformVariable>))> {
@@ -758,11 +792,34 @@ impl VariableStorage {
         self.character_len
     }
 
-    pub fn add_local_info(&mut self, func: StrKey, var_name: StrKey, info: VariableInfo) {
-        self.local_variables
-            .entry(func)
-            .or_default()
-            .insert(var_name, (info, None));
+    /// Insert one function's complete set of `#DIM` locals at once.
+    ///
+    /// Callers already have every entry in hand before this is called
+    /// (`function.rs::insert_compiled_func` collects them across its info
+    /// loop and builtin defaults; the `game.era` bytecode loader already
+    /// deserializes a whole-function `Vec`), so this never needs to grow a
+    /// table one entry at a time. It still merges into any table already
+    /// present for `func`, rather than overwriting it outright: a handful
+    /// of real functions are compiled more than once (the same name
+    /// defined in more than one source), and the previous per-entry
+    /// `HashMap`-based insertion transparently accumulated every call's
+    /// entries into one table — replacing wholesale here would silently
+    /// drop an earlier call's locals. `LocalVarTable::from_entries`
+    /// already resolves same-key collisions with last-value-wins, so
+    /// appending the new entries after the existing table's own gives the
+    /// same result a second `HashMap::insert` pass would have.
+    pub fn insert_local_table(&mut self, func: StrKey, entries: Vec<(StrKey, VariableInfo)>) {
+        match self.local_variables.get(&func) {
+            Some(existing) => {
+                let mut combined: Vec<(StrKey, VariableInfo)> =
+                    existing.iter().map(|(key, (info, _))| (key, info.clone())).collect();
+                combined.extend(entries);
+                self.local_variables.insert(func, LocalVarTable::from_entries(combined));
+            }
+            None => {
+                self.local_variables.insert(func, LocalVarTable::from_entries(entries));
+            }
+        }
     }
 
     /// Reserve space for `additional` more functions' local-variable tables.

@@ -166,9 +166,7 @@ pub unsafe fn load_script(
 
     ctx.var.reserve_local_functions(local_infos.len());
     for (key, vars) in local_infos {
-        for var in vars {
-            ctx.var.add_local_info(key, var.0, var.1);
-        }
+        ctx.var.insert_local_table(key, vars);
     }
 
     Ok((

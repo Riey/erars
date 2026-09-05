@@ -33,9 +33,6 @@ thiserror = "1"
 anyhow = "1"
 logos = { version = "0.14", features = ["logos-derive"] }
 hashbrown = { version = "0.15", features = ["serde"] }
-# `union` shrinks the inline/spilled representation by one word; safe for the
-# non-`Copy` per-function local-variable payload (`erars-vm/src/variable.rs`).
-smallvec = { version = "1", features = ["union"] }
 enum-map = { version = "2", features = ["serde"] }
 encoding_rs = "0.8"
 

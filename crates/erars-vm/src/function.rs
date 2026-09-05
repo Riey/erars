@@ -169,6 +169,7 @@ impl FunctionDic {
         let mut flags = EventFlags::None;
         let mut local_size = default_var_size.default_local_size;
         let mut locals_size = default_var_size.default_locals_size;
+        let mut local_entries: Vec<(StrKey, VariableInfo)> = Vec::new();
 
         for info in func.header.infos {
             match info {
@@ -198,7 +199,7 @@ impl FunctionDic {
                     body.is_functions = true;
                 }
                 FunctionInfo::Dim(local) => {
-                    var_dic.add_local_info(func.header.name, local.var, local.info);
+                    local_entries.push((local.var, local.info));
                 }
             }
         }
@@ -211,50 +212,48 @@ impl FunctionDic {
         let args = var_dic.known_key(KnownVariableNames::ArgS);
 
         if let Some(local_size) = local_size {
-            var_dic.add_local_info(
-                func.header.name,
+            local_entries.push((
                 local,
                 VariableInfo {
                     size: vec![local_size],
                     ..Default::default()
                 },
-            );
+            ));
         }
 
         if let Some(locals_size) = locals_size {
-            var_dic.add_local_info(
-                func.header.name,
+            local_entries.push((
                 locals,
                 VariableInfo {
                     is_str: true,
                     size: vec![locals_size],
                     ..Default::default()
                 },
-            );
+            ));
         }
 
         if let Some(arg_size) = default_var_size.default_arg_size {
-            var_dic.add_local_info(
-                func.header.name,
+            local_entries.push((
                 arg,
                 VariableInfo {
                     size: vec![arg_size],
                     ..Default::default()
                 },
-            );
+            ));
         }
 
         if let Some(args_size) = default_var_size.default_args_size {
-            var_dic.add_local_info(
-                func.header.name,
+            local_entries.push((
                 args,
                 VariableInfo {
                     is_str: true,
                     size: vec![args_size],
                     ..Default::default()
                 },
-            );
+            ));
         }
+
+        var_dic.insert_local_table(func.header.name, local_entries);
 
         if let Ok(ty) = func.header.name.resolve().parse::<EventType>() {
             // With `イベント関数のCALLを許可する` on, Emuera also files the
