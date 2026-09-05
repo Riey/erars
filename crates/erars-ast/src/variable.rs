@@ -103,11 +103,22 @@ pub struct LocalVariable {
 ///   with no allocation-behaviour change (an empty `Vec` never allocated
 ///   either). The wire format is *not* byte-identical for the empty case —
 ///   `None` encodes as a single MessagePack `nil` where an empty `Vec`
-///   encoded as an empty array — but every existing save file still loads:
-///   an old save's empty-array `init` deserialises into `Some(&[])` rather
-///   than `None`, which every reader here treats identically to `None`
-///   (see [`VariableInfo::init_exprs`]). No custom `Serialize`/`Deserialize`
-///   impl or version bump was needed for either field.
+///   encoded as an empty array — so a plain derived `Deserialize` would let
+///   an old save's empty-array `init` come back as `Some(Box::new([]))`
+///   rather than `None`. That distinction has to stay unobservable, not
+///   merely "treated the same" by whichever reader remembers to check
+///   ([`VariableInfo::init_exprs`]): `VariableStorage::load_variables`
+///   (`erars-vm/src/variable.rs`) restores a saved variable only when its
+///   whole `VariableInfo` compares equal to the freshly parsed one via this
+///   struct's derived `PartialEq`, and `None != Some(Box::new([]))` under
+///   that derive — an unnormalised `init` would make every saved variable
+///   with an empty initialiser silently reset to its default instead of
+///   restoring the player's value. `init`'s `#[serde(deserialize_with =
+///   ...)]` below collapses a deserialized empty sequence to `None` so that
+///   this can never arise in the first place, and the one other place that
+///   builds a `VariableInfo` by hand from a possibly-empty initialiser list
+///   (`erars-compiler/src/parser/expr.rs`'s `dim_line`) normalises the same
+///   way. No version bump was needed for either field.
 ///
 /// Packing the 7 `bool`s above into one `bitflags` byte was measured and
 /// rejected: with `size`/`init` at their current widths, the 7 loose bytes
@@ -127,7 +138,21 @@ pub struct VariableInfo {
     pub is_dynamic: bool,
     pub default_int: i64,
     pub size: tinyvec::ArrayVec<[u32; 3]>,
+    #[serde(deserialize_with = "deserialize_init")]
     pub init: Option<Box<[Expr]>>,
+}
+
+/// Collapses a deserialized `init` that arrived as an empty sequence — what
+/// every save file and `game.era` written before `init` became
+/// `Option<Box<[Expr]>>` wrote for "no initialiser" — down to `None`, so
+/// `Some(Box::new([]))` can never arise from deserializing an old file. See
+/// the struct doc comment above for why this has to happen here rather than
+/// merely at the few places that read `init` back out.
+fn deserialize_init<'de, D>(deserializer: D) -> Result<Option<Box<[Expr]>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(Option::<Box<[Expr]>>::deserialize(deserializer)?.filter(|exprs| !exprs.is_empty()))
 }
 
 impl VariableInfo {
@@ -139,10 +164,11 @@ impl VariableInfo {
         self.size.iter().copied().product::<u32>() as usize
     }
 
-    /// `init`'s expressions as a plain slice, treating `None` and
-    /// `Some(&[])` identically — an old save's empty-array `init` can
-    /// deserialise into the latter (see the field doc comment above), and
-    /// every reader wants "no initialiser" either way.
+    /// `init`'s expressions as a plain slice. `init` should never actually
+    /// be `Some(&[])` — `deserialize_init` and `dim_line` both normalise an
+    /// empty initialiser to `None` before it reaches a `VariableInfo` — but
+    /// this still treats the two identically as a defensive fallback, since
+    /// "no initialiser" is what every caller here wants for either shape.
     pub fn init_exprs(&self) -> &[Expr] {
         self.init.as_deref().unwrap_or(&[])
     }
@@ -183,4 +209,105 @@ fn index_test() {
     k9::assert_equal!(info.calculate_single_idx(&[1]), (None, 1));
     k9::assert_equal!(info.calculate_single_idx(&[1, 1]), (None, 1001));
     k9::assert_equal!(info.calculate_single_idx(&[2, 1, 1]), (None, 2001001));
+}
+
+/// Reproduces the exact wire shape pre-`VariableInfo`-shrink code wrote:
+/// `init: Vec<Expr>` at the same struct position, encoded positionally by
+/// `rmp_serde`'s default (non-`struct_map`) `Serializer` — the same encoder
+/// `erars-vm/src/save.rs` uses for every save file and `game.era`. Field
+/// names never reach the wire in that mode, only order, so this only needs
+/// to match `VariableInfo`'s current field order and count.
+#[derive(Serialize)]
+struct OldShapeVariableInfo {
+    is_chara: bool,
+    is_str: bool,
+    is_global: bool,
+    is_const: bool,
+    is_ref: bool,
+    is_savedata: bool,
+    is_dynamic: bool,
+    default_int: i64,
+    size: Vec<u32>,
+    init: Vec<Expr>,
+}
+
+/// The bug this guards: a save file written before the `VariableInfo`
+/// shrink always wrote `init` as an array (empty when there was no
+/// initialiser, never absent). Deserializing that through a plain derived
+/// `Deserialize` produces `Some(Box::new([]))`, not `None` — and
+/// `VariableStorage::load_variables` compares the *whole* `VariableInfo` by
+/// derived equality against the freshly parsed one to decide whether a
+/// saved variable's value should be restored. `None != Some(Box::new([]))`
+/// under that derive, so every saved variable with an empty initialiser
+/// (i.e. nearly all of them) would silently fail the equality check and
+/// get reset to its default instead of restored. `deserialize_init` exists
+/// so this can never reach that comparison.
+#[test]
+fn deserializing_an_old_shape_empty_init_compares_equal_to_a_fresh_one() {
+    let old = OldShapeVariableInfo {
+        is_chara: false,
+        is_str: false,
+        is_global: true,
+        is_const: false,
+        is_ref: false,
+        is_savedata: true,
+        is_dynamic: false,
+        default_int: 0,
+        size: vec![10],
+        init: Vec::new(),
+    };
+    let bytes = rmp_serde::to_vec(&old).expect("old-shape struct encodes");
+    let deserialized: VariableInfo =
+        rmp_serde::from_slice(&bytes).expect("new VariableInfo decodes the old wire shape");
+
+    let freshly_parsed = VariableInfo {
+        is_global: true,
+        is_savedata: true,
+        size: tinyvec::array_vec!([u32; 3] => 10),
+        init: None,
+        ..Default::default()
+    };
+
+    k9::assert_equal!(deserialized, freshly_parsed);
+    assert!(deserialized.init.is_none(), "empty init must normalise to None, not Some(&[])");
+}
+
+/// Audits `size` for the same class of bug `init` had: `size` was
+/// `Vec<u32>`, is now `tinyvec::ArrayVec<[u32; 3]>`, and — unlike `init` —
+/// is not wrapped in an `Option`, so there is no second representation
+/// ("absent" vs. "empty") for an old file's empty array to land on: both
+/// the old `Vec<u32>` and the new `ArrayVec` decode an empty MessagePack
+/// array as an empty collection and nothing else, and compare equal
+/// element-by-element. Confirmed here rather than assumed, now that
+/// `VariableInfo`'s equality is known to be load-bearing
+/// (`VariableStorage::load_variables`) and not merely descriptive: an old
+/// save's scalar (zero-dimension) variable — `size: []` — must still
+/// compare equal to a freshly parsed one after the shrink.
+#[test]
+fn deserializing_an_old_shape_empty_size_compares_equal_to_a_fresh_one() {
+    let old = OldShapeVariableInfo {
+        is_chara: false,
+        is_str: false,
+        is_global: false,
+        is_const: false,
+        is_ref: false,
+        is_savedata: true,
+        is_dynamic: false,
+        default_int: 7,
+        size: Vec::new(),
+        init: Vec::new(),
+    };
+    let bytes = rmp_serde::to_vec(&old).expect("old-shape struct encodes");
+    let deserialized: VariableInfo =
+        rmp_serde::from_slice(&bytes).expect("new VariableInfo decodes the old wire shape");
+
+    let freshly_parsed = VariableInfo {
+        is_savedata: true,
+        default_int: 7,
+        size: tinyvec::ArrayVec::new(),
+        init: None,
+        ..Default::default()
+    };
+
+    k9::assert_equal!(deserialized, freshly_parsed);
 }

@@ -1576,6 +1576,106 @@ impl VariableStorage {
     }
 }
 
+#[cfg(test)]
+mod load_variables_tests {
+    use super::*;
+    use erars_compiler::HeaderInfo;
+
+    fn savedata_info() -> VariableInfo {
+        VariableInfo {
+            is_global: false,
+            is_savedata: true,
+            default_int: 0,
+            size: tinyvec::array_vec!([u32; 3] => 1),
+            ..Default::default()
+        }
+    }
+
+    /// Mirrors the exact wire shape pre-`VariableInfo`-shrink code wrote —
+    /// `init: Vec<Expr>` at the same struct position — so that serializing
+    /// this and deserializing it back into today's `VariableInfo` (through
+    /// `rmp_serde`, the same encoder `erars-vm/src/save.rs` uses for every
+    /// save file) reproduces precisely what loading a pre-existing save
+    /// produces, `deserialize_init` included, rather than a hand-picked
+    /// stand-in for it.
+    #[derive(Serialize)]
+    struct OldShapeVariableInfo {
+        is_chara: bool,
+        is_str: bool,
+        is_global: bool,
+        is_const: bool,
+        is_ref: bool,
+        is_savedata: bool,
+        is_dynamic: bool,
+        default_int: i64,
+        size: Vec<u32>,
+        init: Vec<erars_ast::Expr>,
+    }
+
+    fn old_shape_saved_info(info: &VariableInfo) -> VariableInfo {
+        let old = OldShapeVariableInfo {
+            is_chara: info.is_chara,
+            is_str: info.is_str,
+            is_global: info.is_global,
+            is_const: info.is_const,
+            is_ref: info.is_ref,
+            is_savedata: info.is_savedata,
+            is_dynamic: info.is_dynamic,
+            default_int: info.default_int,
+            size: info.size.to_vec(),
+            init: Vec::new(),
+        };
+        let bytes = rmp_serde::to_vec(&old).expect("old-shape struct encodes");
+        rmp_serde::from_slice(&bytes).expect("VariableInfo decodes the old wire shape")
+    }
+
+    /// Defends the actual bug: `VariableStorage::load_variables` restores a
+    /// saved variable only when `*info == sav_info` (this file, above). A
+    /// save file written before the `VariableInfo` shrink always
+    /// serialised `init` as an array, empty when there was no initialiser —
+    /// deserializing that through a plain derived `Deserialize` (i.e.
+    /// without `deserialize_init`) comes back `Some(Box::new([]))`, not
+    /// `None`, and `None != Some(Box::new([]))` under the derived equality
+    /// `load_variables` uses. Before `deserialize_init` existed, that made
+    /// this test fail: the saved value was silently discarded and the
+    /// variable reset to its default. `old_shape_saved_info` reproduces the
+    /// old save's actual bytes (not a hand-picked stand-in for them) via a
+    /// real `rmp_serde` round trip, and this drives them through the real
+    /// `load_variables` a save/load actually calls, not a mock of it.
+    #[test]
+    fn an_old_shape_saved_variable_with_empty_init_restores_its_value() {
+        erars_ast::init_interner();
+        let header = Arc::new(HeaderInfo::default());
+        let name = get_interner().get_or_intern_static("TESTSAVEDATA");
+
+        let fresh_info = savedata_info();
+        let mut infos = HashMap::new();
+        infos.insert(name, fresh_info.clone());
+        let mut storage = VariableStorage::new(header.clone(), &infos);
+
+        let old_shape_info = old_shape_saved_info(&fresh_info);
+        assert_eq!(
+            old_shape_info, fresh_info,
+            "an old save's empty init must normalise to compare equal to a freshly parsed one"
+        );
+
+        let saved_value = 42;
+        let mut sav_var = UniformVariable::new(&header, &old_shape_info);
+        sav_var.assume_normal().as_int().unwrap()[0] = saved_value;
+
+        let mut sav_variables = HashMap::new();
+        sav_variables.insert(name, (old_shape_info, sav_var));
+
+        storage.load_variables(sav_variables, HashMap::new(), false);
+
+        let restored = storage.get_var(name).unwrap().1.assume_normal().as_int().unwrap()[0];
+        assert_eq!(
+            restored, saved_value,
+            "an old-shape save's empty-init variable must restore its value, not reset to default"
+        );
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum VmVariable {
     Int(Vec<i64>),

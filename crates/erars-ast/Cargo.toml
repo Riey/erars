@@ -23,6 +23,7 @@ tinyvec = { version = "1.6", features = ["serde"] }
 
 [dev-dependencies]
 k9 = "0.11.1"
+rmp-serde = "1.1.1"
 
 [features]
 

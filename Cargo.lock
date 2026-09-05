@@ -972,6 +972,7 @@ dependencies = [
  "option_set",
  "ordered-float",
  "papaya",
+ "rmp-serde",
  "serde",
  "strum",
  "tinyvec",

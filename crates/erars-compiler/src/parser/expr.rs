@@ -1353,7 +1353,7 @@ pub fn dim_line<'c, 'a>(
                                     })
                                     .unwrap_or_default();
                             }
-                            info.init = init.map(Vec::into_boxed_slice);
+                            info.init = init.filter(|v| !v.is_empty()).map(Vec::into_boxed_slice);
 
                             break Ok((
                                 i,
