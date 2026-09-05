@@ -31,6 +31,21 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1 vulkan-tools
         vulkaninfo --summary || true
+    # A stock runner has zero system fonts, so `FontChain` falls all the way
+    # back to the bundled Noto Sans Mono, and every candidate we tried next
+    # (the bundled font itself, and a real "Noto Sans Mono CJK JP" install)
+    # has tall enough line-height metrics at `GDRAWTEXT`'s default 100px font
+    # that the glyph lands entirely below this test's small bitmap. Liberation
+    # Mono does not: reproduced locally (bwrap, zero system fonts) with every
+    # font/vm test still green. `ERARS_FONT_DIR` is the same "extra font
+    # search path" a real deployment would point at msgothic.ttc; pointing it
+    # here makes font resolution deterministic instead of depending on
+    # whichever fonts a given runner image happens to preinstall.
+    - name: Install fonts
+      run: |
+        sudo apt-get install -y --no-install-recommends fonts-liberation
+        mkdir -p /tmp/erars-ci-fonts
+        cp /usr/share/fonts/truetype/liberation/LiberationMono-*.ttf /tmp/erars-ci-fonts/
     - name: Build
       run: cargo build --verbose --all
     - name: Run tests
@@ -39,3 +54,4 @@ jobs:
         # test_support::gpu_device panics instead of printing SKIP, so a
         # missing adapter fails the job rather than passing silently.
         ERARS_REQUIRE_GPU: "1"
+        ERARS_FONT_DIR: /tmp/erars-ci-fonts
