@@ -257,14 +257,32 @@ impl Compiler {
 
     fn push_var_ref(&mut self, var: Variable) -> CompileResult<()> {
         let count = self.push_list(var.args)?;
-        self.push(Instruction::load_str(var.var));
         match var.func_extern {
             Some(e) => {
+                self.push(Instruction::load_str(var.var));
                 self.push(Instruction::load_str(e));
                 self.push(Instruction::load_extern_varref(count));
             }
             None => {
-                self.push(Instruction::load_var_ref(count));
+                // `LoadVarRefNamed{0,1,2,3}` fold the `LoadStr(name)` that
+                // otherwise always immediately precedes `LoadVarRef(count)`
+                // (confirmed 100% of the time across eraTHYMKR/eramegaten,
+                // see `instruction.rs`'s `LoadVarRefNamed0` doc comment) into
+                // one dispatch. `count > 3` is unobserved in both corpora but
+                // not impossible (arbitrarily many index expressions are
+                // syntactically legal); the classic two-instruction form
+                // remains fully correct and is used for that case.
+                let inst = match count {
+                    0 => Instruction::load_var_ref_named0(var.var),
+                    1 => Instruction::load_var_ref_named1(var.var),
+                    2 => Instruction::load_var_ref_named2(var.var),
+                    3 => Instruction::load_var_ref_named3(var.var),
+                    _ => {
+                        self.push(Instruction::load_str(var.var));
+                        Instruction::load_var_ref(count)
+                    }
+                };
+                self.push(inst);
             }
         }
         Ok(())

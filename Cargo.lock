@@ -1070,6 +1070,7 @@ dependencies = [
  "log",
  "parking_lot",
  "rayon",
+ "serde_yaml",
 ]
 
 [[package]]
@@ -1096,6 +1097,7 @@ dependencies = [
  "pprof",
  "rayon",
  "rmp-serde",
+ "serde",
  "serde_yaml",
 ]
 

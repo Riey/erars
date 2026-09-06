@@ -1,7 +1,7 @@
 use anyhow::{ensure, Context};
 use std::fmt::Write as _;
 use erars_ast::Alignment;
-use erars_compiler::EraConfigKey;
+use erars_compiler::{EraConfigKey, InstructionType};
 use erars_ui::image::MixedNum;
 use tinyvec::ArrayVec;
 
@@ -121,349 +121,443 @@ pub(super) fn run_instruction(
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
 ) -> Result<InstructionWorkflow> {
-    if let Some(pos) = inst.as_report_position() {
-        ctx.update_position(pos);
-    } else if let Some(i) = inst.as_load_int() {
-        ctx.push(i as i64);
-    } else if let Some(r) = inst.as_load_int_suffix() {
-        let l = ctx.pop_int()? as i32;
-        #[cfg(target_endian = "big")]
-        compile_error!("Big endian not supported");
-        let i: i64 = unsafe { std::mem::transmute((l, r)) };
-        ctx.push(i);
-    } else if let Some(s) = inst.as_load_str() {
-        ctx.push_strkey(s);
-    } else if inst.is_duplicate() {
-        ctx.dup();
-    } else if inst.is_duplicate_prev() {
-        ctx.dup_prev();
-    } else if inst.is_store_result() {
-        match ctx.pop_value()? {
-            Value::Int(i) => ctx.var.set_result(i),
-            Value::String(s) => ctx.var.set_results(s),
+    crate::inst_counter::record(inst.ty());
+
+    match inst.ty() {
+        InstructionType::ReportPosition => {
+            let pos = inst.as_report_position().unwrap();
+            ctx.update_position(pos);
         }
-    } else if inst.is_store_var() {
-        let var_ref = ctx.pop_var_ref()?;
-        let value = ctx.pop_value()?;
-
-        ctx.set_var_ref(&var_ref, value)?;
-    } else if inst.is_pop() {
-        drop(ctx.pop()?);
-    } else if inst.is_read_var() {
-        let value = ctx.pop_value()?;
-        ctx.push(value);
-    } else if inst.is_eval_form_string() {
-        let form = ctx.pop_str()?;
-
-        return Ok(InstructionWorkflow::EvalFormString(form));
-    } else if inst.is_goto_label() {
-        return Ok(InstructionWorkflow::GotoLabel {
-            label: ctx.pop_strkey()?,
-            is_try: false,
-        });
-    } else if inst.is_try_goto_label() {
-        return Ok(InstructionWorkflow::GotoLabel {
-            label: ctx.pop_strkey()?,
-            is_try: true,
-        });
-    } else if let Some(c) = inst.as_load_extern_varref() {
-        let func_extern = ctx.pop_strkey()?;
-        let name = ctx.pop_strkey()?;
-        let args = ctx.take_arg_list(None, c)?;
-        ctx.push_var_ref(name, func_extern, args)?;
-    } else if let Some(c) = inst.as_load_var_ref() {
-        let name = ctx.pop_strkey()?;
-        let args = ctx.take_arg_list(Some(name), c)?;
-        ctx.push_var_ref(name, func_name, args)?;
-    } else if inst.is_load_count_var_ref() {
-        ctx.push_var_ref(ctx.var.known_key(Var::Count), func_name, ArgVec::new())?;
-    } else if inst.is_reuse_lastline() {
-        let s = ctx.pop_str()?;
-        tx.reuse_last_line(s);
-        redraw_print(ctx, tx)?;
-    } else if let Some(flags) = inst.as_print_button() {
-        let value = ctx.pop_value()?;
-        let text = ctx.pop_str()?;
-        if flags.contains(PrintFlags::LEFT_ALIGN) {
-            tx.print_button_lc(text, value);
-        } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
-            tx.print_button_rc(text, value);
-        } else {
-            tx.print_button(text, value);
+        InstructionType::LoadInt => {
+            let i = inst.as_load_int().unwrap();
+            ctx.push(i as i64);
         }
-        redraw_print(ctx, tx)?;
-    } else if let Some(flags) = inst.as_print() {
-        let s = ctx.pop_str()?;
-
-        if flags.contains(PrintFlags::DEBUG) {
-            // Emuera's debug console is a flat `StringBuilder`: `DebugPrint`
-            // appends the text and `DebugNewLine` appends a line break, so the
-            // `L`/`W` forms end the pending line and the bare forms do not
-            // (`EmueraConsole.cs:1837-1854`). DEBUGPRINT is not a PRINTK
-            // function, so `FORCEKANA` never applies to it.
-            log::debug!("{s}");
-            tx.debug_print(s, flags.contains(PrintFlags::NEWLINE));
-            return Ok(InstructionWorkflow::Normal);
+        InstructionType::LoadIntSuffix => {
+            let r = inst.as_load_int_suffix().unwrap();
+            let l = ctx.pop_int()? as i32;
+            #[cfg(target_endian = "big")]
+            compile_error!("Big endian not supported");
+            let i: i64 = unsafe { std::mem::transmute((l, r)) };
+            ctx.push(i);
         }
-
-        // Emuera applies `ConvertStringType` only to the PRINTK family and
-        // PRINTDATAK (`Instraction.Child.cs:149-150`, `:229-230`) — never to a
-        // plain PRINT, however `FORCEKANA` is set.
-        let s = if flags.contains(PrintFlags::FORCE_KANA) {
-            tx.force_kana().convert(s)
-        } else {
-            s
-        };
-
-        let prev_color = if flags.contains(PrintFlags::DEFAULT_COLOR) {
-            let c = tx.color();
-            tx.reset_color();
-            Some(c)
-        } else {
-            None
-        };
-
-        if flags.contains(PrintFlags::LEFT_ALIGN) {
-            tx.printlc(&s);
-        } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
-            tx.printrc(&s);
-        } else if flags.contains(PrintFlags::PLAIN) {
-            tx.print_plain(s);
-        } else {
-            tx.print(s);
+        InstructionType::LoadStr => {
+            let s = inst.as_load_str().unwrap();
+            ctx.push_strkey(s);
         }
-
-        if let Some(prev_color) = prev_color {
-            let erars_ui::Color([r, g, b]) = erars_ui::Color::from(prev_color);
-            tx.set_color(r, g, b);
+        InstructionType::Duplicate => {
+            ctx.dup();
         }
-
-        if flags.contains(PrintFlags::NEWLINE) {
-            tx.new_line();
+        InstructionType::DuplicatePrev => {
+            ctx.dup_prev();
         }
+        InstructionType::StoreResult => {
+            match ctx.pop_value()? {
+                Value::Int(i) => ctx.var.set_result(i),
+                Value::String(s) => ctx.var.set_results(s),
+            }
+        }
+        InstructionType::StoreVar => {
+            let var_ref = ctx.pop_var_ref()?;
+            let value = ctx.pop_value()?;
 
-        if flags.contains(PrintFlags::WAIT) {
-            let gen = tx.input_gen();
-            // Emuera force-paints whenever the console settles into a wait
-            // (`EmueraConsole.cs:1184`), even with REDRAW off.
-            ctx.input_redraw(
-                tx,
-                InputRequest {
-                    generation: gen,
-                    ty: InputRequestType::AnyKey,
-                    is_one: false,
-                    timeout: None,
-                },
-            )?;
-        } else {
+            ctx.set_var_ref(&var_ref, value)?;
+        }
+        InstructionType::Pop => {
+            drop(ctx.pop()?);
+        }
+        InstructionType::ReadVar => {
+            let value = ctx.pop_value()?;
+            ctx.push(value);
+        }
+        InstructionType::EvalFormString => {
+            let form = ctx.pop_str()?;
+
+            return Ok(InstructionWorkflow::EvalFormString(form));
+        }
+        InstructionType::GotoLabel => {
+            return Ok(InstructionWorkflow::GotoLabel {
+                label: ctx.pop_strkey()?,
+                is_try: false,
+            });
+        }
+        InstructionType::TryGotoLabel => {
+            return Ok(InstructionWorkflow::GotoLabel {
+                label: ctx.pop_strkey()?,
+                is_try: true,
+            });
+        }
+        InstructionType::LoadExternVarRef => {
+            let c = inst.as_load_extern_varref().unwrap();
+            let func_extern = ctx.pop_strkey()?;
+            let name = ctx.pop_strkey()?;
+            let args = ctx.take_arg_list(None, c)?;
+            ctx.push_var_ref(name, func_extern, args)?;
+        }
+        InstructionType::LoadVarRef => {
+            let c = inst.as_load_var_ref().unwrap();
+            let name = ctx.pop_strkey()?;
+            let args = ctx.take_arg_list(Some(name), c)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
+        InstructionType::LoadVarRefNamed0 => {
+            let name = inst.as_load_var_ref_named0().unwrap();
+            let args = ctx.take_arg_list(Some(name), 0)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
+        InstructionType::LoadVarRefNamed1 => {
+            let name = inst.as_load_var_ref_named1().unwrap();
+            let args = ctx.take_arg_list(Some(name), 1)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
+        InstructionType::LoadVarRefNamed2 => {
+            let name = inst.as_load_var_ref_named2().unwrap();
+            let args = ctx.take_arg_list(Some(name), 2)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
+        InstructionType::LoadVarRefNamed3 => {
+            let name = inst.as_load_var_ref_named3().unwrap();
+            let args = ctx.take_arg_list(Some(name), 3)?;
+            ctx.push_var_ref(name, func_name, args)?;
+        }
+        InstructionType::LoadCountVarRef => {
+            ctx.push_var_ref(ctx.var.known_key(Var::Count), func_name, ArgVec::new())?;
+        }
+        InstructionType::ReuseLastLine => {
+            let s = ctx.pop_str()?;
+            tx.reuse_last_line(s);
             redraw_print(ctx, tx)?;
         }
-    } else if let Some(c) = inst.as_try_call().or_else(|| inst.as_try_jump()) {
-        let args = ctx.take_list(c).collect::<Vec<_>>();
-        let func = ctx.pop_strkey()?;
+        InstructionType::PrintButton => {
+            let flags = inst.as_print_button().unwrap();
+            let value = ctx.pop_value()?;
+            let text = ctx.pop_str()?;
+            if flags.contains(PrintFlags::LEFT_ALIGN) {
+                tx.print_button_lc(text, value);
+            } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
+                tx.print_button_rc(text, value);
+            } else {
+                tx.print_button(text, value);
+            }
+            redraw_print(ctx, tx)?;
+        }
+        InstructionType::Print => {
+            let flags = inst.as_print().unwrap();
+            let s = ctx.pop_str()?;
 
-        match vm.try_call(func, &args, tx, ctx)? {
-            Some(Workflow::Return) => {
-                if inst.is_try_jump() {
-                    return Ok(Workflow::Return.into());
+            if flags.contains(PrintFlags::DEBUG) {
+                // Emuera's debug console is a flat `StringBuilder`: `DebugPrint`
+                // appends the text and `DebugNewLine` appends a line break, so the
+                // `L`/`W` forms end the pending line and the bare forms do not
+                // (`EmueraConsole.cs:1837-1854`). DEBUGPRINT is not a PRINTK
+                // function, so `FORCEKANA` never applies to it.
+                log::debug!("{s}");
+                tx.debug_print(s, flags.contains(PrintFlags::NEWLINE));
+                return Ok(InstructionWorkflow::Normal);
+            }
+
+            // Emuera applies `ConvertStringType` only to the PRINTK family and
+            // PRINTDATAK (`Instraction.Child.cs:149-150`, `:229-230`) — never to a
+            // plain PRINT, however `FORCEKANA` is set.
+            let s = if flags.contains(PrintFlags::FORCE_KANA) {
+                tx.force_kana().convert(s)
+            } else {
+                s
+            };
+
+            let prev_color = if flags.contains(PrintFlags::DEFAULT_COLOR) {
+                let c = tx.color();
+                tx.reset_color();
+                Some(c)
+            } else {
+                None
+            };
+
+            if flags.contains(PrintFlags::LEFT_ALIGN) {
+                tx.printlc(&s);
+            } else if flags.contains(PrintFlags::RIGHT_ALIGN) {
+                tx.printrc(&s);
+            } else if flags.contains(PrintFlags::PLAIN) {
+                tx.print_plain(s);
+            } else {
+                tx.print(s);
+            }
+
+            if let Some(prev_color) = prev_color {
+                let erars_ui::Color([r, g, b]) = erars_ui::Color::from(prev_color);
+                tx.set_color(r, g, b);
+            }
+
+            if flags.contains(PrintFlags::NEWLINE) {
+                tx.new_line();
+            }
+
+            if flags.contains(PrintFlags::WAIT) {
+                let gen = tx.input_gen();
+                // Emuera force-paints whenever the console settles into a wait
+                // (`EmueraConsole.cs:1184`), even with REDRAW off.
+                ctx.input_redraw(
+                    tx,
+                    InputRequest {
+                        generation: gen,
+                        ty: InputRequestType::AnyKey,
+                        is_one: false,
+                        timeout: None,
+                    },
+                )?;
+            } else {
+                redraw_print(ctx, tx)?;
+            }
+        }
+        InstructionType::TryCall | InstructionType::TryJump => {
+            let c = inst.as_try_call().or_else(|| inst.as_try_jump()).unwrap();
+            let args = ctx.take_list(c).collect::<Vec<_>>();
+            let func = ctx.pop_strkey()?;
+
+            match vm.try_call(func, &args, tx, ctx)? {
+                Some(Workflow::Return) => {
+                    if inst.is_try_jump() {
+                        return Ok(Workflow::Return.into());
+                    }
+                    ctx.push(true);
                 }
-                ctx.push(true);
-            }
-            Some(other) => return Ok(other.into()),
-            None => {
-                ctx.push(false);
-            }
-        }
-    } else if let Some(c) = inst.as_jump().or_else(|| inst.as_call()) {
-        let args = ctx.take_list(c).collect::<Vec<_>>();
-        let func = ctx.pop_strkey()?;
-
-        match vm.call(func, &args, tx, ctx)? {
-            Workflow::Return => {
-                if inst.is_jump() {
-                    return Ok(Workflow::Return.into());
+                Some(other) => return Ok(other.into()),
+                None => {
+                    ctx.push(false);
                 }
             }
-            other => return Ok(other.into()),
         }
-    } else if let Some(b) = inst.as_begin() {
-        return Ok(Workflow::Begin(b).into());
-    } else if let Some(ty) = inst.as_call_event() {
-        call_event!(vm, ty, tx, ctx);
-    } else if let Some(c) = inst.as_concat_string() {
-        let args = ctx.take_value_list(c)?;
-        let ret = args.into_iter().fold(String::new(), |s, l| s + l.into_str().as_str());
-        ctx.push(ret);
-    } else if let Some(t) = inst.as_times() {
-        let arg = ctx.pop_int()?;
-        let ret = (arg as f32 * t.into_inner()) as i64;
-        ctx.push(ret);
-    } else if let Some(op) = inst.as_unaryop() {
-        match op {
-            UnaryOperator::Not => {
-                let operand = ctx.pop_value()?.as_bool();
-                ctx.push(!operand);
-            }
-            UnaryOperator::Minus => {
-                let operand = ctx.pop_int()?;
-                ctx.push(-operand);
+        InstructionType::Jump | InstructionType::Call => {
+            let c = inst.as_jump().or_else(|| inst.as_call()).unwrap();
+            let args = ctx.take_list(c).collect::<Vec<_>>();
+            let func = ctx.pop_strkey()?;
+
+            match vm.call(func, &args, tx, ctx)? {
+                Workflow::Return => {
+                    if inst.is_jump() {
+                        return Ok(Workflow::Return.into());
+                    }
+                }
+                other => return Ok(other.into()),
             }
         }
-    } else if let Some(op) = inst.as_binop() {
-        let rhs = ctx.pop_value()?;
-        let lhs = ctx.pop_value()?;
+        InstructionType::Begin => {
+            let b = inst.as_begin().unwrap();
+            return Ok(Workflow::Begin(b).into());
+        }
+        InstructionType::CallEvent => {
+            let ty = inst.as_call_event().unwrap();
+            call_event!(vm, ty, tx, ctx);
+        }
+        InstructionType::ConcatString => {
+            let c = inst.as_concat_string().unwrap();
+            let args = ctx.take_value_list(c)?;
+            let ret = args.into_iter().fold(String::new(), |s, l| s + l.into_str().as_str());
+            ctx.push(ret);
+        }
+        InstructionType::Times => {
+            let t = inst.as_times().unwrap();
+            let arg = ctx.pop_int()?;
+            let ret = (arg as f32 * t.into_inner()) as i64;
+            ctx.push(ret);
+        }
+        InstructionType::UnaryOperator => {
+            let op = inst.as_unaryop().unwrap();
+            match op {
+                UnaryOperator::Not => {
+                    let operand = ctx.pop_value()?.as_bool();
+                    ctx.push(!operand);
+                }
+                UnaryOperator::Minus => {
+                    let operand = ctx.pop_int()?;
+                    ctx.push(-operand);
+                }
+            }
+        }
+        InstructionType::BinaryOperator => {
+            let op = inst.as_binop().unwrap();
+            let rhs = ctx.pop_value()?;
+            let lhs = ctx.pop_value()?;
 
-        let ret = match op {
-            BinaryOperator::Add => match lhs {
-                Value::Int(i) => Value::Int(i + rhs.try_into_int()?),
-                Value::String(s) => Value::String(s + rhs.into_str().as_str()),
-            },
-            BinaryOperator::Mul => match lhs {
-                Value::Int(i) => Value::Int(i * rhs.try_into_int()?),
-                Value::String(s) => Value::String(s.repeat(usize::try_from(rhs.try_into_int()?)?)),
-            },
-            BinaryOperator::Sub => Value::Int(lhs.try_into_int()? - rhs.try_into_int()?),
-            BinaryOperator::Div => Value::Int(lhs.try_into_int()? / rhs.try_into_int()?),
-            BinaryOperator::Rem => Value::Int(lhs.try_into_int()? % rhs.try_into_int()?),
-            BinaryOperator::Less => Value::Int((lhs.try_into_int()? < rhs.try_into_int()?).into()),
-            BinaryOperator::LessOrEqual => {
-                Value::Int((lhs.try_into_int()? <= rhs.try_into_int()?).into())
-            }
-            BinaryOperator::Greater => {
-                Value::Int((lhs.try_into_int()? > rhs.try_into_int()?).into())
-            }
-            BinaryOperator::GreaterOrEqual => {
-                Value::Int((lhs.try_into_int()? >= rhs.try_into_int()?).into())
-            }
-            BinaryOperator::Equal => Value::Int(i64::from(lhs == rhs)),
-            BinaryOperator::NotEqual => Value::Int(i64::from(lhs != rhs)),
-            BinaryOperator::And => Value::Int(i64::from(lhs.as_bool() && rhs.as_bool())),
-            BinaryOperator::Or => Value::Int(i64::from(lhs.as_bool() || rhs.as_bool())),
-            BinaryOperator::Nand => Value::Int(i64::from(!(lhs.as_bool() && rhs.as_bool()))),
-            BinaryOperator::Nor => Value::Int(i64::from(!(lhs.as_bool() || rhs.as_bool()))),
-            BinaryOperator::Xor => Value::Int(i64::from(lhs.as_bool() ^ rhs.as_bool())),
-            BinaryOperator::BitAnd => Value::Int(lhs.try_into_int()? & rhs.try_into_int()?),
-            BinaryOperator::BitOr => Value::Int(lhs.try_into_int()? | rhs.try_into_int()?),
-            BinaryOperator::BitXor => Value::Int(lhs.try_into_int()? ^ rhs.try_into_int()?),
-            BinaryOperator::Lhs => Value::Int(lhs.try_into_int()? << rhs.try_into_int()?),
-            BinaryOperator::Rhs => Value::Int(lhs.try_into_int()? >> rhs.try_into_int()?),
-        };
+            let ret = match op {
+                BinaryOperator::Add => match lhs {
+                    Value::Int(i) => Value::Int(i + rhs.try_into_int()?),
+                    Value::String(s) => Value::String(s + rhs.into_str().as_str()),
+                },
+                BinaryOperator::Mul => match lhs {
+                    Value::Int(i) => Value::Int(i * rhs.try_into_int()?),
+                    Value::String(s) => Value::String(s.repeat(usize::try_from(rhs.try_into_int()?)?)),
+                },
+                BinaryOperator::Sub => Value::Int(lhs.try_into_int()? - rhs.try_into_int()?),
+                BinaryOperator::Div => Value::Int(lhs.try_into_int()? / rhs.try_into_int()?),
+                BinaryOperator::Rem => Value::Int(lhs.try_into_int()? % rhs.try_into_int()?),
+                BinaryOperator::Less => Value::Int((lhs.try_into_int()? < rhs.try_into_int()?).into()),
+                BinaryOperator::LessOrEqual => {
+                    Value::Int((lhs.try_into_int()? <= rhs.try_into_int()?).into())
+                }
+                BinaryOperator::Greater => {
+                    Value::Int((lhs.try_into_int()? > rhs.try_into_int()?).into())
+                }
+                BinaryOperator::GreaterOrEqual => {
+                    Value::Int((lhs.try_into_int()? >= rhs.try_into_int()?).into())
+                }
+                BinaryOperator::Equal => Value::Int(i64::from(lhs == rhs)),
+                BinaryOperator::NotEqual => Value::Int(i64::from(lhs != rhs)),
+                BinaryOperator::And => Value::Int(i64::from(lhs.as_bool() && rhs.as_bool())),
+                BinaryOperator::Or => Value::Int(i64::from(lhs.as_bool() || rhs.as_bool())),
+                BinaryOperator::Nand => Value::Int(i64::from(!(lhs.as_bool() && rhs.as_bool()))),
+                BinaryOperator::Nor => Value::Int(i64::from(!(lhs.as_bool() || rhs.as_bool()))),
+                BinaryOperator::Xor => Value::Int(i64::from(lhs.as_bool() ^ rhs.as_bool())),
+                BinaryOperator::BitAnd => Value::Int(lhs.try_into_int()? & rhs.try_into_int()?),
+                BinaryOperator::BitOr => Value::Int(lhs.try_into_int()? | rhs.try_into_int()?),
+                BinaryOperator::BitXor => Value::Int(lhs.try_into_int()? ^ rhs.try_into_int()?),
+                BinaryOperator::Lhs => Value::Int(lhs.try_into_int()? << rhs.try_into_int()?),
+                BinaryOperator::Rhs => Value::Int(lhs.try_into_int()? >> rhs.try_into_int()?),
+            };
 
-        ctx.push(ret);
-    } else if let Some(no) = inst.as_goto() {
-        return Ok(InstructionWorkflow::Goto(no));
-    } else if let Some(no) = inst.as_goto_if_not() {
-        let cond = ctx.pop_value()?.as_bool();
-        if !cond {
+            ctx.push(ret);
+        }
+        InstructionType::Goto => {
+            let no = inst.as_goto().unwrap();
             return Ok(InstructionWorkflow::Goto(no));
         }
-    } else if let Some(no) = inst.as_goto_if() {
-        let cond = ctx.pop_value()?.as_bool();
-        if cond {
-            return Ok(InstructionWorkflow::Goto(no));
-        }
-    } else if let Some(align) = inst.as_set_aligment() {
-        tx.set_align(align);
-    } else if let Some(align) = inst.as_pad_str() {
-        let width = ctx.pop_int()?;
-        let text = match ctx.pop_value()? {
-            Value::String(s) => s,
-            Value::Int(i) => i.to_string(),
-        };
-        let text_cells = tx.cells(&text);
-
-        ctx.push(cells::pad_str_cells(text, width, align, text_cells));
-    } else if let Some(var) = inst.as_builtin_var() {
-        let c = ctx.pop_int()? as u32;
-        let args = ctx.take_arg_list(None, c)?;
-
-        use BuiltinVariable::*;
-
-        let value = match var {
-            GamebaseCode => ctx.header_info.gamebase.code.into(),
-            GamebaseVersion => ctx.header_info.gamebase.version.into(),
-            GamebaseAllowVersion => ctx.header_info.gamebase.allow_version.into(),
-            GamebaseDefaultChara => ctx.header_info.gamebase.default_chara.into(),
-            GamebaseNoItem => ctx.header_info.gamebase.no_item.into(),
-            GamebaseAuthor => ctx.header_info.gamebase.author.clone().into(),
-            GamebaseYear => ctx.header_info.gamebase.year.clone().into(),
-            GamebaseTitle => ctx.header_info.gamebase.title.clone().into(),
-            GamebaseInfo => ctx.header_info.gamebase.info.clone().into(),
-
-            LastLoadNo => ctx.lastload_no.into(),
-            LastLoadText => ctx.lastload_text.clone().into(),
-            LastLoadVersion => ctx.lastload_version.into(),
-
-            CharaNum => (ctx.var.character_len() as i64).into(),
-            LineCount => (tx.line_count() as i64).into(),
-            Rand => {
-                // `RAND` needs its argument: Emuera's `ReduceVariable` refuses
-                // the bare form with 「RANDの引数が省略されています」
-                // (`GameData/Variable/VariableParser.cs:170-177`). erars checks
-                // arity at run time throughout, so the refusal lands here.
-                ensure!(
-                    !args.is_empty(),
-                    "RAND의 인수가 생략되었습니다"
-                );
-                // Emuera raises a script error instead of sampling an empty
-                // range: `RandToken.GetIntValue` throws
-                // `RANDの引数に0以下の値({i})が指定されました` whenever the
-                // argument is not positive
-                // (`GameData/Variable/VariableToken.cs:1459-1465`).
-                let max = args[0];
-                ensure!(max > 0, "RAND: 인수에 0 이하의 값({max})이 지정됐습니다");
-                Value::Int(ctx.var.rng().gen_range(0..max) as i64)
+        InstructionType::GotoIfNot => {
+            let no = inst.as_goto_if_not().unwrap();
+            let cond = ctx.pop_value()?.as_bool();
+            if !cond {
+                return Ok(InstructionWorkflow::Goto(no));
             }
-            DrawLineStr => {
-                // `getDefStBar` — the bar Emuera baked from `DRAWLINE文字` at
-                // start-up (`GameProc/Process.cs:117`). `PrintBar` prints this
-                // very string, so `DRAWLINE` and `DRAWLINESTR` agree.
-                let unit = &ctx.header_info.replace.drawline_str;
-                Value::String(tx.bar_string(unit).unwrap_or_default())
+        }
+        InstructionType::GotoIf => {
+            let no = inst.as_goto_if().unwrap();
+            let cond = ctx.pop_value()?.as_bool();
+            if cond {
+                return Ok(InstructionWorkflow::Goto(no));
             }
-            IsTimeout => Value::Int(ctx.is_timeout as i64),
-            MoneyLabel => Value::String(ctx.header_info.replace.money_unit.clone()),
-        };
-
-        ctx.push(value);
-    } else if let Some(meth) = inst.as_builtin_method() {
-        return run_builtin_method(meth, func_name, tx, ctx);
-    } else if let Some(com) = inst.as_builtin_command() {
-        return run_builtin_command(com, func_name, vm, tx, ctx);
-    } else if let Some(idx) = inst.as_load_default_argument() {
-        let target_func_name = match ctx
-            .stack()
-            .iter()
-            .rev()
-            .nth(idx as usize)
-            .context("Invalid index for LoadDefaultArgument")?
-        {
-            LocalValue::InternedStr(name) => name.to_global(),
-            LocalValue::Value(Value::String(name)) => ctx.var.interner().get_or_intern(name),
-            _ => bail!("LoadDefaultArgument need function name"),
-        };
-
-        let body = vm.dic.get_func(target_func_name)?;
-
-        let arg = body
-            .args()
-            .get(idx as usize)
-            .context("LoadDefaultArgument argument is out of range")?;
-
-        match arg.2.as_ref() {
-            Some(default_value) => match default_value {
-                InlineValue::Int(i) => ctx.push(*i),
-                InlineValue::String(s, _) => ctx.push_strkey(*s),
-            },
-            None => match ctx.var.get_maybe_local_var(target_func_name, arg.0)?.0.is_str {
-                true => ctx.push(String::new()),
-                false => ctx.push(0i64),
-            },
         }
-    } else {
-        if !inst.is_nop() && !inst.is_debug() {
-            bail!("Unimplemented instruction: {inst:?}");
+        InstructionType::SetAlignment => {
+            let align = inst.as_set_aligment().unwrap();
+            tx.set_align(align);
         }
+        InstructionType::PadStr => {
+            let align = inst.as_pad_str().unwrap();
+            let width = ctx.pop_int()?;
+            let text = match ctx.pop_value()? {
+                Value::String(s) => s,
+                Value::Int(i) => i.to_string(),
+            };
+            let text_cells = tx.cells(&text);
+
+            ctx.push(cells::pad_str_cells(text, width, align, text_cells));
+        }
+        InstructionType::BuiltinVar => {
+            let var = inst.as_builtin_var().unwrap();
+            let c = ctx.pop_int()? as u32;
+            let args = ctx.take_arg_list(None, c)?;
+
+            use BuiltinVariable::*;
+
+            let value = match var {
+                GamebaseCode => ctx.header_info.gamebase.code.into(),
+                GamebaseVersion => ctx.header_info.gamebase.version.into(),
+                GamebaseAllowVersion => ctx.header_info.gamebase.allow_version.into(),
+                GamebaseDefaultChara => ctx.header_info.gamebase.default_chara.into(),
+                GamebaseNoItem => ctx.header_info.gamebase.no_item.into(),
+                GamebaseAuthor => ctx.header_info.gamebase.author.clone().into(),
+                GamebaseYear => ctx.header_info.gamebase.year.clone().into(),
+                GamebaseTitle => ctx.header_info.gamebase.title.clone().into(),
+                GamebaseInfo => ctx.header_info.gamebase.info.clone().into(),
+
+                LastLoadNo => ctx.lastload_no.into(),
+                LastLoadText => ctx.lastload_text.clone().into(),
+                LastLoadVersion => ctx.lastload_version.into(),
+
+                CharaNum => (ctx.var.character_len() as i64).into(),
+                LineCount => (tx.line_count() as i64).into(),
+                Rand => {
+                    // `RAND` needs its argument: Emuera's `ReduceVariable` refuses
+                    // the bare form with 「RANDの引数が省略されています」
+                    // (`GameData/Variable/VariableParser.cs:170-177`). erars checks
+                    // arity at run time throughout, so the refusal lands here.
+                    ensure!(
+                        !args.is_empty(),
+                        "RAND의 인수가 생략되었습니다"
+                    );
+                    // Emuera raises a script error instead of sampling an empty
+                    // range: `RandToken.GetIntValue` throws
+                    // `RANDの引数に0以下の値({i})が指定されました` whenever the
+                    // argument is not positive
+                    // (`GameData/Variable/VariableToken.cs:1459-1465`).
+                    let max = args[0];
+                    ensure!(max > 0, "RAND: 인수에 0 이하의 값({max})이 지정됐습니다");
+                    Value::Int(ctx.var.rng().gen_range(0..max) as i64)
+                }
+                DrawLineStr => {
+                    // `getDefStBar` — the bar Emuera baked from `DRAWLINE文字` at
+                    // start-up (`GameProc/Process.cs:117`). `PrintBar` prints this
+                    // very string, so `DRAWLINE` and `DRAWLINESTR` agree.
+                    let unit = &ctx.header_info.replace.drawline_str;
+                    Value::String(tx.bar_string(unit).unwrap_or_default())
+                }
+                IsTimeout => Value::Int(ctx.is_timeout as i64),
+                MoneyLabel => Value::String(ctx.header_info.replace.money_unit.clone()),
+            };
+
+            ctx.push(value);
+        }
+        InstructionType::BuiltinMethod => {
+            let meth = inst.as_builtin_method().unwrap();
+            return run_builtin_method(meth, func_name, vm, tx, ctx);
+        }
+        InstructionType::BuiltinCommand => {
+            let com = inst.as_builtin_command().unwrap();
+            return run_builtin_command(com, func_name, vm, tx, ctx);
+        }
+        InstructionType::LoadDefaultArgument => {
+            let idx = inst.as_load_default_argument().unwrap();
+            let target_func_name = match ctx
+                .stack()
+                .iter()
+                .rev()
+                .nth(idx as usize)
+                .context("Invalid index for LoadDefaultArgument")?
+            {
+                LocalValue::InternedStr(name) => name.to_global(),
+                LocalValue::Value(Value::String(name)) => ctx.var.interner().get_or_intern(name),
+                _ => bail!("LoadDefaultArgument need function name"),
+            };
+
+            // Emuera lets `TRY*CALL*FORM`/`TRY*JUMP*FORM` name a function
+            // that doesn't exist and skip silently (Emuera excom.md's
+            // TRYCALLFORM/TRYCCALLFORM entries). An omitted positional
+            // argument's default value is only meaningful if the callee is
+            // ever actually invoked, and a missing callee means `try_call`
+            // discards `args` outright without reading this slot — so when
+            // the name doesn't resolve, push a harmless placeholder instead
+            // of hard-failing here and pre-empting the try/catch semantics
+            // the surrounding `Call` instruction is about to apply.
+            match vm.dic.get_func_opt(target_func_name) {
+                Some(body) => {
+                    let arg = body
+                        .args()
+                        .get(idx as usize)
+                        .context("LoadDefaultArgument argument is out of range")?;
+
+                    match arg.2.as_ref() {
+                        Some(default_value) => match default_value {
+                            InlineValue::Int(i) => ctx.push(*i),
+                            InlineValue::String(s, _) => ctx.push_strkey(*s),
+                        },
+                        None => match ctx.var.get_maybe_local_var(target_func_name, arg.0)?.0.is_str
+                        {
+                            true => ctx.push(String::new()),
+                            false => ctx.push(0i64),
+                        },
+                    }
+                }
+                None => ctx.push(0i64),
+            }
+        }
+        InstructionType::Nop | InstructionType::Debug => {}
     }
 
     Ok(InstructionWorkflow::Normal)
@@ -1275,6 +1369,7 @@ fn gdiplus_only(meth: BuiltinMethod) -> bool {
 fn run_builtin_method(
     meth: BuiltinMethod,
     func_name: StrKey,
+    vm: &TerminalVm,
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
 ) -> Result<InstructionWorkflow> {
@@ -2999,6 +3094,22 @@ fn run_builtin_method(
             );
         }
 
+        BuiltinMethod::ExistFunction => {
+            check_arg_count!(1);
+            let name = get_arg!(@key args, ctx);
+            // Emuera `EXISTFUNCTION(name)`: 0 if `name` names no function or a
+            // system builtin, 1 for a normal `@`-function, 2 for a
+            // `#FUNCTION` numeric expression function, 3 for a `#FUNCTIONS`
+            // string expression function.
+            let ret = match vm.dic.normal.get(&name) {
+                None => 0,
+                Some(body) if body.is_function() => 2,
+                Some(body) if body.is_functions() => 3,
+                Some(_) => 1,
+            };
+            ctx.push(ret);
+        }
+
         BuiltinMethod::ChkData => {
             check_arg_count!(1);
             let idx = get_arg!(@u32: args, ctx);
@@ -3607,13 +3718,22 @@ fn run_builtin_command(
             let delimiter = get_arg!(@String: args, ctx);
             let mut var = get_arg!(@var args);
 
+            let mut count = 0u32;
             for (idx, part) in s.split(delimiter.as_str()).enumerate() {
                 var.idxs.push(idx as u32);
 
                 ctx.set_var_ref(&var, part.into())?;
 
                 var.idxs.pop();
+                count = idx as u32 + 1;
             }
+
+            // Emuera sets `RESULT` to the number of split elements
+            // (`SPLIT.html`'s reference doc: "分割された要素の総数（分割数）が
+            // システム変数 RESULT に自動的に代入されます") - callers rely on
+            // this to know how many slots of the destination array were
+            // filled, e.g. `RAND:RESULT` to pick a random element.
+            ctx.var.set_result(count as i64);
         }
         BuiltinCommand::Bar => {
             let var = get_arg!(@i64: args, ctx);

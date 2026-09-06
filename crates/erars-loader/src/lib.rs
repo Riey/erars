@@ -147,8 +147,43 @@ pub unsafe fn load_script(
     let dic = erars_bytecode::read_from(&mut file_bytes)?;
 
     log::info!("Load game data");
+    // `rmp_serde`'s default 1024-level nesting-depth guard
+    // (`rmp-serde-1.1.2/src/decode.rs`'s `Deserializer::from_read`) is a
+    // DoS mitigation sized for untrusted input; `HeaderInfo` carries
+    // `VariableInfo::init: Option<Box<[Expr]>>`, and a long left-associative
+    // `#DEFINE`/`#DIM` initialiser expression (`a + b + c + ...`) nests one
+    // serde level per term through `Expr`'s recursive `Box` structure.
+    // Measured directly against the real eramegaten corpus
+    // (`erars-loader/examples/expr_depth_probe.rs`, `depth_cap_probe.rs`):
+    // its deepest initialiser (`SEIZON_パーツデータ`) is an `Expr` tree 2466
+    // levels deep, which needs an actual `set_max_depth` of at least 2471
+    // to decode — comfortably past the default 1024, confirming the AST
+    // depth maps ~1:1 onto `rmp_serde`'s own depth counter.
+    //
+    // A cap is still a stack-exhaustion guard, not just an error-message
+    // preference, so it must sit well below where deserialization itself
+    // can overflow the real runtime thread (`erars-stdio`'s
+    // `.stack_size(8 * 1024 * 1024)`), or a corrupted/adversarial file
+    // just trades a clean `depth limit exceeded` for a segfault before the
+    // counter ever gets a chance to fire. Measured empirically on this
+    // exact 8 MiB thread (`depth_stack_crash_probe.rs`, bisecting until
+    // the thread reports "has overflowed its stack"): a release build
+    // survives up to depth ~21,600 before overflowing, a debug build only
+    // up to depth ~12,000 — so `1 << 20` (1,048,576) was never a "fails
+    // cleanly" bound at all, it was ~48x past the point where the process
+    // segfaults first.
+    //
+    // 4096 is chosen instead: ~1.7x headroom over the measured real-corpus
+    // requirement (2471) for organic growth, while staying ~3x below the
+    // measured debug-build crash point and ~5x below the release one, to
+    // leave margin for slower platforms/instrumented builds that spend
+    // more stack per recursion level than either measured here. If a
+    // future corpus genuinely needs deeper nesting than this, the fix is
+    // an iterative (de)serializer for `Expr`, not raising this constant.
+    let mut de = rmp_serde::Deserializer::new(&mut file_bytes);
+    de.set_max_depth(4096);
     let (mut header, local_infos): (HeaderInfo, HashMap<StrKey, Vec<(StrKey, VariableInfo)>>) =
-        rmp_serde::decode::from_read(&mut file_bytes)?;
+        serde::Deserialize::deserialize(&mut de)?;
     header.init_macro_filter();
     let vconsole = VirtualConsole::new(&console_config(&config));
 

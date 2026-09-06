@@ -26,3 +26,6 @@ mimalloc = { version = "0.1.31", default-features = false }
 
 [features]
 with-backtrace = ["log-panics/with-backtrace"]
+# See `erars-vm/src/inst_counter.rs`. Off by default; never enable for a
+# timing run.
+inst-counter = ["erars-vm/inst-counter"]

@@ -93,7 +93,7 @@ macro_rules! define_instruction {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, strum::Display)]
 #[repr(u8)]
-enum InstructionType {
+pub enum InstructionType {
     Nop = 0,
     Pop = 1,
     ReportPosition = 2,
@@ -114,6 +114,24 @@ enum InstructionType {
     StoreVar = 24,
     StoreResult = 25,
 
+    // `LoadStr(name)` immediately followed by `LoadVarRef(count)` is not a
+    // common bigram, it is *the only* bigram `push_var_ref` ever emits for a
+    // non-extern variable reference: a corpus-wide census (eraTHYMKR,
+    // eramegaten, ~1.4M combined `LoadVarRef` occurrences) found zero
+    // exceptions. `count` is the compile-time-known number of index
+    // expressions (`FLAG:i:j` etc.); both corpora never exceed 3. Folding the
+    // pair into one dispatch removes a whole `push_strkey`/`pop_strkey`
+    // stack round trip for that 100%-of-the-time case, at the cost of 4 of
+    // the ~216 unused `InstructionType` discriminants -- `Instruction`'s
+    // payload stays a plain, unmodified `StrKey` (no bit-packing, no
+    // truncation, no coupling to `erars_ast::interner::ID_CAP`). A
+    // `count > 3` reference (unobserved in both corpora, but not impossible)
+    // falls back to the classic `LoadStr` + `LoadVarRef` pair; the fallback
+    // is exercised by `loadvarref_named.rs`'s test alongside 0..=3.
+    LoadVarRefNamed0 = 26,
+    LoadVarRefNamed1 = 27,
+    LoadVarRefNamed2 = 28,
+    LoadVarRefNamed3 = 29,
     Call = 30,
     TryCall = 31,
     Jump = 32,
@@ -150,6 +168,16 @@ pub struct Instruction {
     data: [u8; 4],
 }
 
+impl Instruction {
+    /// The discriminant, for dispatch via a real `match` — one comparison
+    /// against a jump table instead of the `as_x()`/`is_x()` chain's linear
+    /// scan through every earlier variant.
+    #[inline(always)]
+    pub const fn ty(&self) -> InstructionType {
+        self.ty
+    }
+}
+
 define_instruction! {
     @empty
     (nop, Nop),
@@ -184,6 +212,10 @@ define_instruction! {
 
     @StrKey,
     (load_str, LoadStr),
+    (load_var_ref_named0, LoadVarRefNamed0),
+    (load_var_ref_named1, LoadVarRefNamed1),
+    (load_var_ref_named2, LoadVarRefNamed2),
+    (load_var_ref_named3, LoadVarRefNamed3),
     (debug, Debug),
 
     @PrintFlags,

@@ -22,7 +22,18 @@ compile_error!("Doesn't support big endian");
 // identifier block is written as explicit `(key, string)` pairs instead of
 // strings alone in key order — an older reader would silently misassign
 // every key after the first gap.
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 11];
+//
+// Magic values are monotonic and NEVER reused, even when a later change
+// reverts back to a format a lower value once named. 11 (pre-`bytecode-opt`),
+// 12 (`d0f1162`, P1v2's positions table), 13 (`75a7315`, u16 line encoding),
+// and 14 (`454fb16`, P2's LoadStr/LoadVarRef fusion) are all spent: real
+// `game.era` files written under each of those still exist (caches,
+// mid-arc worktrees, benchmark artifacts) and MUST be rejected, not
+// silently misread as whatever format the number is reused for next.
+// Reverting `d0f1162`/`75a7315` (see docs/research/2026-09-05-bytecode-dispatch-optimization.md
+// §17) restored the pre-P1v2 on-disk layout but bumped to 15 rather than
+// rolling back to 11 or 12 for exactly this reason.
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 15];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {

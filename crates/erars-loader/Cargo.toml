@@ -15,6 +15,7 @@ erars-vm = { path = "../erars-vm" }
 
 anyhow.workspace = true
 hashbrown.workspace = true
+serde.workspace = true
 
 rayon = { version = "1.5.3", optional = true }
 codespan = "0.11.1"
@@ -46,3 +47,16 @@ multithread = [
 [[example]]
 name = "phases"
 required-features = ["multithread"]
+
+# `jit_census` is the instruction-frequency census used to guide bytecode
+# dispatch optimization (unigram/bigram counts). No rayon usage, so no
+# feature gate needed.
+[[example]]
+name = "jit_census"
+
+# `jit_ceiling_bench` runs a real interpreter-loop benchmark (loop body
+# statement mix matched to the jit_census corpus proportions) through
+# `TerminalVm::try_call`, for A/B-ing interpreter dispatch changes
+# (bytecode-opt Step 1). No rayon usage, so no feature gate needed.
+[[example]]
+name = "jit_ceiling_bench"

@@ -1,6 +1,6 @@
 mod stdio_frontend;
 
-use std::{collections::VecDeque, path::Path};
+use std::{collections::VecDeque, path::Path, time::Instant};
 
 use erars_loader::{load_config, load_script, run_script, save_script};
 use memory_stats::memory_stats;
@@ -20,6 +20,18 @@ struct Args {
 
     #[clap(long, help = "Accept input value from file")]
     use_input: Option<std::path::PathBuf>,
+
+    #[clap(
+        long,
+        help = "Exit cleanly once --use-input's queue is exhausted, instead of falling through to real stdin"
+    )]
+    exit_when_input_exhausted: bool,
+
+    #[clap(
+        long,
+        help = "Print [bench] load-complete/session-complete elapsed-time markers to stderr, for isolating game-loop time from load time in a real-workload timing comparison"
+    )]
+    bench_timing: bool,
 
     #[clap(
         long,
@@ -54,6 +66,7 @@ fn main() {
     use flexi_logger::*;
 
     let args: Args = clap::Parser::parse();
+    let bench_start = Instant::now();
 
     let _handle = if args.quite {
         None
@@ -92,7 +105,13 @@ fn main() {
         None => VecDeque::new(),
     };
 
-    let system = Box::new(stdio_frontend::StdioFrontend::new(args.json, inputs));
+    let system = Box::new(stdio_frontend::StdioFrontend::new(
+        args.json,
+        inputs,
+        args.exit_when_input_exhausted,
+        args.bench_timing,
+        bench_start,
+    ));
 
     std::thread::Builder::new()
         .stack_size(8 * 1024 * 1024)
@@ -123,6 +142,9 @@ fn main() {
                     std::process::exit(1);
                 }
             };
+            if args.bench_timing {
+                eprintln!("[bench] load complete: {:?}", bench_start.elapsed());
+            }
 
             // Emuera's `-Debug` (`Program.cs:219-220`): `@DEBUG` opens the
             // debug window only in a run started with it. Set here rather
@@ -152,6 +174,10 @@ fn main() {
                     print!("\x1b]2;{}\x07", ctx.header_info.gamebase.window_title);
                 }
                 vm.start(&mut tx, &mut ctx);
+                if args.bench_timing {
+                    eprintln!("[bench] session complete: {:?}", bench_start.elapsed());
+                }
+                erars_vm::inst_counter::dump();
             }
         })
         .unwrap()
