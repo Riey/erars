@@ -19,3 +19,4 @@ msgothic.ttc
 .DS_Store
 __pycache__/
 /2026-*.txt
+/.worktrees
