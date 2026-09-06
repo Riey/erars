@@ -729,6 +729,26 @@ evidently does not. `src` stays **mandatory**, exactly as `HtmlManager.cs:1005-1
 the one attribute without which there is nothing to draw; the two "bare `<img>`" hits in the corpus
 census are regex false positives inside string literals (`DIV_MESSAGE.ERB:216`, `:733`).
 
+**A third corpus-typo cluster, found 2026-09-06 while driving `eramegaten_p_kr` past character
+creation:** `Data/ERB/ＳＨＯＰ関連/SHOP.ERB`, function `SHOW_SUB_TARGET`, has two distinct
+malformations, both confirmed genuine corpus authoring mistakes (not erars gaps) by hand-tracing
+`html.rs`'s `parse_attrs`/tag-balance validator against the exact bytes at each site:
+- **Lines 738, 741, 743** — a stray literal `+` sits between two attributes inside one quoted FORM
+  string, e.g. `@"<div xpos = '{50 + 2200 * L_ROW}'  + ypos = '{500 * L_COLUMN}'>"`: the `+`
+  between the closing `'` and `ypos` is bare text, not inside a `{}` interpolation, so it lexes as
+  an attribute-key character and `parse_attrs` correctly `bail!`s with `html文字列"..."のタグ解析
+  中にエラーが発生しました`. Confirmed against a minimal standalone `HTML_PRINT` repro reproducing
+  the identical rejection.
+- **Line 750** — `HTML_PRINT @"<div xpos = '0' ypos = '...'>" + SHOWLINE + "<div>"`: the trailing
+  `"<div>"` should be `"</div>"` (missing the closing slash), leaving the outer `<div>` genuinely
+  unclosed; erars's tag-balance validator correctly reports `閉じられていないタグがあります`.
+
+Same class as the `ypps`/`yos`/`xpos`-on-`<img>` typos above: a strict grammar that mirrors
+Emuera's own `HtmlManager.cs` lexer will reject genuinely malformed markup regardless of engine,
+and this is markup malformed per that documented grammar, not an erars defect. Not patched in the
+read-only `eramegaten_p_kr` source; a disposable `/tmp` scratch copy with both typos corrected was
+used to keep driving the corpus further (reaches the shop/hub screen past this function).
+
 **The publish/redraw ordering is enforced by the type system, not by this document.**
 `SystemFunctions::redraw` and its three `input_*` siblings take a `graphics::Painted<'_>` by value;
 the only thing that can construct one is `GraphicsStore::publish`, whose field is private to

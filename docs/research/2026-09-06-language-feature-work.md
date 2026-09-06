@@ -369,3 +369,125 @@ of panicking, and `ARRAYSORT`'s default argument is a genuine
 feature-completeness fix — but "five crashes, all confirmed reachable in
 the corpus" overstates both how many of them were process-crashing in
 what ships, and what the corpus counts actually established.
+
+## 6. `DELDATA`-on-missing-slot fix, and the `todo.md` §2–§6 residual (2026-09-06, later session)
+
+A later corpus-driving session (`lang-residual`) merged one more real defect into `master`
+(`a06607c`, `--no-ff` over `2034f6b`) and then swept `todo.md` §2–§6 for anything still genuinely
+missing, since §1 (in-expression functions) was already fully implemented by an earlier arc.
+
+### 6.1 `DELDATA` on a never-written save slot aborted the whole VM
+
+`crates/erars-vm/src/save.rs::delete_save_data` called `std::fs::remove_file(...)?` with a bare
+`?`, so deleting a slot nobody had saved to yet raised `std::io::ErrorKind::NotFound`, which
+propagated as a fatal VM abort. `excom.md:1128-1131` documents DELDATA as never erroring even when
+the target file is absent (matching .NET's `File.Delete`, a silent no-op for a missing path).
+Every fresh `eramegaten_p_kr` save hit this: `SHOP.ERB`'s `EVENTSHOP` default branch unconditionally
+runs `DELDATA SAVEDATA_NUM_FOR_CONTINUE` on an unwritten slot, so **no fresh playthrough could ever
+reach the shop screen** — the VM died with `VM error occurred: No such file or directory (os error
+2)` right after the `SET_MASTER` intro narration, zero call-stack frames printed. Fix: swallow only
+`NotFound`; any other `remove_file` failure still propagates. `tests/run_tests/basic/save_data.erb`/
+`.out` gained a DELDATA-on-missing-slot case and a DELDATA-actually-deletes-a-slot case (via
+`CHKDATA` before/after), both proven to fail pre-fix by reverting the source change and reproducing
+the identical abort byte-for-byte. `cargo test --workspace --features multithread` on merged
+`master`: **456 passed, 0 failed.**
+
+Two further runtime errors past `DELDATA` in the same corpus traced to genuine `SHOP.ERB` authoring
+typos, not erars gaps — recorded in `2026-09-03-emuera-command-gap.md`'s corpus-typo catalog rather
+than here, since that document is where this project tracks pre-existing corpus defects.
+
+### 6.2 `todo.md` §2–§6 residual: genuinely empty except one already-known naming gap
+
+Every item was checked by grepping the *actual* field/type name for read sites across the whole
+workspace (not just its own declaration), the same discipline §3.1 above establishes for enum
+variants — a declared, parseable, `GETCONFIG`-queryable field is not evidence of wired behavior,
+exactly as an enum variant's absence is not evidence of missing behavior.
+
+- **§2 (26 candidate variables, 6 claimed genuinely missing):** all 6 — `CDFLAGNAME1`,
+  `CDFLAGNAME2`, `GAMEBASE_GAMECODE`, `ISTIMEOUT`, `MONEYLABEL`, `TFLAGNAME` — are already
+  implemented (`crates/erars-vm/src/variable.rs`'s name-CSV table, `BuiltinVariable::IsTimeout`/
+  `MoneyLabel`/`GamebaseCode` in `erars-ast/src/variable.rs` with executor arms). These are the
+  same 6 (plus the `GAMEBASE_GAMECODE` alias as a 7th) §3.1 above already documented as false
+  positives; nothing new here. **Residual: none.**
+- **§3 (`#ONLY` directive):** `SharpCode::ONLY` exists in `crates/erars-lexer/src/sharp.rs:31`.
+  **Residual: none.**
+- **§4 (config keys):** the 61-heading gap `todo.md` reported no longer applies — every key in its
+  §4.1 "behavioural" list (36) and its 4 "extra corpus keys" now has an `EraConfigKey` variant, an
+  `EraConfig` struct field, and a `GETCONFIG`/`GETCONFIGS` accessor arm (confirmed by a runtime
+  probe: `GETCONFIG("システム関数の上書きを許可する")` → `1`, `GETCONFIG("擬似変数RANDの仕様を
+  eramakerに合わせる")` → `0`, matching each key's documented default). **But parsing and exposing
+  a config value is not the same claim as `todo.md` §4.1 makes — "changes engine semantics" — and
+  a workspace-wide grep for each field's own snake_case name (not just its `EraConfigKey` variant)
+  found only 11 of the 40 actually consulted anywhere outside the config struct's own
+  parse/`GETCONFIG` code:** `ignore_case`, `save_nos`, `use_rename_file`, `use_replace_file`,
+  `use_save_folder`, `use_debug_command`, `display_warning_level`, `search_subdirectory`,
+  `compati_callname`, `compati_call_event`, `use_sp_chara` are genuinely wired into loader/executor
+  behavior (each has a real call site cited by field name above). The other **28** — `auto_save`,
+  `use_key_macro`, `infinite_loop_alert_time`, `display_report`, `reduce_argument_on_load`,
+  `ignore_uncalled_function`, `function_not_found_warning`, `function_not_called_warning`,
+  `button_wrap`, `sort_with_filename`, `warn_back_compatibility`, `allow_function_overloading`,
+  `warn_function_overloading`, `warn_normal_function_overloading`, `compati_error_line`,
+  `compati_rand`, `compati_function_no_ignore_case`, `system_allow_full_space`,
+  `system_save_in_utf8`, `compati_linefeed_as_1739`, `allow_long_input_by_mouse`,
+  `system_save_in_binary`, `compati_func_arg_optional`, `compati_func_arg_auto_convert`,
+  `system_ignore_triple_symbol`, `times_not_rigorous_calculation`, `system_no_target`,
+  `system_ignore_string_set` — are read by nothing but their own struct and `GETCONFIG`: a script
+  can query the value it set in `emuera.config`, but no loader, lint, or executor logic branches on
+  it. The backing types for two of these are corroborating, independent evidence at the type level,
+  not just the field level: `ReduceArgumentOnLoadFlag` and `DisplayWarningFlag` (the enums behind
+  `reduce_argument_on_load`/`function_not_found_warning`/`function_not_called_warning`) have **zero**
+  references anywhere outside their own `derive` block — a type that nothing ever matches on cannot
+  gate any behavior regardless of which variant is stored. `system_allow_full_space` is a milder
+  case worth calling out separately: the lexer's full-width-space-as-whitespace handling
+  (`erars-lexer/src/{lib,utils}.rs`, `erars-compiler/src/parser/expr.rs:140`) is unconditional code
+  matching the config's default (`true`), not a read of the config value — so the *default*
+  behavior is correct but the switch to turn it off does nothing.
+
+  **This is a real, verified residual — 28 declared-but-behaviorally-inert config switches — but it
+  is a different shape of gap than §1's "absent function"/§2's "absent variable": nothing here
+  raises `Variable X is not exists` or `Function X is not exists`, because there is no missing
+  symbol. A script that sets `AllowFunctionOverloading:NO` or `CompatiRAND:YES` compiles, runs, and
+  reads back the value it set — it just gets none of the described behavior change.** Left
+  unimplemented rather than fixed in this pass: wiring 28 independent semantic switches (many
+  requiring new checks in the loader's function-registration path or a `rand` generator swap) is
+  new feature work on a different scale than this arc's fixes, not a residual gap-sweep item, and
+  none of it was reached by either corpus in this session's replay depth (`eramegaten_p_kr` and
+  `eraTHYMKR` both ship `emuera.config` files that only ever set keys already in the wired-11 list,
+  per `todo.md §4`'s own `●meg`/`●thy` usage columns — no corpus script in this project currently
+  depends on any of the 28).
+- **§5 (5 debug console commands):** confirmed still host/UI work, not a VM gap — `erars-stdio` has
+  no interactive debug console to attach `@REBOOT`/`@OUTPUT`/`@EXIT`/`@CONFIG`/`@DEBUG` to.
+  **Residual: none for the VM; out of scope for a headless engine, unchanged from `todo.md`.**
+- **§6 (CSV columns):** §6.1 (`GameBase.csv`) and §6.2 (`Chara*.csv`) were already marked "no column
+  gap" by `todo.md` itself. §6.3 (`_replace.csv`, 16 keys) was marked "verify, not confirmed in this
+  pass" by `todo.md`; checked here: `crates/erars-compiler/src/parser.rs`'s `ReplaceInfo` struct
+  covers all 16 (`money_unit`, `money_position`, `simple_message_at_start`,
+  `sales_item_count`/`drawline_str`/`bar_char_1`/`bar_char_2`/`system_menu_0`/`system_menu_1`/
+  `com_able_default`/`stain_default`/`time_up_string`/`explv_default`/`palamlv_default`/
+  `pband_default`/`relation_default` — every one of the 16 wiki keys has a field). **Residual:
+  none.**
+
+**Net: the only pre-existing false-positive already known (§2/§3.1's 7 variables) stays closed, §3
+and §6 are genuinely empty, §5 is out of VM scope by design, and §4's real residual is the 28
+declared-but-unwired config switches above — not the 61-heading gap `todo.md` originally reported,
+which was itself superseded once the enum/struct/GETCONFIG layer was built out.** Neither corpus's
+`emuera.config` exercises any of the 28, so this residual was not reachable by the corpus-driving
+methodology this arc otherwise prioritizes — it surfaces only from the systematic sweep, which is
+why it is recorded here rather than fixed: implementing 28 independent semantic switches is a
+separate, larger arc, not a same-session gap-sweep fix.
+
+## 7. Worktree cleanup
+
+All three tip commits (`723567b` fix-executor-crash-class, `5002181` feature-bulk-array-assign,
+`2034f6b` fix-deldata-noop) were confirmed ancestors of `master` (`a06607c`) via
+`git merge-base --is-ancestor` before any removal. `fix-deldata-noop` removed cleanly.
+`fix-executor-crash-class` and `feature-bulk-array-assign` each had leftover working-tree state
+blocking a plain `git worktree remove` — in both cases confirmed harmless before forcing: the only
+dirty tracked file was the auto-regenerated `docs/research/emuera-wiki/coverage.md` (regenerates on
+every test run, per standing project convention never staged/committed), `feature-bulk-array-assign`
+additionally had an uncommitted `.gitignore` edit whose only change (`/.worktrees`) already exists
+on `master` via the separate direct commit §4 describes, and an untracked draft copy of
+`2026-09-06-language-feature-gap-inventory.md` that diffed entirely against the file's current,
+corrected `master` content — an earlier, superseded revision (the very "first pass" §3.1 and §6.2
+above cite as containing false positives), not unmerged work. `git worktree remove --force` for
+both, then `git branch -d` for all three. Roster after cleanup: no worktrees, `master` only.
