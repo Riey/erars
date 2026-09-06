@@ -1,0 +1,3 @@
+start
+VM error occurred: LIMIT関数: 第2引数が第3引数より大きいです
+At function SYSTEM_TITLE tests/run_tests/basic/limit_invalid.erb@7

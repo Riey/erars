@@ -357,7 +357,7 @@ pub(super) fn run_instruction(
         InstructionType::Times => {
             let t = inst.as_times().unwrap();
             let arg = ctx.pop_int()?;
-            let ret = (arg as f32 * t.into_inner()) as i64;
+            let ret = (arg as f64 * t.into_inner() as f64) as i64;
             ctx.push(ret);
         }
         InstructionType::UnaryOperator => {
@@ -388,8 +388,20 @@ pub(super) fn run_instruction(
                     Value::String(s) => Value::String(s.repeat(usize::try_from(rhs.try_into_int()?)?)),
                 },
                 BinaryOperator::Sub => Value::Int(lhs.try_into_int()? - rhs.try_into_int()?),
-                BinaryOperator::Div => Value::Int(lhs.try_into_int()? / rhs.try_into_int()?),
-                BinaryOperator::Rem => Value::Int(lhs.try_into_int()? % rhs.try_into_int()?),
+                BinaryOperator::Div => {
+                    let l = lhs.try_into_int()?;
+                    let r = rhs.try_into_int()?;
+                    ensure!(r != 0, "0で除算しました");
+                    ensure!(!(l == i64::MIN && r == -1), "除算でオーバーフローが発生しました");
+                    Value::Int(l / r)
+                }
+                BinaryOperator::Rem => {
+                    let l = lhs.try_into_int()?;
+                    let r = rhs.try_into_int()?;
+                    ensure!(r != 0, "0で除算しました");
+                    ensure!(!(l == i64::MIN && r == -1), "除算でオーバーフローが発生しました");
+                    Value::Int(l % r)
+                }
                 BinaryOperator::Less => Value::Int((lhs.try_into_int()? < rhs.try_into_int()?).into()),
                 BinaryOperator::LessOrEqual => {
                     Value::Int((lhs.try_into_int()? <= rhs.try_into_int()?).into())
@@ -410,8 +422,16 @@ pub(super) fn run_instruction(
                 BinaryOperator::BitAnd => Value::Int(lhs.try_into_int()? & rhs.try_into_int()?),
                 BinaryOperator::BitOr => Value::Int(lhs.try_into_int()? | rhs.try_into_int()?),
                 BinaryOperator::BitXor => Value::Int(lhs.try_into_int()? ^ rhs.try_into_int()?),
-                BinaryOperator::Lhs => Value::Int(lhs.try_into_int()? << rhs.try_into_int()?),
-                BinaryOperator::Rhs => Value::Int(lhs.try_into_int()? >> rhs.try_into_int()?),
+                BinaryOperator::Lhs => {
+                    let l = lhs.try_into_int()?;
+                    let r = (rhs.try_into_int()? & 0x3F) as u32;
+                    Value::Int(l << r)
+                }
+                BinaryOperator::Rhs => {
+                    let l = lhs.try_into_int()?;
+                    let r = (rhs.try_into_int()? & 0x3F) as u32;
+                    Value::Int(l >> r)
+                }
             };
 
             ctx.push(ret);
@@ -1884,26 +1904,28 @@ fn run_builtin_method(
             let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
             let end = get_arg!(@opt @usize: args, ctx);
             let exact_match = get_arg!(@opt @i64: args, ctx).map_or(false, |i| i != 0);
-
             let (info, var, _) = ctx.resolve_var_ref(&var)?;
 
             ensure!(info.size.len() == 1, "{meth} only work with 1D variable");
 
             let pos = if info.is_str {
                 let value = value.try_into_str()?;
-                let regex = regex::Regex::new(&if exact_match {
-                    format!("^{value}$")
-                } else {
-                    value
-                })
-                .context("Parse FINDELEMENT argument")?;
+                let regex = regex::Regex::new(&value)
+                    .map_err(|_| anyhow::anyhow!("第2引数が正規表現として不正です"))?;
                 let var = var.as_str()?;
                 let arr = range_end_opt(var, start, end)?;
 
+                let matcher = |v: &String| {
+                    if exact_match {
+                        regex.find(v).map_or(false, |m| m.len() == v.len())
+                    } else {
+                        regex.is_match(v)
+                    }
+                };
                 if meth == BuiltinMethod::FindElement {
-                    arr.iter().position(|v| regex.is_match(v))
+                    arr.iter().position(matcher)
                 } else {
-                    arr.iter().rposition(|v| regex.is_match(v))
+                    arr.iter().rposition(matcher)
                 }
             } else {
                 let value = value.try_into_int()?;
@@ -2117,7 +2139,7 @@ fn run_builtin_method(
         BuiltinMethod::Sqrt => {
             check_arg_count!(1);
             let x = get_arg!(@i64: args, ctx);
-            ctx.push((x as f32).sqrt() as i64);
+            ctx.push((x as f64).sqrt() as i64);
         }
         BuiltinMethod::MoneyStr => {
             check_arg_count!(1, 2);
@@ -2129,7 +2151,6 @@ fn run_builtin_method(
                 Some(format) => format_arg(meth, value, format)?,
                 None => value.to_string(),
             };
-
             let ret = if ctx.header_info.replace.unit_forward {
                 format!("{}{number}", ctx.header_info.replace.money_unit)
             } else {
@@ -2496,6 +2517,7 @@ fn run_builtin_method(
             let v = get_arg!(@i64: args, ctx);
             let low = get_arg!(@i64: args, ctx);
             let high = get_arg!(@i64: args, ctx);
+            ensure!(low <= high, "LIMIT関数: 第2引数が第3引数より大きいです");
 
             ctx.push(v.clamp(low, high));
         }
@@ -2547,6 +2569,7 @@ fn run_builtin_method(
             check_arg_count!(2);
             let l = get_arg!(@i64: args, ctx);
             let r = get_arg!(@i64: args, ctx);
+            ensure!((0..64).contains(&r), "GETBIT関数: 第2引数({r})が0から63の範囲外です");
             ctx.push((l >> r) & 1);
         }
 
@@ -3418,21 +3441,24 @@ fn run_builtin_command(
         }
         BuiltinCommand::SetBit => {
             let v = get_arg!(@var args);
-            let idx = get_arg!(@usize: args, ctx);
+            let idx = get_arg!(@i64: args, ctx);
+            ensure!((0..64).contains(&idx), "SETBIT命令: 第2引数({idx})が0から63の範囲外です");
             let i = ctx.ref_int_var_ref(&v)?;
-            *i |= 1 << idx;
+            *i |= 1 << (idx as usize);
         }
         BuiltinCommand::ClearBit => {
             let v = get_arg!(@var args);
-            let idx = get_arg!(@usize: args, ctx);
+            let idx = get_arg!(@i64: args, ctx);
+            ensure!((0..64).contains(&idx), "CLEARBIT命令: 第2引数({idx})が0から63の範囲外です");
             let i = ctx.ref_int_var_ref(&v)?;
-            *i &= !(1 << idx);
+            *i &= !(1 << (idx as usize));
         }
         BuiltinCommand::InvertBit => {
             let v = get_arg!(@var args);
-            let idx = get_arg!(@usize: args, ctx);
+            let idx = get_arg!(@i64: args, ctx);
+            ensure!((0..64).contains(&idx), "INVERTBIT命令: 第2引数({idx})が0から63の範囲外です");
             let i = ctx.ref_int_var_ref(&v)?;
-            *i ^= 1 << idx;
+            *i ^= 1 << (idx as usize);
         }
         BuiltinCommand::ArrayShift => {
             // Emuera `Process.ScriptProc.cs:606-638`: the variable must be a plain
@@ -3552,7 +3578,7 @@ fn run_builtin_command(
         }
         BuiltinCommand::ArraySort => {
             let v = get_arg!(@var args);
-            let is_forward = get_arg!(@bool: args, ctx);
+            let is_forward = get_arg!(@opt @bool: args, ctx).unwrap_or(true);
             let start = get_arg!(@opt @usize: args, ctx);
             let count = get_arg!(@opt @usize: args, ctx);
 

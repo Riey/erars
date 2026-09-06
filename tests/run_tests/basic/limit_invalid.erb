@@ -1,0 +1,7 @@
+@SYSTEM_TITLE
+; Mirroring COMF440.ERB:407 when EJAC == 0:
+; BASE:PLAYER:2 = LIMIT(BASE:PLAYER:2 - EJAC*(TFLAG:91), 0, EJAC-1)
+; low = 0, high = -1 -> low > high
+PRINTFORML start
+LOCAL = 50
+PRINTFORML {LIMIT(LOCAL, 0, -1)}

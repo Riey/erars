@@ -1,0 +1,3 @@
+start
+VM error occurred: GETBIT関数: 第2引数(64)が0から63の範囲外です
+At function SYSTEM_TITLE tests/run_tests/basic/getbit_oor.erb@5

@@ -1,0 +1,3 @@
+start
+VM error occurred: SETBIT命令: 第2引数(-1)が0から63の範囲外です
+At function SYSTEM_TITLE tests/run_tests/basic/setbit_neg.erb@5
