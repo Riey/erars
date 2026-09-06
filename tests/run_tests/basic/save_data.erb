@@ -44,3 +44,14 @@ PRINTFORML savenos_var {FLAG:5}
 PRINTFORML gettimes {STRLENS(GETTIMES())} [%SUBSTRING(GETTIMES(), 4, 1)%] [%SUBSTRING(GETTIMES(), 13, 1)%]
 GETTIME
 PRINTFORML gettime {STRLENS(RESULTS)} [%SUBSTRING(RESULTS, 4, 1)%]
+
+; ---- DELDATA on a slot that was never written is not an error ----------
+; (excom.md:1128-1131: "not an error even if the file does not exist")
+DELDATA 77
+PRINTFORML deldata_missing ok
+
+; ---- DELDATA actually removes a previously written slot ----------------
+SAVEDATA 6, "to delete"
+PRINTFORML chkdata_before {CHKDATA(6)}
+DELDATA 6
+PRINTFORML chkdata_after {CHKDATA(6)}
