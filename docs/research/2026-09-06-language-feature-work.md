@@ -1,9 +1,13 @@
 # Language Feature Gap Inventory → Fixes → Merge — 2026-09-06
 
-Final `master`: `281eadba7cc21ec1afc3fb110c4b9de2993022ce` (local only, not pushed).
-Merged: `fix/executor-crash-class` (tip `723567b`) then `feature/bulk-array-assign`
-(tip `5002181`), then a direct `master` commit for `.gitignore`'s `/.worktrees`
-entry.
+This is a running log across several sessions the same day; each numbered section below names the
+`master` commit(s) it produced, not a single frozen endpoint — a "final SHA" line here would go
+stale the next time this doc is appended to, the way this line itself did once before. §4 merged
+`fix/executor-crash-class` (tip `723567b`) then `feature/bulk-array-assign` (tip `5002181`), then a
+direct `master` commit for `.gitignore`'s `/.worktrees` entry; §6 merged `fix/deldata-missing-file-
+noop` (tip `2034f6b`) as `a06607c`, then committed doc updates as `89cb290`. All local only, never
+pushed — check `git log`/`git rev-parse master` for the actual current tip rather than trusting a
+number written down here.
 
 ## 1. The inventory: corpus-driven method and what it found
 
@@ -418,43 +422,133 @@ exactly as an enum variant's absence is not evidence of missing behavior.
   eramakerに合わせる")` → `0`, matching each key's documented default). **But parsing and exposing
   a config value is not the same claim as `todo.md` §4.1 makes — "changes engine semantics" — and
   a workspace-wide grep for each field's own snake_case name (not just its `EraConfigKey` variant)
-  found only 11 of the 40 actually consulted anywhere outside the config struct's own
+  found only 11 of the 39 real fields (36 behavioural headings minus the one, `CompatiDRAWLINE`,
+  `todo.md` itself already marks obsolete/superseded and which has no corresponding `EraConfig`
+  field, plus the 4 extra corpus keys) actually consulted anywhere outside the config struct's own
   parse/`GETCONFIG` code:** `ignore_case`, `save_nos`, `use_rename_file`, `use_replace_file`,
   `use_save_folder`, `use_debug_command`, `display_warning_level`, `search_subdirectory`,
   `compati_callname`, `compati_call_event`, `use_sp_chara` are genuinely wired into loader/executor
-  behavior (each has a real call site cited by field name above). The other **28** — `auto_save`,
-  `use_key_macro`, `infinite_loop_alert_time`, `display_report`, `reduce_argument_on_load`,
-  `ignore_uncalled_function`, `function_not_found_warning`, `function_not_called_warning`,
-  `button_wrap`, `sort_with_filename`, `warn_back_compatibility`, `allow_function_overloading`,
-  `warn_function_overloading`, `warn_normal_function_overloading`, `compati_error_line`,
-  `compati_rand`, `compati_function_no_ignore_case`, `system_allow_full_space`,
-  `system_save_in_utf8`, `compati_linefeed_as_1739`, `allow_long_input_by_mouse`,
-  `system_save_in_binary`, `compati_func_arg_optional`, `compati_func_arg_auto_convert`,
-  `system_ignore_triple_symbol`, `times_not_rigorous_calculation`, `system_no_target`,
-  `system_ignore_string_set` — are read by nothing but their own struct and `GETCONFIG`: a script
-  can query the value it set in `emuera.config`, but no loader, lint, or executor logic branches on
-  it. The backing types for two of these are corroborating, independent evidence at the type level,
-  not just the field level: `ReduceArgumentOnLoadFlag` and `DisplayWarningFlag` (the enums behind
-  `reduce_argument_on_load`/`function_not_found_warning`/`function_not_called_warning`) have **zero**
-  references anywhere outside their own `derive` block — a type that nothing ever matches on cannot
-  gate any behavior regardless of which variant is stored. `system_allow_full_space` is a milder
-  case worth calling out separately: the lexer's full-width-space-as-whitespace handling
-  (`erars-lexer/src/{lib,utils}.rs`, `erars-compiler/src/parser/expr.rs:140`) is unconditional code
-  matching the config's default (`true`), not a read of the config value — so the *default*
-  behavior is correct but the switch to turn it off does nothing.
+  behavior (each has a real call site cited by field name above). **The remaining 28 field names
+  were re-checked individually against `docs/research/emuera-wiki/config.md`'s own wording for
+  what each key is supposed to do**, which splits them into four shapes, so a future reader can
+  pick keys off this list without re-deriving the analysis:
 
-  **This is a real, verified residual — 28 declared-but-behaviorally-inert config switches — but it
-  is a different shape of gap than §1's "absent function"/§2's "absent variable": nothing here
-  raises `Variable X is not exists` or `Function X is not exists`, because there is no missing
-  symbol. A script that sets `AllowFunctionOverloading:NO` or `CompatiRAND:YES` compiles, runs, and
-  reads back the value it set — it just gets none of the described behavior change.** Left
-  unimplemented rather than fixed in this pass: wiring 28 independent semantic switches (many
-  requiring new checks in the loader's function-registration path or a `rand` generator swap) is
-  new feature work on a different scale than this arc's fixes, not a residual gap-sweep item, and
-  none of it was reached by either corpus in this session's replay depth (`eramegaten_p_kr` and
-  `eraTHYMKR` both ship `emuera.config` files that only ever set keys already in the wired-11 list,
-  per `todo.md §4`'s own `●meg`/`●thy` usage columns — no corpus script in this project currently
-  depends on any of the 28).
+  - **Host/presentation-only — reclassify out of the residual, same as §4.2's window/mouse/font
+    keys (2):** `use_key_macro` (`キーボードマクロを使用する` — F1–F12 keyboard macros bound in the
+    GUI; the wiki itself calls out that it doesn't interact with `ONEINPUT`-family input "by
+    design", and a headless engine has no F-key concept to bind) and `allow_long_input_by_mouse`
+    (`ONEINPUT系命令でマウスによる2文字以上の入力を許可する` — mouse-click multi-character input on
+    `ONEINPUT`; not even shown in Emuera's own config UI, mouse-only). Neither has any manifestation
+    without a pointing device and a GUI keybinding layer.
+  - **Config value is inert either way because the current code hardcodes one fixed behavior,
+    unconditionally (2):** `button_wrap` (`ボタンの途中で行を折りかえさない` — whether a selectable
+    `[N] - ...` line that would overflow the console width wraps as one unit or splits;
+    `erars-renderer/src/layout.rs`'s wrap algorithm is written directly against the default
+    `NO`/`false` behavior with no branch for `YES`) and `system_allow_full_space` (`全角スペースを
+    ホワイトスペースに含める` — whether U+3000 counts as lexer whitespace; `erars-lexer/src/lib.rs`'s
+    `skip_ws` treats it as whitespace unconditionally, matching only the default `true`). Wiring
+    either means making an *existing* branch read the config value, not building new logic —
+    smaller than the rest of this list.
+  - **The underlying feature is entirely absent, not just its toggle (1):** `system_ignore_triple_
+    symbol` (`FORM中の三連記号を展開しない` — eramaker's FORM syntax expands a bare `///`/`+++` run
+    into literal `NAME:ASSI`/`CALLNAME:ASSI` text; default `NO` means expansion is *on*). A
+    workspace-wide search for this expansion (`ASSI` as a FORM-literal target, any `///`/triple-
+    symbol handling in `erars-compiler/src/parser/expr.rs` or the lexer) found nothing — erars does
+    not implement eramaker's triple-symbol FORM shorthand at all, config aside. Wiring this key
+    means implementing that expansion first, then gating it behind the (default-on) switch — a
+    small parser feature, not a config plumbing change.
+  - **Needs a headless-specific design decision, not just a wire-up, because Emuera's own response
+    is a modal dialog (1):** `infinite_loop_alert_time` (`無限ループ警告までのミリ秒数` — if no
+    `WAIT`-family command executes for this many milliseconds, show an interactive "this looks like
+    an infinite loop, continue?" dialog; `0` disables the feature). The *trigger* — a wall-clock
+    watchdog on time-since-last-`WAIT`, confirmed absent from erars: no `infinite_loop`/`watchdog`
+    hits anywhere in the VM — is genuine engine timing logic a headless build could implement. The
+    *response* is not: there is no user to click "continue" in `erars-stdio`. Wiring this requires
+    picking a headless equivalent (log-and-continue? log-and-abort? make it configurable?) before
+    there is anything to implement, which is a design call, not a mechanical port.
+  - **Real, unimplemented engine semantics with a reasonably well-scoped wiring point (22),
+    grouped by the subsystem each would touch:**
+    - *Loader/startup behavior*: `auto_save` (`オートセーブを行なう` — autosave on `BEGIN SHOP`,
+      overridable from the ERB side; touches wherever `BEGIN SHOP` is dispatched in the executor),
+      `display_report` (`ロード時にレポートを表示する` — print a total-lines/functions summary at
+      load, else show the `_replace.csv` loading message instead; touches the loader's end-of-load
+      path), `sort_with_filename` (`読み込み順をファイル名順にソートする` — sort the CSV/ERB file
+      list by name before loading instead of raw directory-enumeration order; touches the file-list
+      collection step in `erars-loader/src/lib.rs`, a small, mechanical change).
+    - *Load-time argument-diagnostics cluster (the wiki marks three of these "only meaningful when
+      `reduce_argument_on_load` is active", so they are one feature, not four)*: `reduce_argument_
+      on_load` (`ロード時に引数を解析する` — NO/ONCE/YES: whether call-argument shapes are resolved
+      at load time, a load-speed/error-checking tradeoff with no analysis pass in erars today),
+      `ignore_uncalled_function` (`呼び出されなかった関数を無視する` — skip that analysis for
+      functions never called), `function_not_found_warning`/`function_not_called_warning`
+      (`関数が見つからない警告の扱い`/`関数が呼び出されなかった警告の扱い` — IGNORE/LATER/ONCE/
+      DISPLAY selectors for, respectively, a `CALL`/`JUMP` target that doesn't exist — explicitly
+      *not* `CALLFORM`/`JUMPFORM` — and a defined-but-never-called function). All four require a
+      new load-time call-graph/argument-shape analysis pass; none of it exists in `erars-loader` to
+      hang a config check on today, so this cluster is the largest single piece of new work on the
+      list.
+    - *Function-registration/override cluster*: `allow_function_overloading` (`システム関数の上書き
+      を許可する`, default YES — whether a user-defined function may override a name from
+      `式中で使える関数`/the in-expression-function table; touches wherever `erars-loader` registers
+      user functions against `FunctionDic`, which today has no reject-on-collision path at all),
+      `warn_function_overloading`/`warn_normal_function_overloading` (warn on such an override /
+      warn on a duplicate non-event function of the same name — both are diagnostics riding on the
+      same registration path), `warn_back_compatibility` (`eramaker互換性に関する警告を表示する` —
+      a general on/off banner for warnings tied to the other `Compati*` quirks below; wiring it
+      means gating those warnings' emission on this flag once they exist).
+    - *Compat/parsing quirks*: `compati_error_line` (`解釈不能な行があっても実行する` — **note the
+      polarity**: real Emuera's *default* is `NO`, meaning it refuses to start at the title screen
+      on any unparseable line; erars's loader (`erars-loader/src/lib.rs:590-610`) unconditionally
+      reports the error and keeps loading regardless of this flag — i.e. erars is hardcoded to the
+      *non-default* `YES` behavior, the opposite direction from the `button_wrap`/`system_allow_
+      full_space` cases above. Wiring this means *adding* a startup-abort path, not just reading an
+      existing one), `compati_function_no_ignore_case` (`関数・属性については大文字小文字を無視し
+      ない` — case-sensitivity for function names/attributes specifically, independent of the
+      already-wired blanket `ignore_case`; touches the same identifier-matching path `ignore_case`
+      does, but scoped to function/attribute lookups only), `compati_linefeed_as_1739` (`ver1739
+      以前の非ボタン折り返しを再現する` — reproduce a pre-1.739 `DRAWLINE`/line-wrap quirk for old
+      scripts; not obsolete per the wiki, still a live key, but a legacy-version compatibility
+      toggle neither corpus needs — touches `erars-renderer/src/layout.rs`'s wrap algorithm, same
+      area as `button_wrap`).
+    - *RNG*: `compati_rand` (`擬似変数RANDの仕様をeramakerに合わせる` — eramaker's `RAND` has
+      documented quirks erars's current `rng().gen_range(0..max)` doesn't reproduce: accepts
+      negative arguments, never returns ≥ 32767, and has a measurable bias once the range exceeds
+      1000; wiring this means implementing eramaker's actual generator as a second mode next to the
+      one `crates/erars-vm/src/terminal_vm/executor.rs`'s `Rand` arm already uses, not a parameter
+      tweak on the existing one).
+    - *Save format*: `system_save_in_binary`/`system_save_in_utf8` (binary vs. eramaker-compatible
+      text save format, and SJIS vs. UTF-8 text encoding when saving as text — the wiki notes
+      binary mode forces UTF-8 regardless of the UTF-8 flag's own setting; touches `erars-vm/src/
+      save.rs`'s serialization, the same file §6.1's `DELDATA` fix lives in).
+    - *Call-argument semantics*: `compati_func_arg_optional` (`ユーザー関数の全ての引数の省略を許可
+      する` — let a call omit non-`ARG`/`ARGS`/private-variable parameters, leaving the callee's
+      variable at whatever it held before the call rather than erroring; touches call-argument
+      binding in the executor), `compati_func_arg_auto_convert` (`ユーザー関数の引数に自動的に
+      TOSTRを補完する` — auto-`TOSTR` an int passed where a function expects a string parameter;
+      same call-binding path).
+    - *Misc executor semantics*: `times_not_rigorous_calculation` (`TIMES`/decimal math mode — see
+      §5.1's `TIMES` `f32`/`f64` discussion for the existing payload-size constraint this would
+      interact with), `system_no_target` (`キャラクタ変数の引数を補完しない` — disables `TARGET`
+      auto-completion of a bare `chara:var` reference; touches variable-reference resolution in the
+      executor), `system_ignore_string_set` (`文字列変数の代入に文字列式を強制する` — restrict
+      plain `=` on a string variable to a genuine string expression, presumably rejecting what
+      today silently coerces; touches the same plain-`=`-on-string path §2.2 above fixed).
+
+  **Net for §4: the real, engine-relevant residual is 26 keys (28 minus the 2 host-only), of which
+  2 are a small "read an existing branch" change, 1 needs a small new parser feature before the
+  switch means anything, 1 needs a design decision before it's a wiring problem at all, and 22 are
+  genuine unimplemented semantics — the largest cluster (load-time argument diagnostics, 4 keys)
+  being the single biggest piece of new work.** This is a real, verified residual, but a different
+  shape of gap than §1's "absent function"/§2's "absent variable": nothing here raises `Variable X
+  is not exists` or `Function X is not exists`, because there is no missing symbol — a script that
+  sets `AllowFunctionOverloading:NO` or `CompatiRAND:YES` compiles, runs, and reads back the value
+  it set, just with none of the described behavior change. Left unimplemented rather than fixed in
+  this pass, and deliberately not started per explicit instruction pending a user decision: wiring
+  up to 26 independent semantic switches is new feature work on a different scale than this arc's
+  fixes, not a residual gap-sweep item, and none of it was reached by either corpus in this
+  session's replay depth (`eramegaten_p_kr` and `eraTHYMKR` both ship `emuera.config` files that
+  only ever set keys already in the wired-11 list, per `todo.md §4`'s own `●meg`/`●thy` usage
+  columns — no corpus script in this project currently depends on any of the 26).
 - **§5 (5 debug console commands):** confirmed still host/UI work, not a VM gap — `erars-stdio` has
   no interactive debug console to attach `@REBOOT`/`@OUTPUT`/`@EXIT`/`@CONFIG`/`@DEBUG` to.
   **Residual: none for the VM; out of scope for a headless engine, unchanged from `todo.md`.**
