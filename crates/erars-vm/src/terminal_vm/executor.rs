@@ -422,8 +422,16 @@ pub(super) fn run_instruction(
                 BinaryOperator::BitAnd => Value::Int(lhs.try_into_int()? & rhs.try_into_int()?),
                 BinaryOperator::BitOr => Value::Int(lhs.try_into_int()? | rhs.try_into_int()?),
                 BinaryOperator::BitXor => Value::Int(lhs.try_into_int()? ^ rhs.try_into_int()?),
-                BinaryOperator::Lhs => Value::Int(lhs.try_into_int()? << rhs.try_into_int()?),
-                BinaryOperator::Rhs => Value::Int(lhs.try_into_int()? >> rhs.try_into_int()?),
+                BinaryOperator::Lhs => {
+                    let l = lhs.try_into_int()?;
+                    let r = (rhs.try_into_int()? & 0x3F) as u32;
+                    Value::Int(l << r)
+                }
+                BinaryOperator::Rhs => {
+                    let l = lhs.try_into_int()?;
+                    let r = (rhs.try_into_int()? & 0x3F) as u32;
+                    Value::Int(l >> r)
+                }
             };
 
             ctx.push(ret);
@@ -2560,6 +2568,7 @@ fn run_builtin_method(
             check_arg_count!(2);
             let l = get_arg!(@i64: args, ctx);
             let r = get_arg!(@i64: args, ctx);
+            ensure!((0..64).contains(&r), "GETBIT関数: 第2引数({r})が0から63の範囲外です");
             ctx.push((l >> r) & 1);
         }
 
@@ -3431,21 +3440,24 @@ fn run_builtin_command(
         }
         BuiltinCommand::SetBit => {
             let v = get_arg!(@var args);
-            let idx = get_arg!(@usize: args, ctx);
+            let idx = get_arg!(@i64: args, ctx);
+            ensure!((0..64).contains(&idx), "SETBIT命令: 第2引数({idx})が0から63の範囲外です");
             let i = ctx.ref_int_var_ref(&v)?;
-            *i |= 1 << idx;
+            *i |= 1 << (idx as usize);
         }
         BuiltinCommand::ClearBit => {
             let v = get_arg!(@var args);
-            let idx = get_arg!(@usize: args, ctx);
+            let idx = get_arg!(@i64: args, ctx);
+            ensure!((0..64).contains(&idx), "CLEARBIT命令: 第2引数({idx})が0から63の範囲外です");
             let i = ctx.ref_int_var_ref(&v)?;
-            *i &= !(1 << idx);
+            *i &= !(1 << (idx as usize));
         }
         BuiltinCommand::InvertBit => {
             let v = get_arg!(@var args);
-            let idx = get_arg!(@usize: args, ctx);
+            let idx = get_arg!(@i64: args, ctx);
+            ensure!((0..64).contains(&idx), "INVERTBIT命令: 第2引数({idx})が0から63の範囲外です");
             let i = ctx.ref_int_var_ref(&v)?;
-            *i ^= 1 << idx;
+            *i ^= 1 << (idx as usize);
         }
         BuiltinCommand::ArrayShift => {
             // Emuera `Process.ScriptProc.cs:606-638`: the variable must be a plain
