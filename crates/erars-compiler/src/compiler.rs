@@ -714,6 +714,14 @@ impl Compiler {
 
                 self.store_var(var)?;
             }
+            Stmt::ArrayAssign(var, values) => {
+                let count = values.len() as u32;
+                self.push_var(var)?;
+                for value in values {
+                    self.push_expr(value)?;
+                }
+                self.push(Instruction::store_var_seq(count));
+            }
             Stmt::Call {
                 name,
                 args,

@@ -113,6 +113,18 @@ pub enum InstructionType {
     ReadVar = 23,
     StoreVar = 24,
     StoreResult = 25,
+    /// Emuera's comma-separated bulk array-literal assignment
+    /// (`erars_ast::Stmt::ArrayAssign`, `docs/research/emuera-wiki/exetc.md`
+    /// "Batch Assignment to Array Variables"): pops `count` values (pushed
+    /// in source order, so the first RHS expression ends up deepest) then
+    /// one var-ref, and stores them into consecutive elements starting at
+    /// the var-ref's own (possibly omitted) index, one dimension's bound
+    /// enforced per doc ("...out-of-array reference error occurs" when the
+    /// fill would spill into the next outer index). New discriminant, same
+    /// 5-byte `Instruction` layout as every other `@u32` variant here — no
+    /// `VERSION_MAGIC` bump, following `LoadVarRefNamed0..3`'s precedent
+    /// (`instruction.rs:131-134`).
+    StoreVarSeq = 59,
 
     // `LoadStr(name)` immediately followed by `LoadVarRef(count)` is not a
     // common bigram, it is *the only* bigram `push_var_ref` ever emits for a
@@ -209,6 +221,7 @@ define_instruction! {
     (goto_if_not, GotoIfNot),
     (goto_if, GotoIf),
     (load_default_argument, LoadDefaultArgument),
+    (store_var_seq, StoreVarSeq),
 
     @StrKey,
     (load_str, LoadStr),

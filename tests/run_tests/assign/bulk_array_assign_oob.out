@@ -1,0 +1,2 @@
+VM error occurred: 배치 대입 인덱스가 배열 범위를 벗어났습니다: SMALL index 3 >= size 3
+At function SYSTEM_TITLE tests/run_tests/assign/bulk_array_assign_oob.erb@8

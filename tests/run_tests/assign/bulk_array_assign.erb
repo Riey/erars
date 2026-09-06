@@ -1,0 +1,28 @@
+@SYSTEM_TITLE
+; Plain `=` batch-assigns a comma-separated int list to consecutive array
+; elements starting at the target's own index
+; (docs/research/emuera-wiki/exetc.md, "Batch Assignment to Array
+; Variables").
+A:10 = 1, 2, 3
+PRINTFORML {A:10} {A:11} {A:12}
+
+; Same for a two-dimensional array: only the last (rightmost) index
+; advances; the leading index stays fixed.
+DA:0:0 = 4, 5, 6
+PRINTFORML {DA:0:0} {DA:0:1} {DA:0:2}
+
+; `'=` batch-assigns a comma-separated string list the same way, only for
+; string targets (the wiki's own example).
+STR:20 '= "Strawberry", "Melon", "Blue Hawaii"
+PRINTFORML %STR:20% / %STR:21% / %STR:22%
+
+; A single-value `'=` (no comma) stays the existing scalar string-expression
+; assign, unaffected by list-based parsing.
+STR:23 '= "Ayu"
+PRINTFORML %STR:23%
+STR:24 '= TSTR:0 + "ABC"
+PRINTFORML %STR:24%
+
+; Omitting the index entirely starts the fill at element 0.
+B = 7, 8, 9
+PRINTFORML {B:0} {B:1} {B:2}

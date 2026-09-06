@@ -1,0 +1,12 @@
+@SYSTEM_TITLE
+; Plain `=` on a string variable is a FORM string literal: a comma in the
+; RHS is a literal character of the assigned string, never a value-list
+; separator. This must stay bit-identical to today's behavior even though
+; `A:10 = 1,2,3` above now batch-fills — eraTHYMKR relies on this exact
+; distinction 87 times (RESULTS/LOCALS/CSTR/TSTR/STR/COM_NAME), and never
+; uses `'=` on those variables for a bulk fill
+; (docs/research/emuera-wiki/exetc.md, "Assignment to a String Variable
+; Using a String Expression": "The string `Strawberry, Melon, Blue
+; Hawaii` is assigned to STR:20").
+STR = Strawberry, Melon, Blue Hawaii
+PRINTFORML %STR%

@@ -51,6 +51,51 @@ fn try_parse_csv_int(s: &str) -> Option<u32> {
         .map(|(_, n)| n)
 }
 
+/// Builds the `Stmt` for a `=`/`'=` assignment whose RHS was parsed as a
+/// comma-separated list (`self::expr::expr_list`). A single-element list is
+/// always a plain scalar assign, unchanged from before this list-based
+/// parsing existed. More than one element is Emuera's comma-separated bulk
+/// array-literal assignment (`docs/research/emuera-wiki/exetc.md`, "Batch
+/// Assignment to Array Variables" for plain `=` on an int target, and
+/// "Assignment to a String Variable Using a String Expression" for `'=` on
+/// a string target): each expression is assigned to one consecutive array
+/// element starting at `var`'s own index.
+///
+/// A trailing blank element (`A:10 = 1, 2,`) is trimmed by `expr_list`
+/// itself before this function ever sees it, matching the same convention
+/// every other comma-list grammar in this parser already applies (`CALL`
+/// args, command/method args). An *interior* blank (`A:10 = 1, , 3`) has no
+/// documented meaning for this specific feature — unlike an omitted `CALL`
+/// argument, there is no default value a skipped array-literal element could
+/// fall back to — so it is rejected as a compile error rather than guessing
+/// a runtime meaning (0, an unchanged element, or an empty string).
+fn assign_stmt_from_list(
+    var: Variable,
+    list: Vec<Option<Expr>>,
+    span: std::ops::Range<usize>,
+) -> ParserResult<Stmt> {
+    if list.len() <= 1 {
+        match list.into_iter().next() {
+            Some(Some(expr)) => Ok(Stmt::Assign(var, None, expr)),
+            _ => Err(("대입할 값이 없습니다".into(), span)),
+        }
+    } else {
+        let mut values = Vec::with_capacity(list.len());
+        for item in list {
+            match item {
+                Some(expr) => values.push(expr),
+                None => {
+                    return Err((
+                        "배치 대입 목록 중간에 값이 생략되었습니다".into(),
+                        span,
+                    ))
+                }
+            }
+        }
+        Ok(Stmt::ArrayAssign(var, values))
+    }
+}
+
 macro_rules! csv_parse_int {
     ($s:expr, $span:expr) => {
         match try_parse_csv_int($s) {
@@ -1506,8 +1551,17 @@ impl HeaderInfo {
                     _ => bail!("Minus operator can only used for Int value"),
                 },
                 UnaryOperator::Not => match self.const_eval(expr)? {
-                    Value::Int(i) => Ok(Value::Int(!i)),
+                    // Logical negation, matching the runtime executor's
+                    // `UnaryOperator::Not` (`Value::as_bool`-based): must not
+                    // be confused with `~`'s bitwise complement below, which
+                    // this arm used to also perform back when `!` and `~`
+                    // shared one variant.
+                    Value::Int(i) => Ok(Value::Int(if i == 0 { 1 } else { 0 })),
                     _ => bail!("Not operator can only used for Int value"),
+                },
+                UnaryOperator::BitNot => match self.const_eval(expr)? {
+                    Value::Int(i) => Ok(Value::Int(!i)),
+                    _ => bail!("BitNot operator can only used for Int value"),
                 },
             },
             Expr::BinopExpr(lhs, op, rhs) => {
@@ -3500,17 +3554,40 @@ impl<'p> ParserContext<'p> {
                         Stmt::Assign(var, Some(bin_op), rhs)
                     }
                     Some(ComplexAssign::Str) => {
-                        let rhs = try_nom!(pp, self::expr::expr(self)(rhs)).1;
-                        Stmt::Assign(var, None, rhs)
+                        let list = try_nom!(pp, self::expr::expr_list(self)(rhs)).1;
+                        assign_stmt_from_list(var, list, pp.span())?
                     }
                     None => {
-                        let rhs = if self.is_str_var(var.var) {
-                            try_nom!(pp, self::expr::form_arg_expr(self)(rhs)).1
+                        if self.is_str_var(var.var) {
+                            // Plain `=` on a string variable is a FORM
+                            // string literal, not a value list: a comma is a
+                            // literal character of the assigned string
+                            // (`docs/research/emuera-wiki/exetc.md`, "The
+                            // string `Strawberry, Melon, Blue Hawaii` is
+                            // assigned to STR:20" — bulk-fill on a string
+                            // target requires `'=`, handled above). Real
+                            // corpus confirmation: eraTHYMKR has 87 plain-`=`
+                            // string assignments with a top-level RHS comma
+                            // (`RESULTS`/`LOCALS`/`CSTR`/`TSTR`/`STR`/
+                            // `COM_NAME`) and 0 batch-assignments of either
+                            // kind.
+                            //
+                            // `form_arg_expr` (`FormStrType::Arg`) is the
+                            // wrong parser here: it stops at the first
+                            // unescaped comma, which is exactly the
+                            // behavior an argument list needs and exactly
+                            // wrong for a bare RHS — it silently truncated
+                            // every one of those 87 lines at the first
+                            // comma (a pre-existing bug on `master`, not
+                            // introduced by list-based RHS parsing here).
+                            // `form_assign_expr` (`FormStrType::Normal`) has
+                            // no comma stop, so the whole literal survives.
+                            let rhs = try_nom!(pp, self::expr::form_assign_expr(self)(rhs)).1;
+                            Stmt::Assign(var, None, rhs)
                         } else {
-                            try_nom!(pp, self::expr::expr(self)(rhs)).1
-                        };
-
-                        Stmt::Assign(var, None, rhs)
+                            let list = try_nom!(pp, self::expr::expr_list(self)(rhs)).1;
+                            assign_stmt_from_list(var, list, pp.span())?
+                        }
                     }
                 }
             }
@@ -3829,6 +3906,24 @@ impl<'p> ParserContext<'p> {
         match init {
             Some(init) => {
                 let rhs = if is_str {
+                    // Deliberately still `form_arg_expr` (`FormStrType::Arg`,
+                    // comma-stopping), not the `form_assign_expr`
+                    // (`FormStrType::Normal`) used for plain `=` on an
+                    // already-declared string variable above: this is a
+                    // *different* statement (`VARI`/`VARS`'s inline
+                    // initialiser, not `#DIM`'s — see this function's doc
+                    // comment), it was never touched by the batch-assign
+                    // work, and it shares the same comma-truncation defect a
+                    // plain `=` on an existing string variable had. Left
+                    // as-is rather than "fixed while here": a grep of both
+                    // `eraTHYMKR` and `eramegaten_p_kr/Data` for
+                    // `VARI`/`VARS <name> = ...,...` found zero real sites
+                    // (`#DIMS <name> = "a", "b", "c"` is unrelated — that is
+                    // a `#DIM`-directive bulk initialiser, parsed by
+                    // `dim_line`'s own `expr`-list, which was never
+                    // comma-stopping), so nothing observable regresses
+                    // either way today. This is a known, verified-empty
+                    // divergence, not an oversight.
                     try_nom!(pp, self::expr::form_arg_expr(self)(init)).1
                 } else {
                     try_nom!(pp, self::expr::expr(self)(init)).1

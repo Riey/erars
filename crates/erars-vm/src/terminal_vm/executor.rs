@@ -162,6 +162,13 @@ pub(super) fn run_instruction(
 
             ctx.set_var_ref(&var_ref, value)?;
         }
+        InstructionType::StoreVarSeq => {
+            let count = inst.as_store_var_seq().unwrap();
+            let values = ctx.take_value_list(count)?;
+            let var_ref = ctx.pop_var_ref()?;
+
+            ctx.set_var_ref_seq(&var_ref, values)?;
+        }
         InstructionType::Pop => {
             drop(ctx.pop()?);
         }
@@ -370,6 +377,10 @@ pub(super) fn run_instruction(
                 UnaryOperator::Minus => {
                     let operand = ctx.pop_int()?;
                     ctx.push(-operand);
+                }
+                UnaryOperator::BitNot => {
+                    let operand = ctx.pop_int()?;
+                    ctx.push(!operand);
                 }
             }
         }
