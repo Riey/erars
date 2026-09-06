@@ -1,0 +1,14 @@
+@SYSTEM_TITLE
+; `~` is bitwise NOT ("ビットごとの否定"), distinct from `!` which is logical
+; NOT ("論理否定") — docs/research/emuera-wiki/exop.md. They used to share
+; one AST node (`UnaryOperator::Not`), which broke the common
+; `CFLAG &= ~1pN` bitmask-clear idiom by zeroing the whole flag word.
+A = 1P4 + 1P2 + 1P0
+PRINTFORML {A}
+
+; Clear only bit 2 (value 4) via the bitmask-clear idiom.
+A = A & ~1P2
+PRINTFORML {A}
+
+; Logical NOT is unaffected by the split: 0 -> 1, nonzero -> 0.
+PRINTFORML {!0} {!5}

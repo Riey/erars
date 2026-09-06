@@ -358,6 +358,57 @@ impl VmContext {
         Ok(())
     }
 
+    /// Emuera's comma-separated bulk array-literal assignment
+    /// (`erars_ast::Stmt::ArrayAssign`): `values[0]` goes to `var_ref`'s own
+    /// index, `values[1]` to the next element, and so on, filling
+    /// consecutively. Per `docs/research/emuera-wiki/exetc.md`'s "Batch
+    /// Assignment to Array Variables" (`DA:0:0 to DA:0:99 is not assigned to
+    /// DA:1:0, and an out-of-array reference error occurs`), the fill is
+    /// bounded by the *last* declared dimension's size, not the variable's
+    /// total flat storage size — spilling into the next outer index is an
+    /// error, never a silent wraparound. Earlier elements in `values` are
+    /// already written by the time a later one is found out of range
+    /// (a plain sequential fill, not validated upfront), matching a naive
+    /// imperative loop.
+    pub fn set_var_ref_seq(&mut self, var_ref: &VariableRef, values: Vec<Value>) -> Result<()> {
+        if values.is_empty() {
+            return Ok(());
+        }
+
+        let last_dim_size = {
+            let (info, _var) = self.var.get_maybe_local_var(var_ref.func_name, var_ref.name)?;
+            info.size.last().copied().unwrap_or(1)
+        };
+
+        let start = var_ref.idxs.last().copied().unwrap_or(0);
+        let leading_len = var_ref.idxs.len().saturating_sub(1);
+
+        for (i, value) in values.into_iter().enumerate() {
+            let cur = start + i as u32;
+            if cur >= last_dim_size {
+                bail!(
+                    "배치 대입 인덱스가 배열 범위를 벗어났습니다: {} index {} >= size {}",
+                    var_ref.name,
+                    cur,
+                    last_dim_size
+                );
+            }
+
+            let mut idxs: ArgVec = var_ref.idxs[..leading_len].iter().copied().collect();
+            idxs.push(cur);
+
+            let sub_ref = VariableRef {
+                name: var_ref.name,
+                func_name: var_ref.func_name,
+                idxs,
+            };
+
+            self.set_var_ref(&sub_ref, value)?;
+        }
+
+        Ok(())
+    }
+
     pub fn resolve_var_ref<'c>(
         &'c mut self,
         r: &VariableRef,

@@ -41,6 +41,16 @@ pub enum Stmt {
     StrData(Variable, Vec<Vec<Expr>>),
     ReuseLastLine(StrKey),
     Assign(Variable, Option<BinaryOperator>, Expr),
+    /// Emuera's comma-separated bulk array-literal assignment: plain `=`
+    /// with more than one top-level comma-separated value on an
+    /// int/int-array target, or `'=` with more than one value on a
+    /// str/str-array target (`docs/research/emuera-wiki/exetc.md`,
+    /// "Batch Assignment to Array Variables" / "Assignment to a String
+    /// Variable Using a String Expression"). Each expression is assigned to
+    /// one consecutive array element, starting at `Variable`'s own
+    /// (possibly omitted, defaulting to 0) index; a single-value list is
+    /// never represented this way — it stays a plain `Assign`.
+    ArrayAssign(Variable, Vec<Expr>),
     Sif(Expr, Box<StmtWithPos>),
     If(Vec<(ExprWithPos, Vec<StmtWithPos>)>, Vec<StmtWithPos>),
     Times(Variable, NotNan<f32>),

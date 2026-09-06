@@ -828,7 +828,7 @@ fn single_expr<'c, 'a>(ctx: &'c ParserContext) -> impl FnMut(&'a str) -> IResult
         } else if let Some(i) = i.strip_prefix('!') {
             (i, Unary(UnaryOperator::Not))
         } else if let Some(i) = i.strip_prefix('~') {
-            (i, Unary(UnaryOperator::Not))
+            (i, Unary(UnaryOperator::BitNot))
         } else if let Some(i) = i.strip_prefix('-') {
             (i, Unary(UnaryOperator::Minus))
         } else {
@@ -1382,6 +1382,21 @@ pub fn form_arg_expr<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| (de_sp(form_str(FormStrType::Arg, ctx)))(i)
+}
+
+/// A bare `=` assignment's right-hand side on a string variable
+/// (`docs/research/emuera-wiki/exetc.md`, "Assignment to String Variable
+/// Using FORM Syntax"): a FORM string like `form_arg_expr`, trimmed of
+/// surrounding whitespace the same way, but `FormStrType::Normal` rather
+/// than `FormStrType::Arg` — a bare RHS has no argument list to separate,
+/// so a comma is a literal character of the assigned string, never a stop
+/// point (`docs/research/emuera-wiki/exetc.md`, "Batch Assignment to Array
+/// Variables": `STR:20 = Strawberry, Melon, Blue Hawaii` assigns the single
+/// string `Strawberry, Melon, Blue Hawaii`).
+pub fn form_assign_expr<'c, 'a>(
+    ctx: &'c ParserContext,
+) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
+    move |i| (de_sp(form_str(FormStrType::Normal, ctx)))(i)
 }
 
 pub fn returnform_line<'c, 'a>(
