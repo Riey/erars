@@ -1,0 +1,15 @@
+@SYSTEM_TITLE
+; Mirroring eramegaten FUSION.ERB:457 and :894:
+; `ARRAYSORT L_FUSION_CARD` (single argument, order omitted -> default forward/ascending)
+#DIM L_FUSION_CARD, 5
+L_FUSION_CARD:0 = 30
+L_FUSION_CARD:1 = 10
+L_FUSION_CARD:2 = 50
+L_FUSION_CARD:3 = 20
+L_FUSION_CARD:4 = 40
+
+ARRAYSORT L_FUSION_CARD
+
+FOR LOCAL, 0, 5
+    PRINTFORML {L_FUSION_CARD:LOCAL}
+NEXT

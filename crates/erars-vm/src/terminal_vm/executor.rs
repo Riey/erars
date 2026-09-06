@@ -388,8 +388,20 @@ pub(super) fn run_instruction(
                     Value::String(s) => Value::String(s.repeat(usize::try_from(rhs.try_into_int()?)?)),
                 },
                 BinaryOperator::Sub => Value::Int(lhs.try_into_int()? - rhs.try_into_int()?),
-                BinaryOperator::Div => Value::Int(lhs.try_into_int()? / rhs.try_into_int()?),
-                BinaryOperator::Rem => Value::Int(lhs.try_into_int()? % rhs.try_into_int()?),
+                BinaryOperator::Div => {
+                    let l = lhs.try_into_int()?;
+                    let r = rhs.try_into_int()?;
+                    ensure!(r != 0, "0で除算しました");
+                    ensure!(!(l == i64::MIN && r == -1), "除算でオーバーフローが発生しました");
+                    Value::Int(l / r)
+                }
+                BinaryOperator::Rem => {
+                    let l = lhs.try_into_int()?;
+                    let r = rhs.try_into_int()?;
+                    ensure!(r != 0, "0で除算しました");
+                    ensure!(!(l == i64::MIN && r == -1), "除算でオーバーフローが発生しました");
+                    Value::Int(l % r)
+                }
                 BinaryOperator::Less => Value::Int((lhs.try_into_int()? < rhs.try_into_int()?).into()),
                 BinaryOperator::LessOrEqual => {
                     Value::Int((lhs.try_into_int()? <= rhs.try_into_int()?).into())
@@ -2496,6 +2508,7 @@ fn run_builtin_method(
             let v = get_arg!(@i64: args, ctx);
             let low = get_arg!(@i64: args, ctx);
             let high = get_arg!(@i64: args, ctx);
+            ensure!(low <= high, "LIMIT関数: 第2引数が第3引数より大きいです");
 
             ctx.push(v.clamp(low, high));
         }
@@ -3552,7 +3565,7 @@ fn run_builtin_command(
         }
         BuiltinCommand::ArraySort => {
             let v = get_arg!(@var args);
-            let is_forward = get_arg!(@bool: args, ctx);
+            let is_forward = get_arg!(@opt @bool: args, ctx).unwrap_or(true);
             let start = get_arg!(@opt @usize: args, ctx);
             let count = get_arg!(@opt @usize: args, ctx);
 
