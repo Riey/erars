@@ -357,7 +357,7 @@ pub(super) fn run_instruction(
         InstructionType::Times => {
             let t = inst.as_times().unwrap();
             let arg = ctx.pop_int()?;
-            let ret = (arg as f32 * t.into_inner()) as i64;
+            let ret = (arg as f64 * t.into_inner() as f64) as i64;
             ctx.push(ret);
         }
         InstructionType::UnaryOperator => {
@@ -1904,26 +1904,28 @@ fn run_builtin_method(
             let start = get_arg!(@opt @usize: args, ctx).unwrap_or(0);
             let end = get_arg!(@opt @usize: args, ctx);
             let exact_match = get_arg!(@opt @i64: args, ctx).map_or(false, |i| i != 0);
-
             let (info, var, _) = ctx.resolve_var_ref(&var)?;
 
             ensure!(info.size.len() == 1, "{meth} only work with 1D variable");
 
             let pos = if info.is_str {
                 let value = value.try_into_str()?;
-                let regex = regex::Regex::new(&if exact_match {
-                    format!("^{value}$")
-                } else {
-                    value
-                })
-                .context("Parse FINDELEMENT argument")?;
+                let regex = regex::Regex::new(&value)
+                    .map_err(|_| anyhow::anyhow!("第2引数が正規表現として不正です"))?;
                 let var = var.as_str()?;
                 let arr = range_end_opt(var, start, end)?;
 
+                let matcher = |v: &String| {
+                    if exact_match {
+                        regex.find(v).map_or(false, |m| m.len() == v.len())
+                    } else {
+                        regex.is_match(v)
+                    }
+                };
                 if meth == BuiltinMethod::FindElement {
-                    arr.iter().position(|v| regex.is_match(v))
+                    arr.iter().position(matcher)
                 } else {
-                    arr.iter().rposition(|v| regex.is_match(v))
+                    arr.iter().rposition(matcher)
                 }
             } else {
                 let value = value.try_into_int()?;
@@ -2137,7 +2139,7 @@ fn run_builtin_method(
         BuiltinMethod::Sqrt => {
             check_arg_count!(1);
             let x = get_arg!(@i64: args, ctx);
-            ctx.push((x as f32).sqrt() as i64);
+            ctx.push((x as f64).sqrt() as i64);
         }
         BuiltinMethod::MoneyStr => {
             check_arg_count!(1, 2);
@@ -2149,7 +2151,6 @@ fn run_builtin_method(
                 Some(format) => format_arg(meth, value, format)?,
                 None => value.to_string(),
             };
-
             let ret = if ctx.header_info.replace.unit_forward {
                 format!("{}{number}", ctx.header_info.replace.money_unit)
             } else {
