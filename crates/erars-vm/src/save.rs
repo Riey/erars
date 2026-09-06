@@ -1,58 +1,101 @@
+mod emuera;
+
 use anyhow::{bail, ensure, Context, Result};
 use erars_ast::{StrKey, VariableInfo};
+use erars_compiler::HeaderInfo;
 use flate2::{read, write};
 use hashbrown::HashMap;
 use itertools::Either;
 use serde::{Deserialize, Serialize};
 use std::{
-    io::{BufReader, Read, Write},
+    io::{Cursor, Read, Write},
     path::Path,
 };
 
 use crate::{SaveList, UniformVariable, VmVariable};
 
+/// A file's payload once its container format has been resolved: either
+/// erars's own `rmp_serde` blob (streamed straight through, unread until a
+/// `to_*_data` call actually deserialises it), or a real Emuera save
+/// [`emuera::sniff`] recognised and [`emuera::parse`] already fully parsed
+/// (Emuera's text grammar has no msgpack-style "parse later" split — the
+/// whole file has to be read to find the fields at all).
+enum SaveBody {
+    Native(Box<dyn Read + Send>),
+    Emuera(emuera::EmueraSaveData),
+}
+
 pub struct RawSaveData {
     pub description: String,
     pub code: u32,
     pub version: u32,
-    pub data: Box<dyn Read + Send>,
+    body: SaveBody,
 }
 
 impl RawSaveData {
     const MAGIC: [u8; 4] = [0x01, 0x02, 0xFF, 0xFE];
 
-    pub fn to_local_data(self) -> anyhow::Result<SerializableVariableStorage> {
-        let mut ret: SerializableVariableStorage = rmp_serde::from_read(self.data)?;
-        ret.description = self.description;
-        ret.code = self.code;
-        ret.version = self.version;
+    /// `header` is only consulted for a foreign Emuera body — this game's
+    /// currently declared variables are what a foreign save's names and
+    /// shapes get reconciled against (see the `save::emuera` module doc
+    /// comment). A same-format load ignores it entirely, same as before.
+    pub fn to_local_data(self, header: &HeaderInfo) -> Result<SerializableVariableStorage> {
+        let (description, code, version) = (self.description, self.code, self.version);
+        let mut ret = match self.body {
+            SaveBody::Native(data) => rmp_serde::from_read(data)?,
+            SaveBody::Emuera(data) => emuera::build_local_data(data, header).0,
+        };
+        ret.description = description;
+        ret.code = code;
+        ret.version = version;
         Ok(ret)
     }
 
-    pub fn to_global_data(self) -> anyhow::Result<SerializableGlobalVariableStorage> {
-        let mut ret: SerializableGlobalVariableStorage = rmp_serde::from_read(self.data)?;
-        ret.code = self.code;
-        ret.version = self.version;
+    pub fn to_global_data(self, header: &HeaderInfo) -> Result<SerializableGlobalVariableStorage> {
+        let (code, version) = (self.code, self.version);
+        let mut ret = match self.body {
+            SaveBody::Native(data) => rmp_serde::from_read(data)?,
+            SaveBody::Emuera(data) => emuera::build_global_data(data, header).0,
+        };
+        ret.code = code;
+        ret.version = version;
         Ok(ret)
     }
 
     pub fn to_chara_data(self) -> anyhow::Result<SerializableCharaData> {
-        let mut ret: SerializableCharaData = rmp_serde::from_read(self.data)?;
-        ret.description = self.description;
-        ret.code = self.code;
-        ret.version = self.version;
+        let (description, code, version) = (self.description, self.code, self.version);
+        let SaveBody::Native(data) = self.body else {
+            // `read_chara_data` already refuses a recognised Emuera
+            // `chara_*.dat` before it ever reaches here (see its own doc
+            // comment) — this pass never parses one, so this arm is
+            // unreachable in practice, not a silently-accepted foreign body.
+            bail!("Emuera chara data import is not supported");
+        };
+        let mut ret: SerializableCharaData = rmp_serde::from_read(data)?;
+        ret.description = description;
+        ret.code = code;
+        ret.version = version;
         Ok(ret)
     }
 
     pub fn to_var_data(self) -> anyhow::Result<SerializableVarData> {
-        let mut ret: SerializableVarData = rmp_serde::from_read(self.data)?;
-        ret.description = self.description;
-        ret.code = self.code;
-        ret.version = self.version;
+        let (description, code, version) = (self.description, self.code, self.version);
+        let SaveBody::Native(data) = self.body else {
+            // See `to_chara_data`: `read_var_data` already refuses a
+            // recognised Emuera `var_*.dat` before this point.
+            bail!("Emuera var data import is not supported");
+        };
+        let mut ret: SerializableVarData = rmp_serde::from_read(data)?;
+        ret.description = description;
+        ret.code = code;
+        ret.version = version;
         Ok(ret)
     }
 
-    pub fn from_read(mut data: Box<dyn Read + Send>) -> Result<Self> {
+    /// Parses an already-decompressed, confirmed-native stream: reads the
+    /// magic/code/version/description preamble `write_dat_header` wrote and
+    /// leaves the rest of `data` for a `to_*_data` call to deserialise.
+    fn from_native_read(mut data: Box<dyn Read + Send>) -> Result<Self> {
         let buf = &mut [0u8; 4];
         data.read_exact(buf)?;
         if buf != &Self::MAGIC {
@@ -77,12 +120,70 @@ impl RawSaveData {
             description,
             code,
             version,
-            data,
+            body: SaveBody::Native(data),
         })
     }
 
-    pub fn from_file(file: std::fs::File) -> Result<Self> {
-        Self::from_read(Box::new(std::io::BufReader::new(file)))
+    /// Parses an already-confirmed-native, uncompressed byte buffer (chara/
+    /// var `.dat` files are never gzip-wrapped, unlike numbered/global
+    /// saves — see `write_chara_data`/`write_var_data`).
+    fn from_native_bytes(bytes: Vec<u8>) -> Result<Self> {
+        ensure!(bytes.starts_with(&Self::MAGIC), "Invalid MAGIC");
+        Self::from_native_read(Box::new(Cursor::new(bytes)))
+    }
+
+    fn from_emuera_bytes(
+        bytes: &[u8],
+        encoding: &'static encoding_rs::Encoding,
+        is_global: bool,
+    ) -> Result<Self> {
+        match emuera::sniff(bytes, encoding) {
+            Some(variant) => {
+                let (data, code, version, description) =
+                    emuera::parse(variant, bytes, encoding, is_global)?;
+                Ok(Self {
+                    description,
+                    code,
+                    version,
+                    body: SaveBody::Emuera(data),
+                })
+            }
+            None => bail!("인식할 수 없는 세이브 파일 형식입니다"),
+        }
+    }
+
+    /// Resolves `bytes` (the whole file's raw content) into either erars's
+    /// own format or a real Emuera save. `native_gzip` says whether erars's
+    /// own format is gzip-compressed for this particular file — numbered
+    /// `save{idx:02}.rsav.gz` is, `global.rsav` is not (`write_global_data`:
+    /// "don't compress global data since it's pretty small"). A real Emuera
+    /// save is never gzip-compressed either way, so `native_gzip` only ever
+    /// gates the *native* branch. `encoding`/`is_global` are only consulted
+    /// for a foreign Emuera body — see `from_emuera_bytes`.
+    fn from_bytes(
+        bytes: Vec<u8>,
+        native_gzip: bool,
+        encoding: &'static encoding_rs::Encoding,
+        is_global: bool,
+    ) -> Result<Self> {
+        if native_gzip {
+            let mut decoder = read::GzDecoder::new(Cursor::new(bytes));
+            let mut decompressed = Vec::new();
+            let decoded = decoder.read_to_end(&mut decompressed).is_ok();
+            let bytes = decoder.into_inner().into_inner();
+
+            if decoded && decompressed.starts_with(&Self::MAGIC) {
+                return Self::from_native_read(Box::new(Cursor::new(decompressed)));
+            }
+
+            return Self::from_emuera_bytes(&bytes, encoding, is_global);
+        }
+
+        if bytes.starts_with(&Self::MAGIC) {
+            return Self::from_native_read(Box::new(Cursor::new(bytes)));
+        }
+
+        Self::from_emuera_bytes(&bytes, encoding, is_global)
     }
 }
 
@@ -214,7 +315,47 @@ fn make_save_file_name(idx: u32) -> String {
     format!("save{idx:02}.rsav.gz")
 }
 
+/// Real Emuera's own numbered-slot name (`getSaveDataPath`, `.il:107770`) —
+/// never written by erars, only ever read as a fallback when no native slot
+/// exists (see `read_save_data_slot`).
+fn emuera_save_file_name(idx: u32) -> String {
+    format!("save{idx:02}.sav")
+}
+
 static GLOBAL_SAVE_FILE_NAME: &str = "global.rsav";
+
+/// Real Emuera's own global-save name (`getSaveDataPathG`, `.il:107868`).
+static EMUERA_GLOBAL_SAVE_FILE_NAME: &str = "global.sav";
+
+/// Reads `path` whole, unless it is a real Emuera save recognised by
+/// [`emuera::sniff`] — `chara_*.dat`/`var_*.dat` compatibility is out of
+/// scope for this pass (see the `save::emuera` module doc comment), so such
+/// a file is refused with a distinct, actionable error rather than either
+/// silently ignored (`Ok(None)`, indistinguishable from "no such file") or
+/// failed with a generic parse error a player can't act on. A missing file
+/// is `Ok(None)`; any other unrecognised content is returned as-is for the
+/// caller's own native parse attempt to fail on.
+fn read_bytes_rejecting_emuera(
+    path: &Path,
+    kind: &str,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<Option<Vec<u8>>> {
+    let Ok(bytes) = std::fs::read(path) else {
+        return Ok(None);
+    };
+
+    if !bytes.starts_with(&RawSaveData::MAGIC) {
+        if let Some(variant) = emuera::sniff(&bytes, encoding) {
+            bail!(
+                "{}은(는) 실제 Emuera가 작성한 {kind} 파일({variant:?})입니다. \
+                 erars는 이 파일 형식을 지원하지 않습니다.",
+                path.display()
+            );
+        }
+    }
+
+    Ok(Some(bytes))
+}
 
 /// Emuera `getSaveDataPathC`: `chara_<name>.dat` beside the numbered saves.
 pub fn write_chara_data(sav_path: &Path, name: &str, sav: &SerializableCharaData) -> Result<()> {
@@ -225,14 +366,19 @@ pub fn write_chara_data(sav_path: &Path, name: &str, sav: &SerializableCharaData
         .context("Serialize chara sav")
 }
 
-pub fn read_chara_data(sav_path: &Path, name: &str) -> Result<Option<RawSaveData>> {
+pub fn read_chara_data(
+    sav_path: &Path,
+    name: &str,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<Option<RawSaveData>> {
     check_dat_filename(name)?;
 
-    let Ok(file) = std::fs::File::open(sav_path.join(format!("chara_{name}.dat"))) else {
+    let path = sav_path.join(format!("chara_{name}.dat"));
+    let Some(bytes) = read_bytes_rejecting_emuera(&path, "캐릭터 저장(SAVECHARA)", encoding)? else {
         return Ok(None);
     };
 
-    Ok(RawSaveData::from_file(file).ok())
+    Ok(RawSaveData::from_native_bytes(bytes).ok())
 }
 
 /// Emuera `getSaveDataPathV`: `var_<name>.dat`.
@@ -244,14 +390,19 @@ pub fn write_var_data(sav_path: &Path, name: &str, sav: &SerializableVarData) ->
         .context("Serialize var sav")
 }
 
-pub fn read_var_data(sav_path: &Path, name: &str) -> Result<Option<RawSaveData>> {
+pub fn read_var_data(
+    sav_path: &Path,
+    name: &str,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<Option<RawSaveData>> {
     check_dat_filename(name)?;
 
-    let Ok(file) = std::fs::File::open(sav_path.join(format!("var_{name}.dat"))) else {
+    let path = sav_path.join(format!("var_{name}.dat"));
+    let Some(bytes) = read_bytes_rejecting_emuera(&path, "변수 저장(SAVEVAR)", encoding)? else {
         return Ok(None);
     };
 
-    Ok(RawSaveData::from_file(file).ok())
+    Ok(RawSaveData::from_native_bytes(bytes).ok())
 }
 
 /// Emuera `VariableEvaluator.GetDatFiles` (`VariableEvaluator.cs:1786-1809`):
@@ -371,16 +522,59 @@ pub fn delete_save_data(sav_path: &Path, idx: u32) -> Result<()> {
     Ok(())
 }
 
-pub fn read_save_data(sav_path: &Path, idx: u32) -> Result<Option<RawSaveData>> {
-    let file = sav_path.join(make_save_file_name(idx));
+/// Picks between erars's own native slot and a real Emuera save occupying
+/// the same logical slot (`native_name`/`emuera_name` — a numbered
+/// `save{idx:02}.rsav.gz`/`save{idx:02}.sav` pair, or the global pair): the
+/// native file always wins if both exist, logged so a player who somehow
+/// has both is not left wondering which one erars actually loaded. Neither
+/// existing is `Ok(None)`, matching a missing single file's own long-standing
+/// meaning ("no such slot", not an error).
+fn read_save_data_slot(
+    sav_path: &Path,
+    native_name: &str,
+    emuera_name: &str,
+    native_gzip: bool,
+    is_global: bool,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<Option<RawSaveData>> {
+    let native_path = sav_path.join(native_name);
+    let emuera_path = sav_path.join(emuera_name);
+    let native_exists = native_path.exists();
+    let emuera_exists = emuera_path.exists();
 
-    let compressed = match std::fs::File::open(&file) {
-        Ok(file) => file,
-        Err(_) => return Ok(None),
+    if native_exists && emuera_exists {
+        log::warn!(
+            "{}와(과) {}이(가) 모두 존재합니다: erars 자체 저장 파일을 우선 사용합니다.",
+            native_path.display(),
+            emuera_path.display(),
+        );
+    }
+
+    let (path, native_gzip) = if native_exists {
+        (native_path, native_gzip)
+    } else if emuera_exists {
+        (emuera_path, false)
+    } else {
+        return Ok(None);
     };
-    let decoder = read::GzDecoder::new(BufReader::new(compressed));
 
-    Ok(RawSaveData::from_read(Box::new(decoder)).ok())
+    let bytes = std::fs::read(&path)?;
+    Ok(RawSaveData::from_bytes(bytes, native_gzip, encoding, is_global).ok())
+}
+
+pub fn read_save_data(
+    sav_path: &Path,
+    idx: u32,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<Option<RawSaveData>> {
+    read_save_data_slot(
+        sav_path,
+        &make_save_file_name(idx),
+        &emuera_save_file_name(idx),
+        true,
+        false,
+        encoding,
+    )
 }
 
 pub fn write_global_data(sav_path: &Path, sav: &SerializableGlobalVariableStorage) -> Result<()> {
@@ -395,18 +589,27 @@ pub fn write_global_data(sav_path: &Path, sav: &SerializableGlobalVariableStorag
     Ok(())
 }
 
-pub fn read_global_data(sav_path: &Path) -> Result<Option<RawSaveData>> {
-    let file = sav_path.join(GLOBAL_SAVE_FILE_NAME);
-
-    let Ok(file) = std::fs::File::open(&file) else { return Ok(None); };
-
-    Ok(RawSaveData::from_file(file).ok())
+pub fn read_global_data(
+    sav_path: &Path,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<Option<RawSaveData>> {
+    read_save_data_slot(
+        sav_path,
+        GLOBAL_SAVE_FILE_NAME,
+        EMUERA_GLOBAL_SAVE_FILE_NAME,
+        false,
+        true,
+        encoding,
+    )
 }
 
 #[cfg(feature = "multithread")]
 use rayon::prelude::*;
 
-pub fn load_local_list(sav_path: &Path) -> anyhow::Result<SaveList> {
+pub fn load_local_list(
+    sav_path: &Path,
+    encoding: &'static encoding_rs::Encoding,
+) -> anyhow::Result<SaveList> {
     let sav_idxs = 0..100;
     #[cfg(not(feature = "multithread"))]
     let iter = sav_idxs.into_iter();
@@ -414,9 +617,10 @@ pub fn load_local_list(sav_path: &Path) -> anyhow::Result<SaveList> {
     let iter = sav_idxs.into_par_iter();
 
     iter.filter_map(|idx| {
-        read_save_data(sav_path, idx)
+        read_save_data(sav_path, idx, encoding)
             .transpose()
             .map(|sav| sav.map(|sav| (idx, Either::Right(sav))))
     })
     .collect::<anyhow::Result<_>>()
 }
+

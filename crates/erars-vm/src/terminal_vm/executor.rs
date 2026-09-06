@@ -599,7 +599,7 @@ fn run_save_game(
     tx: &mut VirtualConsole,
     ctx: &mut VmContext,
 ) -> Result<Workflow> {
-    let mut savs = crate::save::load_local_list(&ctx.sav_dir)?;
+    let mut savs = crate::save::load_local_list(&ctx.sav_dir, ctx.encoding())?;
     print_sav_data_list(&savs, tx);
 
     loop {
@@ -638,7 +638,7 @@ fn run_save_game(
 }
 
 fn run_load_game(tx: &mut VirtualConsole, ctx: &mut VmContext) -> Result<Option<u32>> {
-    let mut savs = crate::save::load_local_list(&ctx.sav_dir)?;
+    let mut savs = crate::save::load_local_list(&ctx.sav_dir, ctx.encoding())?;
     print_sav_data_list(&savs, tx);
 
     loop {
@@ -665,9 +665,9 @@ fn run_load_data(
     // 「不正なデータをロードしようとしました」
     // (`GameProc/Process.ScriptProc.cs:814-828`). erars used to unwrap here,
     // which turned a script-level mistake into a process abort.
-    let sav = crate::save::read_save_data(&ctx.sav_dir, idx)?
+    let sav = crate::save::read_save_data(&ctx.sav_dir, idx, ctx.encoding())?
         .ok_or_else(|| anyhow!("부정한 데이터를 로드하려고 했습니다"))?
-        .to_local_data()?;
+        .to_local_data(&ctx.header_info)?;
 
     ctx.lastload_text = sav.description.clone();
     ctx.lastload_no = idx;
@@ -2007,7 +2007,7 @@ fn run_builtin_method(
 
             // Emuera `CheckDataByFilename`: the state code goes to the stack and
             // the human-readable reason to RESULTS.
-            let (ret, rets) = match crate::save::read_chara_data(&ctx.sav_dir, &name) {
+            let (ret, rets) = match crate::save::read_chara_data(&ctx.sav_dir, &name, ctx.encoding()) {
                 Ok(Some(sav)) => {
                     if sav.code != ctx.header_info.gamebase.code {
                         (2, "異なるゲームのセーブデータです".into())
@@ -2062,7 +2062,7 @@ fn run_builtin_method(
             let name = get_arg!(@String: args, ctx);
 
             // Emuera `CheckDataByFilename(getSaveDataPathV(name), Var)`.
-            let (ret, rets) = match crate::save::read_var_data(&ctx.sav_dir, &name) {
+            let (ret, rets) = match crate::save::read_var_data(&ctx.sav_dir, &name, ctx.encoding()) {
                 Ok(Some(sav)) => {
                     if sav.code != ctx.header_info.gamebase.code {
                         (2, "異なるゲームのセーブデータです".into())
@@ -3148,7 +3148,7 @@ fn run_builtin_method(
             check_arg_count!(1);
             let idx = get_arg!(@u32: args, ctx);
 
-            let (ret, rets) = match crate::save::read_save_data(&ctx.sav_dir, idx)? {
+            let (ret, rets) = match crate::save::read_save_data(&ctx.sav_dir, idx, ctx.encoding())? {
                 Some(sav) => {
                     if sav.code != ctx.header_info.gamebase.code {
                         (2, None)
@@ -4489,9 +4489,11 @@ fn run_builtin_command(
             )?;
         }
         BuiltinCommand::LoadGlobal => {
-            if let Some(global_sav) = crate::save::read_global_data(&ctx.sav_dir)? {
-                ctx.var
-                    .load_global_serializable(global_sav.to_global_data()?, &ctx.header_info)?;
+            if let Some(global_sav) = crate::save::read_global_data(&ctx.sav_dir, ctx.encoding())? {
+                ctx.var.load_global_serializable(
+                    global_sav.to_global_data(&ctx.header_info)?,
+                    &ctx.header_info,
+                )?;
             }
         }
         BuiltinCommand::Swap => {
@@ -4573,7 +4575,7 @@ fn run_builtin_command(
 
             // Emuera silently reports failure through RESULT instead of raising:
             // a missing, foreign or outdated file is simply not loaded.
-            let loaded = match crate::save::read_chara_data(&ctx.sav_dir, &name)? {
+            let loaded = match crate::save::read_chara_data(&ctx.sav_dir, &name, ctx.encoding())? {
                 Some(sav)
                     if sav.code == ctx.header_info.gamebase.code
                         && sav.version >= ctx.header_info.gamebase.allow_version =>
@@ -4641,7 +4643,7 @@ fn run_builtin_command(
 
             // Emuera reports failure through RESULT instead of raising: a
             // missing, foreign or outdated file leaves every variable alone.
-            let loaded = match crate::save::read_var_data(&ctx.sav_dir, &name)? {
+            let loaded = match crate::save::read_var_data(&ctx.sav_dir, &name, ctx.encoding())? {
                 Some(sav)
                     if sav.code == ctx.header_info.gamebase.code
                         && sav.version >= ctx.header_info.gamebase.allow_version =>

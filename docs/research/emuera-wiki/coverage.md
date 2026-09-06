@@ -463,14 +463,14 @@ This harness therefore cannot prove absence for any `PRINT*` name;
 | `GETKEY` | ran | `PRINTFORML [{GETKEY(0)}]` | ran | [0] |
 | `GETKEYTRIGGERED` | ran | `PRINTFORML [{GETKEYTRIGGERED(0)}]` | ran | [0] |
 | `GETLINESTR` | ran | `PRINTFORML [{GETLINESTR("X")}]` | ran | [XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX] |
-| `GETMILLISECOND` | ran | `PRINTFORML [{GETMILLISECOND()}]` | ran | [63924089893699] |
+| `GETMILLISECOND` | ran | `PRINTFORML [{GETMILLISECOND()}]` | ran | [63924303075934] |
 | `GETNUM` | ran | `PRINTFORML [{GETNUM(FLAG, "X")}]` | ran | [-1] |
 | `GETPALAMLV` | ran | `PRINTFORML [{GETPALAMLV(0, 0)}]` | ran | [0] |
-| `GETSECOND` | ran | `PRINTFORML [{GETSECOND()}]` | ran | [63924089893] |
+| `GETSECOND` | ran | `PRINTFORML [{GETSECOND()}]` | ran | [63924303076] |
 | `GETSPCHARA` | present | `PRINTFORML [{GETSPCHARA(0)}]` | vm | VM error occurred: SPキャラ関係の機能は標準では使用できません(互換性オプション「SPキャラを使用する」をONにしてください) |
 | `GETSTYLE` | ran | `PRINTFORML [{GETSTYLE()}]` | ran | [0] |
-| `GETTIME` | ran | `PRINTFORML [{GETTIME()}]` | ran | [20260904123814690] |
-| `GETTIMES` | ran | `PRINTFORML [{GETTIMES()}]` | ran | [2026/09/04 12:38:14] |
+| `GETTIME` | ran | `PRINTFORML [{GETTIME()}]` | ran | [20260906235116869] |
+| `GETTIMES` | ran | `PRINTFORML [{GETTIMES()}]` | ran | [2026/09/06 23:51:16] |
 | `GFILLRECTANGLE` | present | `PRINTFORML [{GFILLRECTANGLE(0, 0, 0, 0, 0)}]` | vm | VM error occurred: 메소드 GFILLRECTANGLE의 width는 0이 아닌 int 범위의 값이여야합니다: 0 |
 | `GGETCOLOR` | ran | `PRINTFORML [{GGETCOLOR(0, 0, 0)}]` | ran | [-1] |
 | `GHEIGHT` | ran | `PRINTFORML [{GHEIGHT(0)}]` | ran | [0] |
@@ -641,7 +641,7 @@ This harness therefore cannot prove absence for any `PRINT*` name;
 | `PLAYER` | ran | `PRINTFORML [{PLAYER}]` | ran | [0] |
 | `PREVCOM` | ran | `PRINTFORML [{PREVCOM}]` | ran | [0] |
 | `RAND` | present | `PRINTFORML [{RAND}]` | vm | VM error occurred: RAND의 인수가 생략되었습니다 |
-| `RANDDATA` | ran | `PRINTFORML [{RANDDATA}]` | ran | [909175202879401292] |
+| `RANDDATA` | ran | `PRINTFORML [{RANDDATA}]` | ran | [6534204583749256196] |
 | `RELATION` | ran | `ADDDEFCHARA ⏎ PRINTFORML [{RELATION}]` | ran | [0] |
 | `RESULT` | ran | `PRINTFORML [{RESULT}]` | ran | [0] |
 | `RESULTS` | ran | `PRINTFORML [{RESULTS}]` | ran | [] |

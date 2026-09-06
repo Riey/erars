@@ -3,3 +3,4 @@ tests/parse_tests/* linguist-vendored
 tests/run_tests/* linguist-vendored
 js-example/* linguist-vendored
 ERB/* linguist-vendored
+tests/fixtures/emuera_saves/**/*.sav binary
