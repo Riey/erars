@@ -359,7 +359,14 @@ pub fn write_save_data(sav_path: &Path, idx: u32, sav: &SerializableVariableStor
 pub fn delete_save_data(sav_path: &Path, idx: u32) -> Result<()> {
     create_sav_dir(sav_path)?;
 
-    std::fs::remove_file(sav_path.join(make_save_file_name(idx)))?;
+    // `DELDATA` (excom.md:1128-1131): "not an error even if the file does
+    // not exist" — matches .NET's `File.Delete`, a silent no-op for a
+    // missing path, unlike `std::fs::remove_file`.
+    if let Err(err) = std::fs::remove_file(sav_path.join(make_save_file_name(idx))) {
+        if err.kind() != std::io::ErrorKind::NotFound {
+            return Err(err.into());
+        }
+    }
 
     Ok(())
 }
