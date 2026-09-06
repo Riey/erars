@@ -1,10 +1,16 @@
 @SYSTEM_TITLE
 ; Plain `=` on a string variable is a FORM string literal: a comma in the
 ; RHS is a literal character of the assigned string, never a value-list
-; separator. This must stay bit-identical to today's behavior even though
-; `A:10 = 1,2,3` above now batch-fills — eraTHYMKR relies on this exact
-; distinction 87 times (RESULTS/LOCALS/CSTR/TSTR/STR/COM_NAME), and never
-; uses `'=` on those variables for a bulk fill
+; separator. Pre-fix `master` got this wrong — the plain-`=`-on-string
+; branch parsed its RHS with the comma-*stopping* `form_arg_expr` (meant
+; for call-argument lists), so it silently truncated at the first
+; unescaped comma (`STR = Strawberry, Melon, Blue Hawaii` would have
+; stored only `Strawberry`). This fixture pins the fix: the same branch
+; now uses `form_assign_expr` (no comma stop), so the comma survives as a
+; literal character. eraTHYMKR relies on this exact distinction 87 times
+; (RESULTS/LOCALS/CSTR/TSTR/STR/COM_NAME) and never uses `'=` on those
+; variables for a bulk fill — see `bulk_array_assign.erb`'s `A:10 = 1, 2,
+; 3` for that separate, `'=`/plain-`=`-on-int-array batch-fill feature
 ; (docs/research/emuera-wiki/exetc.md, "Assignment to a String Variable
 ; Using a String Expression": "The string `Strawberry, Melon, Blue
 ; Hawaii` is assigned to STR:20").

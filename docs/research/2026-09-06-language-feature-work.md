@@ -225,7 +225,8 @@ that oracle; they don't replace building it.
 `fix/executor-crash-class` (closed workstream: `LIMIT` guard, `ARRAYSORT`
 optional `order`, div/mod-by-zero guards, bit-helper index bounds,
 `<<`/`>>` shift-count masking, `FINDELEMENT`/`FINDLASTELEMENT`
-exact-match + regex-error handling, `TIMES`/`SQRT` `f32`→`f64`) merged into
+exact-match + regex-error handling, `TIMES`/`SQRT` integer-operand
+widening to `f64`, §5.1) merged into
 `master` first with `--no-ff`, cleanly, no conflicts. `feature/bulk-array-assign`
 (this arc: §2.1–2.4) merged second with `--no-ff`; both branches touched
 `executor.rs` but at disjoint line ranges (unary-operator dispatch vs.
@@ -249,3 +250,122 @@ validate nothing) — eramegaten reaches the six-class role-selection screen
 errors or warnings in the run transcript; eraTHYMKR reaches the main hub
 and reproduces both §2.2's and §2.3's in-situ proofs exactly as described
 above, against the merged binary.
+
+## 5. Corrections to this arc's claims and test coverage (2026-09-06, same day)
+
+A later review found this record and the standalone inventory
+(`docs/research/2026-09-06-language-feature-gap-inventory.md`) both
+overstated two `fix/executor-crash-class` items. Both are corrected here
+against the actual merged-`master` code, located by symbol rather than by
+the (already stale) line numbers those two documents cite.
+
+### 5.1 `TIMES` is only half-widened to `f64`; `SQRT` is fully widened
+
+`TIMES`'s multiplication factor is an AST/instruction-payload value, not a
+runtime-stack value: `Stmt::Times(Variable, NotNan<f32>)`
+(`crates/erars-ast/src/ast.rs`) is compiled straight into
+`Instruction::times(ratio)`, whose 4-byte payload is declared
+`@NotNan<f32>` in `crates/erars-compiler/src/instruction.rs`'s
+`define_instruction!` table. Growing that field to `f64` would widen every
+`Instruction` (or require a constant pool for just this one opcode) —
+exactly the kind of per-instruction size growth the preceding
+`bytecode-opt` arc (`docs/research/2026-09-05-bytecode-dispatch-optimization.md`)
+measured and rejected. This arc correctly did not do that.
+
+What the fix actually changed, in `InstructionType::Times`'s executor arm
+(`crates/erars-vm/src/terminal_vm/executor.rs`):
+
+```rust
+let t = inst.as_times().unwrap();
+let arg = ctx.pop_int()?;
+let ret = (arg as f64 * t.into_inner() as f64) as i64;
+```
+
+`arg` — the `i64` operand popped off the runtime stack — is now genuinely
+computed in `f64`, all the way through the multiply. That's the fix that
+matters: pre-fix, `arg` was cast straight to `f32` (24-bit mantissa)
+*before* multiplying, silently corrupting the low bits of any integer
+above 2^24 (16,777,216) — exactly the range EXP, money, and other
+large-magnitude script values live in, which is why this ranked #1 by
+corpus impact.
+
+`t.into_inner()` is a different story: it is still the `NotNan<f32>` read
+straight out of the instruction payload, `as f64`-widened with nothing to
+recover — a `f32`'s already-rounded value converts to `f64` exactly, but
+it was rounded to `f32` precision (~7 significant decimal digits) back at
+parse time and stays that way. So a residual ~1e-7 relative rounding error
+versus Emuera's true `double` factor remains, permanently, as a consequence
+of the payload layout — not a bug left over from an incomplete fix. This is
+harmless in practice: every real `TIMES` factor literal found across both
+corpora during the original inventory pass is a simple decimal like `1.5`
+or `0.8`, nowhere near needing `f64`'s extra 29 bits of mantissa to render
+exactly.
+
+**Correct summary: the integer-operand truncation (the real corruption
+risk) is fixed; the factor remains `f32`-precision by construction, and
+that residual is not corrected by, and does not need to be corrected by,
+this arc.** Prior wording ("`TIMES`/`SQRT` `f32`→`f64`") implied both were
+identically and completely widened; that is false for `TIMES`.
+
+`SQRT` has no such payload constraint. `BuiltinMethod::Sqrt`'s argument is
+an ordinary runtime value popped with `get_arg!(@i64: args, ctx)` — never
+stored in an instruction payload — so `(x as f64).sqrt() as i64` is
+complete, unconstrained `f64` end to end. `SQRT`'s widening claim was
+accurate; only the sentence lumping it together with `TIMES` was not.
+
+### 5.2 Shift-count masking is defensive hardening, not a confirmed crash
+
+The inventory's ranked table groups `<<`/`>>` shift masking with `LIMIT`,
+the bit-index helpers, div/mod-by-zero, and `ARRAYSORT`'s missing default
+argument as one undifferentiated "runtime panic" crash class, evidenced
+only by corpus *usage counts* of the operators — which count how often
+`<<`/`>>` appear in a script, not whether any of those call sites ever
+pass an out-of-range shift count. No profile in `Cargo.toml` sets
+`overflow-checks` (there is no `[profile.release]` section at all), so
+Cargo's default applies: `overflow-checks = false` in `--release`, `true`
+in `dev`/`test`. Confirmed empirically (`target/release`, runtime-computed
+shift amounts to defeat const-folding): pre-fix's raw `lhs << rhs` /
+`lhs >> rhs` panicked only in `dev`/`test` builds; in `--release`, LLVM's
+lowering already masked the shift count to `bits - 1` (i.e. `& 0x3F` for
+`i64`) before executing the shift — `1i64 << 64 == 1`, `1i64 << -1 ==
+i64::MIN`, `1i64 << 65 == 2`, matching C#'s own `& 0x3F` masking exactly.
+**The shipped `--release` binary was already computing Emuera-correct
+results for out-of-range shift counts before this fix; the fix hardens
+`dev`/`test` builds (and removes reliance on an implementation-defined
+LLVM lowering) rather than closing a release-crashing gap.** The same
+applies to the bit-helpers' pre-fix bodies (`GetBit`'s raw `l >> r`;
+`SetBit`/`ClearBit`/`InvertBit`'s raw `1 << idx`) — identical shift
+semantics, identical release-mode masking, identical dev/test-only panic
+risk. (`SetBit`/`ClearBit`/`InvertBit` additionally already rejected a
+negative index pre-fix, as a script error, via `get_arg!(@usize: ...)`'s
+failing conversion — only an index `>= 64` was subject to the masking
+behavior above.)
+
+Ranking the same five items by what a `--release` binary actually does
+pre-fix:
+
+- **Genuinely panics in `--release` (real crash-class fixes)**:
+  `BinaryOperator::Div`/`Rem` on `rhs == 0` or `i64::MIN / -1` (integer
+  division traps unconditionally in every Rust build profile, confirmed
+  empirically — it is not gated by `overflow-checks`); `LIMIT`'s
+  `v.clamp(low, high)` when `low > high` (`i64::clamp`'s internal bounds
+  check is a real `assert!`, not `debug_assert!`, confirmed empirically to
+  abort `--release` too).
+- **Debug/test-only panic; `--release` already produced a defensible
+  result without the fix (defensive hardening)**: `<<`/`>>` shift-count
+  masking; the `GETBIT`/`SETBIT`/`CLEARBIT`/`INVERTBIT` index guards.
+- **Never a Rust panic in any profile (not a crash-class item at all)**:
+  `ARRAYSORT`'s missing-`order` case is an ordinary `check_arg_count!`
+  failure — a `bail!`-raised `anyhow::Error` surfaced as a normal VM
+  script error (`매개변수가 부족합니다`), the same path every other
+  builtin's argument-count mismatch already used. It was a
+  feature-completeness gap (no optional-argument default), never a
+  process crash.
+
+All six fixes in `fix/executor-crash-class` were still worth making — the
+first two close a real `--release` crash, the guard-based ones make
+`dev`/`test` builds match `--release`'s already-correct behavior instead
+of panicking, and `ARRAYSORT`'s default argument is a genuine
+feature-completeness fix — but "five crashes, all confirmed reachable in
+the corpus" overstates both how many of them were process-crashing in
+what ships, and what the corpus counts actually established.

@@ -15,3 +15,13 @@ PRINTFORML {FINDLASTELEMENT(SAVESTR, "abc", 0, 3, 0)}
 PRINTFORML {FINDLASTELEMENT(SAVESTR, "abc", 0, 3, 1)}
 PRINTFORML {FINDLASTELEMENT(SAVESTR, "bc", 0, 3, 0)}
 PRINTFORML {FINDLASTELEMENT(SAVESTR, "bc", 0, 3, 1)}
+;
+; Exact mode (flag != 0) is regex whole-match, not literal equality:
+; a metacharacter in `value` still behaves as a regex even when flag != 0,
+; and a match only counts if it spans the entire element (erars mirrors
+; Emuera's `Match.Success && str.Length == match.Length`, not a `^...$`
+; anchor). These cases fail if exact mode is ever "simplified" to `==`.
+PRINTFORML {FINDELEMENT(SAVESTR, "abc|def", 0, 3, 1)}
+PRINTFORML {FINDLASTELEMENT(SAVESTR, "abc|def", 0, 3, 1)}
+PRINTFORML {FINDELEMENT(SAVESTR, "a.c", 0, 3, 1)}
+PRINTFORML {FINDELEMENT(SAVESTR, "b.", 0, 3, 1)}
