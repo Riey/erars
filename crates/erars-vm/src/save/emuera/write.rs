@@ -34,48 +34,75 @@
 //! shape, in file order" — no built-in/user split needed.
 //!
 //! The *global*-scope extended section is different: its 8 built-in groups
-//! (`VariableData.SaveToStreamExtended`'s own `GetExtSaveList` pass) hold
-//! `VariableCode` members flagged `__SAVE_EXTENDED__` for that shape —
-//! **not** "no such member exists": `RANDDATA` (`VariableCode.cs:120`,
-//! `__INTEGER__ | __ARRAY_1D__ | __SAVE_EXTENDED__ | __EXTENDED__`, no
-//! `__CHARACTER_DATA__`/`__LOCAL__` flag) is exactly such a global-scope
-//! built-in array and so, by the enum flags alone, should be a candidate
-//! for that pass's `dataIntegerArray` group. That it is *not* actually
-//! written there is established empirically, not from the enum: a real
-//! Emuera-written capture whose `RANDDATA` holds genuine non-zero RNG
-//! state (`crates/erars-vm/tests/emuera_rand_save_fixture.rs`) round-trips
-//! byte-exact with `RANDDATA` appearing among the six *user*-defined
-//! groups, at the same file position an ordinary `#DIM GLOBAL RANDDATA,
-//! 625` declaration would occupy — proving Emuera's real writer does not
-//! source that built-in group's `dataIntegerArray[RANDDATA]` slot from
-//! the same live state `RANDDATA` reads as a script variable (most likely
-//! the RNG state is held in a separate object with its own get/set
-//! intercept, and the backing `dataIntegerArray` field the built-in pass
-//! reads is simply never populated). `GetExtSaveList`'s role per
-//! `crosscheck.md` §2.7 is populating `extSaveListDic`, a name-recognition
-//! table for the *reader* mapping identifier strings back to
-//! `VariableCode`s — this doc's claim about what the *writer* actually
-//! emits rests on every real capture in this crate's corpus (13 files,
-//! including the RANDDATA one above) having all 8 built-in groups empty,
-//! not on having read `VariableData.cs:689-762`'s exact field list
-//! line-by-line to prove no other global-scope `__SAVE_EXTENDED__` member
-//! can ever hold nonzero content there.
+//! (`VariableData.SaveToStreamExtended`, `VariableData.cs:689-741`, via
+//! `GetExtSaveList`) are populated by the writer, and this crate's own
+//! writer previously got that wrong *twice* — first claiming no
+//! `VariableCode` member could ever land there, then (having found
+//! `RANDDATA` in the enum) claiming the group was empty in practice
+//! anyway "empirically, every real capture examined so far". Both claims
+//! are refuted by a fixture already in this crate's own corpus:
+//! `tests/fixtures/emuera_saves/real_rand/randcap90_real.sav` (see its
+//! README) has a non-zero `RANDDATA` sitting three `__EMU_SEPARATOR__`s
+//! after the marker — the *fourth* of the local save's 14 extended
+//! groups, i.e. the built-in int-1D group, not any of the six
+//! user-defined ones (which start only after all 8 built-ins, group 10
+//! onward; the fixture's own `#DIM SAVEDATA RANDCAP` array lands there,
+//! nine separators in). `round_trip_real_captures_are_byte_exact` and
+//! `export_local_places_randdata_in_builtin_int1d_group` (`emuera.rs`'s
+//! `tests` module) both pin this exact layout.
 //!
-//! **If this is wrong** — some Emuera build/config *does* populate a
-//! built-in group's backing field with live content — a real capture from
-//! that build would fail this crate's reader-side round-trip test outright
-//! (the reader also assumes these 8 groups are structurally present but
-//! content-empty, spec §2.5), and this writer would need a new built-in
-//! group case in [`write_variable_section`] rather than routing that name
-//! through the user-defined groups. Re-run the round-trip test against any
-//! newly captured save before trusting this claim for a build outside the
-//! `real`/`real_old` corpus.
+//! The source confirms the fixture, not just the enum flags in isolation:
+//! `VariableData.SaveToStreamExtended` calls `GetExtSaveList` once per
+//! shape and unconditionally writes every code it returns
+//! (`VariableCode.cs:100,114,181-193`); `GetExtSaveList`
+//! (`VariableIdentifier.cs:264-271`) is populated by every
+//! `__SAVE_EXTENDED__`-flagged member at static-init time
+//! (`VariableIdentifier.cs:249-260`), keyed by exactly the shape bits
+//! (`__ARRAY_1D__`/`__ARRAY_2D__`/`__ARRAY_3D__`/`__CHARACTER_DATA__`/
+//! `__STRING__`/`__INTEGER__`) `WriteExtended`'s caller masks with — the
+//! same list the *reader*'s `LoadFromStreamExtended`
+//! (`VariableData.cs:754-816`) filters its own dictionaries by. So
+//! `GetExtSaveList` drives both sides of the built-in groups, not just
+//! the reader's name recognition. Enumerating every global-scope (i.e.
+//! not `__CHARACTER_DATA__`) `__SAVE_EXTENDED__` member in
+//! `VariableCode.cs` gives exactly:
 //!
-//! So those 8 groups are unconditionally empty in every real capture
-//! examined so far, and every non-OLD global-scope name instead belongs to
-//! the six *user*-defined groups (`userDefinedSaveVarList[0..6]`),
-//! version-gated to `>= 1808`. [`write_variable_section`] encodes exactly
-//! that split.
+//! | Built-in group | Members (declaration/enum order) |
+//! |---|---|
+//! | string scalar | *(none — no such member exists)* |
+//! | int scalar | *(none)* |
+//! | string 1D | `TSTR` (`0x06`, a real accessible script variable — see `VariableData.cs:200`, `VariableEvaluator.cs:1559`, not erars-invented) |
+//! | int 1D | `RANDDATA` (`0x40`) |
+//! | string 2D | *(none — `__COUNT_STRING_ARRAY_2D__ == 0`)* |
+//! | int 2D | `DITEMTYPE`, `DA`, `DB`, `DC`, `DD`, `DE` (`0x00`-`0x05`) |
+//! | string 3D | *(none — `__COUNT_STRING_ARRAY_3D__ == 0`)* |
+//! | int 3D | `TA`, `TB` (`0x00`-`0x01`) |
+//!
+//! (Member order within a group matches `Enum.GetValues`' ascending raw
+//! value, which for members sharing a shape's flag bits reduces to plain
+//! declaration order — the low index byte is the only thing that
+//! differs.) All 8 of these names are already implemented in this crate
+//! as ordinary `is_savedata` variables (`erars-loader/src/variable.yaml`),
+//! so an export can legitimately carry any of them and must route each to
+//! its correct built-in group — not the user-defined pass — and must
+//! exclude them from that user-defined pass so they are never written
+//! twice. [`write_variable_section`] does exactly that:
+//! [`BUILTIN_STR1D`]/[`BUILTIN_INT1D`]/[`BUILTIN_INT2D`]/[`BUILTIN_INT3D`]
+//! give each built-in group's fixed membership and order; the four
+//! groups with no member (string/int scalar, string 2D/3D) are always
+//! empty for a structural reason (no such `VariableCode` exists), not an
+//! observed-so-far one, so no fixture could ever falsify that half of the
+//! claim short of a future Emuera version adding a new flagged member.
+//!
+//! **What would falsify the rest of this** — the four *non-empty* groups'
+//! exact membership/order: a real capture whose built-in string-1D,
+//! int-1D, int-2D, or int-3D group contains a key not in the table above,
+//! or omits/reorders one of the ones listed while that variable holds
+//! non-default content, or places a member in a different group entry
+//! than its declared order predicts. Re-run
+//! `round_trip_real_captures_are_byte_exact` against any newly captured
+//! save before trusting this table for a build outside this crate's own
+//! corpus.
 
 use anyhow::{bail, ensure, Result};
 
@@ -90,6 +117,22 @@ use super::{
 /// (spec §2.6); writing an older marker is out of scope (see the export
 /// module's doc comment).
 pub const EXPORT_VERSION: u32 = 1808;
+
+// ---------------------------------------------------------------------
+// Built-in extended-group membership (see the module doc comment's
+// "Group placement" section for the source/fixture evidence)
+// ---------------------------------------------------------------------
+
+/// Built-in global-scope string-1D members, in enum order.
+const BUILTIN_STR1D: &[&str] = &["TSTR"];
+/// Built-in global-scope int-1D members, in enum order. `RANDDATA` is the
+/// only one — this is the group the module doc comment's fixture-refuted
+/// claim was about.
+const BUILTIN_INT1D: &[&str] = &["RANDDATA"];
+/// Built-in global-scope int-2D members, in enum order.
+const BUILTIN_INT2D: &[&str] = &["DITEMTYPE", "DA", "DB", "DC", "DD", "DE"];
+/// Built-in global-scope int-3D members, in enum order.
+const BUILTIN_INT3D: &[&str] = &["TA", "TB"];
 
 // ---------------------------------------------------------------------
 // Shared little helpers
@@ -634,6 +677,27 @@ fn extended_names<'a>(
         .map(|(k, v)| (k.as_str(), v))
 }
 
+/// As [`extended_names`], but for a built-in group: `names` gives the
+/// group's *fixed*, source-derived membership and order (see the module
+/// doc comment) instead of the map's own insertion order, and there is no
+/// `exclude` — a built-in name is never itself excluded from its own
+/// group. Only names actually present in `map` (and of matching shape)
+/// are yielded; erars implements every one of these as an ordinary
+/// `is_savedata` variable, but a hand-built or foreign-parsed map need
+/// not declare all of them.
+fn builtin_names<'a>(
+    map: &'a IndexMap<String, ParsedArray>,
+    names: &'static [&'static str],
+    want_str: bool,
+    want_dims: usize,
+) -> impl Iterator<Item = (&'a str, &'a ParsedArray)> {
+    names.iter().filter_map(move |&name| {
+        map.get(name)
+            .filter(|v| v.is_str() == want_str && v.dim_count() == want_dims)
+            .map(|v| (name, v))
+    })
+}
+
 fn write_str_scalar_group<'a>(lines: &mut Vec<String>, names: impl Iterator<Item = (&'a str, &'a ParsedArray)>) {
     for (name, v) in names {
         if let ParsedArray::StrScalar(s) = v {
@@ -730,28 +794,42 @@ fn write_chara_section(lines: &mut Vec<String>, chara: &IndexMap<String, ParsedA
 }
 
 /// The local save's own (non-chara) variable section (spec §2.5): 8
-/// built-in groups — unconditionally empty in every real capture, see the
-/// module doc comment — then, `version >= 1808` only, 6 user-defined
-/// groups holding every non-OLD global-scope name. Mirrors
+/// built-in groups (string/int scalar — always empty, no such member
+/// exists; string 1D — `TSTR`; int 1D — `RANDDATA`; string 2D — always
+/// empty; int 2D — `DITEMTYPE`/`DA`-`DE`; string 3D — always empty; int
+/// 3D — `TA`/`TB`; see the module doc comment's "Group placement"
+/// section), then, `version >= 1808` only, 6 user-defined groups holding
+/// every other non-OLD global-scope name. Mirrors
 /// [`super::parse_variable_section`] exactly.
 fn write_variable_section(lines: &mut Vec<String>, globals: &IndexMap<String, ParsedArray>, version: u32) -> Result<()> {
     let mut exclude: Vec<&str> = GLOBAL_OLD_ARR.to_vec();
     exclude.push("SAVESTR");
+    exclude.extend(BUILTIN_STR1D.iter().chain(BUILTIN_INT1D).chain(BUILTIN_INT2D).chain(BUILTIN_INT3D));
 
-    // 8 built-in groups: empirically empty in every real capture examined
-    // (including one with genuine non-zero RANDDATA content) — see the
-    // module doc comment's "Group placement" section for why this is not
-    // simply an enum-flag consequence, and what would have to be re-checked
-    // if it turns out wrong for some other build.
-    for _ in 0..4 {
-        lines.push(EMU_SEPARATOR.to_owned());
-    }
+    // Built-in group 1 (string scalar) and 2 (int scalar): no
+    // `VariableCode` member with either shape is ever flagged
+    // `__SAVE_EXTENDED__` at global scope — structurally, not just
+    // empirically, empty.
+    lines.push(EMU_SEPARATOR.to_owned());
+    lines.push(EMU_SEPARATOR.to_owned());
+    // Built-in group 3 (string 1D): `TSTR`.
+    write_str1d_group(lines, builtin_names(globals, BUILTIN_STR1D, true, 1));
+    lines.push(EMU_SEPARATOR.to_owned());
+    // Built-in group 4 (int 1D): `RANDDATA`.
+    write_int1d_group(lines, builtin_names(globals, BUILTIN_INT1D, false, 1));
+    lines.push(EMU_SEPARATOR.to_owned());
     if version >= 1708 {
+        // Built-in group 5 (string 2D): structurally empty, as above.
         lines.push(EMU_SEPARATOR.to_owned());
+        // Built-in group 6 (int 2D): `DITEMTYPE`, `DA`-`DE`.
+        write_int2d_group(lines, builtin_names(globals, BUILTIN_INT2D, false, 2));
         lines.push(EMU_SEPARATOR.to_owned());
     }
     if version >= 1729 {
+        // Built-in group 7 (string 3D): structurally empty, as above.
         lines.push(EMU_SEPARATOR.to_owned());
+        // Built-in group 8 (int 3D): `TA`, `TB`.
+        write_int3d_group(lines, builtin_names(globals, BUILTIN_INT3D, false, 3));
         lines.push(EMU_SEPARATOR.to_owned());
     }
 
