@@ -1,11 +1,12 @@
 # Emuera On-Disk Save Format (1.818 / `0x710`)
 
-**Date:** 2026-09-06
+**Date:** 2026-09-06 (amended 2026-09-07 with real C# source — see §8)
 **Authorities, in order:**
-1. **Real on-disk captures** (new, definitive) — six files produced by actually running `Emuera1818_kr3.exe` (eraTHYMKR v3.21 corpus) under wine headless (Xvfb), in all container variants, at `tests/fixtures/emuera_saves/real/` (see `real/README.md`). These verify bytes where IL only implies.
-2. IL disassembly of `Emuera1818_kr3.exe` (Emuera 1.818, `.NET 2.0` x86, version marker `0x710`) at `/tmp/emuera.il`, produced by mono `ikdasm`, cited as `Emuera1818_kr3.exe IL <method> (.il:<line>)`.
-3. erars's own writer `crates/erars-vm/src/save.rs` (contrast only).
-**WebEmuera C# source is unavailable** (verified absent system-wide); compiled IL + real captures are the byte-level truth.
+1. **Real C# source** (new, definitive) — the upstream Emuera sources shipped by **uEmuera** (`github.com/xerysherry/uEmuera`, commit `cb66a45`, **Emuera 1824v15**) in `Assets/Scripts/Emuera/`; cited as `path:line`. Every claim in this doc is cross-checked against it in `docs/research/2026-09-07-emuera-source-crosscheck.md`. **Version note:** the source is 1824, not 1.818; the `VariableCode` enum is contract-frozen so the OLD-block slots are identical, but two writer-side differences are flagged inline (§4.3).
+2. **Real on-disk captures** — six files produced by actually running `Emuera1818_kr3.exe` (eraTHYMKR v3.21 corpus) under wine headless (Xvfb), in all container variants, at `tests/fixtures/emuera_saves/real/` (see `real/README.md`). These verify bytes where source only implies.
+3. IL disassembly of `Emuera1818_kr3.exe` (Emuera 1.818, `.NET 2.0` x86, version marker `0x710`) at `/tmp/emuera.il`, produced by mono `ikdasm`, cited as `Emuera1818_kr3.exe IL <method> (.il:<line>)` — retained where it is the only 1.818 evidence, superseded by the C# where they overlap.
+4. erars's own writer `crates/erars-vm/src/save.rs` (contrast only).
+Compiled IL + real captures + the C# source are the byte-level truth.
 
 > These headers/documentation in READMEs of fixtures say the same thing in shorter form.
 
@@ -181,7 +182,7 @@ WriteInt64(charCount)   8 bytes
 CharacterData::SaveToStreamBinary  x charCount   (contiguous WriteWithKey records, no separators)
 WriteEOF()              1 byte    0xFF
 ```
-Real capture decoded to 37 contiguous records (`ISASSI,NO,BASE,...,TCVAR, NAME,CALLNAME,NICKNAME,MASTERNAME, CSTR, ITEM_MAP, MONSTER_MAP, PLAYER_DATA, INVENTORY_ITEM, INVENTORY_FLAG, ITEM_NAME_RPG, ITEM_DISCRIPT_RPG, ITEM_DATA_RPG, MONSTER_DATA`) then a single `0xFF` EOF at offset 2316 — **no `0xFD`/`0xFE` separators appear in a local binary save**.
+Real capture decoded to 37 contiguous records (`ISASSI,NO,BASE,...,TCVAR, NAME,CALLNAME,NICKNAME,MASTERNAME, CSTR, ITEM_MAP, MONSTER_MAP, PLAYER_DATA, INVENTORY_ITEM, INVENTORY_FLAG, ITEM_NAME_RPG, ITEM_DISCRIPT_RPG, ITEM_DATA_RPG, MONSTER_DATA`) then a single `0xFF` EOF at offset 2316 — **no `0xFD`/`0xFE` separators appear in this local binary save**. Each char block is terminated by a single `0xFE` (`EOC`, `CharacterData.SaveToStreamBinary` `CharacterData.cs:464`), then the global block ends with `0xFF`. From Emuera **1813** a `0xFD` (`Separator`) is additionally written *inside* a char block before its `#DIM` user-defined chara vars (`CharacterData.cs:451-462`); none of the six captures exercises this, and erars's reader refuses such a file cleanly (see `docs/research/2026-09-07-emuera-source-crosscheck.md` §7).
 
 ### 4.2 Global save, binary (`SaveGlobal` → `SaveGlobalToStreamBinary`, `.il:109115,51432`; **validated against `global_binary_real.sav`**)
 ```text
@@ -204,7 +205,7 @@ Real `global_binary_real.sav` (76 B): header(16) + FileType(1) + code(8) + versi
 
 (`0xCF`=Byte, `0xD0`=Int16, `0xD1`=Int32, `0xD2`=Int64 tag — `Ebdb` markers, `.il:~94620`.)
 
-**Integer 1D array** (`writeData(int64[])`, `.il:93732-93845`): `int32 length` (full logical length) + elements (each via `m_WriteInt`; runs of ≥1 consecutive zeros are compressed as `0xF0` `count` via `m_WriteInt`), terminated by `0xFF` (EoD). If the tail is all zeros, the trailing zero-run is still emitted (`0xF0 count`) — the length field carries the true extent. (Verified: real `BASE` array = len `64` + `0x0F`... values + zero-run + `0xFF`.)
+**Integer 1D array** (`writeData(int64[])`, `.il:93732-93845`; `EraBinaryDataWriter.writeData(Int64[])` `EraBinaryDataWriter.cs:140-165`): `int32 length` (full logical length) + elements (each via `m_WriteInt`; runs of ≥1 consecutive zeros are compressed as `0xF0` `count` via `m_WriteInt`), terminated by `0xFF` (EoD). **A trailing all-zero tail is NOT emitted** — the writer drops the final zero-run and writes `EoD` directly (`EraBinaryDataWriter.cs:163` comment: "if the rest of the array is all zero, don't store the zero count, just store the end-of-array"); the reader zero-fills the remainder up to the length field, which carries the true extent. (Verified: real `BASE` = len `100` + `2500 2000 10000` + `0xFF`, no trailing zero-run. `0xF0` runs appear only mid-array, always followed by non-zero data.) [A prior version of this claim said the trailing run is emitted — WRONG, corrected 2026-09-07 against both the 1.818 capture and the 1824 source.]
 **Integer 2D / 3D** (`writeData(int64[0...,0...])`, `.il:93847`): `dim0:int32, dim1:int32` (+ `dim2` for 3D), then elements via `m_WriteInt` with zero-run compression, terminated by `0xFF` (signature `02 10 52 45 4C 41 54 49 4F 4E 00 00 00 02 00 00 00 03 00 00 00` verified in real save for `RELATION` int2D, dims 2×3).
 
 **Per-variable record** (`WriteWithKey(key, value)`, `/tmp/emuera.il:93491-93630`):
@@ -215,7 +216,7 @@ type byte: `0`=int64, `1`=int64[], `2`=int64[2D], `3`=int64[3D], `16`=string, `1
 `<key string>`: `BinaryWriter.Write(string)` (7-bit byte-length prefix + **UTF-16LE**).
 `<payload>`: the scalar / 1D / 2D / 3D encoding above.
 
-**Terminators:** `WriteSeparator`=0xFD (`EraSaveDataType.Separator`), `WriteEOC`=0xFE, `WriteEOF`=0xFF. **Note:** in a local/global binary save these separators do not appear between records — the type byte disambiguates each record and the file ends with a single `0xFF`. (`0xFD`/`0xFE` are used by `SaveVariable`/`LoadVariableBinary` for `SAVEVAR`/`SAVECHARA` dat files.)
+**Terminators:** `WriteSeparator`=0xFD (`EraSaveDataType.Separator`), `WriteEOC`=0xFE, `WriteEOF`=0xFF. **Note:** in a local/global binary save the type byte disambiguates each record; each char block ends with one `0xFE`, the file ends with one `0xFF`. `0xFD` appears only (a) inside a 1813+ char block before `#DIM` user-defined chara vars (`CharacterData.cs:451-462`, see §4.1), and (b) in `SaveVariable`/`LoadVariableBinary`'s `SAVEVAR`/`SAVECHARA` dat files.
 
 > **Loader recommendation:** implement binary per the above (now fully validated against real captures), or refuse binary cleanly. Binary strings are **UTF-16LE** (7-bit byte length), and the type-byte set `{0,1,2,3,16,17,18,19}` is confirmed.
 
@@ -244,9 +245,9 @@ Biggest structural differences: (1) Emuera stores **plaintext** sections separat
 ## 6. Unresolved / low-confidence
 
 1. ~~**UTF-8 text BOM**~~ — **RESOLVED (empirical):** UTF-8 text saves begin `EF BB BF`; SJIS and binary do not.
-2. **2D/3D exact byte framing in binary** — the writer side is fully validated (see §4.3: `RELATION` int2D dims 2×3 decodes). The `EraBinaryDataReader` 2D/3D *reader* marker semantics (EoA2 `0xE1` / ZeroA2 `0xF2` on the read path) were not exercised by the real captures (the eraTHYMKR char block's 2D/3D arrays wrote uncompressed), so loader 2D/3D *reading* should still be treated with mild caution — but the on-disk record framing is confirmed.
-3. **Old-era marker variance** — older versions wrote `__EMUERA_STRAT__` (1.700), `__EMUERA_1708_STRAT__`, `_1729_`, `_1803_`. This build emits only `__EMUERA_1808_STRAT__`. Recommendation: accept `1808` as primary; treat any other marker as "unsupported version".
-4. **3D string arrays in text** are unimplemented in Emuera itself (reader throws); any loader should reject a text save that contains a 3D string key.
+2. ~~**2D/3D exact byte framing in binary**~~ — **RESOLVED (source, 2026-09-07):** the `EraBinaryDataReader` marker semantics are confirmed from the C# (`EraBinaryDataReader.cs` `Ebdb` `:35-46`; `ReadIntArray2D` `:278-370`, `ReadIntArray3D` `:372-495`, `ReadStrArray2D` `:599-649`, `ReadStrArray3D` `:651-730`): `EoA1{0xE0}` row terminator, `ZeroA1{0xF1}` N empty rows, `EoA2{0xE1}` matrix/plane terminator, `ZeroA2{0xF2}` N empty planes, `Zero{0xF0}` N zero cells, `String{0xD8}`, `EoD{0xFF}`. The real captures exercise `0xF0`/`0xD0-0xD2`/`0xD8` but, as predicted, never the 2D/3D structural markers. erars's `BinCursor` (`emuera.rs:730-1058`) implements them identically to the C# — verified, so the earlier "mild caution" is withdrawn; two unit tests feed C#-writer-equivalent bytes through `read_int2d`/`read_int3d` to prove it.
+3. **Old-era marker variance** — CONFIRMED (source, 2026-09-07) real Emuera's `SeekEmuStart` (`EraDataStream.cs:129-165`) accepts **all five**: `__EMUERA_STRAT__`(1700), `_1708_`, `_1729_`, `_1803_`, `_1808_` and dispatch the extended-block grammar by `DataVersion` (`VariableEvaluator.cs:2315-2324`, `VariableData.cs:799-801`). This build's writer emits only `_1808_` (`EraDataWriter.EMU_START = EraDataReader.EMU_1808_START`, `EraDataStream.cs:480`). erars's reader is a 1.808+ extended-grammar reader: for a non-1808 marker it still parses the OLD block (version-independent) and ignores the extended block. That is the intended conservative refusal, kept; the difference is now documented precisely.
+4. **3D string arrays in text** — CONFIRMED (source, 2026-09-07): unimplemented in Emuera itself on **both** writer and reader — `WriteExtended(string,string[,])`/`(string,string[,,])` throw `NotImplementedException` (`EraDataStream.cs:658-661,722-725`), and `ReadStringArray2D/3DExtended` throw `FileEE` on any content (`:338-349,413-426`). 2D string is likewise unimplemented in text. Binary string 2D/3D (type `0x12`/`0x13`) ARE fully implemented. Any text-save loader should reject a 2D/3D string key, as erars does.
 5. **BOM / char-count edge**: a `characterCount` of 0 (pure-var or fresh global) — global saves never write a count line; local saves always do. UTF-8 text saves carry a `EF BB BF` BOM on line 1 (strip before parsing); SJIS and binary do not.
 6. **SJIS is lossy for non-cp932 text.** The eraTHYMKR game is Korean; with `SystemSaveInUTF8:NO` the saveText/string values are written as SHIFT-JIS (cp932), which cannot represent Hangul — the real SJIS capture shows `?`-style byte substitution in place of Korean, i.e. the game's own Korean strings do not survive a SJIS save round-trip. Loaders should not reject on this; it is expected behavior.
 
@@ -257,3 +258,18 @@ Biggest structural differences: (1) Emuera stores **plaintext** sections separat
 - **The OLD block must be parsed, not skipped** (see §2.3): it is where nearly all of a real save's actual game state lives. A loader reads it positionally first (per character, then the global vars), *then* scans for `__EMUERA_1808_STRAT__` (`SeekEmuStart`) and layers the extended block on top if found — mirroring `VariableEvaluator::LoadFromStream`'s exact call order (OLD reads, then `SeekEmuStart()`, then extended reads only if it returned `true`). `SeekEmuStart` returning `false` (pre-1.808 saves, no marker at all) means there is no extended block to add — not that the OLD block should have been skipped.
 - Extended scalar sections are `KEY:VALUE`, arrays are `KEY` then values then `__FINISHED`, 2D is comma-joined rows + `__FINISHED`. All separators are `__EMU_SEPARATOR__` and the extended-body marker is `__EMUERA_1808_STRAT__`. End of the variable extended block is simply **EOF** (no trailing `__FINISHED` after the last user-defined section).
 - Emuera's text reader reads numeric arrays up to the trimmed length and back-fills the declared default beyond it — match this with `VmVariable::overwrite_from` (already present in erars).
+
+---
+
+## 8. Source cross-check (2026-09-07)
+
+Every claim in this document has been re-verified against the real Emuera C#
+source (uEmuera, commit `cb66a45`, Emuera 1824v15) in
+[`2026-09-07-emuera-source-crosscheck.md`](2026-09-07-emuera-source-crosscheck.md):
+the positional OLD-block layouts (§2.3) are confirmed name-for-name and
+count-for-count, the binary 2D/3D marker semantics (§6.2) are confirmed and
+erars already implements them correctly, the old-marker and string-2D/3D
+items (§6.3/§6.4) are resolved, and the one factual error found (§4.3's
+"trailing zero-run is still emitted") is corrected in place. No reader bug
+was found; the only code change is two tests that lock in the
+source-verified 2D/3D marker path.

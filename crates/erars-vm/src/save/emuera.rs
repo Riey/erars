@@ -7,12 +7,15 @@
 //! here to find out which.
 //!
 //! Byte-level grammar is documented in
-//! `docs/research/2026-09-06-emuera-save-format.md` (citations to Emuera's
-//! decompiled IL, `Emuera1818_kr3.exe` — an actual shipped binary, not
-//! secondary documentation); this module implements exactly what that spec
-//! establishes and refuses, cleanly, whatever it marks unresolved rather
-//! than guessing at it. See [`EmueraSaveVariant`] for the container forms
-//! Emuera itself can produce and which of them this module accepts.
+//! `docs/research/2026-09-06-emuera-save-format.md` — originally derived
+//! from decompiled IL of Emuera 1.818 (`Emuera1818_kr3.exe`) and re-verified
+//! against the real Emuera C# source (uEmuera, `Assets/Scripts/Emuera/`,
+//! Emuera 1824v15) in
+//! `docs/research/2026-09-07-emuera-source-crosscheck.md`. This module
+//! implements exactly what the spec establishes and refuses, cleanly,
+//! whatever it marks unsupported rather than guessing at it. See
+//! [`EmueraSaveVariant`] for the container forms Emuera itself can produce
+//! and which of them this module accepts.
 //!
 //! ## Scope: read-only, numbered saves and `global.sav` only
 //!
@@ -220,6 +223,36 @@ impl ParsedArray {
     }
 }
 
+/// What the seek for the extended block actually found. The OLD block is
+/// always parsed first and is version-independent (spec §2.3); this records
+/// whether a `__EMUERA_1808_STRAT__`, an older marker, or no marker at all
+/// followed it — the difference decides whether the save's extended-only
+/// variables (`NICKNAME`, `MASTERNAME`, `CSTR`, `CDFLAG`, and every user
+/// `#DIM SAVEDATA` array) were imported or are being dropped, which is a
+/// load the player must be told about rather than one that silently passes
+/// as "complete".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ExtendedMarker {
+    /// `__EMUERA_1808_STRAT__` was found and its extended block was read.
+    Emuera1808,
+    /// An older (or unknown) `__EMUERA_..._STRAT__` marker was found; its
+    /// exact text is kept. This reader implements only the 1808 extended
+    /// grammar, so that block is *not* read.
+    Older(String),
+    /// No extended marker was found at all (a save written before the
+    /// extended block existed, or truncated); no extended block was read.
+    Absent,
+}
+
+impl Default for ExtendedMarker {
+    fn default() -> Self {
+        // `parse_binary` sets this explicitly; the default is the common
+        // text case, so [`ImportReport`]/callers built without one
+        // short-circuit to "nothing to warn about".
+        ExtendedMarker::Emuera1808
+    }
+}
+
 /// Everything read out of one Emuera save file's variable payload, in
 /// foreign-name-keyed form — `String`s, not `StrKey`s: a name this game
 /// never interned cannot become a `StrKey` at all, which is itself the
@@ -234,6 +267,11 @@ pub struct EmueraSaveData {
     /// One row per `CHARADATA` entry (spec §2.5 "Character section"), in
     /// the file's own order.
     pub charas: Vec<HashMap<String, ParsedArray>>,
+    /// Which extended-block marker the seek found (see [`ExtendedMarker`]);
+    /// the OLD block is always read regardless. Populated by [`parse_text`];
+    /// binary saves are inherently 1808-framed, so [`parse_binary`] sets
+    /// [`ExtendedMarker::Emuera1808`].
+    pub extended_marker: ExtendedMarker,
 }
 
 /// Sniffs which [`EmueraSaveVariant`] `bytes` (the whole file, not yet
@@ -337,22 +375,33 @@ impl<'a> LineCursor<'a> {
             .map_err(|e| anyhow!("정수가 아닙니다: {line:?} ({e})"))
     }
 
-    /// Consumes lines up to and including the first line equal to `marker`,
-    /// returning `true` if found. Returns `false` (consuming every
-    /// remaining line) if the file ends first — real Emuera's own
-    /// `SeekEmuStart` (`.il:142958-143054`) does exactly this and returns
-    /// `false` rather than erroring: a save written before the extended
-    /// block existed genuinely has no marker and no extended data at all,
-    /// which is a legitimate, expected case (spec §7, corrected — the OLD
-    /// block is never actually optional to *read*, only the extended block
-    /// following it is).
-    fn try_seek_past(&mut self, marker: &str) -> bool {
+    /// Consumes lines up to and including the first extended-block marker,
+    /// returning which one was found. Real Emuera's own `SeekEmuStart`
+    /// (`.il:142958-143054`; `EraDataStream.cs:129-165`) accepts all five
+    /// markers and reports whether the extended block follows. This reader
+    /// implements only the 1808 extended grammar, so anything other than
+    /// `__EMUERA_1808_STRAT__` — an older marker, or none at all (a save
+    /// written before the extended block existed) — is surfaced as a
+    /// reportable [`ExtendedMarker]` rather than silently treated as
+    /// "complete" (`docs/research/2026-09-07-emuera-source-crosscheck.md`
+    /// §6.3): the OLD block is never optional to *read*, only the extended
+    /// block following it is.
+    fn seek_emu_start(&mut self) -> ExtendedMarker {
         for line in self.lines.by_ref() {
-            if line == marker {
-                return true;
+            if line == EMU_START {
+                return ExtendedMarker::Emuera1808;
+            }
+            // Shape-match any other `__EMUERA_..._STRAT__` (including the
+            // 1700-vintage `__EMUERA_STRAT__`, which carries no version
+            // number) so an unknown future marker is also reported rather
+            // than swallowed. Only markers live here: the seek runs between
+            // the end of the OLD block and the start of the extended block,
+            // where no value line can look like a marker.
+            if line.starts_with("__EMUERA_") && line.ends_with("STRAT__") {
+                return ExtendedMarker::Older(line.to_owned());
             }
         }
-        false
+        ExtendedMarker::Absent
     }
 
     /// One value per line until `__FINISHED`, with no leading `KEY` line —
@@ -698,11 +747,14 @@ fn parse_text(text: &str, is_global: bool) -> Result<(EmueraSaveData, u32, u32, 
         parse_old_variable_block(&mut cursor)?
     };
 
-    // The extended block genuinely is optional — an old-version save with
-    // no `__EMUERA_..._STRAT__` marker at all has none, and `try_seek_past`
-    // returning `false` (real `SeekEmuStart` semantics) is the correct,
-    // expected outcome for one, not an error.
-    if cursor.try_seek_past(EMU_START) {
+    // The extended block genuinely is optional — a save written before it
+    // existed carries no `__EMUERA_..._STRAT__` marker at all. Only the
+    // 1808 marker's extended grammar is read; an older marker (or none at
+    // all) is surfaced via [`ExtendedMarker`] so the caller can warn the
+    // player that the extended-only variables were dropped — never a
+    // silent load.
+    let extended_marker = cursor.seek_emu_start();
+    if extended_marker == ExtendedMarker::Emuera1808 {
         if is_global {
             globals.extend(parse_global_variable_section(&mut cursor)?);
         } else {
@@ -714,7 +766,7 @@ fn parse_text(text: &str, is_global: bool) -> Result<(EmueraSaveData, u32, u32, 
     }
 
     Ok((
-        EmueraSaveData { globals, charas },
+        EmueraSaveData { globals, charas, extended_marker },
         code as u32,
         version as u32,
         description,
@@ -1136,7 +1188,12 @@ fn parse_binary(bytes: &[u8], is_global: bool) -> Result<(EmueraSaveData, u32, u
     let end = read_binary_records(&mut cur, &mut globals)?;
     ensure!(matches!(end, RecordEnd::Eof), "전역 레코드 블록이 EOF(0xFF)로 끝나지 않았습니다");
 
-    Ok((EmueraSaveData { globals, charas }, code as u32, version as u32, description))
+    Ok((
+        EmueraSaveData { globals, charas, extended_marker: ExtendedMarker::Emuera1808 },
+        code as u32,
+        version as u32,
+        description,
+    ))
 }
 
 /// One variable dropped from the import, and why.
@@ -1193,6 +1250,15 @@ pub struct PartialVariable {
 pub struct ImportReport {
     pub skipped: Vec<SkippedVariable>,
     pub partial: Vec<PartialVariable>,
+    /// Set when the save's extended block was not imported — an older
+    /// `__EMUERA_..._STRAT__` marker, or none at all — carrying a short
+    /// reason (the marker text, or "마커 없음"). Kept so that
+    /// [`ImportReport::log_summary`] cannot report "0 skipped, 0 partial"
+    /// as if the load were complete: the version-independent OLD block is
+    /// in, but every extended-only variable (`NICKNAME`, `MASTERNAME`,
+    /// `CSTR`, `CDFLAG`, and the game's user `#DIM SAVEDATA` arrays) is
+    /// silently absent.
+    pub extended_marker_skipped: Option<String>,
 }
 
 impl ImportReport {
@@ -1216,16 +1282,46 @@ impl ImportReport {
         });
     }
 
+    /// Records that the save's extended block was skipped, logging a clear
+    /// warning naming what the seek found — the same warn-routing as
+    /// [`Self::skip`], so an old or absent marker is as loud as a dropped
+    /// variable, and it is counted in [`Self::log_summary`] so a "0
+    /// skipped" report stays trustworthy.
+    fn note_marker_skipped(&mut self, marker: &ExtendedMarker) {
+        match marker {
+            ExtendedMarker::Emuera1808 => {} // nothing to report
+            ExtendedMarker::Older(m) => {
+                let detail =
+                    format!("오래된 확장 블록 마커 {m} 발견 — 확장 전용 변수는 가져오지 않았습니다");
+                log::warn!("Emuera 세이브 가져오기: {detail}");
+                self.extended_marker_skipped = Some(format!("마커 {m}"));
+            }
+            ExtendedMarker::Absent => {
+                log::warn!(
+                    "Emuera 세이브 가져오기: 확장 블록 마커(__EMUERA_1808_STRAT__)가 없음 — 확장 전용 변수는 가져오지 않았습니다"
+                );
+                self.extended_marker_skipped = Some("마커 없음".to_owned());
+            }
+        }
+    }
+
     /// One line stating exactly how many variables were skipped and how many
     /// partially imported — printed once per load, always, so "0 skipped, 0
     /// partial" is a claim a player can trust rather than the absence of a
-    /// check.
+    /// check. When the extended block was skipped, a further warning line
+    /// makes that explicit so the counts alone cannot read as a complete
+    /// import.
     pub fn log_summary(&self) {
         log::info!(
             "Emuera 세이브 가져오기 완료: {} 개 변수 무시됨, {} 개 변수 부분적으로 가져옴",
             self.skipped.len(),
             self.partial.len()
         );
+        if let Some(detail) = &self.extended_marker_skipped {
+            log::warn!(
+                "Emuera 세이브 가져오기: 확장 블록 건너뜀 ({detail}) — 확장 전용 변수는 가져오지 않았습니다"
+            );
+        }
     }
 }
 
@@ -1543,6 +1639,7 @@ pub fn build_local_data(
     let mut variables = merge_globals(data.globals, header, false, &mut report);
     variables.extend(merge_chara_columns(data.charas, header, &mut report));
 
+    report.note_marker_skipped(&data.extended_marker);
     report.log_summary();
 
     (
@@ -1570,6 +1667,7 @@ pub fn build_global_data(
     let mut report = ImportReport::default();
     let variables = merge_globals(data.globals, header, true, &mut report);
 
+    report.note_marker_skipped(&data.extended_marker);
     report.log_summary();
 
     (
@@ -1677,6 +1775,67 @@ mod tests {
         vec![FINISHED.to_owned(), FINISHED.to_owned()] // GLOBAL, GLOBALS
     }
 
+    /// The extended block's body of one local save (spec §2.5: character
+    /// section 6 groups, then variable section 8 built-in + 6 user-defined
+    /// groups) — shared by [`fixture_local_text`] and
+    /// [`fixture_local_text_with_marker`] so the only difference between
+    /// the current-marker and old-marker fixtures is the marker line
+    /// itself.
+    fn extended_local_body() -> Vec<String> {
+        [
+            // --- character section (6 groups) ---
+            "NICKNAME:EmuChan",
+            EMU_SEPARATOR,
+            "NO:7",
+            EMU_SEPARATOR,
+            "CSTR",
+            "hello",
+            "bye",
+            FINISHED,
+            EMU_SEPARATOR,
+            "CFLAG",
+            "1",
+            "9",
+            FINISHED,
+            EMU_SEPARATOR,
+            EMU_SEPARATOR, // string 2D (always empty)
+            "RELATION",
+            "3,0,0",
+            "0,5",
+            FINISHED,
+            EMU_SEPARATOR,
+            // --- variable section (8 built-in + 6 user-defined groups) ---
+            "MES:こんにちは",
+            EMU_SEPARATOR,
+            "DAY:15",
+            "MONEY:100",
+            EMU_SEPARATOR,
+            "SAVESTR",
+            "store",
+            FINISHED,
+            EMU_SEPARATOR,
+            "FLAG",
+            "1",
+            "1",
+            "0",
+            FINISHED,
+            EMU_SEPARATOR,
+            EMU_SEPARATOR, // string 2D (empty)
+            EMU_SEPARATOR, // int 2D (empty in this fixture)
+            EMU_SEPARATOR, // string 3D (empty)
+            EMU_SEPARATOR, // int 3D (empty in this fixture)
+            EMU_SEPARATOR, // user string 1D (empty)
+            EMU_SEPARATOR, // user int 1D (empty)
+            EMU_SEPARATOR, // user string 2D (empty)
+            EMU_SEPARATOR, // user int 2D (empty)
+            EMU_SEPARATOR, // user string 3D (empty)
+            EMU_SEPARATOR, // user int 3D (empty)
+        ]
+        .into_iter()
+        .map(str::to_owned)
+        .collect()
+    }
+
     /// One local save, hand-assembled line by line from the spec's own
     /// grammar (§2.1/§2.3/§2.4/§2.5) — not captured from any fixture file,
     /// so a parser bug that also happens to match a buggy fixture can't
@@ -1691,59 +1850,7 @@ mod tests {
         lines.extend(empty_old_chara_lines());
         lines.extend(empty_old_global_lines());
         lines.push(EMU_START.to_owned());
-        lines.extend(
-            [
-                // --- character section (6 groups) ---
-                "NICKNAME:EmuChan",
-                EMU_SEPARATOR,
-                "NO:7",
-                EMU_SEPARATOR,
-                "CSTR",
-                "hello",
-                "bye",
-                FINISHED,
-                EMU_SEPARATOR,
-                "CFLAG",
-                "1",
-                "9",
-                FINISHED,
-                EMU_SEPARATOR,
-                EMU_SEPARATOR, // string 2D (always empty)
-                "RELATION",
-                "3,0,0",
-                "0,5",
-                FINISHED,
-                EMU_SEPARATOR,
-                // --- variable section (8 built-in + 6 user-defined groups) ---
-                "MES:こんにちは",
-                EMU_SEPARATOR,
-                "DAY:15",
-                "MONEY:100",
-                EMU_SEPARATOR,
-                "SAVESTR",
-                "store",
-                FINISHED,
-                EMU_SEPARATOR,
-                "FLAG",
-                "1",
-                "1",
-                "0",
-                FINISHED,
-                EMU_SEPARATOR,
-                EMU_SEPARATOR, // string 2D (empty)
-                EMU_SEPARATOR, // int 2D (empty in this fixture)
-                EMU_SEPARATOR, // string 3D (empty)
-                EMU_SEPARATOR, // int 3D (empty in this fixture)
-                EMU_SEPARATOR, // user string 1D (empty)
-                EMU_SEPARATOR, // user int 1D (empty)
-                EMU_SEPARATOR, // user string 2D (empty)
-                EMU_SEPARATOR, // user int 2D (empty)
-                EMU_SEPARATOR, // user string 3D (empty)
-                EMU_SEPARATOR, // user int 3D (empty)
-            ]
-            .into_iter()
-            .map(str::to_owned),
-        );
+        lines.extend(extended_local_body());
         lines.join("\n")
     }
 
@@ -2250,9 +2357,69 @@ mod tests {
         assert!(matches!(data.globals.get("DAY"), Some(ParsedArray::Int1D(v)) if v.len() == 1000));
         assert!(matches!(data.globals.get("MONEY"), Some(ParsedArray::Int1D(v)) if v.len() == 1000));
         // FILED_MAP is int 3D, 100x100x100 — the largest shape this capture
-        // carries; must decode fully rather than erroring on `0xF2`/`0xE1`.
+        // carries; must decode fully. (This capture's 3D array uses only
+        // `0xF0` zero-runs and the value tags, not the structural
+        // `0xF2`/`0xE1`/`0xF1`/`0xE0` markers — those are exercised by
+        // `bin_cursor_read_*3d*_markers` below, against C#-writer-equivalent
+        // bytes per `docs/research/2026-09-07-emuera-source-crosscheck.md`.)
         assert!(matches!(data.globals.get("FILED_MAP"), Some(ParsedArray::Int3D(blocks)) if blocks.len() == 100));
         assert_eq!(data.globals.len(), 79, "79 global records after the character's own EOC");
+    }
+
+    /// The 2D/3D *structural* markers (`EoA1{0xE0}`, `ZeroA1{0xF1}`,
+    /// `EoA2{0xE1}`, `ZeroA2{0xF2}`) never appear in any of the six real
+    /// captures, so these are proven against exact byte streams the 1824 C#
+    /// writer would emit (verified independently in Python):
+    /// `EraBinaryDataWriter.writeData(Int64[,])` (EraBinaryDataWriter.cs
+    /// :167-215) / `(Int64[,,])` (:217-272) — see
+    /// `docs/research/2026-09-07-emuera-source-crosscheck.md` §3.
+    #[test]
+    fn bin_cursor_read_int2d_uses_row_and_zero_markers() {
+        // writeData(Int64[,]) for [[0,0,0],[5,0,7]]:
+        //   dim0=2,dim1=3, then row 0 all-zero -> ZeroA1(0xF1) count 1,
+        //   value 5, Zero(0xF0) count 1, value 7, row terminator EoA1(0xE0),
+        //   EoD(0xFF).
+        let bytes = [
+            0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, // dims 2x3
+            0xF1, 0x01, // one all-zero row
+            0x05,       // row 1: value 5
+            0xF0, 0x01, // one zero cell
+            0x07,       // value 7
+            0xE0,       // row terminator
+            0xFF,       // end of array
+        ];
+        let mut cur = BinCursor::new(&bytes);
+        let grid = cur.read_int2d().unwrap();
+        assert_eq!(grid, vec![vec![0, 0, 0], vec![5, 0, 7]]);
+    }
+
+    #[test]
+    fn bin_cursor_read_int3d_uses_plane_and_row_markers() {
+        // writeData(Int64[,,]) for [[[0,0],[0,0]],[[1,0],[0,2]]]:
+        //   dim0=2,dim1=2,dim2=2, then outer 0 all-zero -> ZeroA2(0xF2)
+        //   count 1, value 1, row terminators EoA1(0xE0), Zero(0xF0) count 1
+        //   + value 2 + EoA1, matrix terminator EoA2(0xE1), EoD(0xFF).
+        let bytes = [
+            0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00,
+            0x00,       // dims 2x2x2
+            0xF2, 0x01, // one all-zero plane
+            0x01,       // plane 1: value 1
+            0xE0,       // row terminator
+            0xF0, 0x01, // one zero cell
+            0x02,       // value 2
+            0xE0,       // row terminator
+            0xE1,       // plane terminator
+            0xFF,       // end of array
+        ];
+        let mut cur = BinCursor::new(&bytes);
+        let planes = cur.read_int3d().unwrap();
+        assert_eq!(
+            planes,
+            vec![
+                (0, vec![vec![0, 0], vec![0, 0]]),
+                (1, vec![vec![1, 0], vec![0, 2]]),
+            ]
+        );
     }
 
     #[test]
@@ -2270,6 +2437,107 @@ mod tests {
         // `NotDeclared` at reconcile time, same as any unknown legacy name.
         assert!(
             matches!(data.globals.get("GLOBAL"), Some(ParsedArray::Int1D(v)) if v.len() == 2000 && v[0] == 100 && v[1..].iter().all(|&x| x == 0))
+        );
+    }
+
+    /// [`fixture_local_text`] with `marker` standing in for the normal 1808
+    /// marker. The extended body always follows (so a positive control with
+    /// [`EMU_START`] reads it, and an old marker proves it is *not* read —
+    /// the only variable is the marker line itself).
+    fn fixture_local_text_with_marker(marker: &str) -> String {
+        let mut lines: Vec<String> = vec![
+            "12345".to_owned(),
+            "1808".to_owned(),
+            "test save".to_owned(),
+            "1".to_owned(),
+        ];
+        lines.extend(empty_old_chara_lines());
+        lines.extend(empty_old_global_lines());
+        lines.push(marker.to_owned());
+        lines.extend(extended_local_body());
+        lines.join("\n")
+    }
+
+    /// A pre-extended-block save: the OLD block with no marker at all after
+    /// it (valid pre-1.808 grammar — the extended block genuinely did not
+    /// exist then).
+    fn fixture_local_text_no_marker() -> String {
+        let mut lines: Vec<String> = vec![
+            "12345".to_owned(),
+            "1808".to_owned(),
+            "test save".to_owned(),
+            "1".to_owned(),
+        ];
+        lines.extend(empty_old_chara_lines());
+        lines.extend(empty_old_global_lines());
+        lines.join("\n")
+    }
+
+    /// An old-version extended marker must be *reported* (named), not
+    /// silently treated as "no extended data": a real save from a pre-1808
+    /// Emuera carries `NICKNAME`/`MASTERNAME`/`CSTR`/`CDFLAG` and every
+    /// user `#DIM SAVEDATA` array in that block, and a load that drops them
+    /// silently presents a plausible-but-wrong character.
+    #[test]
+    fn parse_text_reports_older_marker_without_reading_extended_block() {
+        // Positive control: the *same* extended body is fully read when the
+        // marker is the current 1808 one — so the only difference in the
+        // old-marker case below is the marker line itself.
+        let (data, ..) = parse_text(&fixture_local_text_with_marker(EMU_START), false).unwrap();
+        assert_eq!(data.extended_marker, ExtendedMarker::Emuera1808);
+        assert!(matches!(data.charas[0].get("NICKNAME"), Some(ParsedArray::StrScalar(s)) if s == "EmuChan"));
+        assert!(matches!(data.globals.get("MES"), Some(ParsedArray::StrScalar(s)) if s == "こんにちは"));
+
+        // With an older marker, the same body is *not* read, and the marker
+        // itself is surfaced so the caller can warn the player.
+        let (data, ..) =
+            parse_text(&fixture_local_text_with_marker("__EMUERA_1708_STRAT__"), false).unwrap();
+        assert_eq!(
+            data.extended_marker,
+            ExtendedMarker::Older("__EMUERA_1708_STRAT__".into()),
+            "the exact old marker must be surfaced, not swallowed"
+        );
+        let chara = &data.charas[0];
+        assert!(chara.get("NICKNAME").is_none(), "NICKNAME is extended-only; absent for an old marker");
+        assert!(chara.get("CSTR").is_none(), "CSTR is extended-only; absent for an old marker");
+        assert!(data.globals.get("MES").is_none(), "MES is extended-only; absent for an old marker");
+    }
+
+    /// The absent-marker case (a genuinely pre-extended save) is *also* a
+    /// reportable condition: the OLD block loaded fine, but nothing after
+    /// it was imported. Both that and an old marker must land in
+    /// [`ImportReport`] so [`ImportReport::log_summary`] cannot claim a
+    /// complete import.
+    #[test]
+    fn report_counts_an_absent_or_older_extended_marker() {
+        // Normal 1808: no marker warning at all.
+        let (data, ..) = parse_text(&fixture_local_text(), false).unwrap();
+        assert_eq!(data.extended_marker, ExtendedMarker::Emuera1808);
+        let (_, report) = build_local_data(data, &fixture_header());
+        assert!(report.extended_marker_skipped.is_none(), "1808 marker must not be flagged");
+
+        // Older marker: flagged, naming the marker.
+        let (data, ..) =
+            parse_text(&fixture_local_text_with_marker("__EMUERA_1708_STRAT__"), false).unwrap();
+        assert_eq!(
+            data.extended_marker,
+            ExtendedMarker::Older("__EMUERA_1708_STRAT__".into())
+        );
+        let (storage, report) = build_local_data(data, &fixture_header());
+        let skipped = &report.extended_marker_skipped;
+        assert!(
+            skipped.as_deref().is_some_and(|d| d.contains("__EMUERA_1708_STRAT__")),
+            "report must name the marker found: {skipped:?}"
+        );
+        assert!(!storage.variables.is_empty(), "OLD block still imports; only the extended block is skipped");
+
+        // No marker at all: flagged as absent.
+        let (data, ..) = parse_text(&fixture_local_text_no_marker(), false).unwrap();
+        assert_eq!(data.extended_marker, ExtendedMarker::Absent);
+        let (_, report) = build_local_data(data, &fixture_header());
+        assert!(
+            report.extended_marker_skipped.is_some(),
+            "a pre-extended save must also be reported as skipping the extended block"
         );
     }
 }
