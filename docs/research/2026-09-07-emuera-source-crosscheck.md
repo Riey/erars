@@ -218,20 +218,31 @@ Emuera's *writer* only ever emits `__EMUERA_1808_STRAT__`
 (`EraDataWriter.EMU_START = EraDataReader.EMU_1808_START`,
 `EraDataStream.cs:480`; `EmuStart()` `:569-574`).
 
-**Verdict.** The reader's scope is 1.818's *extended-block grammar*, which
-is what a current Emuera writes. For a save whose marker is `1700/1708/
-1729/1803`, our `parse_text` calls `try_seek_past("__EMUERA_1808_STRAT__")`
-`(`emuera.rs:349-357`)`, which consumes the foreign marker and the whole
-extended block looking for 1808, hits EOF, and returns `false` — so the OLD
-block is still parsed correctly (its layout is version-independent) and the
-extended block is silently dropped. That is a real but bounded compatibility
-gap for pre-1.808 saves (they lose `NICKNAME`/`MASTERNAME`/`CSTR`/`CDFLAG`
-and any user vars that lived only in the extended block), and it is the
-deliberate conservative-refusal the doc recommends. Emulating Emuera's
-per-version extended grammar would be new scope, not a bug fix; the doc's
-"accept 1808 as primary; treat others as unsupported-version" guidance is
-retained, but its wording is tightened (§7) to say precisely that the OLD
-block is still read and only the extended block is ignored.
+**Verdict (updated — old markers now implemented).** erars now reads every
+marker's extended block with the per-version grammar the C# dispatch above
+describes, so a `1700/1708/1729/1803` save's extended-only variables are
+imported, not dropped (`emuera.rs`):
+- chara extended: `parse_chara_section` keeps 4 groups (the `Old1802`
+  reduced reader) for `version < 1803` and adds the 2D group for
+  `>= 1803`.
+- variable extended: 2D iff `>= 1708`, 3D iff `>= 1729` (the read-side
+  gates `EraDataStream.cs:297,344,366,424`), then the six user-defined-var
+  groups iff `>= 1808` (`VariableData.cs:799-801`). The OLD block remains
+  version-independent and is parsed first, unchanged.
+
+This supersedes the earlier "refusal" verdict. Per the user's instruction,
+a marker this reader does not recognize (`Unknown`, a future version) and
+an absent marker (`Absent`) are still reported and still skipped — an
+unknown/future grammar may not be silently assumed to parse.
+
+**Evidence class (important).** Only 1808 is backed by genuine captures
+(six). The 1700/1708/1729/1803 layouts are derived by reading the C# reader
+dispatch above and the same `ReadStringArray{2D,3D}Extended` /
+`ReadIntArray{2D,3D}` gates — high confidence but *structural, not
+byte-validated* against a real old-version save (neither corpus can produce
+one; eraTHYMKR ships 1.818 and prerelease versions are not archived). The
+tests for those versions therefore use synthetic fixtures built to the
+dispatch, and the per-version group counts are asserted exactly.
 
 ---
 
@@ -298,9 +309,12 @@ bytes `0x12`/`0x13` (`EraSaveDataType.StrArray2D/3D`,
 
 ## 8. Reader bugs found
 
-**None.** The three resolutions are all confirmations: (1) binary 2D/3D
-markers are already implemented correctly, (2) old markers are safely
-treated as "OLD block only" by deliberate scope, not by accident, (3) string
-2D/3D in text are unimplemented in Emuera itself on both the writer and
-reader side. The only corrections are doc-level (§4's trailing-zero-run error,
-§6.2 retirement, §6.3/§7 wording) plus the two new marker-exercising tests.
+**None.** The resolutions are confirmations: (1) binary 2D/3D markers are
+already implemented correctly, (3) string 2D/3D in text are unimplemented in
+Emuera itself on both the writer and reader side. Item (2) is now
+**delivered, not merely confirmed**: old markers are supported (this
+workstream, `feat/emuera-old-marker-support`) with per-version grammars, not
+treated as "OLD block only" — see the updated §6.2 verdict and its explicit
+evidence class (1700/1708/1729/1803 from the C# dispatch, not from real old
+captures). The doc-level corrections (§4's trailing-zero-run error, §6.2
+retirement, §6.3/§7 wording) plus the marker-exercising tests stand.
