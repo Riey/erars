@@ -118,6 +118,21 @@ fn fixture_root() -> std::path::PathBuf {
     std::env::temp_dir().join(format!("erars-run-tests-{}", std::process::id()))
 }
 
+/// Removes [`fixture_root`]'s directory when it drops — including while
+/// unwinding from a fixture assertion failure, since `cargo test` runs with
+/// panic=unwind by default — so a `cargo test` invocation never leaks its
+/// scratch directory under the system temp dir. `run_test`'s pre-create
+/// sweep (see the [`fixture_root`] doc comment) stays regardless: a killed
+/// test process skips this `Drop`, and a stale directory must never be
+/// allowed to influence a later run.
+struct ScratchGuard(std::path::PathBuf);
+
+impl Drop for ScratchGuard {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// All fixtures in one `run_test` invocation intentionally share this same
 /// directory (call it as many times as there are fixtures; the path never
 /// changes within a process), so state one fixture writes is still there for
@@ -147,6 +162,7 @@ fn run_test() {
 
     erars_ast::init_interner();
     let _ = std::fs::remove_dir_all(fixture_root());
+    let _scratch_guard = ScratchGuard(fixture_root());
 
     let erb_files = glob::glob("tests/run_tests/**/*.erb").unwrap();
     let header = test_util::get_ctx("").header.try_as_arc().unwrap();

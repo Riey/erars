@@ -226,12 +226,25 @@ impl SystemFunctions for ScriptedInput {
 struct Runner {
     header: Arc<HeaderInfo>,
     config: Arc<EraConfig>,
+    /// The scratch directory `sav`/`resources` live under, removed on drop
+    /// (see the comment in `new` on why a leftover copy must never
+    /// influence a later run).
+    root: PathBuf,
     sav: PathBuf,
     resources: PathBuf,
     /// Every panicking probe, `(name, probe, message)`. Collected globally
     /// because the per-name ladder keeps only its best outcome, and a panic
     /// that a later probe shape papers over is still a defect.
     panics: std::cell::RefCell<Vec<(String, String, String)>>,
+}
+
+impl Drop for Runner {
+    fn drop(&mut self) {
+        // Best-effort: a process kill skips this, which is exactly why
+        // `new` also sweeps before creating the directory rather than
+        // relying on this alone.
+        let _ = std::fs::remove_dir_all(&self.root);
+    }
 }
 
 impl Runner {
@@ -275,6 +288,7 @@ impl Runner {
         Runner {
             header: test_util::get_ctx("").header.try_as_arc().unwrap(),
             config: Arc::new(EraConfig::default()),
+            root,
             sav,
             resources,
             panics: std::cell::RefCell::new(Vec::new()),
