@@ -213,27 +213,52 @@ straightforward `CSTR:0:0 = "cap_name"` literal assignment. This holds
 identically on *both* 1738 and 1803, so it is not itself a marker-version
 difference between the two fixtures here.
 
+This is not a version quirk and not an authoring-path guess — it is
+deterministic Emuera semantics, and the repo already contains the proof.
+Plain `=` assignment to a string variable is **FORM-syntax assignment**:
+the right-hand side is substituted the same way as a `PRINTFORM` argument
+and stored **verbatim**
+(`docs/research/emuera-wiki/exetc.md:102-133`, "Assignment to String
+Variable Using FORM Syntax"). A quoted literal like `"cap_name"` therefore
+stores its quote characters as ordinary text content; nothing strips them.
+The *other* string-assignment form — the `'=` operator, which evaluates the
+RHS as a string expression instead of a FORM literal
+(`docs/research/emuera-wiki/exetc.md:125-133`) — was only added in Emuera
+**ver1813**. Both `Emuera1738.exe` (product version 1.736) and
+`Emuera1803.exe` (1.803) predate 1813, so `'=` did not exist on either exe
+yet: there was never an alternative form available for these captures to
+have used instead. The quoting is Emuera's FORM-assignment rule applying
+deterministically, not a choice that could have gone the other way.
+
 It **does** differ from the unrelated 1808-era real capture already in this
 repo (`tests/fixtures/emuera_saves/real/save90_text_utf8_real.sav`, line
 4677, game eraTHYMKR v3.21): that capture's `CSTR` value (`보통 집`, "ordinary
-house") has no quotes. But that capture's `CSTR` was never assigned via an
-ERB literal at all — per the wiki, `CSTR` is normally populated from a
-character CSV's `CSTR,*,**` field at chara-load time, which is almost
-certainly eraTHYMKR's actual mechanism (a different value-origin, not an ERB
-`=` assignment). So the quoted-vs-unquoted contrast observed here is
-[INFERENCE]-flagged as *not proven* to be a version-dependent Emuera quirk —
-it may equally be "ERB literal assignment to an explicit-index chara array"
-vs "CSV-declared" producing different raw bytes, independent of version.
+house") has no quotes. That's consistent with the same rule, not an
+exception to it: per the wiki, `CSTR` is normally populated from a
+character CSV's `CSTR,*,**` field at chara-load time, not through an ERB
+`=` assignment at all — a different value-origin, so the FORM-verbatim rule
+above never applies to it in the first place.
 
-What **is** directly verified against this crate's own source (not
-inferred): `LineCursor::read_1d_arrays` in `crates/erars-vm/src/save/emuera.rs`
+What **is** directly verified against this crate's own source: `LineCursor::
+read_1d_arrays` in `crates/erars-vm/src/save/emuera.rs`
 never strips quote characters, for any Emuera version — a string-1D value is
 copied verbatim from its own line into `ParsedArray::Str1D`. So erars's
 reader has no version-dependent (or any) quote-handling logic to be
 inconsistent; whatever a real Emuera save's `CSTR` line contains byte-for-byte
-is exactly what erars imports. There is nothing to fix here, only an
-upstream-Emuera authoring-path difference worth knowing about when comparing
-values across captures from different games/versions.
+is exactly what erars imports.
+
+erars's own compiler models both assignment forms and this exact
+FORM-vs-expression distinction directly:
+`crates/erars-compiler/src/parser.rs:3560-3586` (the plain-`=` arm on a
+string-typed target) parses the RHS with `form_assign_expr`, a
+comma-tolerant FORM-literal parser matching Emuera's FORM-syntax semantics,
+while the sibling `ComplexAssign::Str` arm
+(`crates/erars-compiler/src/parser.rs:3556-3559`, the `'=` operator) parses
+the RHS as an expression list for bulk sequential-fill assignment instead.
+The plain-`=` FORM-literal handling was itself a prior bug fix in this repo
+(`docs/research/2026-09-06-language-feature-work.md` §2.2): an earlier
+version of that branch wrongly stopped at the first unescaped comma,
+corrupting exactly this kind of literal.
 
 ## Scope / honest limits
 
