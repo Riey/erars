@@ -4488,6 +4488,41 @@ fn run_builtin_command(
                 &ctx.var.get_global_serializable(&ctx.header_info),
             )?;
         }
+        BuiltinCommand::SaveDataEmuera => {
+            let idx = get_arg!(@u32: args, ctx);
+            let description = get_arg!(@String: args, ctx);
+
+            log::info!("Save {idx} (Emuera format): {description}");
+
+            let var = ctx.var.get_serializable(&ctx.header_info, description);
+            let text_encoding = if ctx.config.system_save_in_utf8 {
+                crate::save::emuera::write::TextEncodingChoice::Utf8
+            } else {
+                crate::save::emuera::write::TextEncodingChoice::NonUnicode
+            };
+            crate::save::write_emuera_save_data(
+                &ctx.sav_dir,
+                idx,
+                &var,
+                ctx.config.system_save_in_binary,
+                text_encoding,
+                ctx.encoding(),
+            )?;
+        }
+        BuiltinCommand::SaveGlobalEmuera => {
+            let text_encoding = if ctx.config.system_save_in_utf8 {
+                crate::save::emuera::write::TextEncodingChoice::Utf8
+            } else {
+                crate::save::emuera::write::TextEncodingChoice::NonUnicode
+            };
+            crate::save::write_emuera_global_data(
+                &ctx.sav_dir,
+                &ctx.var.get_global_serializable(&ctx.header_info),
+                ctx.config.system_save_in_binary,
+                text_encoding,
+                ctx.encoding(),
+            )?;
+        }
         BuiltinCommand::LoadGlobal => {
             if let Some(global_sav) = crate::save::read_global_data(&ctx.sav_dir, ctx.encoding())? {
                 ctx.var.load_global_serializable(

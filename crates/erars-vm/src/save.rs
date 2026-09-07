@@ -1,4 +1,4 @@
-mod emuera;
+pub(crate) mod emuera;
 
 use anyhow::{bail, ensure, Context, Result};
 use erars_ast::{StrKey, VariableInfo};
@@ -601,6 +601,66 @@ pub fn read_global_data(
         true,
         encoding,
     )
+}
+
+/// Exports this game's current local save state to real Emuera's own
+/// on-disk format at the same numbered slot `SAVEDATA` uses — an opt-in,
+/// player-triggered path back out of erars (see the `save::emuera::write`
+/// module doc comment), never written automatically. `binary` picks the
+/// container variant and mirrors Emuera's own `SystemSaveInBinary`; for
+/// the text variant, `text_encoding`/`encoding` mirror `SystemSaveInUTF8`
+/// exactly as they already do for [`load_local_list`]'s own text reads.
+pub fn write_emuera_save_data(
+    sav_path: &Path,
+    idx: u32,
+    sav: &SerializableVariableStorage,
+    binary: bool,
+    text_encoding: emuera::write::TextEncodingChoice,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<()> {
+    create_sav_dir(sav_path)?;
+
+    let data = emuera::export_local(sav);
+    let bytes = if binary {
+        emuera::write::write_binary(&data, false, sav.code, sav.version, &sav.description)
+    } else {
+        emuera::write::write_text(
+            &data,
+            false,
+            sav.code,
+            sav.version,
+            &sav.description,
+            text_encoding,
+            encoding,
+        )?
+    };
+    std::fs::write(sav_path.join(emuera_save_file_name(idx)), bytes)
+        .context("Write Emuera-format save file")?;
+
+    Ok(())
+}
+
+/// As [`write_emuera_save_data`], for the global save (`SAVEGLOBAL`'s
+/// counterpart) — real Emuera's own `global.sav`.
+pub fn write_emuera_global_data(
+    sav_path: &Path,
+    sav: &SerializableGlobalVariableStorage,
+    binary: bool,
+    text_encoding: emuera::write::TextEncodingChoice,
+    encoding: &'static encoding_rs::Encoding,
+) -> Result<()> {
+    create_sav_dir(sav_path)?;
+
+    let data = emuera::export_global(sav)?;
+    let bytes = if binary {
+        emuera::write::write_binary(&data, true, sav.code, sav.version, "")
+    } else {
+        emuera::write::write_text(&data, true, sav.code, sav.version, "", text_encoding, encoding)?
+    };
+    std::fs::write(sav_path.join(EMUERA_GLOBAL_SAVE_FILE_NAME), bytes)
+        .context("Write Emuera-format global save file")?;
+
+    Ok(())
 }
 
 #[cfg(feature = "multithread")]

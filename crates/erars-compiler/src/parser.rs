@@ -2984,6 +2984,8 @@ impl<'p> ParserContext<'p> {
                     SWAP => normal_command!(BuiltinCommand::Swap),
                     SAVEGLOBAL => normal_command!(BuiltinCommand::SaveGlobal),
                     LOADGLOBAL => normal_command!(BuiltinCommand::LoadGlobal),
+                    SAVEDATA_EMUERA => normal_command!(BuiltinCommand::SaveDataEmuera),
+                    SAVEGLOBAL_EMUERA => normal_command!(BuiltinCommand::SaveGlobalEmuera),
                     POWER => normal_command!(BuiltinCommand::Power),
                     FORCEKANA => normal_command!(BuiltinCommand::ForceKana),
                     MIN => normal_method!(BuiltinMethod::Min),
