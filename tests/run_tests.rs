@@ -103,14 +103,27 @@ impl SystemFunctions for FixtureInput {
     }
 }
 
-/// Where a fixture's `sav/` and `resources/` live.
+/// Where every fixture's `sav/` and `resources/` live for this test process.
 ///
 /// Under the system temp directory rather than the repo, because `OUTPUTLOG`
 /// and `@OUTPUT` write `emuera.log` into `sav_dir`'s *parent* — Emuera's
 /// `WorkingDir` (`GameView/EmueraConsole.Print.cs:686-687`) — and a relative
-/// `sav` would put that file in the checkout.
+/// `sav` would put that file in the checkout. Scoped by process id and wiped
+/// once at the top of `run_test`, rather than a bare fixed name: a fixed,
+/// never-cleaned path would be shared by every invocation of this suite that
+/// has ever run on the machine, and a leftover `chara_*.dat`/`var_*.dat`/save
+/// slot from an earlier run could then leak into a `CHKDATA`/`CHKVARDATA`/
+/// `CHKCHARADATA` fixture's result.
+fn fixture_root() -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("erars-run-tests-{}", std::process::id()))
+}
+
+/// All fixtures in one `run_test` invocation intentionally share this same
+/// directory (call it as many times as there are fixtures; the path never
+/// changes within a process), so state one fixture writes is still there for
+/// a later one in the same run — only cross-*process* leakage is closed.
 fn fixture_roots() -> (std::path::PathBuf, std::path::PathBuf) {
-    let root = std::env::temp_dir().join("erars-run-tests");
+    let root = fixture_root();
     let sav = root.join("sav");
     std::fs::create_dir_all(&sav).unwrap();
     (sav, root.join("resources"))
@@ -133,6 +146,7 @@ fn run_test() {
         .unwrap();
 
     erars_ast::init_interner();
+    let _ = std::fs::remove_dir_all(fixture_root());
 
     let erb_files = glob::glob("tests/run_tests/**/*.erb").unwrap();
     let header = test_util::get_ctx("").header.try_as_arc().unwrap();
