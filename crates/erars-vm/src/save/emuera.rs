@@ -2807,4 +2807,70 @@ mod tests {
         assert!(matches!(data.globals.get("GV_INT_2D"), Some(ParsedArray::Int2D(r)) if r.as_slice() == [vec![1, 2], vec![3, 4]]));
         assert!(matches!(data.globals.get("GV_INT_3D"), Some(ParsedArray::Int3D(b)) if b.as_slice() == [(0, vec![vec![9]])]));
     }
+
+
+    // =========================================================================
+    // Real captures from genuinely old Emuera binaries (added 2026-09-07)
+    // Byte-verified against real old-Emuera saves produced under wine+Xvfb by
+    // old mainline exes (1.701/1.707/1.710/1.738/1.803) recovered from the
+    // JAIST mirror of the archived SourceForge.jp/OSDN "emuera" project. Full
+    // provenance in tests/fixtures/emuera_saves/real_old/README.md. These
+    // validate the four old marker strings and the per-version extended
+    // grammar that only the C# reader dispatch previously implied.
+    macro_rules! old_real_fixture {
+        ($name:literal) => {
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/emuera_saves/real_old/",
+                $name
+            )) as &[u8]
+        };
+    }
+
+    /// The marker each old Emuera exe’s real save carries (README table).
+    fn old_real_marker(version: u32) -> ExtendedMarker {
+        match version {
+            1700 => ExtendedMarker::Known(1700), // from Emuera 1.707
+            1708 => ExtendedMarker::Known(1708), // from Emuera 1.710
+            1729 => ExtendedMarker::Known(1729), // from Emuera 1.738
+            1803 => ExtendedMarker::Known(1803), // from Emuera 1.803
+            _ => unreachable!("no real old capture for {version}"),
+        }
+    }
+
+    fn assert_old_real_capture(version: u32, bytes: &[u8], file: &str) {
+        let sjis = encoding_rs::SHIFT_JIS;
+        assert_eq!(sniff(bytes, sjis), Some(EmueraSaveVariant::TextUtf8), "{file}");
+        let (data, code, gversion, _) =
+            parse(EmueraSaveVariant::TextUtf8, bytes, sjis, false).unwrap();
+        assert_eq!(code, 999000001, "{file}: game code");
+        assert_eq!(gversion, 1000, "{file}: GameBase version");
+        assert_eq!(data.extended_marker, old_real_marker(version), "{file} marker->grammar");
+    }
+
+    /// The four old-marker branches are now backed by real saves.
+    #[test]
+    fn parse_reads_real_old_marker_captures() {
+        assert_old_real_capture(1700, old_real_fixture!("1707_real.sav"), "1707_real.sav");
+        assert_old_real_capture(1708, old_real_fixture!("1710_real.sav"), "1710_real.sav");
+        assert_old_real_capture(1729, old_real_fixture!("1738_real.sav"), "1738_real.sav");
+        assert_old_real_capture(1803, old_real_fixture!("1803_real.sav"), "1803_real.sav");
+    }
+
+    /// Emuera 1.701 predates the extended block entirely and writes no marker:
+    /// the reader must report `Absent`, not desync.
+    #[test]
+    fn parse_reports_1701_real_capture_as_absent() {
+        let sjis = encoding_rs::SHIFT_JIS;
+        let (data, code, gversion, _) = parse(
+            EmueraSaveVariant::TextUtf8,
+            old_real_fixture!("1701_real.sav"),
+            sjis,
+            false,
+        )
+        .unwrap();
+        assert_eq!(code, 999000001);
+        assert_eq!(gversion, 1000);
+        assert_eq!(data.extended_marker, ExtendedMarker::Absent);
+    }
 }

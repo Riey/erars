@@ -235,14 +235,28 @@ a marker this reader does not recognize (`Unknown`, a future version) and
 an absent marker (`Absent`) are still reported and still skipped — an
 unknown/future grammar may not be silently assumed to parse.
 
-**Evidence class (important).** Only 1808 is backed by genuine captures
-(six). The 1700/1708/1729/1803 layouts are derived by reading the C# reader
-dispatch above and the same `ReadStringArray{2D,3D}Extended` /
-`ReadIntArray{2D,3D}` gates — high confidence but *structural, not
-byte-validated* against a real old-version save (neither corpus can produce
-one; eraTHYMKR ships 1.818 and prerelease versions are not archived). The
-tests for those versions therefore use synthetic fixtures built to the
-dispatch, and the per-version group counts are asserted exactly.
+**Evidence class (updated 2026-09-07 — old markers now capture-backed).**
+1808 is backed by the six 1.818 captures; the **1700 / 1708 / 1729 / 1803
+markers are now capture-backed too.** Real saves were produced by actually
+running the original mainline Emuera binaries `Emuera1707.exe` (writes
+`__EMUERA_STRAT__`), `Emuera1710.exe` (`__EMUERA_1708_STRAT__`),
+`Emuera1738.exe` (`__EMUERA_1729_STRAT__`) and `Emuera1803.exe`
+(`__EMUERA_1803_STRAT__`) under wine+Xvfb, driving a tiny hand-written ERB
+game — recovered from the archived SourceForge.jp/OSDN `emuera` project via
+the JAIST mirror (`ftp.jaist.ac.jp/pub/sourceforge.jp/emuera/`). Captures +
+full provenance in `tests/fixtures/emuera_saves/real_old/`; the reader tests
+`parse_reads_real_old_marker_captures` / `parse_reports_1701_real_capture_as_absent`
+prove each marker maps to its per-version grammar against the real bytes.
+Notable findings: **Emuera 1.701 writes no extended block at all** (marker
+`Absent`; the 1700 marker came between 1.701 and 1.707), and each old
+writer's marker string is exactly the constant `EraDataStream.cs` names.
+Two boundaries remain *source-only but synthetic-fixture-covered*: the
+chara extended section's **4-vs-6 group** restructure at 1803 (exercising
+it needs an active `TARGET` character, which requires a full chara-selection
+flow the boot-driven minimal game does not reach), and the 2D/3D *structural*
+markers `0xE0/0xE1/0xF1/0xF2` (never emitted by these small captures; covered
+by the C#-writer-equivalent byte tests in §3). The variable-section group
+counts per version, however, are now asserted against real old-Emuera bytes.
 
 ---
 
