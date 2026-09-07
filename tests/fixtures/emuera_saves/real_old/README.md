@@ -58,14 +58,32 @@ committed byte-identical to what the exe wrote (never normalised).
   | 1.736 | `47955/Emuera1738.zip` |
   | 1.803 | `53137/Emuera1803.zip` |
 
+  **SHA-256 hashes** (recorded 2026-09-07, from the archives fetched above,
+  still present at that time under `/tmp/oldemuera/*.zip` and the exes
+  extracted from them under `/tmp/cap/*/game/*.exe`; verified the two match
+  byte-for-byte before hashing):
+
+  | Release | File | Size (bytes) | SHA-256 |
+  |---|---|---|---|
+  | 1.701 | `Emuera1701.zip` | 97497 | `21e3f01b1142ba22fd43a33a239110efa6fd89f312d65f385b2f4848dfc6f66c` |
+  | 1.701 | `Emuera1701.exe` (extracted) | 214016 | `39743072cf8985d1c6163ade5ce0d7bf0c889aa455e5013a61d347470cc9f420` |
+  | 1.707 | `Emuera1707.zip` | 94446 | `c0af1dedab3e7bdb84d0ff32467240116237f8beb707c7ad1d16ac7d6788aaf0` |
+  | 1.707 | `Emuera1707.exe` (extracted) | 221696 | `75e448a40aaa42f6267e0da033d8a6a6b73024758f3f9ca9ff03031283fbf5e7` |
+  | 1.710 | `Emuera1710.zip` | 99225 | `39ed05e7138b306139ec32d7eb5bd3c47618a52d109d9f816fb1ae47a037cb1b` |
+  | 1.710 | `Emuera1710.exe` (extracted) | 234496 | `fec36d20f7e7cfe9dcc52f13dd987297b7c5a1cf4fbd03ddd60774736546d6ee` |
+  | 1.736 | `Emuera1738.zip` | 137166 | `a82c5c7cc0b00ba3aefe4df411440c5f031c1160acbcdd2c247320c8c41abca1` |
+  | 1.736 | `Emuera1738.exe` (extracted) | 340480 | `08fb062adc93a6290661886d43dff0eb2e34df7568fb62c514655d57fee94872` |
+  | 1.803 | `Emuera1803.zip` | 179148 | `67dc110ae596ccd8cb13f5fa96af750c4c9a6b6a68dde6010ce59f31c29f669e` |
+  | 1.803 | `Emuera1803.exe` (extracted) | 457216 | `8abdfefac4493158e9c02c4b27ecb56da0e0dd14424ab1a352344f37131dcf8e` |
+
   Each zip holds the bare exe (no installer). The **Windows file-version
   resource strings** of the extracted exes were read at capture time and
   matched the expected version (`Emuera1738.exe` reports **1.736** despite its
   1738 build name — MinorShift's build-number vs product-version gap; the Zip
   file name is the build number, the version resource is the product
-  version). If JAIST later rotates or drops these archives, this table plus
-  the byte hashes of the extracted exes are the only remaining provenance
-  chain for these fixtures.
+  version). This table (recovery URLs plus the SHA-256 hashes above) is
+  the full remaining provenance chain for these fixtures if JAIST later
+  rotates or drops these archives.
 - **Runtime:** wine 11.16 + wine-mono prefix under **Xvfb `:88`**;
   `DISPLAY=:88 WINEPREFIX=/tmp/winemono_prefix WINEDEBUG=-all wine ./Emuera####.exe`.
   No xdotool needed — the game saves itself on boot.
