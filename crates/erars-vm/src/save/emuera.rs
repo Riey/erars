@@ -2928,21 +2928,37 @@ mod tests {
     /// `CHAR_OLD_ARR[9]`), and (1803 only) `CDFLAG` in the chara int-2D
     /// group. (The old writer stores this string literal's value
     /// including its surrounding quotes — `CSTR:0:0 = "cap_name"` writes
-    /// `"cap_name"`, 11 bytes, not `cap_name` — on *both* 1738 and 1803,
-    /// so it is not a marker-version difference; a real modern-era capture
+    /// `"cap_name"`, 11 bytes, not `cap_name` — on *both* 1738 and 1803.
+    /// This is not a marker-version difference and not an authoring-path
+    /// guess: plain `=` assignment to a string variable is FORM-syntax
+    /// assignment, whose right-hand side is substituted the same way as a
+    /// `PRINTFORM` argument and stored verbatim
+    /// (`docs/research/emuera-wiki/exetc.md:102-133`), so the quote
+    /// characters are stored as ordinary text content. The only other
+    /// string-assignment form, the `'=` expression operator
+    /// (`docs/research/emuera-wiki/exetc.md:125-133`), was added in
+    /// ver1813 — after both 1.736 (`Emuera1738.exe`) and 1.803
+    /// (`Emuera1803.exe`), so neither exe had `'=` available as an
+    /// alternative. A real modern-era capture
     /// (`save90_text_utf8_real.sav`, line 4677, game eraTHYMKR) stores its
     /// `CSTR` value unquoted, but that capture's `CSTR` comes from a
-    /// character CSV's `CSTR,*,**` field rather than an ERB literal
-    /// assignment, a different origin, not proven to be a version
-    /// difference — [INFERENCE] flagged, not asserted as fact. What *is*
-    /// verified directly against this crate's source: [`LineCursor::
+    /// character CSV's `CSTR,*,**` field rather than an ERB `=` assignment
+    /// at all, so the FORM-verbatim rule above never applies to it — this
+    /// is consistent with the rule, not an exception requiring inference.
+    /// erars's own compiler models both assignment forms identically:
+    /// `crates/erars-compiler/src/parser.rs:3560-3586` (plain `=` on a
+    /// string target) uses `form_assign_expr`, a comma-tolerant FORM
+    /// literal parser, while `crates/erars-compiler/src/parser.rs:3556-3559`
+    /// (`'=`, `ComplexAssign::Str`) parses the RHS as an expression list for
+    /// bulk sequential-fill instead. What *is* additionally verified
+    /// directly against this crate's source: [`LineCursor::
     /// read_1d_arrays`] never strips quote characters at all, for any
     /// version — every string-1D value, `CSTR` included, round-trips
     /// byte-for-byte from file to [`ParsedArray::Str1D`]. So erars is
     /// internally consistent regardless of which of these two real-world
     /// shapes a save carries; there is no reader-side quote-handling bug to
-    /// fix, only an upstream-Emuera authoring-path difference to be aware
-    /// of when comparing values across captures.)
+    /// fix, only Emuera's own deterministic FORM-assignment rule producing
+    /// different bytes for two different value-origins.)
     #[test]
     fn parse_reads_real_old_chara_captures() {
         let sjis = encoding_rs::SHIFT_JIS;

@@ -58,14 +58,32 @@ committed byte-identical to what the exe wrote (never normalised).
   | 1.736 | `47955/Emuera1738.zip` |
   | 1.803 | `53137/Emuera1803.zip` |
 
+  **SHA-256 hashes** (recorded 2026-09-07, from the archives fetched above,
+  still present at that time under `/tmp/oldemuera/*.zip` and the exes
+  extracted from them under `/tmp/cap/*/game/*.exe`; verified the two match
+  byte-for-byte before hashing):
+
+  | Release | File | Size (bytes) | SHA-256 |
+  |---|---|---|---|
+  | 1.701 | `Emuera1701.zip` | 97497 | `21e3f01b1142ba22fd43a33a239110efa6fd89f312d65f385b2f4848dfc6f66c` |
+  | 1.701 | `Emuera1701.exe` (extracted) | 214016 | `39743072cf8985d1c6163ade5ce0d7bf0c889aa455e5013a61d347470cc9f420` |
+  | 1.707 | `Emuera1707.zip` | 94446 | `c0af1dedab3e7bdb84d0ff32467240116237f8beb707c7ad1d16ac7d6788aaf0` |
+  | 1.707 | `Emuera1707.exe` (extracted) | 221696 | `75e448a40aaa42f6267e0da033d8a6a6b73024758f3f9ca9ff03031283fbf5e7` |
+  | 1.710 | `Emuera1710.zip` | 99225 | `39ed05e7138b306139ec32d7eb5bd3c47618a52d109d9f816fb1ae47a037cb1b` |
+  | 1.710 | `Emuera1710.exe` (extracted) | 234496 | `fec36d20f7e7cfe9dcc52f13dd987297b7c5a1cf4fbd03ddd60774736546d6ee` |
+  | 1.736 | `Emuera1738.zip` | 137166 | `a82c5c7cc0b00ba3aefe4df411440c5f031c1160acbcdd2c247320c8c41abca1` |
+  | 1.736 | `Emuera1738.exe` (extracted) | 340480 | `08fb062adc93a6290661886d43dff0eb2e34df7568fb62c514655d57fee94872` |
+  | 1.803 | `Emuera1803.zip` | 179148 | `67dc110ae596ccd8cb13f5fa96af750c4c9a6b6a68dde6010ce59f31c29f669e` |
+  | 1.803 | `Emuera1803.exe` (extracted) | 457216 | `8abdfefac4493158e9c02c4b27ecb56da0e0dd14424ab1a352344f37131dcf8e` |
+
   Each zip holds the bare exe (no installer). The **Windows file-version
   resource strings** of the extracted exes were read at capture time and
   matched the expected version (`Emuera1738.exe` reports **1.736** despite its
   1738 build name — MinorShift's build-number vs product-version gap; the Zip
   file name is the build number, the version resource is the product
-  version). If JAIST later rotates or drops these archives, this table plus
-  the byte hashes of the extracted exes are the only remaining provenance
-  chain for these fixtures.
+  version). This table (recovery URLs plus the SHA-256 hashes above) is
+  the full remaining provenance chain for these fixtures if JAIST later
+  rotates or drops these archives.
 - **Runtime:** wine 11.16 + wine-mono prefix under **Xvfb `:88`**;
   `DISPLAY=:88 WINEPREFIX=/tmp/winemono_prefix WINEDEBUG=-all wine ./Emuera####.exe`.
   No xdotool needed — the game saves itself on boot.
@@ -213,27 +231,52 @@ straightforward `CSTR:0:0 = "cap_name"` literal assignment. This holds
 identically on *both* 1738 and 1803, so it is not itself a marker-version
 difference between the two fixtures here.
 
+This is not a version quirk and not an authoring-path guess — it is
+deterministic Emuera semantics, and the repo already contains the proof.
+Plain `=` assignment to a string variable is **FORM-syntax assignment**:
+the right-hand side is substituted the same way as a `PRINTFORM` argument
+and stored **verbatim**
+(`docs/research/emuera-wiki/exetc.md:102-133`, "Assignment to String
+Variable Using FORM Syntax"). A quoted literal like `"cap_name"` therefore
+stores its quote characters as ordinary text content; nothing strips them.
+The *other* string-assignment form — the `'=` operator, which evaluates the
+RHS as a string expression instead of a FORM literal
+(`docs/research/emuera-wiki/exetc.md:125-133`) — was only added in Emuera
+**ver1813**. Both `Emuera1738.exe` (product version 1.736) and
+`Emuera1803.exe` (1.803) predate 1813, so `'=` did not exist on either exe
+yet: there was never an alternative form available for these captures to
+have used instead. The quoting is Emuera's FORM-assignment rule applying
+deterministically, not a choice that could have gone the other way.
+
 It **does** differ from the unrelated 1808-era real capture already in this
 repo (`tests/fixtures/emuera_saves/real/save90_text_utf8_real.sav`, line
 4677, game eraTHYMKR v3.21): that capture's `CSTR` value (`보통 집`, "ordinary
-house") has no quotes. But that capture's `CSTR` was never assigned via an
-ERB literal at all — per the wiki, `CSTR` is normally populated from a
-character CSV's `CSTR,*,**` field at chara-load time, which is almost
-certainly eraTHYMKR's actual mechanism (a different value-origin, not an ERB
-`=` assignment). So the quoted-vs-unquoted contrast observed here is
-[INFERENCE]-flagged as *not proven* to be a version-dependent Emuera quirk —
-it may equally be "ERB literal assignment to an explicit-index chara array"
-vs "CSV-declared" producing different raw bytes, independent of version.
+house") has no quotes. That's consistent with the same rule, not an
+exception to it: per the wiki, `CSTR` is normally populated from a
+character CSV's `CSTR,*,**` field at chara-load time, not through an ERB
+`=` assignment at all — a different value-origin, so the FORM-verbatim rule
+above never applies to it in the first place.
 
-What **is** directly verified against this crate's own source (not
-inferred): `LineCursor::read_1d_arrays` in `crates/erars-vm/src/save/emuera.rs`
+What **is** directly verified against this crate's own source: `LineCursor::
+read_1d_arrays` in `crates/erars-vm/src/save/emuera.rs`
 never strips quote characters, for any Emuera version — a string-1D value is
 copied verbatim from its own line into `ParsedArray::Str1D`. So erars's
 reader has no version-dependent (or any) quote-handling logic to be
 inconsistent; whatever a real Emuera save's `CSTR` line contains byte-for-byte
-is exactly what erars imports. There is nothing to fix here, only an
-upstream-Emuera authoring-path difference worth knowing about when comparing
-values across captures from different games/versions.
+is exactly what erars imports.
+
+erars's own compiler models both assignment forms and this exact
+FORM-vs-expression distinction directly:
+`crates/erars-compiler/src/parser.rs:3560-3586` (the plain-`=` arm on a
+string-typed target) parses the RHS with `form_assign_expr`, a
+comma-tolerant FORM-literal parser matching Emuera's FORM-syntax semantics,
+while the sibling `ComplexAssign::Str` arm
+(`crates/erars-compiler/src/parser.rs:3556-3559`, the `'=` operator) parses
+the RHS as an expression list for bulk sequential-fill assignment instead.
+The plain-`=` FORM-literal handling was itself a prior bug fix in this repo
+(`docs/research/2026-09-06-language-feature-work.md` §2.2): an earlier
+version of that branch wrongly stopped at the first unescaped comma,
+corrupting exactly this kind of literal.
 
 ## Scope / honest limits
 
