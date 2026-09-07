@@ -2397,6 +2397,16 @@ mod tests {
         };
     }
 
+    macro_rules! real_rand_fixture {
+        ($name:literal) => {
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/emuera_saves/real_rand/",
+                $name
+            )) as &[u8]
+        };
+    }
+
     #[test]
     fn sniff_recognises_all_six_real_captures() {
         let sjis = encoding_rs::SHIFT_JIS;
@@ -3268,11 +3278,112 @@ mod tests {
             ("global_text_utf8_real.sav", real_fixture!("global_text_utf8_real.sav"), EmueraSaveVariant::TextUtf8, true),
             ("global_text_sjis_real.sav", real_fixture!("global_text_sjis_real.sav"), EmueraSaveVariant::TextSjis, true),
             ("global_binary_real.sav", real_fixture!("global_binary_real.sav"), EmueraSaveVariant::Binary, true),
+            // `real_rand/` (see its README.md): the RANDDATA/RANDCAP
+            // capture that refutes this writer's old "8 built-in groups
+            // are always empty" assumption — RANDDATA sits in the
+            // built-in int1D group, not a user-defined one. Pure ASCII
+            // content, no BOM: sniffs as `TextUtf8` but was written by
+            // the non-Unicode path, same as the `*_sjis_real.sav` case
+            // above (see `sniff_recognises_all_six_real_captures`'s own
+            // comment on why that's not a defect).
+            ("randcap90_real.sav", real_rand_fixture!("randcap90_real.sav"), EmueraSaveVariant::TextSjis, false),
         ];
         for (name, bytes, variant, is_global) in cases.iter().copied() {
             let out = round_trip(bytes, variant, is_global);
             assert!(out == bytes, "round-trip byte mismatch for {name} (variant {variant:?})");
         }
+    }
+
+    /// The specific defect `randcap90_real.sav` exposed: `RANDDATA`
+    /// (`VariableCode.RANDDATA = __INTEGER__ | __ARRAY_1D__ |
+    /// __SAVE_EXTENDED__ | __EXTENDED__`, no `__CHARACTER_DATA__`) is a
+    /// *built-in* global-scope extended variable, and real Emuera's own
+    /// writer (`VariableData.SaveToStreamExtended`,
+    /// `VariableData.cs:712-715`) places it in the 4th of the local save's
+    /// 14 extended groups — the built-in int-1D group — via
+    /// `GetExtSaveList(__ARRAY_1D__ | __INTEGER__)`, three
+    /// `__EMU_SEPARATOR__`s after the marker (empty built-in string-scalar,
+    /// int-scalar, and string-1D groups precede it). This drives the
+    /// export path (`export_local` + [`write::write_text`]) directly,
+    /// unlike [`round_trip_real_captures_are_byte_exact`] which only
+    /// round-trips an already-parsed file — this test instead builds a
+    /// fresh [`super::SerializableVariableStorage`] the way the
+    /// `SAVEDATA_EMUERA` builtin actually would.
+    #[test]
+    fn export_local_places_randdata_in_builtin_int1d_group() {
+        erars_ast::init_interner();
+        let mut variables = HashMap::new();
+        variables.insert(
+            get_interner().get_or_intern_static("RANDDATA"),
+            (
+                info(false, true, false, &[625]),
+                UniformVariable::Normal(VmVariable::Int((1..=625).collect())),
+            ),
+        );
+        // An ordinary user `#DIM SAVEDATA RANDCAP` array, of the same
+        // int-1D shape — must land in the *user-defined* int1D group
+        // instead, well after all 8 built-in groups, exactly as
+        // `randcap90_real.sav` itself shows.
+        variables.insert(
+            get_interner().get_or_intern_static("RANDCAP"),
+            (info(false, true, false, &[15]), UniformVariable::Normal(VmVariable::Int(vec![7; 15]))),
+        );
+
+        let storage = super::super::SerializableVariableStorage {
+            description: "cap".to_owned(),
+            code: 999000001,
+            version: 1000,
+            character_len: 0,
+            rand_seed: [0; 32],
+            variables,
+            local_variables: HashMap::new(),
+        };
+
+        let data = export_local(&storage);
+        let sjis = encoding_rs::SHIFT_JIS;
+        let bytes = write::write_text(
+            &data,
+            false,
+            storage.code,
+            write::EXPORT_VERSION,
+            &storage.description,
+            write::TextEncodingChoice::NonUnicode,
+            sjis,
+        )
+        .unwrap();
+        let text = String::from_utf8(bytes).unwrap();
+        let lines: Vec<&str> = text.split("\r\n").collect();
+
+        let marker_idx =
+            lines.iter().position(|&l| l == EMU_START).expect("marker line present");
+        let randdata_idx =
+            lines.iter().position(|&l| l == "RANDDATA").expect("RANDDATA key line present");
+        let between = &lines[marker_idx + 1..randdata_idx];
+        assert!(
+            between.iter().all(|&l| l == EMU_SEPARATOR),
+            "only empty built-in groups may precede RANDDATA, found: {between:?}"
+        );
+        assert_eq!(
+            between.len(),
+            3,
+            "RANDDATA must land in the 4th extended group (built-in int1D), \
+             not a user-defined one — got {} separators before it",
+            between.len()
+        );
+
+        let randcap_idx =
+            lines.iter().position(|&l| l == "RANDCAP").expect("RANDCAP key line present");
+        assert!(randcap_idx > randdata_idx, "RANDCAP must come after RANDDATA's built-in group");
+        let separators_before_randcap =
+            lines[marker_idx + 1..randcap_idx].iter().filter(|&&l| l == EMU_SEPARATOR).count();
+        assert_eq!(
+            separators_before_randcap,
+            9,
+            "RANDCAP (a plain user #DIM SAVEDATA array) must land in the first \
+             user-defined int1D group, after all 8 built-in groups — got {} \
+             separators before it",
+            separators_before_randcap
+        );
     }
 
     #[test]
