@@ -351,8 +351,16 @@ impl VariableStorage {
         sav: SerializableGlobalVariableStorage,
         header: &HeaderInfo,
     ) -> Result<()> {
+        // No `init_rand()` here: real Emuera's `LOADGLOBAL` never touches
+        // the live generator either (`InitRanddata` has exactly one call
+        // site in the whole engine, the `INITRAND` script instruction —
+        // `GameProc/Function/Instraction.Child.cs:1253`; `LoadFromStream`/
+        // `LoadFromStreamBinary` in `GameData/Variable/VariableEvaluator.cs`
+        // never call it). `RANDDATA` restores as the ordinary savedata
+        // variable it is; a script must call `INITRAND` itself afterward
+        // to actually resume drawing from it — see the module doc comment
+        // on `crate::emuera_rand` and `init_rand`'s own doc comment below.
         self.load_variables(sav.variables, sav.local_variables, true);
-        self.init_rand();
         self.init(header)?;
 
         Ok(())
@@ -364,16 +372,21 @@ impl VariableStorage {
         header: &HeaderInfo,
     ) -> Result<()> {
         self.character_len = sav.character_len;
-        // `sav.rand_seed` is intentionally unread: `init_rand()` below
-        // always re-derives `self.rng` from the just-loaded `RANDDATA`
-        // variable, exactly like Emuera's own `INITRAND` semantics, so
-        // whatever this field held would be immediately discarded anyway.
-        // The field itself stays on `SerializableVariableStorage` only so
+        // `sav.rand_seed` is intentionally unread: it predates this
+        // module's Emuera-compatible generator, and `RANDDATA` (an
+        // ordinary savedata variable, restored below by `load_variables`
+        // like any other) is the field that actually carries RNG state
+        // now — see the module doc comment on `crate::emuera_rand`. This
+        // field stays on `SerializableVariableStorage` only so
         // `pre_5dac019_save00.rsav.gz`'s frozen wire shape keeps decoding
         // (see `crates/erars-vm/tests/pre_5dac019_save_fixture.rs`).
 
+        // No `init_rand()` here either — see `load_global_serializable`
+        // above for why: `LOADDATA` restores `RANDDATA` the variable, and
+        // leaves the live generator (`self.rng`) exactly as it was; only
+        // an explicit `INITRAND` resumes drawing from it, matching real
+        // Emuera precisely.
         self.load_variables(sav.variables, sav.local_variables, false);
-        self.init_rand();
         self.init(header)?;
 
         Ok(())
@@ -491,9 +504,19 @@ impl VariableStorage {
         data.copy_from_slice(&state);
     }
 
-    /// `INITRAND` (`VariableEvaluator.InitRanddata`/`MTRandom.SetRand`) —
-    /// also called at the end of every save load, same-format or not, so
-    /// a real Emuera save's `RANDDATA` resumes that exact sequence.
+    /// `INITRAND` (`VariableEvaluator.InitRanddata`/`MTRandom.SetRand`,
+    /// `GameProc/Function/Instraction.Child.cs:1253`): resumes the live
+    /// generator from whatever `RANDDATA` currently holds. This is the
+    /// *only* place real Emuera ever calls `InitRanddata` — `LOADDATA`/
+    /// `LOADGLOBAL` restore `RANDDATA` as an ordinary savedata variable
+    /// (`VariableStorage::load_serializable`/`load_global_serializable`)
+    /// and never call this themselves, so a save's `RAND` sequence only
+    /// actually resumes when the script calls `INITRAND` after loading,
+    /// exactly as Emuera's own wiki documents
+    /// (`docs/research/emuera-wiki/excom.md:1530`: "セーブ・ロード直後に
+    /// INITRAND命令を行うことで、同じ結果を得ることができます" — doing
+    /// `INITRAND` right after save/load gets you the same result, i.e. it
+    /// is not automatic).
     pub fn init_rand(&mut self) {
         let data = self.get_var("RANDDATA").unwrap().1.assume_normal().as_int().unwrap();
         let arr = <[i64; emuera_rand::STATE_LEN]>::try_from(data.as_slice())
@@ -1315,6 +1338,19 @@ impl VariableStorage {
         for var in self.variables.values_mut() {
             var.1 = UniformVariable::new(header, &var.0);
         }
+        // The reset loop above just wiped `RANDDATA` back to its declared
+        // `int[625]` default (625 zeros) along with every other variable.
+        // Do NOT snapshot `self.rng` into it here: real Emuera never
+        // auto-populates `RANDDATA` on a fresh game either - verified by
+        // actually running Emuera1818_kr3.exe with a script that draws
+        // `RAND:1000` then calls `INITRAND` with no preceding `DUMPRAND`.
+        // The captured save's `RANDCAP` shows the post-`INITRAND` draw is
+        // `0`, not a repeat of the pre-`INITRAND` draw: `INITRAND` loaded
+        // the true all-zero `RANDDATA`, which is SFMT's degenerate fixed
+        // point (all-zero state stays all-zero forever - reproduced by
+        // `EmuRandom` bit for bit). So leaving `RANDDATA` untouched here,
+        // to be populated only by an explicit `DUMPRAND`/`INITRAND`, is
+        // the bit-compatible behavior, not a gap to "improve".
         self.init(header)?;
 
         Ok(())
@@ -1521,6 +1557,20 @@ impl VariableStorage {
         Ok(None)
     }
 
+    /// Shared post-setup step for every path that (re)establishes this
+    /// storage's variables: a fresh reset (`reset_data`) and both save
+    /// loads (`load_serializable`/`load_global_serializable`). Deliberately
+    /// does **not** touch `RANDDATA`/`self.rng` — unlike every other
+    /// variable here, `RANDDATA` already holds exactly what it should by
+    /// the time this runs: a load already restored it (or left it at its
+    /// declared default if the save predates it), and `reset_data` needs a
+    /// freshly-seeded `RANDDATA` for a genuinely new game, which it seeds
+    /// itself via `dump_rand()` right after resetting, not through this
+    /// shared helper. An unconditional `dump_rand()` here used to clobber a
+    /// just-loaded save's real `RANDDATA` with whatever `self.rng` already
+    /// happened to be — harmless while `RAND` drew from `ChaCha20Rng` and
+    /// `RANDDATA` was meaningless anyway, but silently breaks real save
+    /// continuity now that it is not.
     pub fn init(&mut self, header: &HeaderInfo) -> Result<()> {
         macro_rules! set {
             ($name:expr, $field:ident) => {
@@ -1533,9 +1583,6 @@ impl VariableStorage {
 
         set!(KnownVariableNames::PalamLv, palamlv_init);
         set!(KnownVariableNames::ExpLv, explv_init);
-
-        // Init RANDDATA with fresh rng
-        self.dump_rand();
         self.get_var("RELATION")?.0.default_int = header.replace.relation_init;
         *self.ref_int("PBAND", &[])? = header.replace.pband_init;
 

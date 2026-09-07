@@ -1,4 +1,14 @@
 @SYSTEM_TITLE
+; `INITRAND` restores whatever `RANDDATA` currently holds - it does NOT
+; auto-snapshot the live generator first. A fresh game's `RANDDATA` is a
+; plain `int[625]` array (all zero, like any other undeclared savedata),
+; so `INITRAND` with no preceding `DUMPRAND` loads that all-zero state,
+; which real Emuera's own SFMT-19937 generator treats as a degenerate
+; fixed point (draws come back `0` forever) - verified by actually running
+; Emuera1818_kr3.exe with this exact draw/INITRAND sequence and no prior
+; DUMPRAND. So this test must call `DUMPRAND` first to snapshot the state
+; being tested, exactly like a real script's save/restore round trip would.
+DUMPRAND
 LOCAL = RAND:1000
 INITRAND
 CALL ASSERT(LOCAL == RAND:1000)
