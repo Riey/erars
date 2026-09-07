@@ -108,11 +108,19 @@ draw sequence — this is the actual save-compat proof:
 `crates/erars-vm/tests/emuera_rand_save_fixture.rs` loads this file through
 the real `LOADDATA` builtin (`erars_vm`'s save-discovery →
 `save::emuera::sniff`/`parse` → `build_local_data` →
-`VariableStorage::load_serializable`, which always ends in
-`VariableStorage::init_rand()`, exactly like a script that ran `INITRAND`
-right after `LOADDATA`) and then draws two more `RAND:100000` values
-through erars — asserting they come back as `60789, 83791`, the same
-continuation real Emuera would have produced from this exact save.
+`VariableStorage::load_serializable`, which restores `RANDDATA` as an
+ordinary variable and — matching real Emuera precisely — never touches the
+live generator itself), then calls `INITRAND` explicitly from
+`@SYSTEM_LOADEND` (`LOADDATA` transitions control flow to the shop/train
+state on success, so nothing after it in the same event runs — real
+Emuera's own `SYSTEM_LOADEND` hook is where a script has to put this), and
+then draws two more `RAND:100000` values through erars — asserting they
+come back as `60789, 83791`, the same continuation real Emuera would have
+produced from this exact save. This is a different round trip than the one
+the capture script above exercises (that one never calls `LOADDATA` — its
+`DUMPRAND`/`INITRAND` pair is a same-session round trip): the fixture test
+separately proves that a *file-based* `LOADDATA` restores `RANDDATA`
+correctly too, using the same generator state either way.
 
 ## Reproducing
 

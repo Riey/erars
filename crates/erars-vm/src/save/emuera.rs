@@ -85,19 +85,28 @@
 //!
 //! `RANDDATA` is treated as an ordinary `int[625]` savedata variable: it
 //! travels through the same declared-shape reconciliation as any other
-//! array, and whatever it holds is fed through the existing
-//! `VariableStorage::init_rand` call that already runs at the end of every
-//! load, same-format or not. Unlike erars's previous ChaCha20-based `RAND`,
+//! array (`VariableStorage::load_serializable`), same as real Emuera's own
+//! `LOADDATA` (`GameData/Variable/VariableEvaluator.cs`'s
+//! `LoadFromStream`/`LoadFromStreamBinary`) — neither one touches the live
+//! generator itself. Real Emuera resumes drawing from a loaded `RANDDATA`
+//! only when the script explicitly calls `INITRAND` afterward
+//! (`InitRanddata` has exactly one call site in the whole engine, the
+//! `INITRAND` instruction — `GameProc/Function/Instraction.Child.cs:1253`),
+//! and erars matches that precisely: `VariableStorage::init_rand` is the
+//! `INITRAND` builtin's implementation, not something `load_serializable`
+//! calls itself. Unlike erars's previous ChaCha20-based `RAND`,
 //! `init_rand`'s generator (`crate::emuera_rand::EmuRandom`) is a bit-exact
 //! port of Emuera's own SFMT-19937, and `RANDDATA`'s 625-`int` shape now
 //! matches Emuera's exactly (624 state words + one refill index,
-//! `GameData/ConstantData.cs:152`) — so a real Emuera save's `RANDDATA`
-//! restores actual continuity here: `RAND` in erars, from this point on,
-//! draws the exact same sequence the originating Emuera session would
-//! have. See `crates/erars-vm/src/emuera_rand.rs` and
+//! `GameData/ConstantData.cs:152`) — so a real Emuera save's `RANDDATA`,
+//! loaded and then fed to `INITRAND` exactly as a real Emuera script would
+//! have to, resumes actual continuity: `RAND` in erars draws the exact
+//! same sequence the originating Emuera session would have from that
+//! point on. See `crates/erars-vm/src/emuera_rand.rs` and
 //! `crates/erars-vm/tests/emuera_rand_save_fixture.rs` (loads a real
-//! Emuera-written `RANDDATA` capture and proves the post-load draws
-//! continue that exact sequence).
+//! Emuera-written `RANDDATA` capture, calls `INITRAND` exactly as its
+//! capture script did, and proves the following draws continue that
+//! exact sequence).
 
 use anyhow::{anyhow, bail, ensure, Result};
 use erars_ast::{get_interner, StrKey, VariableInfo};
@@ -1696,11 +1705,12 @@ pub fn merge_chara_columns(
 /// default — it's a vestigial field on `SerializableVariableStorage`
 /// (see `crate::variable::VariableStorage::load_serializable`'s doc
 /// comment), not how RNG continuity actually travels. `RANDDATA` travels
-/// as an ordinary variable and `VariableStorage::init_rand` re-derives the
-/// actual generator state from it after every load, which — now that
-/// `RANDDATA` is Emuera's own 625-`int` shape and `init_rand` feeds a
-/// bit-exact port of Emuera's generator — is real continuity, not a no-op.
-/// See the module doc comment above.
+/// as an ordinary variable through `load_serializable`'s generic
+/// declared-shape reconciliation, restoring the array bit for bit — the
+/// live generator itself is untouched here, exactly like real Emuera's own
+/// `LOADDATA`; only an explicit `INITRAND` afterward (script-level, not
+/// this function's concern) actually resumes drawing from it. See the
+/// module doc comment above.
 pub fn build_local_data(
     data: EmueraSaveData,
     header: &HeaderInfo,
