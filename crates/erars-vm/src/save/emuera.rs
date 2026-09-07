@@ -112,6 +112,9 @@ use anyhow::{anyhow, bail, ensure, Result};
 use erars_ast::{get_interner, StrKey, VariableInfo};
 use erars_compiler::HeaderInfo;
 use hashbrown::HashMap;
+use indexmap::IndexMap;
+
+pub(crate) mod write;
 
 use crate::variable::{UniformVariable, VmVariable};
 
@@ -284,10 +287,10 @@ pub struct EmueraSaveData {
     /// section": built-in scalars/1D/2D/3D plus the 6 user-defined array
     /// groups, all merged into one name-keyed map — the built-in/user split
     /// only matters to Emuera's own writer layout, not to reconciliation).
-    pub globals: HashMap<String, ParsedArray>,
+    pub globals: IndexMap<String, ParsedArray>,
     /// One row per `CHARADATA` entry (spec §2.5 "Character section"), in
     /// the file's own order.
-    pub charas: Vec<HashMap<String, ParsedArray>>,
+    pub charas: Vec<IndexMap<String, ParsedArray>>,
     /// Which extended-block marker the seek found (see [`ExtendedMarker`]);
     /// the OLD block is always read regardless. Populated by [`parse_text`];
     /// binary saves are inherently 1808-framed, so [`parse_binary`] sets
@@ -478,7 +481,7 @@ impl<'a> LineCursor<'a> {
     /// `to_value`.
     fn read_scalars(
         &mut self,
-        out: &mut HashMap<String, ParsedArray>,
+        out: &mut IndexMap<String, ParsedArray>,
         to_value: impl Fn(&'a str) -> Result<ParsedArray>,
     ) -> Result<()> {
         loop {
@@ -497,7 +500,7 @@ impl<'a> LineCursor<'a> {
     /// repeated `KEY` line + values + `FINISHED`, until `EMU_SEPARATOR`.
     fn read_1d_arrays(
         &mut self,
-        out: &mut HashMap<String, ParsedArray>,
+        out: &mut IndexMap<String, ParsedArray>,
         is_str: bool,
     ) -> Result<()> {
         loop {
@@ -552,7 +555,7 @@ impl<'a> LineCursor<'a> {
 
     /// One int-2D array group (spec §2.4/§2.5): repeated `KEY` line +
     /// comma-rows + `FINISHED`, until `EMU_SEPARATOR`.
-    fn read_2d_arrays(&mut self, out: &mut HashMap<String, ParsedArray>) -> Result<()> {
+    fn read_2d_arrays(&mut self, out: &mut IndexMap<String, ParsedArray>) -> Result<()> {
         loop {
             let key = self.next()?;
             if key == EMU_SEPARATOR {
@@ -575,7 +578,7 @@ impl<'a> LineCursor<'a> {
     /// One int-3D array group (spec §2.4): repeated `KEY` line + `[idx]{`
     /// blocks of comma-rows terminated by `}`, then `FINISHED`, until
     /// `EMU_SEPARATOR`.
-    fn read_3d_arrays(&mut self, out: &mut HashMap<String, ParsedArray>) -> Result<()> {
+    fn read_3d_arrays(&mut self, out: &mut IndexMap<String, ParsedArray>) -> Result<()> {
         loop {
             let key = self.next()?;
             if key == EMU_SEPARATOR {
@@ -632,8 +635,8 @@ impl<'a> LineCursor<'a> {
 /// ([`parse_chara_section`]) only ever adds `NICKNAME`/`MASTERNAME`/`CSTR`/
 /// `CDFLAG` and any further custom chara-scope savedata arrays this game
 /// declares.
-fn parse_old_chara_block(cursor: &mut LineCursor) -> Result<HashMap<String, ParsedArray>> {
-    let mut vars = HashMap::new();
+fn parse_old_chara_block(cursor: &mut LineCursor) -> Result<IndexMap<String, ParsedArray>> {
+    let mut vars = IndexMap::new();
     for name in CHAR_OLD_STR {
         vars.insert(name.to_owned(), ParsedArray::StrScalar(cursor.next()?.to_owned()));
     }
@@ -650,8 +653,8 @@ fn parse_old_chara_block(cursor: &mut LineCursor) -> Result<HashMap<String, Pars
 /// local save (spec §2.3, corrected — see [`GLOBAL_OLD_ARR`]): 60 named 1D
 /// int arrays (`DAY`, `MONEY`, `FLAG`, ... ) then one named 1D string array
 /// (`SAVESTR`), all positional, no scalars.
-fn parse_old_variable_block(cursor: &mut LineCursor) -> Result<HashMap<String, ParsedArray>> {
-    let mut vars = HashMap::new();
+fn parse_old_variable_block(cursor: &mut LineCursor) -> Result<IndexMap<String, ParsedArray>> {
+    let mut vars = IndexMap::new();
     for name in GLOBAL_OLD_ARR {
         vars.insert(name.to_owned(), ParsedArray::Int1D(cursor.read_old_int_array()?));
     }
@@ -663,8 +666,8 @@ fn parse_old_variable_block(cursor: &mut LineCursor) -> Result<HashMap<String, P
 /// see [`GLOBALSAVE_OLD_ARR`]): exactly `GLOBAL` (1D int) then `GLOBALS` (1D
 /// string), positional, no scalars — a different, dedicated layout from
 /// [`parse_old_variable_block`]'s 60-array local-embedded one.
-fn parse_old_global_save_block(cursor: &mut LineCursor) -> Result<HashMap<String, ParsedArray>> {
-    let mut vars = HashMap::new();
+fn parse_old_global_save_block(cursor: &mut LineCursor) -> Result<IndexMap<String, ParsedArray>> {
+    let mut vars = IndexMap::new();
     vars.insert(
         GLOBALSAVE_OLD_ARR.to_owned(),
         ParsedArray::Int1D(cursor.read_old_int_array()?),
@@ -683,8 +686,8 @@ fn parse_old_global_save_block(cursor: &mut LineCursor) -> Result<HashMap<String
     fn parse_chara_section(
         cursor: &mut LineCursor,
         version: u32,
-    ) -> Result<HashMap<String, ParsedArray>> {
-        let mut vars = HashMap::new();
+    ) -> Result<IndexMap<String, ParsedArray>> {
+        let mut vars = IndexMap::new();
         cursor.read_scalars(&mut vars, |v| Ok(ParsedArray::StrScalar(v.to_owned())))?; // string scalars
         cursor.read_scalars(&mut vars, |v| {
             v.trim()
@@ -712,8 +715,8 @@ fn parse_old_global_save_block(cursor: &mut LineCursor) -> Result<HashMap<String
     fn parse_variable_section(
         cursor: &mut LineCursor,
         version: u32,
-    ) -> Result<HashMap<String, ParsedArray>> {
-        let mut vars = HashMap::new();
+    ) -> Result<IndexMap<String, ParsedArray>> {
+        let mut vars = IndexMap::new();
         cursor.read_scalars(&mut vars, |v| Ok(ParsedArray::StrScalar(v.to_owned())))?; // string scalars
         cursor.read_scalars(&mut vars, |v| {
             v.trim()
@@ -763,8 +766,8 @@ fn parse_old_global_save_block(cursor: &mut LineCursor) -> Result<HashMap<String
     fn parse_global_variable_section(
         cursor: &mut LineCursor,
         version: u32,
-    ) -> Result<HashMap<String, ParsedArray>> {
-        let mut vars = HashMap::new();
+    ) -> Result<IndexMap<String, ParsedArray>> {
+        let mut vars = IndexMap::new();
         cursor.read_1d_arrays(&mut vars, true)?; // string 1D
         cursor.read_1d_arrays(&mut vars, false)?; // int 1D
         // 2D iff >= 1708, 3D iff >= 1729 (same gates as the local variable
@@ -810,7 +813,7 @@ fn parse_text(text: &str, is_global: bool) -> Result<(EmueraSaveData, u32, u32, 
     };
     ensure!(character_count >= 0, "characterCount가 음수입니다: {character_count}");
 
-    let mut charas: Vec<HashMap<String, ParsedArray>> = Vec::with_capacity(character_count as usize);
+    let mut charas: Vec<IndexMap<String, ParsedArray>> = Vec::with_capacity(character_count as usize);
     let mut globals = if is_global {
         parse_old_global_save_block(&mut cursor)?
     } else {
@@ -1185,7 +1188,7 @@ enum RecordEnd {
 
 /// Reads `WriteWithKey`-framed records (spec §4.3: `<type byte> <key
 /// string> <payload>`) into `out` until a control byte ends the block.
-fn read_binary_records(cur: &mut BinCursor, out: &mut HashMap<String, ParsedArray>) -> Result<RecordEnd> {
+fn read_binary_records(cur: &mut BinCursor, out: &mut IndexMap<String, ParsedArray>) -> Result<RecordEnd> {
     loop {
         let tag = cur.byte()?;
         match tag {
@@ -1247,7 +1250,7 @@ fn parse_binary(bytes: &[u8], is_global: bool) -> Result<(EmueraSaveData, u32, u
         ensure!(character_count >= 0, "characterCount가 음수입니다: {character_count}");
         charas.reserve(character_count as usize);
         for _ in 0..character_count {
-            let mut vars = HashMap::new();
+            let mut vars = IndexMap::new();
             let end = read_binary_records(&mut cur, &mut vars)?;
             ensure!(
                 matches!(end, RecordEnd::Eoc),
@@ -1257,7 +1260,7 @@ fn parse_binary(bytes: &[u8], is_global: bool) -> Result<(EmueraSaveData, u32, u
         }
     }
 
-    let mut globals = HashMap::new();
+    let mut globals = IndexMap::new();
     let end = read_binary_records(&mut cur, &mut globals)?;
     ensure!(matches!(end, RecordEnd::Eof), "전역 레코드 블록이 EOF(0xFF)로 끝나지 않았습니다");
 
@@ -1540,7 +1543,7 @@ fn reconcile<'h>(
 /// = false`) or `SerializableGlobalVariableStorage` (`is_global = true`)
 /// from a parsed Emuera save's non-chara variables.
 pub fn merge_globals(
-    globals: HashMap<String, ParsedArray>,
+    globals: IndexMap<String, ParsedArray>,
     header: &HeaderInfo,
     is_global: bool,
     report: &mut ImportReport,
@@ -1571,7 +1574,7 @@ pub fn merge_globals(
 /// mismatch is reported once for the whole column rather than once per
 /// character.
 pub fn merge_chara_columns(
-    mut charas: Vec<HashMap<String, ParsedArray>>,
+    mut charas: Vec<IndexMap<String, ParsedArray>>,
     header: &HeaderInfo,
     report: &mut ImportReport,
 ) -> HashMap<StrKey, (VariableInfo, UniformVariable)> {
@@ -1586,7 +1589,7 @@ pub fn merge_chara_columns(
 
     for name in names {
         let per_chara: Vec<Option<ParsedArray>> =
-            charas.iter_mut().map(|row| row.remove(&name)).collect();
+            charas.iter_mut().map(|row| row.shift_remove(&name)).collect();
 
         // Resolve the declaration once, using whichever row actually has
         // data (rows that omitted the name entirely carry no shape/type
@@ -1758,6 +1761,122 @@ pub fn build_global_data(
         },
         report,
     )
+}
+
+/// Reshapes one live variable's flat storage into the foreign-name-keyed
+/// [`ParsedArray`] shape [`write`] expects, using [`VariableInfo::size`]'s
+/// declared dimensionality — the exact inverse of [`reconcile`]'s
+/// `place_2d`/`place_3d` flattening (same row-major convention: `size[0]`
+/// is the outermost dimension). A dimension of `0` only ever occurs
+/// together with an empty `var` (`full_size` is a product), so the `max(1)`
+/// chunk-size guards below never misgroup real data — `chunks` on an empty
+/// slice yields zero chunks regardless of chunk size.
+fn unflatten_to_parsed(info: &VariableInfo, var: &VmVariable) -> ParsedArray {
+    match (info.size.len(), var) {
+        (0, VmVariable::Int(v)) => ParsedArray::IntScalar(v.first().copied().unwrap_or(0)),
+        (0, VmVariable::Str(v)) => ParsedArray::StrScalar(v.first().cloned().unwrap_or_default()),
+        (1, VmVariable::Int(v)) => ParsedArray::Int1D(v.clone()),
+        (1, VmVariable::Str(v)) => ParsedArray::Str1D(v.clone()),
+        (2, VmVariable::Int(v)) => {
+            let cols = (info.size[1] as usize).max(1);
+            ParsedArray::Int2D(v.chunks(cols).map(<[i64]>::to_vec).collect())
+        }
+        (2, VmVariable::Str(v)) => {
+            let cols = (info.size[1] as usize).max(1);
+            ParsedArray::Str2D(v.chunks(cols).map(<[String]>::to_vec).collect())
+        }
+        (3, VmVariable::Int(v)) => {
+            let (rows, cols) = ((info.size[1] as usize).max(1), (info.size[2] as usize).max(1));
+            ParsedArray::Int3D(
+                v.chunks(rows * cols)
+                    .enumerate()
+                    .map(|(i, plane)| (i as u32, plane.chunks(cols).map(<[i64]>::to_vec).collect()))
+                    .collect(),
+            )
+        }
+        (3, VmVariable::Str(v)) => {
+            let (rows, cols) = ((info.size[1] as usize).max(1), (info.size[2] as usize).max(1));
+            ParsedArray::Str3D(
+                v.chunks(rows * cols)
+                    .enumerate()
+                    .map(|(i, plane)| (i as u32, plane.chunks(cols).map(<[String]>::to_vec).collect()))
+                    .collect(),
+            )
+        }
+        (n, _) => unreachable!("VariableInfo::size is capped at 3 dimensions, got {n}"),
+    }
+}
+
+/// Builds an [`EmueraSaveData`] fit for [`write::write_binary`]/
+/// [`write::write_text`] from this game's own live save state — the export
+/// counterpart of [`build_local_data`]. Every `is_savedata` variable this
+/// game declares travels (`sav.variables` is already filtered to
+/// `is_savedata` by [`crate::variable::VariableStorage::get_serializable`]),
+/// keyed by its own name and visited in alphabetical order for a
+/// deterministic, diff-friendly output — nothing reading an exported save
+/// depends on this crate's own writer visiting variables in Emuera's own
+/// internal declaration order (see the `write` module's doc comment).
+/// erars-only bookkeeping state with no Emuera counterpart (`RANDDATA`'s
+/// RNG seed) is carried like any other `is_savedata` variable; real Emuera
+/// simply has no slot for the name and drops it on load exactly as it does
+/// for any other undeclared extended-block key, which is the correct,
+/// narrowly-scoped limit of cross-implementation RNG state, not a bug.
+pub fn export_local(sav: &super::SerializableVariableStorage) -> EmueraSaveData {
+    let mut globals = Vec::new();
+    let mut chara_entries: Vec<(String, &VariableInfo, &[VmVariable])> = Vec::new();
+
+    for (key, (info, var)) in &sav.variables {
+        let name = key.resolve().to_owned();
+        match var {
+            UniformVariable::Normal(v) => globals.push((name, unflatten_to_parsed(info, v))),
+            UniformVariable::Character(vars) => chara_entries.push((name, info, vars)),
+        }
+    }
+    globals.sort_by(|a, b| a.0.cmp(&b.0));
+    chara_entries.sort_by(|a, b| a.0.cmp(&b.0));
+
+    let mut charas: Vec<IndexMap<String, ParsedArray>> =
+        (0..sav.character_len as usize).map(|_| IndexMap::new()).collect();
+    for (name, info, vars) in chara_entries {
+        for (c, slot) in charas.iter_mut().enumerate() {
+            if let Some(v) = vars.get(c) {
+                slot.insert(name.clone(), unflatten_to_parsed(info, v));
+            }
+        }
+    }
+
+    EmueraSaveData {
+        globals: globals.into_iter().collect(),
+        charas,
+        extended_marker: ExtendedMarker::Known(write::EXPORT_VERSION),
+    }
+}
+
+/// As [`export_local`], for [`super::SerializableGlobalVariableStorage`]
+/// (the `SAVEGLOBAL` payload). Fails, naming the variable, if this game has
+/// declared a variable that is both `is_global` and `is_chara` — real
+/// Emuera's own `global.sav` format has no `CHARADATA` section at all
+/// (spec §2.5; see [`build_global_data`]'s own doc comment) to put one in,
+/// so silently dropping it would be exactly the "succeeded while losing
+/// data" failure mode this export must never produce.
+pub fn export_global(sav: &super::SerializableGlobalVariableStorage) -> Result<EmueraSaveData> {
+    let mut globals = Vec::new();
+    for (key, (info, var)) in &sav.variables {
+        let name = key.resolve().to_owned();
+        match var {
+            UniformVariable::Normal(v) => globals.push((name, unflatten_to_parsed(info, v))),
+            UniformVariable::Character(_) => bail!(
+                "변수 '{name}'는 캐릭터 차원을 가진 전역 변수라 global.sav 형식으로 내보낼 수 없습니다"
+            ),
+        }
+    }
+    globals.sort_by(|a, b| a.0.cmp(&b.0));
+
+    Ok(EmueraSaveData {
+        globals: globals.into_iter().collect(),
+        charas: Vec::new(),
+        extended_marker: ExtendedMarker::Known(write::EXPORT_VERSION),
+    })
 }
 
 #[cfg(test)]
@@ -3090,6 +3209,95 @@ mod tests {
                 err.to_string().contains("CDFLAG"),
                 "the parse must fail specifically on the misaligned CDFLAG line, not some unrelated cause: {err}"
             ),
+        }
+    }
+
+    // =========================================================================
+    // Round-trip: parse a real capture, write it straight back out with
+    // `write::write_binary`/`write::write_text`, and require the result to
+    // be byte-identical to the original file. This is ground truth the
+    // project did not author — every real capture in both fixture
+    // directories that isn't a `chara_*.dat`-format file (out of scope,
+    // see the module doc comment) is exercised here, across every
+    // container variant and every historical marker version.
+    fn round_trip(bytes: &[u8], variant: EmueraSaveVariant, is_global: bool) -> Vec<u8> {
+        let sjis = encoding_rs::SHIFT_JIS;
+        let (data, code, version, description) = parse(variant, bytes, sjis, is_global).unwrap();
+        match variant {
+            EmueraSaveVariant::Binary => {
+                write::write_binary(&data, is_global, code, version, &description)
+            }
+            // `sniff` reports `TextUtf8` for *any* valid-UTF-8 text save,
+            // BOM or not (spec §6.6/module doc comment) — a pure-ASCII
+            // capture written non-Unicode is indistinguishable from one
+            // written UTF-8 without a BOM by content alone. The one signal
+            // that *does* disambiguate is the BOM's own presence: real
+            // Emuera only ever emits one when `SystemSaveInUTF8:YES`
+            // (`EraDataStream.cs`'s BOM branch), so its absence here means
+            // this particular capture was actually the non-Unicode writer,
+            // just on content narrow enough to round-trip through UTF-8
+            // too.
+            EmueraSaveVariant::TextUtf8 => {
+                let choice = if bytes.starts_with(&UTF8_BOM) {
+                    write::TextEncodingChoice::Utf8
+                } else {
+                    write::TextEncodingChoice::NonUnicode
+                };
+                write::write_text(&data, is_global, code, version, &description, choice, sjis)
+                    .unwrap()
+            }
+            EmueraSaveVariant::TextSjis => write::write_text(
+                &data,
+                is_global,
+                code,
+                version,
+                &description,
+                write::TextEncodingChoice::NonUnicode,
+                sjis,
+            )
+            .unwrap(),
+        }
+    }
+
+    #[test]
+    fn round_trip_real_captures_are_byte_exact() {
+        let cases: &[(&str, &[u8], EmueraSaveVariant, bool)] = &[
+            ("save90_text_utf8_real.sav", real_fixture!("save90_text_utf8_real.sav"), EmueraSaveVariant::TextUtf8, false),
+            ("save90_text_sjis_real.sav", real_fixture!("save90_text_sjis_real.sav"), EmueraSaveVariant::TextSjis, false),
+            ("save90_binary_real.sav", real_fixture!("save90_binary_real.sav"), EmueraSaveVariant::Binary, false),
+            ("global_text_utf8_real.sav", real_fixture!("global_text_utf8_real.sav"), EmueraSaveVariant::TextUtf8, true),
+            ("global_text_sjis_real.sav", real_fixture!("global_text_sjis_real.sav"), EmueraSaveVariant::TextSjis, true),
+            ("global_binary_real.sav", real_fixture!("global_binary_real.sav"), EmueraSaveVariant::Binary, true),
+        ];
+        for (name, bytes, variant, is_global) in cases.iter().copied() {
+            let out = round_trip(bytes, variant, is_global);
+            assert!(out == bytes, "round-trip byte mismatch for {name} (variant {variant:?})");
+        }
+    }
+
+    #[test]
+    fn round_trip_real_old_captures_are_byte_exact() {
+        let names = [
+            "1701_real.sav",
+            "1707_real.sav",
+            "1710_real.sav",
+            "1738_real.sav",
+            "1738_chara_real.sav",
+            "1803_real.sav",
+            "1803_chara_real.sav",
+        ];
+        let files: [&[u8]; 7] = [
+            old_real_fixture!("1701_real.sav"),
+            old_real_fixture!("1707_real.sav"),
+            old_real_fixture!("1710_real.sav"),
+            old_real_fixture!("1738_real.sav"),
+            old_real_fixture!("1738_chara_real.sav"),
+            old_real_fixture!("1803_real.sav"),
+            old_real_fixture!("1803_chara_real.sav"),
+        ];
+        for (name, bytes) in names.iter().zip(files.iter().copied()) {
+            let out = round_trip(bytes, EmueraSaveVariant::TextUtf8, false);
+            assert!(out == bytes, "round-trip byte mismatch for {name}");
         }
     }
 }

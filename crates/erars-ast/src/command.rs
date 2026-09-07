@@ -493,4 +493,18 @@ pub enum BuiltinCommand {
     /// elements of `var` equal to `value` into `RESULT:0` and store the
     /// matching indices in `RESULT:1`... `end` is exclusive.
     MatchAll,
+
+    /// erars-only extension: exports the current save state to real
+    /// Emuera's own on-disk format at slot `idx`, so a player who migrated
+    /// into erars can migrate back out. Container variant (binary/text) and
+    /// the text variant's encoding follow the same `SystemSaveInBinary`/
+    /// `SystemSaveInUTF8` config keys real Emuera's own writer follows for
+    /// `SAVEDATA` — this command mirrors `SAVEDATA`'s own arguments and
+    /// config sensitivity, just to the other format.
+    #[strum(serialize = "SAVEDATA_EMUERA")]
+    SaveDataEmuera,
+    /// As [`BuiltinCommand::SaveDataEmuera`], for the global save
+    /// (`SAVEGLOBAL`'s counterpart).
+    #[strum(serialize = "SAVEGLOBAL_EMUERA")]
+    SaveGlobalEmuera,
 }

@@ -43,6 +43,7 @@ bytemuck = "1.13.0"
 # GDI+ decodes whatever `Image.FromFile` recognises; the corpus ships `.webp`
 # title art (`タイトル表示/PRINT_TITLE.ERB:50`) and `.jpg` event art.
 image = { version = "0.25", default-features = false, features = ["png", "bmp", "webp", "jpeg"] }
+indexmap = "2.14.2"
 
 [dev-dependencies]
 k9 = "0.11.5"

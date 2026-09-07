@@ -192,6 +192,8 @@ pub enum InstructionCode {
     POWER,
     SAVEGLOBAL,
     LOADGLOBAL,
+    SAVEDATA_EMUERA,
+    SAVEGLOBAL_EMUERA,
     SWAP,
 
     RESETDATA,
