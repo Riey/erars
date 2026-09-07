@@ -3411,4 +3411,79 @@ mod tests {
             assert!(out == bytes, "round-trip byte mismatch for {name}");
         }
     }
+
+    /// The coverage hole that let `real_rand/randcap90_real.sav` go
+    /// untested by `round_trip_real_captures_are_byte_exact` for a whole
+    /// writer-correctness bug's lifetime: a fixture directory can be added
+    /// under `tests/fixtures/emuera_saves/real*/` without anyone updating
+    /// the round-trip tests above, and nothing fails. This test closes that
+    /// *structurally*: it walks every `real*` directory at run time and
+    /// fails loudly if it finds a `.sav` file not named in `covered` below
+    /// (kept in sync with `real_fixture!`/`old_real_fixture!`/
+    /// `real_rand_fixture!` call sites in the two tests above), rather than
+    /// silently leaving it un-round-tripped the way `real_rand/` was.
+    ///
+    /// This can't safely auto-run the round trip itself: `randcap90_real.sav`
+    /// (see its own comment above) proves a file's correct
+    /// `EmueraSaveVariant`/`is_global` can't always be inferred from its
+    /// bytes or its name — that provenance has to come from whoever adds
+    /// the fixture. So this test enforces *someone did*, not what they
+    /// said; a wrong variant/`is_global` still fails the actual round-trip
+    /// test, which already asserts byte-exactness.
+    #[test]
+    fn all_real_fixture_sav_files_are_covered_by_round_trip_tests() {
+        let covered: std::collections::HashSet<&str> = [
+            // `round_trip_real_captures_are_byte_exact` (`tests/fixtures/emuera_saves/real/`
+            // and `real_rand/`):
+            "save90_text_utf8_real.sav",
+            "save90_text_sjis_real.sav",
+            "save90_binary_real.sav",
+            "global_text_utf8_real.sav",
+            "global_text_sjis_real.sav",
+            "global_binary_real.sav",
+            "randcap90_real.sav",
+            // `round_trip_real_old_captures_are_byte_exact` (`real_old/`):
+            "1701_real.sav",
+            "1707_real.sav",
+            "1710_real.sav",
+            "1738_real.sav",
+            "1738_chara_real.sav",
+            "1803_real.sav",
+            "1803_chara_real.sav",
+        ]
+        .into_iter()
+        .collect();
+
+        let base = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/emuera_saves"));
+        let mut missing = Vec::new();
+        for entry in std::fs::read_dir(base).expect("read tests/fixtures/emuera_saves") {
+            let entry = entry.expect("dir entry");
+            let dir_name = entry.file_name();
+            let dir_name = dir_name.to_string_lossy().into_owned();
+            if !entry.path().is_dir() || !dir_name.starts_with("real") {
+                continue;
+            }
+            for file in std::fs::read_dir(entry.path()).expect("read real* fixture dir") {
+                let file = file.expect("fixture dir entry");
+                let file_name = file.file_name();
+                let file_name = file_name.to_string_lossy().into_owned();
+                // `.sav` only: `README.md` and out-of-scope `chara_*.dat`
+                // (see the module doc comment) are deliberately not
+                // round-tripped here.
+                if !file_name.ends_with(".sav") {
+                    continue;
+                }
+                if !covered.contains(file_name.as_str()) {
+                    missing.push(format!("{dir_name}/{file_name}"));
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "found real-capture .sav file(s) not exercised by any round-trip test: {missing:?} \
+             — add them to round_trip_real_captures_are_byte_exact or \
+             round_trip_real_old_captures_are_byte_exact (and to `covered` above); this is \
+             exactly the coverage hole that let real_rand/randcap90_real.sav go untested"
+        );
+    }
 }
