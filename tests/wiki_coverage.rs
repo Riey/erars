@@ -1830,6 +1830,46 @@ impl Row {
     }
 }
 
+/// Names whose `ran` sample output is inherently non-reproducible: four
+/// read the wall clock (`GETMILLISECOND`, `GETSECOND`, `GETTIME`,
+/// `GETTIMES`) and one reseeds the RNG on every process start (`RANDDATA`).
+/// Left unmasked, their rows made
+/// `docs/research/emuera-wiki/coverage.md` differ on every
+/// `cargo test -p erars --test wiki_coverage` run even though every other
+/// cell — function names, probes, stages, verdicts, the coverage table, the
+/// conclusions — is byte-identical run to run. [`mask_volatile_sample`]
+/// elides only the sampled digits, keeping the row's proof that the probe
+/// ran and the shape of what it printed.
+const VOLATILE_SAMPLE_NAMES: &[&str] =
+    &["GETMILLISECOND", "GETSECOND", "GETTIME", "GETTIMES", "RANDDATA"];
+
+/// Replaces each run of digits (with an optional leading `-`, for
+/// `RANDDATA`'s signed 64-bit draw) with a single `#` placeholder, leaving
+/// every other character — the `PRINTFORML [...]` brackets, and for
+/// `GETTIMES` the `/` and `:` date/time separators — exactly as produced.
+/// So `[63924353782197]` becomes `[#]` and `[2026/09/07 13:56:23]` becomes
+/// `[#/#/# #:#:#]`: the report still records that the probe ran and whether
+/// its output was a bare integer or a formatted date-time string, which is
+/// the coverage information that actually matters here — only the volatile
+/// sample value is elided.
+fn mask_volatile_sample(detail: &str) -> String {
+    let mut out = String::with_capacity(detail.len());
+    let mut chars = detail.chars().peekable();
+    while let Some(c) = chars.next() {
+        let starts_number = c.is_ascii_digit()
+            || (c == '-' && chars.peek().is_some_and(char::is_ascii_digit));
+        if starts_number {
+            out.push('#');
+            while chars.peek().is_some_and(char::is_ascii_digit) {
+                chars.next();
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 fn best(runner: &Runner, name: &str, probes: Vec<Probe>) -> Row {
     let mut best: Option<Row> = None;
     for p in probes {
@@ -1841,6 +1881,11 @@ fn best(runner: &Runner, name: &str, probes: Vec<Probe>) -> Row {
                 .push((name.to_owned(), p.shown.clone(), msg.clone()));
         }
         let (verdict, detail) = classify(name, &p, &o);
+        let detail = if verdict == Verdict::Ran && VOLATILE_SAMPLE_NAMES.contains(&name) {
+            mask_volatile_sample(&detail)
+        } else {
+            detail
+        };
         let row = Row {
             name: name.to_owned(),
             noise: None,
