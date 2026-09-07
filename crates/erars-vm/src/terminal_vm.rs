@@ -14,7 +14,6 @@ use erars_ast::{
 use erars_compiler::{Instruction, ParserContext, ReplaceInfo};
 use erars_ui::{FontStyle, InputRequest, InputRequestType, Timeout, VirtualConsole};
 use itertools::Itertools;
-use rand::Rng;
 
 macro_rules! report_error {
     ($tx:expr, $($t:tt)+) => {

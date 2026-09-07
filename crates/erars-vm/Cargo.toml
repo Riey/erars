@@ -21,8 +21,11 @@ itertools = "0.10.3"
 log = "0.4.14"
 rayon = { version = "1.5.3", optional = true }
 encoding_rs.workspace = true
+# Only used for `VariableStorage::new`'s fresh-generator entropy source
+# (`rand::rngs::OsRng`, gated by the `getrandom` feature) — the actual
+# `RAND` PRNG is erars's own `emuera_rand::EmuRandom`, a bit-exact port of
+# Emuera's SFMT-19937, not anything from the `rand` crate.
 rand = { version = "0.8.5", default-features = false, features = ["getrandom"] }
-rand_chacha = { version = "0.3.1", default-features = false }
 # 0.3.37 dropped the `num_threads::is_single_threaded()` gate on
 # `local_offset_at`. Before it, `OffsetDateTime::now_local()` — and so GETTIME,
 # GETTIMES and the whole save-description path — always failed with

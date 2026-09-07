@@ -520,7 +520,7 @@ pub(super) fn run_instruction(
                     // (`GameData/Variable/VariableToken.cs:1459-1465`).
                     let max = args[0];
                     ensure!(max > 0, "RAND: 인수에 0 이하의 값({max})이 지정됐습니다");
-                    Value::Int(ctx.var.rng().gen_range(0..max) as i64)
+                    Value::Int(ctx.var.next_rand(max as i64))
                 }
                 DrawLineStr => {
                     // `getDefStBar` — the bar Emuera baked from `DRAWLINE文字` at
@@ -2137,7 +2137,7 @@ fn run_builtin_method(
                 }
             );
 
-            let ret = ctx.var.rng().gen_range(min..max);
+            let ret = min + ctx.var.next_rand(max - min);
             ctx.push(ret);
         }
         BuiltinMethod::Power => {

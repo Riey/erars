@@ -83,12 +83,21 @@
 //!   misalign data across rows. Reported as a partial import, not silently
 //!   accepted.
 //!
-//! `RANDDATA` is treated as an ordinary `int[4]` savedata variable: whatever
-//! it holds is fed through the existing `VariableStorage::init_rand` call
-//! that already runs at the end of every load, same-format or not. Emuera's
-//! own PRNG algorithm differs from erars's ChaCha20 regardless, so there is
-//! no real continuity to preserve either way — treating it like any other
-//! array costs nothing and needs no special case.
+//! `RANDDATA` is treated as an ordinary `int[625]` savedata variable: it
+//! travels through the same declared-shape reconciliation as any other
+//! array, and whatever it holds is fed through the existing
+//! `VariableStorage::init_rand` call that already runs at the end of every
+//! load, same-format or not. Unlike erars's previous ChaCha20-based `RAND`,
+//! `init_rand`'s generator (`crate::emuera_rand::EmuRandom`) is a bit-exact
+//! port of Emuera's own SFMT-19937, and `RANDDATA`'s 625-`int` shape now
+//! matches Emuera's exactly (624 state words + one refill index,
+//! `GameData/ConstantData.cs:152`) — so a real Emuera save's `RANDDATA`
+//! restores actual continuity here: `RAND` in erars, from this point on,
+//! draws the exact same sequence the originating Emuera session would
+//! have. See `crates/erars-vm/src/emuera_rand.rs` and
+//! `crates/erars-vm/tests/emuera_rand_save_fixture.rs` (loads a real
+//! Emuera-written `RANDDATA` capture and proves the post-load draws
+//! continue that exact sequence).
 
 use anyhow::{anyhow, bail, ensure, Result};
 use erars_ast::{get_interner, StrKey, VariableInfo};
@@ -1684,9 +1693,14 @@ pub fn merge_chara_columns(
 /// Builds a full `SerializableVariableStorage` (the `LOADDATA` payload) from
 /// one parsed numbered-slot Emuera save. `character_len` is derived from the
 /// number of `CHARADATA` rows the file carried; `rand_seed` is left at its
-/// default — `RANDDATA` travels as an ordinary variable (see the module doc
-/// comment) and `VariableStorage::init_rand` re-derives the actual RNG state
-/// from it after every load regardless of what `rand_seed` holds.
+/// default — it's a vestigial field on `SerializableVariableStorage`
+/// (see `crate::variable::VariableStorage::load_serializable`'s doc
+/// comment), not how RNG continuity actually travels. `RANDDATA` travels
+/// as an ordinary variable and `VariableStorage::init_rand` re-derives the
+/// actual generator state from it after every load, which — now that
+/// `RANDDATA` is Emuera's own 625-`int` shape and `init_rand` feeds a
+/// bit-exact port of Emuera's generator — is real continuity, not a no-op.
+/// See the module doc comment above.
 pub fn build_local_data(
     data: EmueraSaveData,
     header: &HeaderInfo,

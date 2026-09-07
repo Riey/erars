@@ -9,15 +9,15 @@ use enum_map::{Enum, EnumMap};
 use erars_ast::{get_interner, EventType, Interner, StrKey, Value, VariableInfo};
 use erars_compiler::{CharacterTemplate, HeaderInfo};
 use hashbrown::HashMap;
-use rand::SeedableRng;
-use rand_chacha::ChaCha20Rng;
+use rand::{rngs::OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use erars_ui::VirtualConsole;
 use strum::{Display, IntoStaticStr};
 
 use crate::{
-    context::FunctionIdentifier, SerializableGlobalVariableStorage, SerializableVariableStorage,
+    context::FunctionIdentifier, emuera_rand, emuera_rand::EmuRandom,
+    SerializableGlobalVariableStorage, SerializableVariableStorage,
 };
 
 macro_rules! set_var {
@@ -215,7 +215,7 @@ pub struct VariableStorage {
     interner: &'static Interner,
     header: Arc<HeaderInfo>,
     character_len: u32,
-    rng: ChaCha20Rng,
+    rng: EmuRandom,
     variables: HashMap<StrKey, (VariableInfo, UniformVariable)>,
     local_variables: HashMap<StrKey, LocalVarTable>,
     known_variables: EnumMap<KnownVariableNames, StrKey>,
@@ -235,7 +235,12 @@ impl VariableStorage {
         Self {
             character_len: 0,
             header,
-            rng: ChaCha20Rng::from_entropy(),
+            // No seed to be bit-compatible with: real Emuera itself seeds
+            // a fresh, non-`RANDOMIZE`d generator from `Environment.TickCount`
+            // (`MTRandom()`, `_Library/SFMT.cs:45`) — wall-clock-dependent
+            // and not reproducible either way, so plain OS entropy is fine
+            // here.
+            rng: EmuRandom::from_seed(OsRng.next_u32()),
             variables,
             local_variables: HashMap::new(),
             known_variables: enum_map::enum_map! {
@@ -359,7 +364,13 @@ impl VariableStorage {
         header: &HeaderInfo,
     ) -> Result<()> {
         self.character_len = sav.character_len;
-        self.rng = SeedableRng::from_seed(sav.rand_seed);
+        // `sav.rand_seed` is intentionally unread: `init_rand()` below
+        // always re-derives `self.rng` from the just-loaded `RANDDATA`
+        // variable, exactly like Emuera's own `INITRAND` semantics, so
+        // whatever this field held would be immediately discarded anyway.
+        // The field itself stays on `SerializableVariableStorage` only so
+        // `pre_5dac019_save00.rsav.gz`'s frozen wire shape keeps decoding
+        // (see `crates/erars-vm/tests/pre_5dac019_save_fixture.rs`).
 
         self.load_variables(sav.variables, sav.local_variables, false);
         self.init_rand();
@@ -435,7 +446,18 @@ impl VariableStorage {
             description,
             local_variables,
             character_len: self.character_len,
-            rand_seed: self.rng.get_seed(),
+            // Vestigial: kept only so `pre_5dac019_save00.rsav.gz`'s
+            // frozen wire shape keeps decoding (see `load_serializable`).
+            // Never read back meaningfully — a snapshot of the current
+            // generator's first 4 state words, sized to fit the field's
+            // pre-existing `[u8; 32]` shape.
+            rand_seed: {
+                let mut bytes = [0u8; 32];
+                for (chunk, word) in bytes.chunks_exact_mut(4).zip(self.rng.get_state()) {
+                    chunk.copy_from_slice(&(word as u32).to_le_bytes());
+                }
+                bytes
+            },
         }
     }
 
@@ -453,26 +475,35 @@ impl VariableStorage {
         }
     }
 
-    pub fn rng(&mut self) -> &mut impl rand::Rng {
-        &mut self.rng
+    /// Draws one bounded value `[0, max)` from the shared generator — the
+    /// `RAND:max` pseudo-variable and `RAND(min, max)`/`RAND(max)`
+    /// function both call this. See the module doc comment on
+    /// [`crate::emuera_rand`] for exactly what Emuera does here and why
+    /// erars must match it precisely rather than sampling uniformly.
+    pub fn next_rand(&mut self, max: i64) -> i64 {
+        self.rng.next_bounded(max)
     }
 
+    /// `DUMPRAND` (`VariableEvaluator.DumpRanddata`/`MTRandom.GetRand`).
     pub fn dump_rand(&mut self) {
-        let seed_arr = self.rng.get_seed();
-        let seed = bytemuck::cast_slice(&seed_arr);
+        let state = self.rng.get_state();
         let data = self.get_var("RANDDATA").unwrap().1.assume_normal().as_int().unwrap();
-        data.copy_from_slice(seed);
+        data.copy_from_slice(&state);
     }
 
+    /// `INITRAND` (`VariableEvaluator.InitRanddata`/`MTRandom.SetRand`) —
+    /// also called at the end of every save load, same-format or not, so
+    /// a real Emuera save's `RANDDATA` resumes that exact sequence.
     pub fn init_rand(&mut self) {
-        let mut seed_arr = [0u8; 32];
-        let seed = self.get_var("RANDDATA").unwrap().1.assume_normal().as_int().unwrap();
-        seed_arr.copy_from_slice(bytemuck::cast_slice(seed));
-        self.rng = ChaCha20Rng::from_seed(seed_arr);
+        let data = self.get_var("RANDDATA").unwrap().1.assume_normal().as_int().unwrap();
+        let arr = <[i64; emuera_rand::STATE_LEN]>::try_from(data.as_slice())
+            .expect("RANDDATA is declared as int[625] (erars-loader/variable.yaml)");
+        self.rng.set_state(&arr);
     }
 
+    /// `RANDOMIZE n` (`VariableEvaluator.Randomize`/`new MTRandom(seed)`).
     pub fn randomize(&mut self, val: i64) {
-        self.rng = ChaCha20Rng::seed_from_u64(val as u64);
+        self.rng = EmuRandom::from_seed(val as u32);
     }
 
     fn upcheck_internal(

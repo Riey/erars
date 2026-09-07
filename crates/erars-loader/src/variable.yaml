@@ -161,7 +161,14 @@ SAVEDATA_TEXT:
   is_savedata: true
 
 RANDDATA:
-  size: [4]
+  # 624 SFMT-19937 state words + 1 refill index — real Emuera's exact
+  # layout (`GameData/ConstantData.cs:152`,
+  # `VariableIntArrayLength[RANDDATA] = 625`). Must match exactly: this
+  # is also the shape a real Emuera save's `RANDDATA` array declares, and
+  # a size mismatch here would make erars's foreign-save reconciliation
+  # treat it as a partial/truncated import instead of the full RNG state
+  # it actually is. See `crates/erars-vm/src/emuera_rand.rs`.
+  size: [625]
   is_savedata: true
 
 BOUGHT:
