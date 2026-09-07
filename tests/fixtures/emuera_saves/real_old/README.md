@@ -40,23 +40,62 @@ committed byte-identical to what the exe wrote (never normalised).
 - **Executables:** `Emuera1701.exe`, `Emuera1707.exe`, `Emuera1710.exe`,
   `Emuera1738.exe`, `Emuera1803.exe` — the original mainline Emuera binaries
   from the archived SourceForge.jp/OSDN **`emuera`** project, recovered from
-  the JAIST academic mirror `ftp.jaist.ac.jp/pub/sourceforge.jp/emuera/`
-  (release files `Emuera1701.zip` id 40666, `Emuera1707.zip` 40904,
-  `Emuera1710.zip` 41229, `Emuera1738.zip` 47955, `Emuera1803.zip` 53137).
+  the JAIST academic mirror
+  `ftp.jaist.ac.jp/pub/sourceforge.jp/emuera/`.
   osdn.net itself no longer resolves (service ended); these are the preserved
-  release archives.
+  release archives. **Exact recovery URLs (so a future reader with the same
+  mirror archived can re-fetch, or see these specific archives):**
+
+  | Release | File id `ftp.jaist.ac.jp/pub/sourceforge.jp/emuera/<id>/<file>` |
+  |---|---|
+  | 1.701 | `40666/Emuera1701.zip` |
+  | 1.707 | `40904/Emuera1707.zip` |
+  | 1.710 | `41229/Emuera1710.zip` |
+  | 1.736 | `47955/Emuera1738.zip` |
+  | 1.803 | `53137/Emuera1803.zip` |
+
+  Each zip holds the bare exe (no installer). The **Windows file-version
+  resource strings** of the extracted exes were read at capture time and
+  matched the expected version (`Emuera1738.exe` reports **1.736** despite its
+  1738 build name — MinorShift's build-number vs product-version gap; the Zip
+  file name is the build number, the version resource is the product
+  version). If JAIST later rotates or drops these archives, this table plus
+  the byte hashes of the extracted exes are the only remaining provenance
+  chain for these fixtures.
 - **Runtime:** wine 11.16 + wine-mono prefix under **Xvfb `:88`**;
   `DISPLAY=:88 WINEPREFIX=/tmp/winemono_prefix WINEDEBUG=-all wine ./Emuera####.exe`.
   No xdotool needed — the game saves itself on boot.
-- **Game:** a tiny hand-written ERB game (`ERB/T.ERH` declares
-  `#DIM SAVEDATA X, 3`; `ERB/T.ERB`'s `@SYSTEM_TITLE` sets `X:0 = 2` and calls
-  `SAVEDATA 90`; `CSV/GameBase.csv` gives `コード,999000001` / `バージョン,1000`).
-  The game is the same for every version so the only variable is the exe.
-  A modern-era game (eraTHYMKR v3.21) was tried first but old Emuera cannot
-  parse its modern ERB (`解釈できない識別子` on 2D savedata vars etc.), so the
-  hand-written game is the source, as the task suggested.
+- **Game (complete source — reproduce the capture from this alone):**
+
+  `ERB/T.ERH` (declarations live only in `.ERH`, not `.ERB`; an ERB that
+  opens with `#` fails with `関数宣言の直後以外で#行が使われています`):
+  ```text
+  #DIM SAVEDATA X, 3
+  ```
+  `ERB/T.ERB` (`X:0` must be set before `SAVEDATA` is called; the 2nd arg of
+  `SAVEDATA` needs a string *variable* on ≤1.703 — string expressions came in
+  1.704 — so `STR:0` is used, not a literal):
+  ```text
+  @SYSTEM_TITLE
+      X:0 = 2
+      STR:0 = "cap"
+      SAVEDATA 90, STR:0
+      QUIT
+  ```
+  `CSV/GameBase.csv` (game code and version so the save header carries them):
+  ```text
+  コード,999000001
+  バージョン,1000
+  ```
+  The game is byte-identical for every version, so the only variable across
+  the five captures is the Emuera exe. A modern-era game (eraTHYMKR v3.21)
+  was tried first but old Emuera cannot parse its modern ERB
+  (`解釈できない識別子` on 2D savedata vars etc.), so the hand-written game is
+  the source, as the task suggested.
 - **Output:** `SAVEDATA 90` → `save90.sav` in the game dir (config
   `セーブデータをsavフォルダ内に作成する:NO` default), copied here verbatim.
+  The five `.sav` here are those files byte-for-byte (authentic CRLF kept;
+  `.gitattributes` marks `tests/fixtures/emuera_saves/**/*.sav binary`).
 
 ## Reproducing
 
@@ -77,3 +116,19 @@ reach (and old Emuera cannot drive the modern-era game far enough to reach).
 So the chara extended section's **4-vs-6 group** restructure (the 1803
 boundary) remains source-derived, not byte-observed — the marker and variable
 grammar are now capture-backed, the chara-section boundary is not.
+
+**Feasibility of closing that gap (for a future pass):** not a small
+extension. The blocker is confirmed empirically: declaring
+`#DIM CHARADATA SAVEDATA CNA, 4` in the `.ERH` compiles fine, but any
+reference at title time fails with `"CNA"は解釈できない識別子です` because no
+character exists — `TARGET` is only established after character creation, and
+Emuera's chara model is **not** code-defined like the savedata var; it lives
+in `CSV/Chara*.csv` (+ optional `CSVI/`) character files the engine parses at
+boot. Closing it needs: (a) authoring correctly-shaped `CSV/Chara*.csv`
+files for each of the five versions (the chara CSV schema can differ between
+them), (b) an interactive chara-selection routine in ERB (`@SELECT_CHARA`,
+named-chara `▽`/`▲` navigation and `TARGET`/`SETCHARA`), and (c) real input
+to pick a character — the boot-driven auto-save trick does not reach a
+`TARGET` at all, so xdotool or a scripted key driver is required. It is a
+multi-step, version-sensitive effort (estimate: hours, not minutes), which is
+why it was left source-derived.
