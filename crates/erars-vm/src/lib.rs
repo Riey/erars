@@ -4,6 +4,7 @@ mod context;
 /// line to it from its own input loop.
 pub mod debug_console;
 mod dotnet_number;
+mod emuera_rand;
 mod function;
 /// Graphics state, and the [`graphics::Painted`] token that orders publishing
 /// before painting. Public because every `SystemFunctions` implementor lives
