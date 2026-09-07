@@ -1,11 +1,13 @@
 # Real old-Emuera save captures (2026-09-07)
 
-Five saves produced by **actually running old Emuera mainline binaries** under
-wine (wine-mono prefix) headless on Xvfb `:88`, driving a tiny hand-written
-ERB game. These are the first real pre-1808 saves ever seen in this project —
-they byte-validate the four old extended-block **marker strings** and the
-per-version extended-block grammar that previously only the C# reader's
-dispatch (`docs/research/2026-09-07-emuera-source-crosscheck.md` §5) implied.
+Seven saves produced by **actually running old Emuera mainline binaries**
+under wine (wine-mono prefix) headless on Xvfb `:88`, driving tiny
+hand-written ERB games. These are the first real pre-1808 saves ever seen in
+this project — they byte-validate the four old extended-block **marker
+strings**, the per-version extended-block grammar, and (second pass, below)
+the **chara section's 4-vs-6 group restructure at 1803**, all previously only
+implied by the C# reader's dispatch
+(`docs/research/2026-09-07-emuera-source-crosscheck.md` §5/§6).
 
 ## Markers observed (the headline finding)
 
@@ -31,6 +33,8 @@ the pre-extended `Absent` state is capture-backed by **1.701**.
 | `1710_real.sav` | 998 | `__EMUERA_1708_STRAT__` |
 | `1738_real.sav` | 1036 | `__EMUERA_1729_STRAT__` |
 | `1803_real.sav` | 1040 | `__EMUERA_1803_STRAT__` |
+| `1738_chara_real.sav` | 1370 | `__EMUERA_1729_STRAT__`, one `ADDVOIDCHARA`'d chara, **4**-group chara section |
+| `1803_chara_real.sav` | 1432 | `__EMUERA_1803_STRAT__`, one `ADDVOIDCHARA`'d chara, **6**-group chara section (`CDFLAG` set) |
 
 All are UTF-8-text saves (`SystemSaveInUTF8` default) with authentic CRLF,
 committed byte-identical to what the exe wrote (never normalised).
@@ -105,30 +109,143 @@ committed byte-identical to what the exe wrote (never normalised).
    then `DISPLAY=:88 WINEPREFIX=/tmp/winemono_prefix WINEDEBUG=-all wine
    ./Emuera####.exe`; wait ~30 s; `save90.sav` appears in the game dir.
 
+## Chara-section boundary captures (`*_chara_real.sav`, 2026-09-07 second pass)
+
+The 5-file pass above deliberately left the chara extended section's 4-vs-6
+group restructure at 1803 source-derived: it needs at least one character to
+exist, and the boot-driven minimal game above never creates one. **Closing
+that gap turned out not to need the interactive `@SELECT_CHARA`/`TARGET` flow
+a previous pass judged necessary** — `ADDVOIDCHARA` plus explicit-index
+chara-array writes (`CSTR:0:0 = ...`, `CFLAG:0:1 = ...`) work perfectly well
+non-interactively, at title time, with no `TARGET` ever set.
+
+`ERB/T.ERH` — same as above (`#DIM SAVEDATA X, 3`).
+
+`ERB/T.ERB` for `1738_chara_real.sav` (Emuera1738, marker `__EMUERA_1729_STRAT__`):
+```text
+@SYSTEM_TITLE
+    X:0 = 2
+    STR:0 = "cap"
+    ADDVOIDCHARA
+    CSTR:0:0 = "cap_name"
+    CFLAG:0:1 = 7
+    CFLAG:0:2 = 13
+    SAVEDATA 90, STR:0
+    QUIT
+```
+
+`ERB/T.ERB` for `1803_chara_real.sav` (Emuera1803, marker `__EMUERA_1803_STRAT__`)
+— **identical plus one line**, `CDFLAG:0:0:0 = 42`:
+```text
+@SYSTEM_TITLE
+    X:0 = 2
+    STR:0 = "cap"
+    ADDVOIDCHARA
+    CSTR:0:0 = "cap_name"
+    CFLAG:0:1 = 7
+    CFLAG:0:2 = 13
+    CDFLAG:0:0:0 = 42
+    SAVEDATA 90, STR:0
+    QUIT
+```
+
+`CSV/GameBase.csv` — same as above (code `999000001`, version `1000`).
+**Same SJIS caveat as the main captures applies and matters just as much
+here**: `CSV/GameBase.csv` must be saved as **Shift-JIS**, not UTF-8/UTF-8
+BOM — with a UTF-8 `GameBase.csv`, Emuera silently mis-parses `コード` (code)
+as `0` and the resulting save's game code no longer matches, making the
+capture useless without any visible error. `emuera.config` is SJIS too.
+
+### Why `1738_chara_real.sav` has no `CDFLAG` line — a real, reproduced negative result
+
+`CDFLAG` is real Emuera's **only chara-scope int-2D savedata variable**
+(`CDFLAG:chara:dim1:dim2`, default size 1×1 per the wiki — hence index
+`0:0:0`, not `0:1:1`; the latter genuinely is out of range and was tried and
+rejected first, see below). It is exactly the variable the 1803-only int2D
+chara group exists to carry, so the task asked for it to appear in *both*
+captures. It could not: **Emuera1738 (product version 1.736) does not
+recognise `CDFLAG` as an identifier at all.**
+
+Evidence, in order of what was actually tried against the real exe:
+
+1. `CDFLAG:0:1:1 = 99` (3-index form, first guess at the default size) →
+   *runtime* error on **1803**: "キャラクタ配列変数CDFLAGの第２引数(1)は配列の
+   範囲外です" ("chara array variable CDFLAG's second argument (1) is out of
+   the array's range") — confirms 1803 recognises `CDFLAG` and its default
+   size is 1×1, exactly as the wiki says.
+2. `CDFLAG:0:0:0 = 42` (index corrected to the 1×1 default) → **1803**
+   succeeds, writes `CDFLAG`/`42`/`__FINISHED` into the new int2D group.
+   Same line on **1738** → *parse*-time error: "警告Lv2:T.ERB:8行目:ラベル文・
+   命令文・代入文のいずれとも解釈できない行です" ("cannot be interpreted as a
+   label/command/assignment statement") — the generic unrecognised-statement
+   error, not a range or argument-count error.
+3. To confirm step 2 is about the identifier `CDFLAG` itself and not the
+   3-index chara-2D syntax in general, `RELATION:0:0:0 = 5` (also a
+   chara+int2D variable, but one that predates 1803) was tried on **1738**:
+   it fails at *runtime* — "キャラクタ変数RELATIONの引数が多すぎます"
+   ("character variable RELATION has too many arguments") — a
+   recognised-identifier error, unlike `CDFLAG`'s parse-time rejection.
+4. The 2-argument form `CDFLAG:0:0 = 42` was also tried on **1738**, in case
+   the 3-vs-2 index count itself was the issue: same parse-time "cannot be
+   interpreted" error as step 2, ruling that out.
+
+[INFERENCE] `CDFLAG` was introduced into Emuera at or after 1.803, not merely
+reframed into new save groups at that version — plausibly the two changes
+(the variable itself, and the save grammar to persist it) shipped together.
+Only the save-format side of that claim is directly evidenced by these
+captures; the variable-introduction timing is inferred from the "unknown
+identifier" vs "known identifier, wrong shape" diagnostic contrast above, not
+from reading Emuera's own source for 1.736–1.803.
+
+This is reported here as a genuine, reproduced negative result per the task's
+own instruction, not smoothed over: **`1738_chara_real.sav` cannot carry a
+`CDFLAG` value, ever, on real Emuera1738**, so the two chara fixtures are
+deliberately asymmetric (1803's game source has one extra line that 1738's
+provably cannot accept). See `crates/erars-vm/src/save/emuera.rs`'s
+`parse_reads_real_old_chara_captures`/`parse_real_old_chara_wrong_grammar_is_rejected`
+test doc comments for how this shapes the two tests built on these fixtures.
+
+### The `CSTR` quoting difference
+
+Both chara captures' `CSTR` value is `"cap_name"` — **11 bytes, quotes
+included** — not `cap_name` (8 bytes), even though the ERB source is a
+straightforward `CSTR:0:0 = "cap_name"` literal assignment. This holds
+identically on *both* 1738 and 1803, so it is not itself a marker-version
+difference between the two fixtures here.
+
+It **does** differ from the unrelated 1808-era real capture already in this
+repo (`tests/fixtures/emuera_saves/real/save90_text_utf8_real.sav`, line
+4677, game eraTHYMKR v3.21): that capture's `CSTR` value (`보통 집`, "ordinary
+house") has no quotes. But that capture's `CSTR` was never assigned via an
+ERB literal at all — per the wiki, `CSTR` is normally populated from a
+character CSV's `CSTR,*,**` field at chara-load time, which is almost
+certainly eraTHYMKR's actual mechanism (a different value-origin, not an ERB
+`=` assignment). So the quoted-vs-unquoted contrast observed here is
+[INFERENCE]-flagged as *not proven* to be a version-dependent Emuera quirk —
+it may equally be "ERB literal assignment to an explicit-index chara array"
+vs "CSV-declared" producing different raw bytes, independent of version.
+
+What **is** directly verified against this crate's own source (not
+inferred): `LineCursor::read_1d_arrays` in `crates/erars-vm/src/save/emuera.rs`
+never strips quote characters, for any Emuera version — a string-1D value is
+copied verbatim from its own line into `ParsedArray::Str1D`. So erars's
+reader has no version-dependent (or any) quote-handling logic to be
+inconsistent; whatever a real Emuera save's `CSTR` line contains byte-for-byte
+is exactly what erars imports. There is nothing to fix here, only an
+upstream-Emuera authoring-path difference worth knowing about when comparing
+values across captures from different games/versions.
+
 ## Scope / honest limits
 
-These captures exercise the **variable** extended section (the savedata var
-`X`) and byte-verify each **marker string** and the per-version **group
-count**. They do **not** exercise per-character savedata: `#DIM CHARADATA
-SAVEDATA` vars need an active `TARGET` character, which requires a full
-new-game/character-selection flow that the boot-driven minimal game does not
-reach (and old Emuera cannot drive the modern-era game far enough to reach).
-So the chara extended section's **4-vs-6 group** restructure (the 1803
-boundary) remains source-derived, not byte-observed — the marker and variable
-grammar are now capture-backed, the chara-section boundary is not.
-
-**Feasibility of closing that gap (for a future pass):** not a small
-extension. The blocker is confirmed empirically: declaring
-`#DIM CHARADATA SAVEDATA CNA, 4` in the `.ERH` compiles fine, but any
-reference at title time fails with `"CNA"は解釈できない識別子です` because no
-character exists — `TARGET` is only established after character creation, and
-Emuera's chara model is **not** code-defined like the savedata var; it lives
-in `CSV/Chara*.csv` (+ optional `CSVI/`) character files the engine parses at
-boot. Closing it needs: (a) authoring correctly-shaped `CSV/Chara*.csv`
-files for each of the five versions (the chara CSV schema can differ between
-them), (b) an interactive chara-selection routine in ERB (`@SELECT_CHARA`,
-named-chara `▽`/`▲` navigation and `TARGET`/`SETCHARA`), and (c) real input
-to pick a character — the boot-driven auto-save trick does not reach a
-`TARGET` at all, so xdotool or a scripted key driver is required. It is a
-multi-step, version-sensitive effort (estimate: hours, not minutes), which is
-why it was left source-derived.
+The original 5-file pass exercises the **variable** extended section (the
+savedata var `X`) and byte-verifies each **marker string** and the
+per-version **group count**. The 2-file chara-boundary pass above closes the
+one remaining source-only claim: the chara extended section's **4-vs-6
+group** restructure at 1803 is now byte-observed, with a real value
+(`CDFLAG`) inside the new group, not just an empty-separator count — see
+`crates/erars-vm/src/save/emuera.rs`'s `parse_reads_real_old_chara_captures`
+test. The one part of the original "closing this gap" plan that turned out
+to be wrong: it does **not** need `CSV/Chara*.csv` character files, an
+interactive `@SELECT_CHARA` flow, or real input — `ADDVOIDCHARA` plus
+explicit chara-index writes reach the exact same real-writer code paths
+non-interactively, at title time, on every version tested (1738 and 1803).
