@@ -34,14 +34,48 @@
 //! shape, in file order" — no built-in/user split needed.
 //!
 //! The *global*-scope extended section is different: its 8 built-in groups
-//! (`VariableData.SaveToStreamExtended`'s own `GetExtSaveList` pass) only
-//! ever hold names from Emuera's static `VariableCode` enum, and no such
-//! enum member is a global-scope extended-only scalar/1D/2D/3D array in
-//! any known Emuera build (unlike the chara-scope ones above) — so those 8
-//! groups are unconditionally empty in every real capture, and every
-//! non-OLD global-scope name instead belongs to the six *user*-defined
-//! groups (`userDefinedSaveVarList[0..6]`), version-gated to `>= 1808`.
-//! [`write_variable_section`] encodes exactly that split.
+//! (`VariableData.SaveToStreamExtended`'s own `GetExtSaveList` pass) hold
+//! `VariableCode` members flagged `__SAVE_EXTENDED__` for that shape —
+//! **not** "no such member exists": `RANDDATA` (`VariableCode.cs:120`,
+//! `__INTEGER__ | __ARRAY_1D__ | __SAVE_EXTENDED__ | __EXTENDED__`, no
+//! `__CHARACTER_DATA__`/`__LOCAL__` flag) is exactly such a global-scope
+//! built-in array and so, by the enum flags alone, should be a candidate
+//! for that pass's `dataIntegerArray` group. That it is *not* actually
+//! written there is established empirically, not from the enum: a real
+//! Emuera-written capture whose `RANDDATA` holds genuine non-zero RNG
+//! state (`crates/erars-vm/tests/emuera_rand_save_fixture.rs`) round-trips
+//! byte-exact with `RANDDATA` appearing among the six *user*-defined
+//! groups, at the same file position an ordinary `#DIM GLOBAL RANDDATA,
+//! 625` declaration would occupy — proving Emuera's real writer does not
+//! source that built-in group's `dataIntegerArray[RANDDATA]` slot from
+//! the same live state `RANDDATA` reads as a script variable (most likely
+//! the RNG state is held in a separate object with its own get/set
+//! intercept, and the backing `dataIntegerArray` field the built-in pass
+//! reads is simply never populated). `GetExtSaveList`'s role per
+//! `crosscheck.md` §2.7 is populating `extSaveListDic`, a name-recognition
+//! table for the *reader* mapping identifier strings back to
+//! `VariableCode`s — this doc's claim about what the *writer* actually
+//! emits rests on every real capture in this crate's corpus (13 files,
+//! including the RANDDATA one above) having all 8 built-in groups empty,
+//! not on having read `VariableData.cs:689-762`'s exact field list
+//! line-by-line to prove no other global-scope `__SAVE_EXTENDED__` member
+//! can ever hold nonzero content there.
+//!
+//! **If this is wrong** — some Emuera build/config *does* populate a
+//! built-in group's backing field with live content — a real capture from
+//! that build would fail this crate's reader-side round-trip test outright
+//! (the reader also assumes these 8 groups are structurally present but
+//! content-empty, spec §2.5), and this writer would need a new built-in
+//! group case in [`write_variable_section`] rather than routing that name
+//! through the user-defined groups. Re-run the round-trip test against any
+//! newly captured save before trusting this claim for a build outside the
+//! `real`/`real_old` corpus.
+//!
+//! So those 8 groups are unconditionally empty in every real capture
+//! examined so far, and every non-OLD global-scope name instead belongs to
+//! the six *user*-defined groups (`userDefinedSaveVarList[0..6]`),
+//! version-gated to `>= 1808`. [`write_variable_section`] encodes exactly
+//! that split.
 
 use anyhow::{bail, ensure, Result};
 
@@ -704,8 +738,11 @@ fn write_variable_section(lines: &mut Vec<String>, globals: &IndexMap<String, Pa
     let mut exclude: Vec<&str> = GLOBAL_OLD_ARR.to_vec();
     exclude.push("SAVESTR");
 
-    // 8 built-in groups: real Emuera has no global-scope extended-only
-    // built-in scalar/1D/2D/3D `VariableCode`, so these are always empty.
+    // 8 built-in groups: empirically empty in every real capture examined
+    // (including one with genuine non-zero RANDDATA content) — see the
+    // module doc comment's "Group placement" section for why this is not
+    // simply an enum-flag consequence, and what would have to be re-checked
+    // if it turns out wrong for some other build.
     for _ in 0..4 {
         lines.push(EMU_SEPARATOR.to_owned());
     }
