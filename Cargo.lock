@@ -1221,7 +1221,6 @@ dependencies = [
  "k9",
  "log",
  "rand",
- "rand_chacha",
  "rayon",
  "regex",
  "rmp-serde",
