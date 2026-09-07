@@ -237,7 +237,26 @@ struct Runner {
 impl Runner {
     fn new() -> Self {
         erars_ast::init_interner();
-        let root = std::env::temp_dir().join("erars-wiki-coverage");
+        // A fixed path under the process-wide temp dir, never cleaned, would
+        // be shared by every run of this suite that has ever happened on the
+        // machine: `wiki_runtime_coverage` and `harness_controls` each build
+        // their own `Runner` and could run concurrently (`cargo test`
+        // defaults to parallel test threads), and a *previous* invocation's
+        // leftover `sav/` — a save slot, a `chara_*.dat`, even a stray
+        // directory where a file belongs — would still be sitting there.
+        // `CHKDATA`/`LOADDATA`'s probes read and write real save slots, so
+        // that leakage can flip a verdict based on machine history instead
+        // of the code under test. One directory per `Runner`, named after
+        // the process and the calling test thread (mirrors
+        // `crates/erars-vm/src/graphics.rs`'s `tmp` helper), plus a clean
+        // sweep before creating it, closes both the cross-run and the
+        // intra-run-parallel cases.
+        let root = std::env::temp_dir().join(format!(
+            "erars-wiki-coverage-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
         let sav = root.join("sav");
         let resources = root.join("resources");
         std::fs::create_dir_all(&sav).unwrap();
