@@ -225,31 +225,34 @@ impl ParsedArray {
 
 /// What the seek for the extended block actually found. The OLD block is
 /// always parsed first and is version-independent (spec §2.3); this records
-/// whether a `__EMUERA_1808_STRAT__`, an older marker, or no marker at all
-/// followed it — the difference decides whether the save's extended-only
-/// variables (`NICKNAME`, `MASTERNAME`, `CSTR`, `CDFLAG`, and every user
-/// `#DIM SAVEDATA` array) were imported or are being dropped, which is a
-/// load the player must be told about rather than one that silently passes
-/// as "complete".
+/// which extended-block marker (if any) follows, which decides whether the
+/// save's extended-only variables (`NICKNAME`, `MASTERNAME`, `CSTR`,
+/// `CDFLAG`, and every user `#DIM SAVEDATA` array) were imported or are
+/// being dropped — a load the player must be told about rather than one
+/// that silently passes as "complete".
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExtendedMarker {
-    /// `__EMUERA_1808_STRAT__` was found and its extended block was read.
-    Emuera1808,
-    /// An older (or unknown) `__EMUERA_..._STRAT__` marker was found; its
-    /// exact text is kept. This reader implements only the 1808 extended
-    /// grammar, so that block is *not* read.
-    Older(String),
+    /// A marker whose extended grammar this reader implements, carrying its
+    /// Emuera version: 1700/1708/1729/1803/1808. The extended block is read
+    /// with per-version group gating (2D iff >= 1708, 3D iff >= 1729, the
+    /// six user-defined groups iff >= 1808; chara 2D iff >= 1803) — see
+    /// `docs/research/2026-09-07-emuera-source-crosscheck.md` §6.
+    Known(u32),
+    /// An unknown/future `__EMUERA_..._STRAT__` marker whose grammar this
+    /// reader does not implement; its exact text is kept so the report can
+    /// name it. The extended block is *not* read.
+    Unknown(String),
     /// No extended marker was found at all (a save written before the
-    /// extended block existed, or truncated); no extended block was read.
+    /// extended block existed, or truncated); no extended block exists.
     Absent,
 }
 
 impl Default for ExtendedMarker {
     fn default() -> Self {
         // `parse_binary` sets this explicitly; the default is the common
-        // text case, so [`ImportReport`]/callers built without one
-        // short-circuit to "nothing to warn about".
-        ExtendedMarker::Emuera1808
+        // 1808-framed text case, so [`ImportReport`]/callers built without
+        // one short-circuit to "nothing to warn about".
+        ExtendedMarker::Known(1808)
     }
 }
 
@@ -270,7 +273,7 @@ pub struct EmueraSaveData {
     /// Which extended-block marker the seek found (see [`ExtendedMarker`]);
     /// the OLD block is always read regardless. Populated by [`parse_text`];
     /// binary saves are inherently 1808-framed, so [`parse_binary`] sets
-    /// [`ExtendedMarker::Emuera1808`].
+    /// [`ExtendedMarker::Known(1808)`].
     pub extended_marker: ExtendedMarker,
 }
 
@@ -375,30 +378,46 @@ impl<'a> LineCursor<'a> {
             .map_err(|e| anyhow!("정수가 아닙니다: {line:?} ({e})"))
     }
 
+    /// The Emuera version a recognized extended-block marker stands for, or
+    /// `None` for an unknown/future marker. Real Emuera's `SeekEmuStart`
+    /// recognizes exactly these five (`EraDataStream.cs:46-50, 129-165`).
+    fn marker_version(line: &str) -> Option<u32> {
+        match line {
+            "__EMUERA_STRAT__" => Some(1700),
+            "__EMUERA_1708_STRAT__" => Some(1708),
+            "__EMUERA_1729_STRAT__" => Some(1729),
+            "__EMUERA_1803_STRAT__" => Some(1803),
+            EMU_START => Some(1808),
+            _ => None,
+        }
+    }
+
     /// Consumes lines up to and including the first extended-block marker,
     /// returning which one was found. Real Emuera's own `SeekEmuStart`
     /// (`.il:142958-143054`; `EraDataStream.cs:129-165`) accepts all five
-    /// markers and reports whether the extended block follows. This reader
-    /// implements only the 1808 extended grammar, so anything other than
-    /// `__EMUERA_1808_STRAT__` — an older marker, or none at all (a save
-    /// written before the extended block existed) — is surfaced as a
-    /// reportable [`ExtendedMarker]` rather than silently treated as
-    /// "complete" (`docs/research/2026-09-07-emuera-source-crosscheck.md`
-    /// §6.3): the OLD block is never optional to *read*, only the extended
-    /// block following it is.
+    /// markers and reports whether the extended block follows; this reader
+    /// implements all five grammars via [`Self::marker_version`], so a
+    /// recognized marker maps to [`ExtendedMarker::Known`] with its
+    /// version. A `__EMUERA_..._STRAT__` marker this reader does not
+    /// recognize (a future version) is [`ExtendedMarker::Unknown`] —
+    /// reported, not read — and no marker at all (a save written before
+    /// the extended block existed) is [`ExtendedMarker::Absent`]
+    /// (`docs/research/2026-09-07-emuera-source-crosscheck.md` §6.3). The
+    /// OLD block is never optional to *read*, only the extended block
+    /// following it is.
     fn seek_emu_start(&mut self) -> ExtendedMarker {
         for line in self.lines.by_ref() {
-            if line == EMU_START {
-                return ExtendedMarker::Emuera1808;
+            if let Some(version) = Self::marker_version(line) {
+                return ExtendedMarker::Known(version);
             }
             // Shape-match any other `__EMUERA_..._STRAT__` (including the
-            // 1700-vintage `__EMUERA_STRAT__`, which carries no version
-            // number) so an unknown future marker is also reported rather
-            // than swallowed. Only markers live here: the seek runs between
-            // the end of the OLD block and the start of the extended block,
-            // where no value line can look like a marker.
+            // 1700-vintage `__EMUERA_STRAT__`, which is handled above) so an
+            // unknown future marker is also reported rather than swallowed.
+            // Only markers live here: the seek runs between the end of the
+            // OLD block and the start of the extended block, where no value
+            // line can look like a marker.
             if line.starts_with("__EMUERA_") && line.ends_with("STRAT__") {
-                return ExtendedMarker::Older(line.to_owned());
+                return ExtendedMarker::Unknown(line.to_owned());
             }
         }
         ExtendedMarker::Absent
@@ -643,48 +662,75 @@ fn parse_old_global_save_block(cursor: &mut LineCursor) -> Result<HashMap<String
 /// groups, no user-defined pass, ending with the group's own trailing
 /// separator (which the caller does not need to consume again — the next
 /// character's or the variable section's first group follows immediately).
-fn parse_chara_section(cursor: &mut LineCursor) -> Result<HashMap<String, ParsedArray>> {
-    let mut vars = HashMap::new();
-    cursor.read_scalars(&mut vars, |v| Ok(ParsedArray::StrScalar(v.to_owned())))?; // string scalars
-    cursor.read_scalars(&mut vars, |v| {
-        v.trim()
-            .parse()
-            .map(ParsedArray::IntScalar)
-            .map_err(|e| anyhow!("정수 스칼라가 아닙니다: {v:?} ({e})"))
-    })?; // int scalars
-    cursor.read_1d_arrays(&mut vars, true)?; // string 1D
-    cursor.read_1d_arrays(&mut vars, false)?; // int 1D
-    cursor.expect_empty_group()?; // string 2D (never present)
-    cursor.read_2d_arrays(&mut vars)?; // int 2D
-    Ok(vars)
-}
+    fn parse_chara_section(
+        cursor: &mut LineCursor,
+        version: u32,
+    ) -> Result<HashMap<String, ParsedArray>> {
+        let mut vars = HashMap::new();
+        cursor.read_scalars(&mut vars, |v| Ok(ParsedArray::StrScalar(v.to_owned())))?; // string scalars
+        cursor.read_scalars(&mut vars, |v| {
+            v.trim()
+                .parse()
+                .map(ParsedArray::IntScalar)
+                .map_err(|e| anyhow!("정수 스칼라가 아닙니다: {v:?} ({e})"))
+        })?; // int scalars
+        cursor.read_1d_arrays(&mut vars, true)?; // string 1D
+        cursor.read_1d_arrays(&mut vars, false)?; // int 1D
+        // Chara 2D arrays exist only from the 1803 grammar: Emuera
+        // dispatches version < 1803 to `LoadFromStreamExtended_Old1802`
+        // (4 groups, `CharacterData.cs:400-428`) and 1803+ to
+        // `LoadFromStreamExtended` (6 groups, `:355-399`) from
+        // `VariableEvaluator.LoadFromStream`.
+        if version >= 1803 {
+            cursor.expect_empty_group()?; // string 2D (never present in text)
+            cursor.read_2d_arrays(&mut vars)?; // int 2D
+        }
+        Ok(vars)
+    }
 
 /// The variable extended section (spec §2.5 "Variable section"): 8
 /// built-in groups then 6 user-defined groups, ending at EOF (no trailing
 /// marker after the last group).
-fn parse_variable_section(cursor: &mut LineCursor) -> Result<HashMap<String, ParsedArray>> {
-    let mut vars = HashMap::new();
-    cursor.read_scalars(&mut vars, |v| Ok(ParsedArray::StrScalar(v.to_owned())))?; // string scalars
-    cursor.read_scalars(&mut vars, |v| {
-        v.trim()
-            .parse()
-            .map(ParsedArray::IntScalar)
-            .map_err(|e| anyhow!("정수 스칼라가 아닙니다: {v:?} ({e})"))
-    })?; // int scalars
-    cursor.read_1d_arrays(&mut vars, true)?; // string 1D
-    cursor.read_1d_arrays(&mut vars, false)?; // int 1D
-    cursor.expect_empty_group()?; // string 2D (never present)
-    cursor.read_2d_arrays(&mut vars)?; // int 2D
-    cursor.expect_empty_group()?; // string 3D (never present)
-    cursor.read_3d_arrays(&mut vars)?; // int 3D
-    cursor.read_1d_arrays(&mut vars, true)?; // user string 1D
-    cursor.read_1d_arrays(&mut vars, false)?; // user int 1D
-    cursor.expect_empty_group()?; // user string 2D (never present)
-    cursor.read_2d_arrays(&mut vars)?; // user int 2D
-    cursor.expect_empty_group()?; // user string 3D (never present)
-    cursor.read_3d_arrays(&mut vars)?; // user int 3D
-    Ok(vars)
-}
+    fn parse_variable_section(
+        cursor: &mut LineCursor,
+        version: u32,
+    ) -> Result<HashMap<String, ParsedArray>> {
+        let mut vars = HashMap::new();
+        cursor.read_scalars(&mut vars, |v| Ok(ParsedArray::StrScalar(v.to_owned())))?; // string scalars
+        cursor.read_scalars(&mut vars, |v| {
+            v.trim()
+                .parse()
+                .map(ParsedArray::IntScalar)
+                .map_err(|e| anyhow!("정수 스칼라가 아닙니다: {v:?} ({e})"))
+        })?; // int scalars
+        cursor.read_1d_arrays(&mut vars, true)?; // string 1D
+        cursor.read_1d_arrays(&mut vars, false)?; // int 1D
+        // The 2D/3D groups are themselves version-gated on the read side
+        // (`EraDataStream.cs:297,344` 2D iff >= 1708; `:366,424` 3D iff
+        // >= 1729): a 1700 file physically has no 2D slots and a 1708-1728
+        // file no 3D slots, so a reader must skip them for older versions
+        // or it consumes the next group's data into the wrong slot.
+        if version >= 1708 {
+            cursor.expect_empty_group()?; // string 2D (never present in text)
+            cursor.read_2d_arrays(&mut vars)?; // int 2D
+        }
+        if version >= 1729 {
+            cursor.expect_empty_group()?; // string 3D (never present in text)
+            cursor.read_3d_arrays(&mut vars)?; // int 3D
+        }
+        // The six user-defined `#DIM SAVEDATA` groups exist only from 1808
+        // — `if (version < 1808) return;` before the Phase-2 reads
+        // (`VariableData.LoadFromStreamExtended`).
+        if version >= 1808 {
+            cursor.read_1d_arrays(&mut vars, true)?; // user string 1D
+            cursor.read_1d_arrays(&mut vars, false)?; // user int 1D
+            cursor.expect_empty_group()?; // user string 2D (never present)
+            cursor.read_2d_arrays(&mut vars)?; // user int 2D
+            cursor.expect_empty_group()?; // user string 3D (never present)
+            cursor.read_3d_arrays(&mut vars)?; // user int 3D
+        }
+        Ok(vars)
+    }
 
 /// The global save's own variable section (spec §2.5, corrected):
 /// **6 groups, no scalars at all** — string 1D, int 1D, string 2D (always
@@ -696,16 +742,25 @@ fn parse_variable_section(cursor: &mut LineCursor) -> Result<HashMap<String, Par
 /// calling `parse_variable_section` here (as this parser used to,
 /// unconditionally) misreads the first 1D-array group as an always-empty
 /// scalar group and desynchronises everything after it.
-fn parse_global_variable_section(cursor: &mut LineCursor) -> Result<HashMap<String, ParsedArray>> {
-    let mut vars = HashMap::new();
-    cursor.read_1d_arrays(&mut vars, true)?; // string 1D
-    cursor.read_1d_arrays(&mut vars, false)?; // int 1D
-    cursor.expect_empty_group()?; // string 2D (never present)
-    cursor.read_2d_arrays(&mut vars)?; // int 2D
-    cursor.expect_empty_group()?; // string 3D (never present)
-    cursor.read_3d_arrays(&mut vars)?; // int 3D
-    Ok(vars)
-}
+    fn parse_global_variable_section(
+        cursor: &mut LineCursor,
+        version: u32,
+    ) -> Result<HashMap<String, ParsedArray>> {
+        let mut vars = HashMap::new();
+        cursor.read_1d_arrays(&mut vars, true)?; // string 1D
+        cursor.read_1d_arrays(&mut vars, false)?; // int 1D
+        // 2D iff >= 1708, 3D iff >= 1729 (same gates as the local variable
+        // section's built-in groups; `EraDataStream.cs:297,344,366,424`).
+        if version >= 1708 {
+            cursor.expect_empty_group()?; // string 2D (never present)
+            cursor.read_2d_arrays(&mut vars)?; // int 2D
+        }
+        if version >= 1729 {
+            cursor.expect_empty_group()?; // string 3D (never present)
+            cursor.read_3d_arrays(&mut vars)?; // int 3D
+        }
+        Ok(vars)
+    }
 
 /// Real Emuera's own reader (`VariableEvaluator::LoadFromStream`,
 /// `.il:108953-109155`; `VariableEvaluator::LoadGlobal`, `.il:109237-109353`)
@@ -748,20 +803,20 @@ fn parse_text(text: &str, is_global: bool) -> Result<(EmueraSaveData, u32, u32, 
     };
 
     // The extended block genuinely is optional — a save written before it
-    // existed carries no `__EMUERA_..._STRAT__` marker at all. Only the
-    // 1808 marker's extended grammar is read; an older marker (or none at
-    // all) is surfaced via [`ExtendedMarker`] so the caller can warn the
-    // player that the extended-only variables were dropped — never a
-    // silent load.
+    // existed carries no `__EMUERA_..._STRAT__` marker at all. Only a
+    // recognized marker's extended block is read, with the per-version
+    // grammar; an unknown marker (or none at all) is surfaced via
+    // [`ExtendedMarker`] so the caller can warn the player that the
+    // extended-only variables were dropped — never a silent load.
     let extended_marker = cursor.seek_emu_start();
-    if extended_marker == ExtendedMarker::Emuera1808 {
+    if let ExtendedMarker::Known(version) = &extended_marker {
         if is_global {
-            globals.extend(parse_global_variable_section(&mut cursor)?);
+            globals.extend(parse_global_variable_section(&mut cursor, *version)?);
         } else {
             for chara in charas.iter_mut() {
-                chara.extend(parse_chara_section(&mut cursor)?);
+                chara.extend(parse_chara_section(&mut cursor, *version)?);
             }
-            globals.extend(parse_variable_section(&mut cursor)?);
+            globals.extend(parse_variable_section(&mut cursor, *version)?);
         }
     }
 
@@ -1189,7 +1244,7 @@ fn parse_binary(bytes: &[u8], is_global: bool) -> Result<(EmueraSaveData, u32, u
     ensure!(matches!(end, RecordEnd::Eof), "전역 레코드 블록이 EOF(0xFF)로 끝나지 않았습니다");
 
     Ok((
-        EmueraSaveData { globals, charas, extended_marker: ExtendedMarker::Emuera1808 },
+        EmueraSaveData { globals, charas, extended_marker: ExtendedMarker::Known(1808) },
         code as u32,
         version as u32,
         description,
@@ -1289,16 +1344,16 @@ impl ImportReport {
     /// skipped" report stays trustworthy.
     fn note_marker_skipped(&mut self, marker: &ExtendedMarker) {
         match marker {
-            ExtendedMarker::Emuera1808 => {} // nothing to report
-            ExtendedMarker::Older(m) => {
+            ExtendedMarker::Known(_) => {} // block was read; nothing to report
+            ExtendedMarker::Unknown(m) => {
                 let detail =
-                    format!("오래된 확장 블록 마커 {m} 발견 — 확장 전용 변수는 가져오지 않았습니다");
+                    format!("알 수 없는 확장 블록 마커 {m} 발견 — 확장 전용 변수는 가져오지 않았습니다");
                 log::warn!("Emuera 세이브 가져오기: {detail}");
                 self.extended_marker_skipped = Some(format!("마커 {m}"));
             }
             ExtendedMarker::Absent => {
                 log::warn!(
-                    "Emuera 세이브 가져오기: 확장 블록 마커(__EMUERA_1808_STRAT__)가 없음 — 확장 전용 변수는 가져오지 않았습니다"
+                    "Emuera 세이브 가져오기: 확장 블록 마커가 없음 — 확장 전용 변수는 가져오지 않았습니다"
                 );
                 self.extended_marker_skipped = Some("마커 없음".to_owned());
             }
@@ -2473,71 +2528,283 @@ mod tests {
         lines.join("\n")
     }
 
-    /// An old-version extended marker must be *reported* (named), not
-    /// silently treated as "no extended data": a real save from a pre-1808
-    /// Emuera carries `NICKNAME`/`MASTERNAME`/`CSTR`/`CDFLAG` and every
-    /// user `#DIM SAVEDATA` array in that block, and a load that drops them
-    /// silently presents a plausible-but-wrong character.
-    #[test]
-    fn parse_text_reports_older_marker_without_reading_extended_block() {
-        // Positive control: the *same* extended body is fully read when the
-        // marker is the current 1808 one — so the only difference in the
-        // old-marker case below is the marker line itself.
-        let (data, ..) = parse_text(&fixture_local_text_with_marker(EMU_START), false).unwrap();
-        assert_eq!(data.extended_marker, ExtendedMarker::Emuera1808);
-        assert!(matches!(data.charas[0].get("NICKNAME"), Some(ParsedArray::StrScalar(s)) if s == "EmuChan"));
-        assert!(matches!(data.globals.get("MES"), Some(ParsedArray::StrScalar(s)) if s == "こんにちは"));
-
-        // With an older marker, the same body is *not* read, and the marker
-        // itself is surfaced so the caller can warn the player.
-        let (data, ..) =
-            parse_text(&fixture_local_text_with_marker("__EMUERA_1708_STRAT__"), false).unwrap();
-        assert_eq!(
-            data.extended_marker,
-            ExtendedMarker::Older("__EMUERA_1708_STRAT__".into()),
-            "the exact old marker must be surfaced, not swallowed"
-        );
-        let chara = &data.charas[0];
-        assert!(chara.get("NICKNAME").is_none(), "NICKNAME is extended-only; absent for an old marker");
-        assert!(chara.get("CSTR").is_none(), "CSTR is extended-only; absent for an old marker");
-        assert!(data.globals.get("MES").is_none(), "MES is extended-only; absent for an old marker");
+    /// Maps each known Emuera version to the exact extended-block marker its
+    /// writer emits (`EraDataStream.cs:46-50`).
+    fn marker_for(version: u32) -> &'static str {
+        match version {
+            1700 => "__EMUERA_STRAT__",
+            1708 => "__EMUERA_1708_STRAT__",
+            1729 => "__EMUERA_1729_STRAT__",
+            1803 => "__EMUERA_1803_STRAT__",
+            1808 => "__EMUERA_1808_STRAT__",
+            _ => unreachable!("no marker for version {version}"),
+        }
     }
 
-    /// The absent-marker case (a genuinely pre-extended save) is *also* a
-    /// reportable condition: the OLD block loaded fine, but nothing after
-    /// it was imported. Both that and an old marker must land in
-    /// [`ImportReport`] so [`ImportReport::log_summary`] cannot claim a
-    /// complete import.
-    #[test]
-    fn report_counts_an_absent_or_older_extended_marker() {
-        // Normal 1808: no marker warning at all.
-        let (data, ..) = parse_text(&fixture_local_text(), false).unwrap();
-        assert_eq!(data.extended_marker, ExtendedMarker::Emuera1808);
-        let (_, report) = build_local_data(data, &fixture_header());
-        assert!(report.extended_marker_skipped.is_none(), "1808 marker must not be flagged");
+    /// A full local numbered save for a specific Emuera version: header,
+    /// placeholder OLD blocks, that version's marker, then only the
+    /// extended groups that version's grammar actually carries, each with
+    /// **distinct sentinel values** so a version-gate miscalibration (one
+    /// group too few/many, or a later group shifted into an earlier slot)
+    /// shows up as a wrong value or a wrong key rather than a silent
+    /// mis-import. Grammar per-version (from the C# reader dispatch,
+    /// `docs/research/2026-09-07-emuera-source-crosscheck.md` §6):
+    /// - chara extended: `Old1802` 4 groups (`strS,intS,str1D,int1D`) for
+    ///   version < 1803, else 6 groups (+ `str2D,int2D`)
+    ///   (`VariableEvaluator.LoadFromStream`; `CharacterData.cs:400-428`
+    ///   vs `:355-399`)
+    /// - variable extended: built-in `strS,intS,str1D,int1D` always, then
+    ///   `2D` iff version >= 1708, `3D` iff version >= 1729, then the six
+    ///   user-defined groups iff version >= 1808
+    ///   (`VariableData.LoadFromStreamExtended` `:763-832`; gates
+    ///   `EraDataStream.cs:297,344,366,424`)
+    fn local_save_for(version: u32) -> String {
+        let mut l: Vec<String> = vec![
+            "12345".to_owned(),
+            "1808".to_owned(),
+            "test save".to_owned(),
+            "1".to_owned(),
+        ];
+        l.extend(empty_old_chara_lines());
+        l.extend(empty_old_global_lines());
+        l.push(marker_for(version).to_owned());
 
-        // Older marker: flagged, naming the marker.
+        // --- chara extended ---
+        l.push("CH_STR_SCALAR:chara_str_scalar".to_owned()); // str scalar
+        l.push(EMU_SEPARATOR.to_owned());
+        l.push("CH_INT_SCALAR:42".to_owned()); // int scalar
+        l.push(EMU_SEPARATOR.to_owned());
+        l.extend(["CH_STR_1D", "chara_str1d_a", "chara_str1d_b", FINISHED, EMU_SEPARATOR]
+            .map(str::to_owned));
+        l.extend(["CH_INT_1D", "3", "4", FINISHED, EMU_SEPARATOR]
+            .map(str::to_owned));
+        if version >= 1803 {
+            l.push(EMU_SEPARATOR.to_owned()); // string 2D (never present in text)
+            l.extend(["CH_INT_2D", "1,2", "3,4,5", FINISHED, EMU_SEPARATOR]
+                .map(str::to_owned));
+        }
+
+        // --- variable section ---
+        l.push("VAR_STR_SCALAR:var_str_scalar".to_owned()); // str scalar
+        l.push(EMU_SEPARATOR.to_owned());
+        l.push("VAR_INT_SCALAR:99".to_owned()); // int scalar
+        l.push(EMU_SEPARATOR.to_owned());
+        l.extend(["VAR_STR_1D", "var_str1d_a", "var_str1d_b", FINISHED, EMU_SEPARATOR]
+            .map(str::to_owned));
+        l.extend(["VAR_INT_1D", "7", "8", "9", FINISHED, EMU_SEPARATOR]
+            .map(str::to_owned));
+        if version >= 1708 {
+            l.push(EMU_SEPARATOR.to_owned()); // string 2D (never present in text)
+            l.extend(["VAR_INT_2D", "1,2", "3", FINISHED, EMU_SEPARATOR]
+                .map(str::to_owned));
+        }
+        if version >= 1729 {
+            l.push(EMU_SEPARATOR.to_owned()); // string 3D (never present in text)
+            l.extend(
+                ["VAR_INT_3D", "[0]{", "1,2", "}", "[2]{", "3", "}", FINISHED, EMU_SEPARATOR]
+                    .map(str::to_owned),
+            );
+        }
+        if version >= 1808 {
+            l.extend(["USR_STR_1D", "usr_str1d", FINISHED, EMU_SEPARATOR]
+                .map(str::to_owned));
+            l.extend(["USR_INT_1D", "11", FINISHED, EMU_SEPARATOR]
+                .map(str::to_owned));
+            l.push(EMU_SEPARATOR.to_owned()); // user string 2D (ever empty)
+            l.extend(["USR_INT_2D", "5", FINISHED, EMU_SEPARATOR]
+                .map(str::to_owned));
+            l.push(EMU_SEPARATOR.to_owned()); // user string 3D (ever empty)
+            l.extend(["USR_INT_3D", "[1]{", "6,7", "}", FINISHED, EMU_SEPARATOR]
+                .map(str::to_owned));
+        }
+        l.join("\n")
+    }
+
+    /// Asserts the *exact* extended-group inventory a version should carry
+    /// (`ExtendedMarker` equals that version), with each present group's
+    /// sentinel value intact and each version-gated-absent group truly
+    /// absent — a shifted group would land in a wrong key/value and fail
+    /// here rather than silently mis-import.
+    fn assert_local_groups(data: &EmueraSaveData, version: u32) {
+        assert_eq!(data.extended_marker, ExtendedMarker::Known(version));
+
+        let chara = &data.charas[0];
+        assert!(matches!(chara.get("CH_STR_SCALAR"), Some(ParsedArray::StrScalar(s)) if s == "chara_str_scalar"));
+        assert!(matches!(chara.get("CH_INT_SCALAR"), Some(ParsedArray::IntScalar(v)) if *v == 42));
+        assert!(matches!(chara.get("CH_STR_1D"), Some(ParsedArray::Str1D(v)) if v.iter().map(String::as_str).eq(["chara_str1d_a", "chara_str1d_b"])));
+        assert!(matches!(chara.get("CH_INT_1D"), Some(ParsedArray::Int1D(v)) if v.as_slice() == [3, 4]));
+        if version >= 1803 {
+            assert!(
+                matches!(chara.get("CH_INT_2D"), Some(ParsedArray::Int2D(r)) if r.as_slice() == [vec![1, 2], vec![3, 4, 5]]),
+                "chara 2D present from 1803 (version {version})"
+            );
+        } else {
+            assert!(chara.get("CH_INT_2D").is_none(), "chara 2D absent before 1803 (version {version})");
+        }
+
+        let g = &data.globals;
+        assert!(matches!(g.get("VAR_STR_SCALAR"), Some(ParsedArray::StrScalar(s)) if s == "var_str_scalar"));
+        assert!(matches!(g.get("VAR_INT_SCALAR"), Some(ParsedArray::IntScalar(v)) if *v == 99));
+        assert!(matches!(g.get("VAR_STR_1D"), Some(ParsedArray::Str1D(v)) if v.iter().map(String::as_str).eq(["var_str1d_a", "var_str1d_b"])));
+        assert!(matches!(g.get("VAR_INT_1D"), Some(ParsedArray::Int1D(v)) if v.as_slice() == [7, 8, 9]));
+        if version >= 1708 {
+            assert!(
+                matches!(g.get("VAR_INT_2D"), Some(ParsedArray::Int2D(r)) if r.as_slice() == [vec![1, 2], vec![3]]),
+                "var 2D present from 1708 (version {version})"
+            );
+        } else {
+            assert!(g.get("VAR_INT_2D").is_none(), "var 2D absent before 1708 (version {version})");
+        }
+        if version >= 1729 {
+            assert!(
+                matches!(g.get("VAR_INT_3D"), Some(ParsedArray::Int3D(b)) if b.as_slice() == [(0, vec![vec![1, 2]]), (2, vec![vec![3]])]),
+                "var 3D present from 1729 (version {version})"
+            );
+        } else {
+            assert!(g.get("VAR_INT_3D").is_none(), "var 3D absent before 1729 (version {version})");
+        }
+        if version >= 1808 {
+            assert!(matches!(g.get("USR_STR_1D"), Some(ParsedArray::Str1D(v)) if v.iter().map(String::as_str).eq(["usr_str1d"])));
+            assert!(matches!(g.get("USR_INT_1D"), Some(ParsedArray::Int1D(v)) if v.as_slice() == [11]));
+            assert!(matches!(g.get("USR_INT_2D"), Some(ParsedArray::Int2D(r)) if r.as_slice() == [vec![5]]));
+            assert!(matches!(g.get("USR_INT_3D"), Some(ParsedArray::Int3D(b)) if b.as_slice() == [(1, vec![vec![6, 7]])]));
+        } else {
+            for k in ["USR_STR_1D", "USR_INT_1D", "USR_INT_2D", "USR_INT_3D"] {
+                assert!(g.get(k).is_none(), "{k} must be absent before 1808 (version {version})");
+            }
+        }
+    }
+
+    /// 1700: the earliest marker. Chara extended = 4 groups (`Old1802`,
+    /// no 2D), variable extended = 4 groups (no 2D/3D). This is the whole
+    /// point of old-save support: the OLD block + scalars + 1D arrays.
+    #[test]
+    fn parse_text_reads_the_1700_four_group_extended_grammar() {
+        let (data, ..) = parse_text(&local_save_for(1700), false).unwrap();
+        assert_local_groups(&data, 1700);
+    }
+
+    /// 1708: the 2D boundary — variable extended gains the int 2D group,
+    /// but chara is still 4 groups (`< 1803`) and 3D is still absent.
+    #[test]
+    fn parse_text_reads_the_1708_six_group_extended_grammar() {
+        let (data, ..) = parse_text(&local_save_for(1708), false).unwrap();
+        assert_local_groups(&data, 1708);
+    }
+
+    /// 1729: the 3D boundary — variable extended gains the int 3D group.
+    /// Chara STILL 4 groups (1729 < 1803): 3D appears in the variable
+    /// section two versions before the chara 2D restructure — exactly the
+    /// asymmetry that desynchronises a reader that ties chara's grammar to
+    /// the variable grammar.
+    #[test]
+    fn parse_text_reads_the_1729_eight_group_extended_grammar() {
+        let (data, ..) = parse_text(&local_save_for(1729), false).unwrap();
+        assert_local_groups(&data, 1729);
+    }
+
+    /// 1803: the chara restructure — chara extended jumps to 6 groups
+    /// (gains CSTR-style int 2D), variable extended stays 8 (no user
+    /// groups; 1803 < 1808).
+    #[test]
+    fn parse_text_reads_the_1803_eight_group_extended_grammar() {
+        let (data, ..) = parse_text(&local_save_for(1803), false).unwrap();
+        assert_local_groups(&data, 1803);
+    }
+
+    /// 1808: the full grammar — chara 6 groups, variable extended 8
+    /// built-in + 6 user-defined groups (the user `#DIM SAVEDATA` pass,
+    /// `if (version < 1808) return;` at `VariableData.cs:799-801`), which
+    /// pre-1808 versions genuinely do not carry.
+    #[test]
+    fn parse_text_reads_the_1808_fourteen_group_extended_grammar() {
+        let (data, ..) = parse_text(&local_save_for(1808), false).unwrap();
+        assert_local_groups(&data, 1808);
+    }
+
+    /// Every known version now reads its extended block, so the end-of-load
+    /// summary must NOT flag any of them as a skipped/absent extended block.
+    #[test]
+    fn build_report_does_not_flag_a_known_version() {
+        for v in [1700, 1708, 1729, 1803, 1808] {
+            let (data, ..) = parse_text(&local_save_for(v), false).unwrap();
+            assert_eq!(data.extended_marker, ExtendedMarker::Known(v));
+            let (_, report) = build_local_data(data, &fixture_header());
+            assert!(
+                report.extended_marker_skipped.is_none(),
+                "known version {v} must not be reported as a skip"
+            );
+        }
+    }
+
+    /// An unknown/future `__EMUERA_..._STRAT__` marker is *still* reported,
+    /// named, and its extended block is *not* read — we cannot claim to
+    /// understand a grammar we have never seen. The marker's text is kept
+    /// on [`ExtendedMarker::Unknown`] so the report can name it.
+    #[test]
+    fn parse_text_reports_an_unknown_future_marker_and_skips() {
         let (data, ..) =
-            parse_text(&fixture_local_text_with_marker("__EMUERA_1708_STRAT__"), false).unwrap();
+            parse_text(&fixture_local_text_with_marker("__EMUERA_1900_STRAT__"), false).unwrap();
         assert_eq!(
             data.extended_marker,
-            ExtendedMarker::Older("__EMUERA_1708_STRAT__".into())
+            ExtendedMarker::Unknown("__EMUERA_1900_STRAT__".into())
         );
-        let (storage, report) = build_local_data(data, &fixture_header());
-        let skipped = &report.extended_marker_skipped;
+        let chara = &data.charas[0];
+        assert!(chara.get("NICKNAME").is_none(), "unknown-marker extended block must not be read");
+        assert!(data.globals.get("MES").is_none(), "unknown-marker extended block must not be read");
+        let (_, report) = build_local_data(data, &fixture_header());
         assert!(
-            skipped.as_deref().is_some_and(|d| d.contains("__EMUERA_1708_STRAT__")),
-            "report must name the marker found: {skipped:?}"
+            report.extended_marker_skipped.as_deref().is_some_and(|d| d.contains("__EMUERA_1900_STRAT__")),
+            "report must name the unknown marker, got {skipped:?}",
+            skipped = report.extended_marker_skipped
         );
-        assert!(!storage.variables.is_empty(), "OLD block still imports; only the extended block is skipped");
+    }
 
-        // No marker at all: flagged as absent.
+    /// A save with *no* extended block at all (genuinely pre-extended, or
+    /// truncated) is a real state distinct from one we merely couldn't
+    /// read — it stays reportable as [`ExtendedMarker::Absent`].
+    #[test]
+    fn parse_text_reports_an_absent_marker() {
         let (data, ..) = parse_text(&fixture_local_text_no_marker(), false).unwrap();
         assert_eq!(data.extended_marker, ExtendedMarker::Absent);
         let (_, report) = build_local_data(data, &fixture_header());
-        assert!(
-            report.extended_marker_skipped.is_some(),
-            "a pre-extended save must also be reported as skipping the extended block"
-        );
+        assert!(report.extended_marker_skipped.is_some(), "an absent marker must be reported");
+    }
+
+    /// A standalone `global.sav`'s variable section is 6 groups with no
+    /// scalars; its 2D/3D groups are gated identically to the local
+    /// variable section (2D iff >= 1708, 3D iff >= 1729).
+    fn global_save_for(version: u32) -> String {
+        let mut l: Vec<String> = vec!["12345".to_owned(), "1808".to_owned()];
+        l.extend(empty_old_global_save_lines()); // GLOBAL, GLOBALS
+        l.push(marker_for(version).to_owned());
+        l.extend(["GV_STR_1D", "gs1", "gs2", FINISHED, EMU_SEPARATOR].map(str::to_owned));
+        l.extend(["GV_INT_1D", "5", "6", FINISHED, EMU_SEPARATOR].map(str::to_owned));
+        if version >= 1708 {
+            l.push(EMU_SEPARATOR.to_owned()); // string 2D
+            l.extend(["GV_INT_2D", "1,2", "3,4", FINISHED, EMU_SEPARATOR].map(str::to_owned));
+        }
+        if version >= 1729 {
+            l.push(EMU_SEPARATOR.to_owned()); // string 3D
+            l.extend(["GV_INT_3D", "[0]{", "9", "}", FINISHED, EMU_SEPARATOR].map(str::to_owned));
+        }
+        l.join("\n")
+    }
+
+    #[test]
+    fn parse_global_section_gates_2d_and_3d_by_version() {
+        // 1700: only string 1D + int 1D.
+        let (data, ..) = parse_text(&global_save_for(1700), true).unwrap();
+        assert_eq!(data.extended_marker, ExtendedMarker::Known(1700));
+        assert!(matches!(data.globals.get("GV_STR_1D"), Some(ParsedArray::Str1D(v)) if v.iter().map(String::as_str).eq(["gs1", "gs2"])));
+        assert!(matches!(data.globals.get("GV_INT_1D"), Some(ParsedArray::Int1D(v)) if v.as_slice() == [5, 6]));
+        assert!(data.globals.get("GV_INT_2D").is_none());
+        assert!(data.globals.get("GV_INT_3D").is_none());
+
+        // 1729: + string 2D + int 2D + int 3D.
+        let (data, ..) = parse_text(&global_save_for(1729), true).unwrap();
+        assert_eq!(data.extended_marker, ExtendedMarker::Known(1729));
+        assert!(matches!(data.globals.get("GV_INT_2D"), Some(ParsedArray::Int2D(r)) if r.as_slice() == [vec![1, 2], vec![3, 4]]));
+        assert!(matches!(data.globals.get("GV_INT_3D"), Some(ParsedArray::Int3D(b)) if b.as_slice() == [(0, vec![vec![9]])]));
     }
 }
