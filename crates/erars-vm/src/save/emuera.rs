@@ -2397,16 +2397,6 @@ mod tests {
         };
     }
 
-    macro_rules! real_rand_fixture {
-        ($name:literal) => {
-            include_bytes!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/../../tests/fixtures/emuera_saves/real_rand/",
-                $name
-            )) as &[u8]
-        };
-    }
-
     #[test]
     fn sniff_recognises_all_six_real_captures() {
         let sjis = encoding_rs::SHIFT_JIS;
@@ -3269,26 +3259,66 @@ mod tests {
         }
     }
 
+    /// Every `.sav` fixture under `tests/fixtures/emuera_saves/real*/` that
+    /// the round-trip tests and the coverage guard below exercise, as
+    /// `(path relative to `emuera_saves/`, bytes, variant, is_global)`.
+    ///
+    /// `EmueraSaveVariant`/`is_global` are deliberately **not** inferred
+    /// from the filename or the bytes here — `randcap90_real.sav` (see its
+    /// own comment below) proves that's not always safe: its pure-ASCII,
+    /// BOM-less content sniffs as `TextUtf8` regardless of which encoding
+    /// path actually wrote it, so the correct variant has to come from
+    /// whoever adds the fixture. This table is where they now state it,
+    /// and it is the *only* place that needs it: both round-trip tests
+    /// and [`all_real_fixture_sav_files_are_covered_by_round_trip_tests`]
+    /// all read from here, so adding a fixture here is the only edit
+    /// needed for full coverage — forgetting to add it here is exactly
+    /// what that guard test catches.
+    const REAL_FIXTURES: &[(&str, &[u8], EmueraSaveVariant, bool)] = &[
+        ("real/save90_text_utf8_real.sav", real_fixture!("save90_text_utf8_real.sav"), EmueraSaveVariant::TextUtf8, false),
+        ("real/save90_text_sjis_real.sav", real_fixture!("save90_text_sjis_real.sav"), EmueraSaveVariant::TextSjis, false),
+        ("real/save90_binary_real.sav", real_fixture!("save90_binary_real.sav"), EmueraSaveVariant::Binary, false),
+        ("real/global_text_utf8_real.sav", real_fixture!("global_text_utf8_real.sav"), EmueraSaveVariant::TextUtf8, true),
+        ("real/global_text_sjis_real.sav", real_fixture!("global_text_sjis_real.sav"), EmueraSaveVariant::TextSjis, true),
+        ("real/global_binary_real.sav", real_fixture!("global_binary_real.sav"), EmueraSaveVariant::Binary, true),
+        // `real_rand/` (see its README.md): the RANDDATA/RANDCAP
+        // capture that refutes this writer's old "8 built-in groups
+        // are always empty" assumption — RANDDATA sits in the
+        // built-in int1D group, not a user-defined one. Pure ASCII
+        // content, no BOM: sniffs as `TextUtf8` but was written by
+        // the non-Unicode path, same as the `*_sjis_real.sav` case
+        // above (see `sniff_recognises_all_six_real_captures`'s own
+        // comment on why that's not a defect). Used only here, so the
+        // `include_bytes!` is inlined rather than macro'd.
+        (
+            "real_rand/randcap90_real.sav",
+            include_bytes!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/fixtures/emuera_saves/real_rand/randcap90_real.sav"
+            )) as &[u8],
+            EmueraSaveVariant::TextSjis,
+            false,
+        ),
+        // `real_old/` (see its README.md): all seven captures load and
+        // resume via the plain `TextUtf8` local-save path (this game's
+        // own writer never produces `TextSjis`/`Binary` for these old
+        // exes), one save per genuinely old mainline exe (1.701/1.707/
+        // 1.710/1.738/1.803) plus two chara-boundary captures (1738/1803).
+        ("real_old/1701_real.sav", old_real_fixture!("1701_real.sav"), EmueraSaveVariant::TextUtf8, false),
+        ("real_old/1707_real.sav", old_real_fixture!("1707_real.sav"), EmueraSaveVariant::TextUtf8, false),
+        ("real_old/1710_real.sav", old_real_fixture!("1710_real.sav"), EmueraSaveVariant::TextUtf8, false),
+        ("real_old/1738_real.sav", old_real_fixture!("1738_real.sav"), EmueraSaveVariant::TextUtf8, false),
+        ("real_old/1738_chara_real.sav", old_real_fixture!("1738_chara_real.sav"), EmueraSaveVariant::TextUtf8, false),
+        ("real_old/1803_real.sav", old_real_fixture!("1803_real.sav"), EmueraSaveVariant::TextUtf8, false),
+        ("real_old/1803_chara_real.sav", old_real_fixture!("1803_chara_real.sav"), EmueraSaveVariant::TextUtf8, false),
+    ];
+
     #[test]
     fn round_trip_real_captures_are_byte_exact() {
-        let cases: &[(&str, &[u8], EmueraSaveVariant, bool)] = &[
-            ("save90_text_utf8_real.sav", real_fixture!("save90_text_utf8_real.sav"), EmueraSaveVariant::TextUtf8, false),
-            ("save90_text_sjis_real.sav", real_fixture!("save90_text_sjis_real.sav"), EmueraSaveVariant::TextSjis, false),
-            ("save90_binary_real.sav", real_fixture!("save90_binary_real.sav"), EmueraSaveVariant::Binary, false),
-            ("global_text_utf8_real.sav", real_fixture!("global_text_utf8_real.sav"), EmueraSaveVariant::TextUtf8, true),
-            ("global_text_sjis_real.sav", real_fixture!("global_text_sjis_real.sav"), EmueraSaveVariant::TextSjis, true),
-            ("global_binary_real.sav", real_fixture!("global_binary_real.sav"), EmueraSaveVariant::Binary, true),
-            // `real_rand/` (see its README.md): the RANDDATA/RANDCAP
-            // capture that refutes this writer's old "8 built-in groups
-            // are always empty" assumption — RANDDATA sits in the
-            // built-in int1D group, not a user-defined one. Pure ASCII
-            // content, no BOM: sniffs as `TextUtf8` but was written by
-            // the non-Unicode path, same as the `*_sjis_real.sav` case
-            // above (see `sniff_recognises_all_six_real_captures`'s own
-            // comment on why that's not a defect).
-            ("randcap90_real.sav", real_rand_fixture!("randcap90_real.sav"), EmueraSaveVariant::TextSjis, false),
-        ];
-        for (name, bytes, variant, is_global) in cases.iter().copied() {
+        for &(name, bytes, variant, is_global) in REAL_FIXTURES {
+            if name.starts_with("real_old/") {
+                continue;
+            }
             let out = round_trip(bytes, variant, is_global);
             assert!(out == bytes, "round-trip byte mismatch for {name} (variant {variant:?})");
         }
@@ -3388,26 +3418,11 @@ mod tests {
 
     #[test]
     fn round_trip_real_old_captures_are_byte_exact() {
-        let names = [
-            "1701_real.sav",
-            "1707_real.sav",
-            "1710_real.sav",
-            "1738_real.sav",
-            "1738_chara_real.sav",
-            "1803_real.sav",
-            "1803_chara_real.sav",
-        ];
-        let files: [&[u8]; 7] = [
-            old_real_fixture!("1701_real.sav"),
-            old_real_fixture!("1707_real.sav"),
-            old_real_fixture!("1710_real.sav"),
-            old_real_fixture!("1738_real.sav"),
-            old_real_fixture!("1738_chara_real.sav"),
-            old_real_fixture!("1803_real.sav"),
-            old_real_fixture!("1803_chara_real.sav"),
-        ];
-        for (name, bytes) in names.iter().zip(files.iter().copied()) {
-            let out = round_trip(bytes, EmueraSaveVariant::TextUtf8, false);
+        for &(name, bytes, variant, is_global) in REAL_FIXTURES {
+            if !name.starts_with("real_old/") {
+                continue;
+            }
+            let out = round_trip(bytes, variant, is_global);
             assert!(out == bytes, "round-trip byte mismatch for {name}");
         }
     }
@@ -3416,12 +3431,11 @@ mod tests {
     /// untested by `round_trip_real_captures_are_byte_exact` for a whole
     /// writer-correctness bug's lifetime: a fixture directory can be added
     /// under `tests/fixtures/emuera_saves/real*/` without anyone updating
-    /// the round-trip tests above, and nothing fails. This test closes that
+    /// [`REAL_FIXTURES`], and nothing fails. This test closes that
     /// *structurally*: it walks every `real*` directory at run time and
-    /// fails loudly if it finds a `.sav` file not named in `covered` below
-    /// (kept in sync with `real_fixture!`/`old_real_fixture!`/
-    /// `real_rand_fixture!` call sites in the two tests above), rather than
-    /// silently leaving it un-round-tripped the way `real_rand/` was.
+    /// fails loudly if it finds a `.sav` file whose `{dir}/{file}` path
+    /// isn't one of [`REAL_FIXTURES`]'s names, rather than silently
+    /// leaving it un-round-tripped the way `real_rand/` was.
     ///
     /// This can't safely auto-run the round trip itself: `randcap90_real.sav`
     /// (see its own comment above) proves a file's correct
@@ -3432,27 +3446,8 @@ mod tests {
     /// test, which already asserts byte-exactness.
     #[test]
     fn all_real_fixture_sav_files_are_covered_by_round_trip_tests() {
-        let covered: std::collections::HashSet<&str> = [
-            // `round_trip_real_captures_are_byte_exact` (`tests/fixtures/emuera_saves/real/`
-            // and `real_rand/`):
-            "save90_text_utf8_real.sav",
-            "save90_text_sjis_real.sav",
-            "save90_binary_real.sav",
-            "global_text_utf8_real.sav",
-            "global_text_sjis_real.sav",
-            "global_binary_real.sav",
-            "randcap90_real.sav",
-            // `round_trip_real_old_captures_are_byte_exact` (`real_old/`):
-            "1701_real.sav",
-            "1707_real.sav",
-            "1710_real.sav",
-            "1738_real.sav",
-            "1738_chara_real.sav",
-            "1803_real.sav",
-            "1803_chara_real.sav",
-        ]
-        .into_iter()
-        .collect();
+        let covered: std::collections::HashSet<&str> =
+            REAL_FIXTURES.iter().map(|&(name, ..)| name).collect();
 
         let base = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/emuera_saves"));
         let mut missing = Vec::new();
@@ -3473,17 +3468,17 @@ mod tests {
                 if !file_name.ends_with(".sav") {
                     continue;
                 }
-                if !covered.contains(file_name.as_str()) {
-                    missing.push(format!("{dir_name}/{file_name}"));
+                let path = format!("{dir_name}/{file_name}");
+                if !covered.contains(path.as_str()) {
+                    missing.push(path);
                 }
             }
         }
         assert!(
             missing.is_empty(),
             "found real-capture .sav file(s) not exercised by any round-trip test: {missing:?} \
-             — add them to round_trip_real_captures_are_byte_exact or \
-             round_trip_real_old_captures_are_byte_exact (and to `covered` above); this is \
-             exactly the coverage hole that let real_rand/randcap90_real.sav go untested"
+             — add them to REAL_FIXTURES above; this is exactly the coverage hole that let \
+             real_rand/randcap90_real.sav go untested"
         );
     }
 }
