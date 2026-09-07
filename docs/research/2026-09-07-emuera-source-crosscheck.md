@@ -250,17 +250,36 @@ prove each marker maps to its per-version grammar against the real bytes.
 Notable findings: **Emuera 1.701 writes no extended block at all** (marker
 `Absent`; the 1700 marker came between 1.701 and 1.707), and each old
 writer's marker string is exactly the constant `EraDataStream.cs` names.
-Two boundaries remain *source-only but synthetic-fixture-covered*: the
-chara extended section's **4-vs-6 group** restructure at 1803 (exercising
-it needs an active `TARGET` character, which requires a full chara-selection
-flow the boot-driven minimal game does not reach — and closing it is not a
-small extension: chara data lives in version-sensitive `CSV/Chara*.csv`
-files rather than ERB, and reaching a `TARGET` needs an interactive
-chara-selection routine plus real input (xdotool), an hours-scale,
-multi-version effort; see `tests/fixtures/emuera_saves/real_old/README.md`), and the 2D/3D *structural*
-markers `0xE0/0xE1/0xF1/0xF2` (never emitted by these small captures; covered
-by the C#-writer-equivalent byte tests in §3). The variable-section group
-counts per version, however, are now asserted against real old-Emuera bytes.
+**Update (2026-09-07, second pass): the chara boundary is now
+capture-backed too.** The interactive `TARGET`/`CSV/Chara*.csv` flow assumed
+necessary above turned out to be unnecessary: `ADDVOIDCHARA` plus
+explicit-index chara-array writes (`CSTR:0:0 = ...`, `CFLAG:0:1 = ...`,
+`CDFLAG:0:0:0 = ...`) work non-interactively at title time with no `TARGET`
+ever set, on both `Emuera1738.exe` and `Emuera1803.exe`. Two new real
+captures, `1738_chara_real.sav` / `1803_chara_real.sav`, exercise the chara
+extended section's **4-vs-6 group** restructure with a real payload
+(`CDFLAG`, real Emuera's only chara-scope int-2D savedata variable) sitting
+in the 1803-only group — not merely an empty-separator count. One genuine
+negative result surfaced along the way: `CDFLAG` cannot be set on
+Emuera1738 at all — the exe rejects the assignment at *parse* time
+("cannot be interpreted as a label/command/assignment statement"), a
+different failure mode than a recognised-but-out-of-range/too-many-arguments
+variable (confirmed by contrast against `RELATION`, a pre-1803 chara+int2D
+variable, which fails at *runtime* instead on the same exe) — [INFERENCE]
+`CDFLAG` itself was likely introduced at/after 1.803, not merely re-slotted
+into new save groups then. Full evidence chain, exact ERB source for both
+games, and the CSTR-quoting finding (both old captures preserve literal
+quote characters Emuera's writer included; erars's reader never strips them,
+for any version) are in `tests/fixtures/emuera_saves/real_old/README.md`.
+See `crates/erars-vm/src/save/emuera.rs`'s
+`parse_reads_real_old_chara_captures` / `parse_real_old_chara_wrong_grammar_is_rejected`
+tests.
+
+The one remaining source-only-but-synthetic-fixture-covered boundary is the
+2D/3D *structural* binary markers `0xE0/0xE1/0xF1/0xF2` (never emitted by
+these small text captures; covered by the C#-writer-equivalent byte tests in
+§3). The variable-section and chara-section group counts per version are now
+both asserted against real old-Emuera bytes.
 
 ---
 

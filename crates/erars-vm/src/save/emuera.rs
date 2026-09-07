@@ -2873,4 +2873,183 @@ mod tests {
         assert_eq!(gversion, 1000);
         assert_eq!(data.extended_marker, ExtendedMarker::Absent);
     }
+
+    /// The 1803 chara boundary — the chara extended section's 4-vs-6 group
+    /// restructure — is now byte-observed with a real *payload* in the new
+    /// groups, not just an empty-separator count. Two games sharing the
+    /// same source (full text, including the CDFLAG negative result below,
+    /// in `real_old/README.md`) each `ADDVOIDCHARA` a character and set
+    /// chara-scope values by explicit index with no `TARGET`
+    /// (`CSTR:0:0`, `CFLAG:0:1`, `CFLAG:0:2`): one save written by
+    /// Emuera1738 (marker `__EMUERA_1729_STRAT__`, version 1729 < 1803),
+    /// whose writer emits the `LoadFromStreamExtended_Old1802` reader's
+    /// **4** chara groups (strS,intS,str1D,int1D); the other by Emuera1803
+    /// (marker `__EMUERA_1803_STRAT__`) whose writer emits all **6**
+    /// (adding the 2D groups str2D,int2D) and *additionally* sets
+    /// `CDFLAG:0:0:0 = 42` — real Emuera's only chara-scope int-2D
+    /// savedata variable, so it is exactly what the 1803-only int2D group
+    /// exists to carry.
+    ///
+    /// **CDFLAG could not be added to the 1738 side**: real Emuera1738
+    /// (product version 1.736) rejects `CDFLAG:0:0:0 = 42` — and even the
+    /// 2-arg form `CDFLAG:0:0 = 42` — at *parse* time with "라벨문·명령문·
+    /// 대입문 어느 것으로도 해석할 수 없는 행입니다" ("cannot be
+    /// interpreted as a label/command/assignment statement"), the generic
+    /// unknown-statement error, not a range/argument-count error. Compare
+    /// the same exe on `RELATION:0:0:0 = 5` (also chara+int2D, but *not*
+    /// new at 1803): that fails at *runtime* instead, with "캐릭터 변수
+    /// RELATION의 인수가 너무 많습니다" ("too many arguments") — a
+    /// recognised-identifier error. The difference is diagnostic: `CDFLAG`
+    /// is not a token Emuera1738's parser knows at all. [INFERENCE] `CDFLAG`
+    /// itself was introduced into Emuera at or after 1.803, not merely
+    /// reframed into new save groups at that version — the two changes
+    /// (variable added, save grammar gains the groups to persist it)
+    /// plausibly shipped together, though only the save-format side is
+    /// directly evidenced here. Either way this is a real, reproduced
+    /// negative result, not a skipped step: **the 1738 capture below has no
+    /// CDFLAG line and cannot have one**, so the two fixtures are
+    /// deliberately asymmetric.
+    ///
+    /// A marker-normalised comparison of the two saves' chara sections
+    /// (bytes after the per-version marker line): identical through the
+    /// int1D group's separator, then 1738 ends the char section with one
+    /// more bare separator (its 4th and last group) while 1803 continues
+    /// with the 1803-only str2D separator, then `CDFLAG`/`42`/`__FINISHED`
+    /// (its int2D group's real content) and *that* group's separator — 5
+    /// extra lines total (2 bare separators for the two new groups, 3
+    /// content lines for the one value living in the second of them),
+    /// exactly the 4-vs-6 restructure with a real value inside it rather
+    /// than the coincidental "two empty separators" a value-free capture
+    /// could not distinguish from noise.
+    ///
+    /// Both import with the chara values landing in the right variables:
+    /// `CSTR` in the chara string-1D group, `CFLAG` in the per-character
+    /// OLD block (positional, not a keyed extended entry — `CFLAG` is
+    /// `CHAR_OLD_ARR[9]`), and (1803 only) `CDFLAG` in the chara int-2D
+    /// group. (The old writer stores this string literal's value
+    /// including its surrounding quotes — `CSTR:0:0 = "cap_name"` writes
+    /// `"cap_name"`, 11 bytes, not `cap_name` — on *both* 1738 and 1803,
+    /// so it is not a marker-version difference; a real modern-era capture
+    /// (`save90_text_utf8_real.sav`, line 4677, game eraTHYMKR) stores its
+    /// `CSTR` value unquoted, but that capture's `CSTR` comes from a
+    /// character CSV's `CSTR,*,**` field rather than an ERB literal
+    /// assignment, a different origin, not proven to be a version
+    /// difference — [INFERENCE] flagged, not asserted as fact. What *is*
+    /// verified directly against this crate's source: [`LineCursor::
+    /// read_1d_arrays`] never strips quote characters at all, for any
+    /// version — every string-1D value, `CSTR` included, round-trips
+    /// byte-for-byte from file to [`ParsedArray::Str1D`]. So erars is
+    /// internally consistent regardless of which of these two real-world
+    /// shapes a save carries; there is no reader-side quote-handling bug to
+    /// fix, only an upstream-Emuera authoring-path difference to be aware
+    /// of when comparing values across captures.)
+    #[test]
+    fn parse_reads_real_old_chara_captures() {
+        let sjis = encoding_rs::SHIFT_JIS;
+        for (version, file, bytes) in [
+            (1729, "1738_chara_real.sav", old_real_fixture!("1738_chara_real.sav")),
+            (1803, "1803_chara_real.sav", old_real_fixture!("1803_chara_real.sav")),
+        ] {
+            assert_eq!(sniff(bytes, sjis), Some(EmueraSaveVariant::TextUtf8), "{file}");
+            let (data, code, gversion, _) =
+                parse(EmueraSaveVariant::TextUtf8, bytes, sjis, false).unwrap();
+            assert_eq!(code, 999000001, "{file}: game code");
+            assert_eq!(gversion, 1000, "{file}: GameBase version");
+            assert_eq!(
+                data.extended_marker,
+                old_real_marker(version),
+                "{file} marker -> grammar"
+            );
+            assert_eq!(data.charas.len(), 1, "{file}: ADDVOIDCHARA created one chara");
+            let chara = &data.charas[0];
+            assert!(
+                matches!(chara.get("CSTR"), Some(ParsedArray::Str1D(v)) if v.as_slice() == ["\"cap_name\""]),
+                "{file}: CSTR:0:0 value landed in the chara string-1D group, quotes and all"
+            );
+            assert!(
+                matches!(chara.get("CFLAG"), Some(ParsedArray::Int1D(v)) if v.as_slice() == [0, 7, 13]),
+                "{file}: CFLAG:0:1=7 and CFLAG:0:2=13 landed in the OLD-block CFLAG array"
+            );
+            if version >= 1803 {
+                assert!(
+                    matches!(chara.get("CDFLAG"), Some(ParsedArray::Int2D(rows)) if rows.as_slice() == [vec![42]]),
+                    "{file}: CDFLAG:0:0:0=42 landed in the 1803-only chara int-2D group"
+                );
+            } else {
+                assert!(
+                    chara.get("CDFLAG").is_none(),
+                    "{file}: the 1729 grammar has no chara int-2D group at all, so CDFLAG cannot appear \
+                     (and Emuera1738 refuses to even parse a CDFLAG assignment — see the fn doc comment)"
+                );
+            }
+        }
+    }
+
+    /// The version gate is what keeps the 4-vs-6 grammar from being
+    /// interchangeable — checked in both directions, honestly reporting
+    /// where each direction's evidence comes from.
+    ///
+    /// **1738 read as 1803 (under-read → over-consume): rejected outright.**
+    /// The reader tries to consume two more chara groups (str2D, int2D)
+    /// than a real 4-group file carries, walks into the variable section's
+    /// own bytes expecting `__EMU_SEPARATOR__`/array-key syntax, and errors.
+    /// This direction *is* a value-level discriminator: the file plainly
+    /// cannot parse under the wrong grammar.
+    ///
+    /// **1803 read as 1729 (over-read → under-consume): also rejected, and
+    /// for a reason CDFLAG makes concrete.** Without CDFLAG (the dead
+    /// session's original pair) this direction did not error at all: every
+    /// group past the 1729 grammar's 4th is empty in that capture, so
+    /// under-consuming just hands the 1729 reader a string-scalar group
+    /// that happens to start with `__EMU_SEPARATOR__` — a valid empty
+    /// group — and parsing silently "succeeds" while proving nothing. With
+    /// `CDFLAG` set, the 1729 grammar's char section still stops one group
+    /// early, but now the very next line the 1729 reader sees is the bare
+    /// word `CDFLAG` (the 1803-only int2D group's key) where it expects
+    /// either `__EMU_SEPARATOR__` or a `KEY:VALUE` string-scalar line —
+    /// `CDFLAG` has no `:`, so [`LineCursor::read_scalars`] rejects it
+    /// outright ("스칼라 변수 줄이 아닙니다" / "not a scalar variable
+    /// line"). So with real payload in the new groups, *both* directions
+    /// of the wrong-grammar comparison now fail to parse; before adding
+    /// CDFLAG only one direction did, and the other was silently
+    /// unfalsifiable on these particular (all-empty) captures.
+    #[test]
+    fn parse_real_old_chara_wrong_grammar_is_rejected() {
+        let sjis = encoding_rs::SHIFT_JIS;
+
+        // 1738 save rewritten to claim the 1803 marker: parse must now use
+        // the 6-group chara grammar on a file that only carries 4 chara
+        // groups, and must fail rather than silently misread.
+        let mut b1738 = old_real_fixture!("1738_chara_real.sav").to_vec();
+        let pos = b1738
+            .windows(b"__EMUERA_1729_STRAT__".len())
+            .position(|w| w == b"__EMUERA_1729_STRAT__")
+            .expect("1729 marker");
+        b1738[pos..pos + b"__EMUERA_1729_STRAT__".len()].copy_from_slice(b"__EMUERA_1803_STRAT__");
+        assert!(
+            parse(EmueraSaveVariant::TextUtf8, &b1738, sjis, false).is_err(),
+            "the 6-group grammar must not parse a real 4-group (1738) chara save"
+        );
+
+        // 1803 save rewritten to claim the 1729 marker: the 4-group grammar
+        // under-consumes the char section by two groups, so the reader
+        // trips directly over the bare `CDFLAG` key line where it expects a
+        // `KEY:VALUE` string-scalar line or a separator — a real parse
+        // error, not a silent misfile, precisely because CDFLAG carries an
+        // actual value here (see the fn doc comment for the empty-capture
+        // contrast).
+        let mut b1803 = old_real_fixture!("1803_chara_real.sav").to_vec();
+        let pos = b1803
+            .windows(b"__EMUERA_1803_STRAT__".len())
+            .position(|w| w == b"__EMUERA_1803_STRAT__")
+            .expect("1803 marker");
+        b1803[pos..pos + b"__EMUERA_1803_STRAT__".len()].copy_from_slice(b"__EMUERA_1729_STRAT__");
+        match parse(EmueraSaveVariant::TextUtf8, &b1803, sjis, false) {
+            Ok(_) => panic!("the 4-group grammar must not parse a real 6-group (1803) chara save either"),
+            Err(err) => assert!(
+                err.to_string().contains("CDFLAG"),
+                "the parse must fail specifically on the misaligned CDFLAG line, not some unrelated cause: {err}"
+            ),
+        }
+    }
 }
