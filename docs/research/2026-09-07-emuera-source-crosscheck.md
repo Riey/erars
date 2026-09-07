@@ -253,7 +253,11 @@ writer's marker string is exactly the constant `EraDataStream.cs` names.
 Two boundaries remain *source-only but synthetic-fixture-covered*: the
 chara extended section's **4-vs-6 group** restructure at 1803 (exercising
 it needs an active `TARGET` character, which requires a full chara-selection
-flow the boot-driven minimal game does not reach), and the 2D/3D *structural*
+flow the boot-driven minimal game does not reach — and closing it is not a
+small extension: chara data lives in version-sensitive `CSV/Chara*.csv`
+files rather than ERB, and reaching a `TARGET` needs an interactive
+chara-selection routine plus real input (xdotool), an hours-scale,
+multi-version effort; see `tests/fixtures/emuera_saves/real_old/README.md`), and the 2D/3D *structural*
 markers `0xE0/0xE1/0xF1/0xF2` (never emitted by these small captures; covered
 by the C#-writer-equivalent byte tests in §3). The variable-section group
 counts per version, however, are now asserted against real old-Emuera bytes.
