@@ -13,6 +13,38 @@ use erars_compiler::{compile, EraConfig, ParserContext};
 use erars_ui::VirtualConsole;
 use erars_vm::{console_config, FunctionDic, NullSystemFunctions, TerminalVm, VmContext};
 
+/// One scratch directory per process *and* calling test thread, swept before
+/// creation and removed on drop — the convention
+/// `tests/wiki_coverage.rs`'s `Runner` and `tests/run_tests.rs`'s
+/// `ScratchGuard` use. A fixed name under the temp dir would be shared by
+/// every run of this suite that has ever happened on the machine, and `cargo
+/// test` runs these tests on parallel threads, so a save slot or `*.dat` left
+/// by an earlier run (or a sibling test) could decide a verdict from machine
+/// history rather than from the code under test.
+struct Scratch(std::path::PathBuf);
+
+impl Scratch {
+    fn new() -> Self {
+        let root = std::env::temp_dir().join(format!(
+            "erars-config-exec-keys-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("sav")).unwrap();
+        std::fs::create_dir_all(root.join("resources")).unwrap();
+        Self(root)
+    }
+}
+
+impl Drop for Scratch {
+    fn drop(&mut self) {
+        // Best-effort, exactly like `ScratchGuard`: a killed process skips
+        // this, which is why `new` also sweeps before creating.
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// Parses, compiles and runs one script under `config`, exactly the way
 /// `tests/run_tests.rs` does, and returns the console text plus whether the
 /// run finished without a VM error.
@@ -23,21 +55,27 @@ fn run(script: &str, config: EraConfig) -> (bool, String) {
         test_util::get_ctx("CONFIG_EXEC_KEYS.ERB").header.try_as_arc().unwrap(),
         erars_ast::StrKey::new("CONFIG_EXEC_KEYS.ERB"),
     )
-    .with_ignore_string_set(config.system_ignore_string_set);
+    .with_ignore_string_set(config.system_ignore_string_set)
+    // Emuera `Config.ICFunction = IgnoreCase && !CompatiFunctionNoignoreCase`
+    // (`Config/Config.cs:36`), negated.
+    .with_case_sensitive_functions(
+        !(config.ignore_case && !config.compati_function_no_ignore_case),
+    );
 
     let program = match parser.parse_program_str(script) {
         Ok(program) => program,
         Err((err, _)) => return (false, format!("PARSE ERROR: {err}")),
     };
 
+    let scratch = Scratch::new();
     let header = parser.header.try_as_arc().unwrap();
     let mut tx = VirtualConsole::new(&console_config(&config));
     let mut ctx = VmContext::new(
         header.clone(),
         Arc::new(config),
         Box::new(NullSystemFunctions),
-        std::env::temp_dir().join("erars-config-exec-keys/sav"),
-        std::env::temp_dir().join("erars-config-exec-keys/resources"),
+        scratch.0.join("sav"),
+        scratch.0.join("resources"),
     );
 
     let mut dic = FunctionDic::new();
@@ -53,6 +91,7 @@ fn run(script: &str, config: EraConfig) -> (bool, String) {
     let ok = vm.start(&mut tx, &mut ctx);
     let mut lines: Vec<String> = tx.lines_from(0).iter().map(ToString::to_string).collect();
     lines.push(tx.last_line.to_string());
+    drop(scratch);
 
     (ok, lines.join("\n").trim_end().to_owned())
 }
@@ -213,4 +252,153 @@ PRINTFORML s={LOCALS}
     );
     assert!(ok, "VM error:\n{out}");
     assert_eq!(out, "s=hello");
+}
+
+/// `擬似変数RANDの仕様をeramakerに合わせる` (`CompatiRAND`, default `false`,
+/// `Config/ConfigData.cs:96`).
+///
+/// The key swaps `RandToken` for `CompatiRandToken`
+/// (`GameData/Variable/VariableData.cs:293-297`). Both draw from the *same*
+/// generator; only the reduction differs — `CompatiRandToken.GetIntValue`
+/// returns `0` for `0`, negates a negative argument and yields
+/// `GetNextRand(32768) % i` (`GameData/Variable/VariableToken.cs:1471-1479`),
+/// which is why the result can never be `>= 32767` and is biased once the
+/// range stops dividing 32768. The two parse-time refusals (omitted argument,
+/// literal `0`) are gated on the same key
+/// (`GameData/Variable/VariableParser.cs:167-179`).
+const COMPATI_RAND: &str = "\
+@SYSTEM_TITLE
+PRINTFORML zero={RAND:0}
+PRINTFORML neg={RAND:-4}
+PRINTFORML bare={RAND}
+";
+
+#[test]
+fn compati_rand_accepts_zero_negative_and_bare() {
+    let (ok, out) = run(COMPATI_RAND, config_with(|c| c.compati_rand = true));
+    assert!(ok, "VM error:\n{out}");
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[0], "zero=0", "RAND:0 is 0, not an error");
+    assert_eq!(lines[2], "bare=0", "a bare RAND is RAND:0");
+    // `% 4` after negation, so the only thing that can vary is which of 0..3.
+    let neg: i64 = lines[1].strip_prefix("neg=").unwrap().parse().unwrap();
+    assert!((0..4).contains(&neg), "negative argument was negated: {neg}");
+}
+
+#[test]
+fn compati_rand_off_still_refuses_zero() {
+    let (ok, out) = run(COMPATI_RAND, config_with(|c| c.compati_rand = false));
+    assert!(!ok, "RAND:0 should have been refused, got:\n{out}");
+    assert!(
+        out.contains("0 이하의 값"),
+        "unexpected failure:\n{out}"
+    );
+}
+
+/// The compat reduction is `GetNextRand(32768) % i`, so it can never reach
+/// 32767 and — unlike the default mode, which reduces a 64-bit draw modulo the
+/// requested bound — cannot produce the whole requested range at all once the
+/// bound exceeds 32768. Drawing a wide range is therefore the sharpest
+/// separator between the two modes that does not depend on the generator's
+/// exact sequence.
+#[test]
+fn compati_rand_never_reaches_32767() {
+    let script = "\
+@SYSTEM_TITLE
+LOCAL:1 = 0
+REPEAT 200
+\tLOCAL = RAND:1000000
+\tIF LOCAL >= 32767
+\t\tLOCAL:1 = 1
+\tENDIF
+REND
+PRINTFORML big={LOCAL:1}
+";
+    let (ok, out) = run(script, config_with(|c| c.compati_rand = true));
+    assert!(ok, "VM error:\n{out}");
+    assert_eq!(out, "big=0", "compat RAND is bounded by 32768");
+
+    let (ok, out) = run(script, config_with(|c| c.compati_rand = false));
+    assert!(ok, "VM error:\n{out}");
+    assert_eq!(
+        out, "big=1",
+        "the default (Emuera-exact) RAND spans the whole requested range"
+    );
+}
+
+/// `関数・属性については大文字小文字を無視しない` (`CompatiFunctionNoignoreCase`,
+/// default `false`, `Config/ConfigData.cs:98`), combined with
+/// `大文字小文字の違いを無視する` (`IgnoreCase`, default `true`,
+/// `Config/ConfigData.cs:40`).
+///
+/// Emuera derives one flag from both: `ICFunction = IgnoreCase &&
+/// !CompatiFunctionNoignoreCase` (`Config/Config.cs:34-50`). So `IgnoreCase`
+/// wins when it is off — function names are case-sensitive regardless of the
+/// compat key — and the compat key only has anything to say while
+/// `IgnoreCase` is on. Variables stay `ICVariable = IgnoreCase`
+/// (`Config/Config.cs:37`, `:401-425`).
+const CASE_CALL: &str = "\
+@SYSTEM_TITLE
+CALL sub
+PRINTFORML after
+
+@SUB
+PRINTFORML in_sub
+";
+
+#[test]
+fn function_names_fold_by_default() {
+    let (ok, out) = run(CASE_CALL, EraConfig::default());
+    assert!(ok, "VM error:\n{out}");
+    assert_eq!(out, "in_sub\nafter");
+}
+
+#[test]
+fn function_no_ignore_case_makes_the_call_miss() {
+    let (ok, out) = run(
+        CASE_CALL,
+        config_with(|c| c.compati_function_no_ignore_case = true),
+    );
+    assert!(!ok, "`CALL sub` should not have found `@SUB`, got:\n{out}");
+    assert!(out.contains("sub"), "unexpected failure:\n{out}");
+}
+
+/// With the compat key on, a call whose case matches the definition still
+/// resolves — the names are compared, not folded away.
+#[test]
+fn function_no_ignore_case_keeps_exact_case_working() {
+    let (ok, out) = run(
+        "\
+@SYSTEM_TITLE
+CALL sub
+PRINTFORML after
+
+@sub
+PRINTFORML in_sub
+",
+        config_with(|c| c.compati_function_no_ignore_case = true),
+    );
+    assert!(ok, "VM error:\n{out}");
+    assert_eq!(out, "in_sub\nafter");
+}
+
+/// `IgnoreCase:NO` alone already makes function names case-sensitive
+/// (`ICFunction = IgnoreCase && !CompatiFunctionNoignoreCase`), and setting
+/// the compat key on top changes nothing — that is the combination worth
+/// pinning, since the two keys disagree in exactly this cell.
+#[test]
+fn ignore_case_off_wins_over_the_compat_key() {
+    for compat in [false, true] {
+        let (ok, out) = run(
+            CASE_CALL,
+            config_with(|c| {
+                c.ignore_case = false;
+                c.compati_function_no_ignore_case = compat;
+            }),
+        );
+        assert!(
+            !ok,
+            "IgnoreCase:NO must make `CALL sub` miss `@SUB` (compat={compat}), got:\n{out}"
+        );
+    }
 }

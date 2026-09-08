@@ -483,6 +483,36 @@ pub(super) fn run_instruction(
         InstructionType::BuiltinVar => {
             let var = inst.as_builtin_var().unwrap();
             let c = ctx.pop_int()? as u32;
+
+            // `擬似変数RANDの仕様をeramakerに合わせる` (`CompatiRAND`, default
+            // `false` per `Config/ConfigData.cs:96`) swaps `RandToken` for
+            // `CompatiRandToken` (`GameData/Variable/VariableData.cs:293-297`),
+            // a different *reduction* over the very same generator: `0` gives
+            // `0`, a negative argument is negated, and the result is
+            // `GetNextRand(32768) % i`
+            // (`GameData/Variable/VariableToken.cs:1471-1479`). The argument is
+            // also optional and may be `0`, because the two parse-time refusals
+            // are themselves gated on the key
+            // (`GameData/Variable/VariableParser.cs:167-179`).
+            //
+            // A negative argument cannot survive `take_arg_list`'s `u32` index
+            // conversion, so this mode reads the raw values instead. The
+            // generator itself (`emuera_rand`, bit-exact with real Emuera) is
+            // untouched: only `next_rand`'s bound and the modulo differ.
+            if matches!(var, BuiltinVariable::Rand) && ctx.config.compati_rand {
+                let args = ctx.take_value_list(c)?;
+                let i = match args.first() {
+                    Some(value) => value.clone().try_into_int()?,
+                    None => 0,
+                };
+                let value = if i == 0 {
+                    0
+                } else {
+                    ctx.var.next_rand(32768) % i.abs()
+                };
+                ctx.push(value);
+                return Ok(InstructionWorkflow::Normal);
+            }
             let args = ctx.take_arg_list(None, c)?;
 
             use BuiltinVariable::*;
