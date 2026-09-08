@@ -789,6 +789,22 @@ the function and replaces just the line with an `InvalidLine` (`GameProc/ErbLoad
 4 more of eramegaten's functions (125,549 → 125,553) and takes its call-graph not-found warnings
 from 4 to 0. The two corpus replays are otherwise byte-identical to before.
 
+**`@SKILL_SET_全体HPバリア` is not a seventh finding — the probe was wrong.** While confirming the
+above, `EXISTFUNCTION("SKILL_SET_全体HPバリア")` (`SKILL_ACTION_EXTRA.ERB:675`) returned 0 on both
+the fixed and the pre-fix binary, which looked like a function still being dropped for some other
+reason. It was an artefact of the probe harness: those runs put the single ERB in a scratch game
+with no `*.ERH` and no `CSV/`, and the same file declares `#DIM IS_ENHANCE_ABLE, MAX_PLAYER_CHARA`
+at `:255`, whose size is a `#DIM CONST` in `Data/ERB/VAR.ERH:109`. Without the header the size is
+not constant, that declaration fails, and the file's functions never register — a property of the
+scratch game, not of the engine.
+
+Probed inside the real corpus instead (probe line spliced into eramegaten's own `@SYSTEM_TITLE`,
+`/tmp` copy, corpus read-only): `A=1 B=1 C=1 D=1` for `SKILL_SET_全体HPバリア`,
+`SKILL_SET_HPバリア`, `SKILL_SET_カジャンダ` and `GOUSEI_CONDITION` — all registered — and the
+full replay reports zero `존재하지 않습니다` at run time. No engine defect here; the lesson is that
+a flattened single-file probe cannot answer a registration question for a corpus whose `#DIM`
+sizes come from headers.
+
 **The publish/redraw ordering is enforced by the type system, not by this document.**
 `SystemFunctions::redraw` and its three `input_*` siblings take a `graphics::Painted<'_>` by value;
 the only thing that can construct one is `GraphicsStore::publish`, whose field is private to
