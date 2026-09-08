@@ -366,6 +366,11 @@ pub enum FormType {
     Percent,
     Brace,
     At,
+    /// A run of exactly three identical `*`/`+`/`=`/`/`/`$` characters
+    /// inside FORM text (payload is that character), Emuera's
+    /// `SystemIgnoreTripleSymbol` shorthand
+    /// (`Sub/LexicalAnalyzer.cs:1203-1218`).
+    TripleSymbol(u8),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -388,7 +393,7 @@ pub enum FormStrType {
 /// Every byte that can end a run is ASCII, so scanning raw bytes can never
 /// match inside a multi-byte character — all of its bytes are >= 0x80 — and
 /// the offset returned is always a UTF-8 boundary.
-fn find_form_delim(h: &[u8], ty: FormStrType) -> Option<usize> {
+fn find_form_delim(h: &[u8], ty: FormStrType, triple_symbol: bool) -> Option<usize> {
     // `%`, `{` and `\` end a run in every context, and memchr3 vectorises
     // them; a type-specific delimiter can only win if it comes earlier, so
     // the second pass is bounded by the first hit.
@@ -402,7 +407,36 @@ fn find_form_delim(h: &[u8], ty: FormStrType) -> Option<usize> {
         FormStrType::Str => memchr::memchr(b'"', head),
     };
 
-    extra.or(common)
+    let delim = extra.or(common);
+    // A triple-symbol run can only win if it starts before whatever `delim`
+    // found, so bound the scan the same way the type-specific pass is
+    // bounded by `common` above.
+    if triple_symbol {
+        let bound = &h[..delim.unwrap_or(h.len())];
+        find_triple_symbol(bound).or(delim)
+    } else {
+        delim
+    }
+}
+
+/// `emuera.config` `FORM中の三連記号を展開しない`
+/// (`SystemIgnoreTripleSymbol`). Finds the first byte offset at which one of
+/// `*`, `+`, `=`, `/`, `$` repeats three times in a row, walking one byte at
+/// a time exactly like `StringStream.TripleSymbol()`
+/// (`Sub/StringStream.cs:152-157`): a run of more than three collapses into
+/// as many triples as fit, left to right, with 1 or 2 leftover characters
+/// staying literal, because the real scan only ever consumes exactly three
+/// at a time and then resumes from there.
+fn find_triple_symbol(h: &[u8]) -> Option<usize> {
+    let mut i = 0;
+    while i + 3 <= h.len() {
+        let c = h[i];
+        if matches!(c, b'*' | b'+' | b'=' | b'/' | b'$') && h[i + 1] == c && h[i + 2] == c {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
 }
 
 /// The literal text in front of the next interpolation, plus which kind of
@@ -420,6 +454,7 @@ fn find_form_delim(h: &[u8], ty: FormStrType) -> Option<usize> {
 /// find the end of a run without decoding anything.
 fn parse_form_normal_str<'a>(
     ty: FormStrType,
+    triple_symbol: bool,
 ) -> impl Fn(&'a str) -> IResult<'a, (Cow<'a, str>, Option<FormType>)> {
     move |i: &'a str| {
         let bytes = i.as_bytes();
@@ -434,7 +469,7 @@ fn parse_form_normal_str<'a>(
         // remaining input starts: they differ by the delimiter, which is
         // consumed for `%`/`{`/`\@` but left in place for the others.
         let (form_ty, text_end, rest) = loop {
-            let at = match find_form_delim(&bytes[pos..], ty) {
+            let at = match find_form_delim(&bytes[pos..], ty, triple_symbol) {
                 Some(off) => pos + off,
                 None => break (None, bytes.len(), bytes.len()),
             };
@@ -467,6 +502,7 @@ fn parse_form_normal_str<'a>(
                 },
                 b'%' => break (Some(FormType::Percent), at, at + '%'.len_utf8()),
                 b'{' => break (Some(FormType::Brace), at, at + '{'.len_utf8()),
+                c @ (b'*' | b'+' | b'=' | b'/' | b'$') => break (Some(FormType::TripleSymbol(c)), at, at + 3),
                 // `#`, `(`, `,` and `"` are only in the delimiter set of the
                 // `FormStrType` that stops on them, so reaching one here means
                 // the segment ends and the delimiter stays for the caller.
@@ -526,7 +562,7 @@ pub fn form_str<'c, 'a>(
     move |i: &'a str| {
         let is_arg_init_value = ctx.is_arg.get();
         ctx.is_arg.set(false);
-        let normal_str = parse_form_normal_str(ty);
+        let normal_str = parse_form_normal_str(ty, !ctx.ignore_triple_symbol());
         let (mut i, (normal, mut ty)) = normal_str(i)?;
 
         let mut form = FormText::new(erars_ast::intern_literal(&normal));
@@ -571,6 +607,7 @@ pub fn form_str<'c, 'a>(
                     let (i, cond) = form_str_cond_form(ctx)(i)?;
                     (i, cond, None, None)
                 }
+                Some(FormType::TripleSymbol(c)) => (i, triple_symbol_expr(ctx, c), None, None),
                 None => break,
             };
 
@@ -586,6 +623,35 @@ pub fn form_str<'c, 'a>(
         ctx.is_arg.set(is_arg_init_value);
 
         Ok((i, Expr::FormText(form)))
+    }
+}
+
+/// Emuera's FORM triple-symbol shorthand
+/// (`GameData/StrForm.cs:22-50`,`:60-83`): `***` reads as `NAME(TARGET)`,
+/// `+++` as `CALLNAME(MASTER)`, `===` as `CALLNAME(PLAYER)`, `///` as
+/// `NAME(ASSI)`, and `$$$` as `CALLNAME(TARGET)` — the character-array
+/// variable indexed by whichever character number the second variable
+/// currently holds. Built directly rather than re-parsed from source text:
+/// Emuera constructs the equivalent `VariableTerm` operands directly too,
+/// so there is no named-index text for `TARGET`/`MASTER`/`PLAYER`/`ASSI` to
+/// resolve.
+fn triple_symbol_expr(ctx: &ParserContext, symbol: u8) -> Expr {
+    let var = |name: &'static str, args: Vec<Expr>| {
+        Expr::Var(Variable {
+            var: ctx.intern_ident(name),
+            func_extern: None,
+            args,
+        })
+    };
+    let index = |name: &'static str| var(name, Vec::new());
+
+    match symbol {
+        b'*' => var("NAME", vec![index("TARGET")]),
+        b'+' => var("CALLNAME", vec![index("MASTER")]),
+        b'=' => var("CALLNAME", vec![index("PLAYER")]),
+        b'/' => var("NAME", vec![index("ASSI")]),
+        b'$' => var("CALLNAME", vec![index("TARGET")]),
+        _ => unreachable!("find_triple_symbol only matches '*'/'+'/'='/'/'/'$'"),
     }
 }
 

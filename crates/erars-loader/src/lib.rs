@@ -681,6 +681,7 @@ pub fn run_script(
                 )
                 .with_warn_back_compatibility(config.warn_back_compatibility)
                 .with_allow_full_space(config.system_allow_full_space)
+                .with_ignore_triple_symbol(config.system_ignore_triple_symbol)
                 .with_call_graph(need_call_graph);
 
             log::debug!("Parse And Compile {}", erb.display());
