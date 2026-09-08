@@ -29,12 +29,21 @@ use erars_ui::VirtualConsole;
 use erars_vm::{console_config, FunctionDic, SystemFunctions, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
-pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
+/// `debug_mode` must be the exact same value passed to [`run_script`] for
+/// this `vm`/`ctx`: it is not recorded on either, so the caller is the only
+/// source of truth for what the compile that produced them actually used
+/// (see [`cache_fingerprint`]).
+pub fn save_script(
+    vm: TerminalVm,
+    ctx: VmContext,
+    target_path: &str,
+    debug_mode: bool,
+) -> anyhow::Result<()> {
     let target = resolve_game_path(target_path);
     let target_path = target.to_str().unwrap_or(target_path);
     // The config the run actually used, not a re-read of the files: what got
     // compiled is what must be identified.
-    let fingerprint = cache_fingerprint(target_path, &ctx.config)?;
+    let fingerprint = cache_fingerprint(target_path, &ctx.config, debug_mode)?;
     let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);
     erars_bytecode::write_to(&mut out, &vm.dic, fingerprint)?;
     let local_infos: HashMap<StrKey, Vec<(StrKey, &VariableInfo)>> =
@@ -119,9 +128,9 @@ fn first_match(target_path: &str, relative: &str) -> Option<PathBuf> {
     .find(|path| path.is_file())
 }
 
-/// Identity of everything a compiled `game.era` was built *from*: the config
-/// and the source files. Stored in the cache by `--save` and re-checked by
-/// `--load`.
+/// Identity of everything a compiled `game.era` was built *from*: the config,
+/// `debug_mode`, and the source files. Stored in the cache by `--save` and
+/// re-checked by `--load`.
 ///
 /// `VERSION_MAGIC` alone was the only identity token the cache had, and it
 /// names the *format*, not the inputs. So a `game.era` compiled with, say,
@@ -133,6 +142,15 @@ fn first_match(target_path: &str, relative: &str) -> Option<PathBuf> {
 /// `キャラクタ変数の引数を補完しない` (variable resolution) and
 /// `システム関数の上書きを許可する` (name resolution): each changes parse
 /// output, and the cache accepted the mismatch and ran the wrong program.
+///
+/// `debug_mode` (Emuera's `-DEBUG`, `Program.cs:82-88`) is the same hazard
+/// though it is not an `EraConfig` field: it is a separate parameter to
+/// [`run_script`], threaded into every `ParserContext::with_debug`, and it
+/// decides whether `[IF_DEBUG]`/`[IF_NDEBUG]` regions and the `DEBUGPRINT`
+/// family compile at all. A cache built with `--debug` and loaded without it
+/// (or the reverse) changes parse output exactly like the config keys above,
+/// so it is mixed into the fingerprint alongside them rather than left as the
+/// one remaining silent-misread path.
 ///
 /// DELIBERATE: the whole `EraConfig` is hashed, not a hand-picked list of the
 /// parse-affecting keys. The list would be right today and rot the moment a
@@ -149,7 +167,11 @@ fn first_match(target_path: &str, relative: &str) -> Option<PathBuf> {
 /// surviving mtime is untouched, and `*.ERH` is included — headers decide
 /// `#DIM` shapes and are as parse-affecting as any script. Emuera's own key
 /// is an order-insensitive xor of mtimes alone, which a rename does not move.
-pub fn cache_fingerprint(target_path: &str, config: &EraConfig) -> anyhow::Result<u64> {
+pub fn cache_fingerprint(
+    target_path: &str,
+    config: &EraConfig,
+    debug_mode: bool,
+) -> anyhow::Result<u64> {
     // FNV-1a, written out rather than taken from `DefaultHasher`, whose
     // output std explicitly does not promise to be stable across releases —
     // an unstable hash would silently invalidate every cache on a toolchain
@@ -164,6 +186,7 @@ pub fn cache_fingerprint(target_path: &str, config: &EraConfig) -> anyhow::Resul
 
     let mut state = 0xcbf29ce484222325u64;
     mix(&mut state, serde_yaml::to_string(config)?.as_bytes());
+    mix(&mut state, &[debug_mode as u8]);
 
     let target = resolve_game_path(target_path);
     let root = target.to_str().unwrap_or(target_path);
@@ -294,10 +317,16 @@ pub fn registration_diagnostics(
 }
 
 /// SAFETY: Any reference to interner is not exist
+///
+/// `debug_mode` must be the exact same value the caller would pass to
+/// [`run_script`] for this game: the cache does not carry it back out, so
+/// this is the only source of truth [`cache_fingerprint`] has to check
+/// against.
 pub unsafe fn load_script(
     target_path: &str,
     system: Box<dyn SystemFunctions>,
     config: EraConfig,
+    debug_mode: bool,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     let target = resolve_game_path(target_path);
     let target_path = target.to_str().unwrap_or(target_path);
@@ -322,7 +351,7 @@ pub unsafe fn load_script(
     // into the process-global interner: a stale cache must be refused without
     // having overwritten global state with its contents first.
     let stored = erars_bytecode::read_header(&mut &*file)?;
-    let expected = cache_fingerprint(target_path, &config)?;
+    let expected = cache_fingerprint(target_path, &config, debug_mode)?;
     if stored != expected {
         anyhow::bail!(
             "game.era is stale: it was compiled from a different config or different \
@@ -1075,29 +1104,73 @@ pub fn run_script(
         // line — the deferred-until-reached behaviour Emuera gets from not
         // reducing the argument at load or from marking the line `IsError`.
         //
-        // `is_argument_class_failure` is the faithful marker of that class. It
-        // lists the messages Emuera would defer or mark-`IsError` without ever
-        // touching `noError`, which in erars all come from argument parsers
-        // whose statement *shape* was already recognised: the nom-expression
-        // funnels (`try_nom!`, `crates/erars-compiler/src/parser.rs:120,131`,
-        // which wrap every `expr::*` argument parser and nothing else) and the
-        // assignment-RHS list (`assign_stmt_from_list`, ::80,89). A line-shape
-        // failure (`[lexer] Unknown line`, a malformed `@`/`#`, a broken
-        // block), or a refused function registration (`ErbLoader.cs:368`),
-        // has a different message and still aborts. Resolved this way in the
-        // loader rather than tagged on `ParserError` because erars's parser
-        // returns one `ParserError` tuple for both classes and the lexer its
-        // own `(String, Range)`; threading a class flag through all of it is
-        // heavier than this one, exhaustively-commented predicate, and the
-        // two messages it matches are the funnels' literal outputs, not free
-        // text. Matching is the conservative direction for anything unknown:
-        // an unlisted class-2 line aborts (loudly, and only when the flag is
-        // off) rather than silently running a program with a broken line.
-        fn is_argument_class_failure(diag: &Diagnostic<StrKey>) -> bool {
+        // DELIBERATE: this predicate enumerates the line-*shape* set (closed,
+        // four sites above) and treats everything else as argument-class,
+        // rather than the reverse. A first version of this check enumerated
+        // the argument-class messages instead and defaulted anything unlisted
+        // to abort, reasoning that was the "conservative" direction — but that
+        // reasoning inverts which set is actually safe to default. The
+        // line-shape set is closed: it is exactly Emuera's four `noError`
+        // sites and does not grow. The argument-class set is open: it is
+        // "every message any argument validator in `erars-compiler` can ever
+        // produce", and it grows every time anyone adds one. Enumerating the
+        // open set and defaulting the rest to abort means each new argument
+        // validation message is a silent new false abort on a corpus Emuera
+        // boots — `Invalid alignment` (`ALIGNMENT`/`BEGIN`), the `CALLEVENT`
+        // target check, the `TRYGOTOLIST` argument check and
+        // `文字列代入は禁止されています` (`system_ignore_string_set`,
+        // `ArgumentBuilder.cs:777-779`) all did exactly this under the first
+        // version, despite every one of them being unambiguously
+        // argument-class. Enumerating the closed set instead means an unlisted
+        // message can only ever be a *false negative* (missing a genuine new
+        // line-shape site), never a false abort — and the four sites are
+        // fixed in Emuera's own source, so there is nothing new to miss.
+        //
+        // Mapped against the concrete sites that can produce an "E2000"
+        // diagnostic here (`erars-lexer::Lexer::next_line`,
+        // `erars-compiler::parser::{parse_and_compile, parse_stmt}`):
+        //
+        // - `"[lexer] Unknown line"` (`erars-lexer/src/lib.rs:882,949`) —
+        //   nothing recognisable at all: `ParseLine` (`:428`).
+        // - `"[lexer] Unknown sharp line"` (`erars-lexer/src/lib.rs:863`) — a
+        //   `#` directive whose name isn't one of `SharpCode`'s:
+        //   `ParseSharpLine` (`:355`).
+        // - `"First line should be function line"`
+        //   (`crates/erars-compiler/src/parser.rs:4402,4500`) — a statement
+        //   before any `@label`; the file would compile zero functions either
+        //   way, so this must always abort rather than silently accepting a
+        //   headerless file.
+        // - a message containing `"for parsing as statement"`
+        //   (`crates/erars-compiler/src/parser.rs:3855`, the
+        //   `EraLine::SharpLine | EraLine::FunctionLine` catch-all in
+        //   `parse_stmt`) — a `#`/`@` line appearing where a statement body
+        //   line was expected: the shape mismatch of `ParseSharpLine`
+        //   (`:355`)/`InvalidLine` (`:407`) reached from inside a function
+        //   body rather than at top level.
+        //
+        // NOT in this set, by the same correspondence check: a malformed
+        // `@label` header itself (`self::expr::function_line`, wrapped by
+        // `try_nom!`, `crates/erars-compiler/src/parser.rs:120,131`) produces
+        // the same `"Expression parsing failed"` text as any other expression
+        // argument failure — erars's single nom-expression funnel cannot tell
+        // the two apart by message, so this one narrow case is necessarily
+        // classed as argument-class (never aborts) despite genuinely being
+        // Emuera's `InvalidLabelLine` (`:368`). That is a pre-existing
+        // divergence in erars's architecture, not a regression introduced by
+        // this predicate: the first version already treated every
+        // `"Expression parsing failed"` message as non-aborting too.
+        //
+        // Resolved this way in the loader rather than tagged on `ParserError`
+        // because erars's parser returns one `ParserError` tuple for both
+        // classes and the lexer its own `(String, Range)`; threading a class
+        // flag through all of it is heavier than this one, exhaustively
+        // cross-referenced predicate.
+        fn is_line_shape_failure(diag: &Diagnostic<StrKey>) -> bool {
             diag.labels.iter().any(|l| {
-                l.message.starts_with("Expression parsing failed")
-                    || l.message == "대입할 값이 없습니다"
-                    || l.message == "배치 대입 목록 중간에 값이 생략되었습니다"
+                l.message.starts_with("[lexer] Unknown line")
+                    || l.message.starts_with("[lexer] Unknown sharp line")
+                    || l.message == "First line should be function line"
+                    || l.message.contains("for parsing as statement")
             })
         }
         if !ctx.config.compati_error_line
@@ -1105,7 +1178,7 @@ pub fn run_script(
                 || diagnostics.iter().any(|d| {
                     d.severity == Severity::Error
                         && d.code.as_deref() == Some("E2000")
-                        && !is_argument_class_failure(d)
+                        && is_line_shape_failure(d)
                 }))
         {
             anyhow::bail!(

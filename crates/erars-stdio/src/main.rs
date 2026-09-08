@@ -119,7 +119,7 @@ fn main() {
         .spawn(move || {
             let config = load_config(&args.target_path);
             let loaded = if args.load {
-                unsafe { load_script(&args.target_path, system, config) }
+                unsafe { load_script(&args.target_path, system, config, args.debug) }
             } else {
                 run_script(
                     &args.target_path,
@@ -161,7 +161,7 @@ fn main() {
                     erars_ast::get_interner().current_memory_usage() / 1024
                 );
             } else if args.save {
-                save_script(vm, ctx, &args.target_path).unwrap();
+                save_script(vm, ctx, &args.target_path, args.debug).unwrap();
             } else {
                 // Emuera titles its window from GAMEBASE right after the
                 // script loads (`GameProc/Process.cs:144`
