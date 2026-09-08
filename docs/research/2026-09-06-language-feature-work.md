@@ -487,6 +487,27 @@ exactly as an enum variant's absence is not evidence of missing behavior.
       new load-time call-graph/argument-shape analysis pass; none of it exists in `erars-loader` to
       hang a config check on today, so this cluster is the largest single piece of new work on the
       list.
+
+      **DONE 2026-09-08, with one negative result.** The call graph now exists:
+      `erars-compiler` records each function's `CALL`/`JUMP` call sites while compiling
+      (`CompiledFunction::calls`, the only place that still knows whether the target was a literal
+      — Emuera reads the same fact as `Argument.IsConst`,
+      `GameProc/Function/Instraction.Child.cs:2259-2264`), and `erars-loader`'s new
+      `call_graph::analyze` walks them breadth-first from Emuera's `Depth = 0` roots (event labels,
+      the system-label set at `GameData/IdentifierDictionary.cs:65-107`, and `#FUNCTION` labels per
+      `GameProc/LogicalLineParser.cs:172`). That drives `function_not_found_warning`,
+      `function_not_called_warning`, `ignore_uncalled_function`, and finally the report's third
+      figure (`被呼出関数合計`, `GameProc/ErbLoader.cs:753`). Nothing is serialised into `game.era`:
+      the graph is consumed at load and dropped, and the compiler is told not to collect call sites
+      at all when every consumer is at its default, so a game with no `emuera.config` pays nothing.
+      **`reduce_argument_on_load` is NOT wired and should not be**: it selects *when* arguments are
+      parsed, and erars has no lazy argument parsing to defer — the compiler reduces every
+      instruction's arguments before the VM starts, which is `YES` permanently, while the
+      call-argument binding Emuera does at load runs unconditionally there too (`CALL` carries
+      `FORCE_SETARG`, `Instraction.Child.cs:2251`, so `GameProc/ErbLoader.cs:876` parses it whatever
+      the flag says). Its `ONCE` value is also not what this doc guessed: `Config/Config.cs:303-317`
+      compares an `mtime` key over every `*.ERB`/`*.CSV` against the previous run's, i.e.
+      "re-analyse when the sources changed", not "analyse functions called once".
     - *Function-registration/override cluster*: `allow_function_overloading` (`システム関数の上書き
       を許可する`, default YES — whether a user-defined function may override a name from
       `式中で使える関数`/the in-expression-function table; touches wherever `erars-loader` registers

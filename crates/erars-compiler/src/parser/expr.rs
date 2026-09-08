@@ -1100,6 +1100,53 @@ pub fn call_arg_list<'c, 'a>(
     }
 }
 
+/// Trims a FORM call target's outer spaces and tabs.
+///
+/// Emuera reads the target of `CALLFORM`/`JUMPFORM`-family instructions with
+/// `AnalyseFormattedString(st, …, trim: true)`
+/// (`GameProc/Function/ArgumentBuilder.cs:586`), and that flag trims the
+/// *first* literal chunk's start and the *last* one's end
+/// (`Sub/LexicalAnalyzer.cs:1270-1274`) — the non-form branch does the same
+/// with an explicit `str.Trim(' ', '\t')` (`:594`). Without it, the extremely
+/// common `CALLFORM FUNC , arg` layout names `"FUNC "`: eramegaten writes it
+/// at `Data/ERB/RPG/アイテム関連/装備品/EQUIPMENT.ERB:2289` and in four places
+/// in `SHOW_STATUS/SHOW_STATUS_WINDOW.ERB`, and erars used to fail those calls
+/// at run time with `Function FUNC  is not exists`.
+fn trim_form_target(ctx: &ParserContext, name: Expr) -> Expr {
+    let retrim = |key: StrKey, start: bool, end: bool| {
+        let text = key.resolve();
+        let mut trimmed = text;
+        if start {
+            trimmed = trimmed.trim_start_matches([' ', '\t']);
+        }
+        if end {
+            trimmed = trimmed.trim_end_matches([' ', '\t']);
+        }
+        if trimmed.len() == text.len() {
+            key
+        } else {
+            ctx.interner.get_or_intern(trimmed)
+        }
+    };
+
+    match name {
+        Expr::String(key) => Expr::String(retrim(key, true, true)),
+        Expr::FormText(mut form) => {
+            match form.other.last_mut() {
+                // The tail literal is the last chunk; the head literal only
+                // loses its leading run.
+                Some(last) => {
+                    form.first = retrim(form.first, true, false);
+                    last.1 = retrim(last.1, false, true);
+                }
+                None => form.first = retrim(form.first, true, true),
+            }
+            Expr::FormText(form)
+        }
+        other => other,
+    }
+}
+
 pub fn call_jump_line<'c, 'a>(
     ctx: &'c ParserContext,
     is_form: bool,
@@ -1107,7 +1154,8 @@ pub fn call_jump_line<'c, 'a>(
     move |i| {
         context("call_jump_line", move |i| {
             let (i, name) = if is_form {
-                call_form_arg_expr(ctx)(i)?
+                let (i, name) = call_form_arg_expr(ctx)(i)?;
+                (i, trim_form_target(ctx, name))
             } else {
                 // A `CALL`/`JUMP` target is a function name, so it folds
                 // only when Emuera's `ICFunction` is on
