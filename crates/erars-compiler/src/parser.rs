@@ -2483,6 +2483,10 @@ pub struct ParserContext<'p> {
     debug_mode: bool,
     /// See [`ParserContext::with_ignore_string_set`].
     ignore_string_set: bool,
+    /// Emuera's `Config.ICFunction`, inverted: `true` means function and
+    /// attribute names are matched case-*sensitively*. See
+    /// [`ParserContext::with_case_sensitive_functions`].
+    case_sensitive_functions: bool,
 }
 
 impl<'p> ParserContext<'p> {
@@ -2500,6 +2504,7 @@ impl<'p> ParserContext<'p> {
             ban_percent: Cell::new(false),
             debug_mode: false,
             ignore_string_set: false,
+            case_sensitive_functions: false,
         }
     }
 
@@ -2518,6 +2523,34 @@ impl<'p> ParserContext<'p> {
     pub fn with_ignore_string_set(mut self, ignore_string_set: bool) -> Self {
         self.ignore_string_set = ignore_string_set;
         self
+    }
+
+    /// Emuera keeps two separate case-folding switches:
+    /// `ICFunction = IgnoreCase && !CompatiFunctionNoignoreCase` for function
+    /// names, attributes and `BEGIN` keywords, and `ICVariable = IgnoreCase`
+    /// for variables, instructions and `$labels`
+    /// (`Config/Config.cs:34-50`, `:401-425`). `関数・属性については大文字小文字
+    /// を無視しない` (`CompatiFunctionNoignoreCase`) defaults `false`
+    /// (`Config/ConfigData.cs:98`) and `大文字小文字の違いを無視する`
+    /// (`IgnoreCase`) defaults `true` (`Config/ConfigData.cs:40`), so the
+    /// default is case-*insensitive* function names — what erars has always
+    /// done. Pass `ICFunction == false` here to fold neither the definition
+    /// name nor the call target.
+    ///
+    /// Only the function half is switchable: erars folds variable and
+    /// instruction names unconditionally, so `ICVariable == false` (a bare
+    /// `IgnoreCase:NO`) is still unimplemented on the variable side.
+    pub fn with_case_sensitive_functions(mut self, case_sensitive: bool) -> Self {
+        self.case_sensitive_functions = case_sensitive;
+        self
+    }
+
+
+
+    /// Whether function/attribute names are matched case-sensitively, i.e.
+    /// Emuera's `!Config.ICFunction`.
+    pub fn case_sensitive_functions(&self) -> bool {
+        self.case_sensitive_functions
     }
 
     /// The preprocessor for one ERB of this game.

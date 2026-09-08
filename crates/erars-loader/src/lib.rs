@@ -579,7 +579,12 @@ pub fn run_script(
             let source = read_file(erb).unwrap();
             let ctx = ParserContext::new(header_info.clone(), StrKey::new(erb.to_str().unwrap()))
                 .with_debug(debug_mode)
-                .with_ignore_string_set(config.system_ignore_string_set);
+                .with_ignore_string_set(config.system_ignore_string_set)
+                // Emuera `Config.ICFunction = IgnoreCase && !CompatiFunctionNoignoreCase`
+                // (`Config/Config.cs:36`); this is its negation.
+                .with_case_sensitive_functions(
+                    !(config.ignore_case && !config.compati_function_no_ignore_case),
+                );
 
             log::debug!("Parse And Compile {}", erb.display());
 

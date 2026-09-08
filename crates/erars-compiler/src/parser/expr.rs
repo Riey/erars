@@ -218,6 +218,17 @@ pub fn ident_no_case<'a>(i: &'a str) -> IResult<'a, Cow<'a, str>> {
     map(ident, upper_no_case)(i)
 }
 
+/// A function name, attribute or `BEGIN` keyword: folded to upper case unless
+/// [`ParserContext::with_case_sensitive_functions`] is set, i.e. exactly
+/// Emuera's `ICFunction` (`Config/Config.cs:36`).
+pub fn func_ident<'a>(ctx: &ParserContext, i: &'a str) -> IResult<'a, Cow<'a, str>> {
+    if ctx.case_sensitive_functions() {
+        map(ident, Cow::Borrowed)(i)
+    } else {
+        ident_no_case(i)
+    }
+}
+
 /// Uppercase `s` the way `str::to_uppercase` would, without copying when it
 /// would not change anything.
 ///
@@ -608,6 +619,11 @@ fn ident_or_method_expr<'c, 'a>(
     ctx: &'c ParserContext,
 ) -> impl FnMut(&'a str) -> IResult<'a, Expr> + 'c {
     move |i| {
+        // Kept unfolded: if this identifier turns out to name a *user
+        // function* and Emuera's `ICFunction` is off, the function key is the
+        // text as written (`Config/Config.cs:36`). Variables, instructions and
+        // builtin methods stay `ICVariable`, i.e. always folded.
+        let (_, raw_ident) = ident(i)?;
         let (i, ident) = ident_no_case(i)?;
         let ident = ctx.replace(&ident);
         let i = i.trim_start_matches(' ');
@@ -623,6 +639,9 @@ fn ident_or_method_expr<'c, 'a>(
 
             match ident.parse() {
                 Ok(meth) => Ok((i, Expr::BuiltinMethod(meth, args))),
+                _ if ctx.case_sensitive_functions() => {
+                    Ok((i, Expr::Method(ctx.intern_ident(raw_ident), args)))
+                }
                 _ => Ok((i, Expr::Method(ctx.intern_ident(&ident), args))),
             }
         } else {
@@ -1090,7 +1109,10 @@ pub fn call_jump_line<'c, 'a>(
             let (i, name) = if is_form {
                 call_form_arg_expr(ctx)(i)?
             } else {
-                let (i, function) = ident_no_case(i)?;
+                // A `CALL`/`JUMP` target is a function name, so it folds
+                // only when Emuera's `ICFunction` is on
+                // (`Config/Config.cs:36`).
+                let (i, function) = func_ident(ctx, i)?;
                 let function = ctx.replace(&function);
 
                 if !erars_lexer::utils::is_ident(function.as_ref()) {
@@ -1467,7 +1489,8 @@ pub fn function_line<'c, 'a>(
 ) -> impl FnMut(&'a str) -> IResult<'a, (Cow<'a, str>, Vec<(Variable, Option<InlineValue>)>)> + 'c {
     move |i| {
         pair(
-            de_sp(ident_no_case),
+            // The `@label` itself is a function name: same `ICFunction` gate.
+            de_sp(|i| func_ident(ctx, i)),
             preceded(
                 sp,
                 alt((
