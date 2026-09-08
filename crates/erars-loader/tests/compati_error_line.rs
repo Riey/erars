@@ -17,6 +17,19 @@
 //! touching `noError`, so the game boots either way. eramegaten ships six such
 //! lines (its Korean-translation damage), which is why this classification is
 //! a live requirement and not an abstraction.
+//!
+//! The classifying predicate in `crates/erars-loader/src/lib.rs` enumerates
+//! the line-shape set (closed: exactly the four sites above) and treats
+//! everything else as argument-class — not the reverse. A first version
+//! enumerated the argument-class messages instead and aborted on anything
+//! unlisted; since that set is open (it grows with every new argument
+//! validator `erars-compiler` gains), every message this file didn't yet
+//! know about became a silent new false abort. `ALIGNMENT`/`BEGIN`'s
+//! `Invalid alignment`, `CALLEVENT`'s target check, `TRYGOTOLIST`'s argument
+//! check, and `system_ignore_string_set`'s
+//! `文字列代入は禁止されています` are exactly that: each aborted under the
+//! first version despite being unambiguously argument-class, and each gets
+//! its own regression test below.
 
 use erars_compiler::EraConfig;
 use erars_loader::run_script;
@@ -95,6 +108,110 @@ fn compati_error_line_on_keeps_loading_past_an_unrecognisable_line() {
 /// `noError`). erars recovers the line to a `THROW` stand-in and loads —
 /// loading here is the acceptance criterion for the class split.
 const MALFORMED_FORM_ERB: &str = "@SYSTEM_TITLE\nPRINTFORMW hel%lo\nPRINTL ok\n";
+
+/// `ALIGNMENT`/`BEGIN` share `Invalid alignment` (`parser.rs:3059,3063`) when
+/// their argument isn't a valid enum variant — an otherwise well-formed
+/// statement whose one argument didn't parse, exactly like the FORM case
+/// above. Argument-class, so it must not abort — the first version of the
+/// predicate aborted on this because it enumerated argument-class messages
+/// and this one wasn't on the list.
+const INVALID_ALIGNMENT_ERB: &str = "@SYSTEM_TITLE\nALIGNMENT GARBAGE\nPRINTL ok\n";
+
+#[test]
+fn compati_error_line_off_does_not_abort_on_an_invalid_alignment_argument() {
+    let dir = fixture_dir_with_erb("alignment-off", INVALID_ALIGNMENT_ERB);
+    let config = EraConfig::default();
+    let (_vm, _ctx, _tx) = run_script(
+        dir.0.to_str().unwrap(),
+        Box::new(NullSystemFunctions),
+        config,
+        false,
+        false,
+        false,
+    )
+    .expect("an invalid ALIGNMENT argument must not abort, even with CompatiErrorLine off");
+}
+
+const INVALID_BEGIN_ERB: &str = "@SYSTEM_TITLE\nBEGIN GARBAGE\nPRINTL ok\n";
+
+#[test]
+fn compati_error_line_off_does_not_abort_on_an_invalid_begin_argument() {
+    let dir = fixture_dir_with_erb("begin-off", INVALID_BEGIN_ERB);
+    let config = EraConfig::default();
+    let (_vm, _ctx, _tx) = run_script(
+        dir.0.to_str().unwrap(),
+        Box::new(NullSystemFunctions),
+        config,
+        false,
+        false,
+        false,
+    )
+    .expect("an invalid BEGIN argument must not abort, even with CompatiErrorLine off");
+}
+
+/// `CALLEVENT`'s target must be one of the nine `EventType` names
+/// (`parser.rs:3484-3492`); an unrecognised name is argument-class, not a
+/// statement-shape failure.
+const CALLEVENT_TARGET_ERROR_ERB: &str = "@SYSTEM_TITLE\nCALLEVENT NOTANEVENT\nPRINTL ok\n";
+
+#[test]
+fn compati_error_line_off_does_not_abort_on_a_callevent_target_error() {
+    let dir = fixture_dir_with_erb("callevent-off", CALLEVENT_TARGET_ERROR_ERB);
+    let config = EraConfig::default();
+    let (_vm, _ctx, _tx) = run_script(
+        dir.0.to_str().unwrap(),
+        Box::new(NullSystemFunctions),
+        config,
+        false,
+        false,
+        false,
+    )
+    .expect("a CALLEVENT target error must not abort, even with CompatiErrorLine off");
+}
+
+/// A `TRYGOTOLIST` candidate may not carry arguments (`parser.rs:3442-3447`,
+/// `ErbLoader.cs:1330-1385`); `FUNC LABEL1, 1` violates that, but the
+/// `TRYGOTOLIST`/`FUNC`/`ENDFUNC` shape itself is fine — argument-class.
+const TRYGOTOLIST_ARGUMENT_ERROR_ERB: &str =
+    "@SYSTEM_TITLE\nTRYGOTOLIST\nFUNC LABEL1, 1\nENDFUNC\nPRINTL ok\n";
+
+#[test]
+fn compati_error_line_off_does_not_abort_on_a_trygotolist_argument_error() {
+    let dir = fixture_dir_with_erb("trygotolist-off", TRYGOTOLIST_ARGUMENT_ERROR_ERB);
+    let config = EraConfig::default();
+    let (_vm, _ctx, _tx) = run_script(
+        dir.0.to_str().unwrap(),
+        Box::new(NullSystemFunctions),
+        config,
+        false,
+        false,
+        false,
+    )
+    .expect("a TRYGOTOLIST argument error must not abort, even with CompatiErrorLine off");
+}
+
+/// `文字列変数の代入に文字列式を強制する` (`system_ignore_string_set`) refuses a
+/// plain `=` on a string variable and demands `'=` instead
+/// (`ArgumentBuilder.cs:777-779`: `文字列代入は禁止されています`). The `LOCALS =`
+/// statement shape is recognised fine; only this argument-level check fails —
+/// argument-class, not line-shape.
+const FORCED_STRING_ASSIGN_ERB: &str = "@SYSTEM_TITLE\nLOCALS = hello, world\nPRINTL ok\n";
+
+#[test]
+fn compati_error_line_off_does_not_abort_on_a_forced_string_assignment() {
+    let dir = fixture_dir_with_erb("string-forced-off", FORCED_STRING_ASSIGN_ERB);
+    let mut config = EraConfig::default();
+    config.system_ignore_string_set = true;
+    let (_vm, _ctx, _tx) = run_script(
+        dir.0.to_str().unwrap(),
+        Box::new(NullSystemFunctions),
+        config,
+        false,
+        false,
+        false,
+    )
+    .expect("a forced-string-assignment refusal must not abort, even with CompatiErrorLine off");
+}
 
 #[test]
 fn compati_error_line_off_does_not_abort_on_an_argument_expression_failure() {
