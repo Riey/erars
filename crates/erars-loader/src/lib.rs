@@ -1,3 +1,5 @@
+pub mod call_graph;
+
 use anyhow::Context;
 use erars_reader::read_file;
 use parking_lot::Mutex;
@@ -19,7 +21,9 @@ use codespan_reporting::{
     },
 };
 use erars_ast::{StrKey, VariableInfo};
-use erars_compiler::{Bump, CompiledFunction, EraConfig, HeaderInfo, ParserContext};
+use erars_compiler::{
+    Bump, CompiledFunction, DisplayWarningFlag, EraConfig, HeaderInfo, ParserContext,
+};
 use erars_lint::{check_function, ErarsFiles};
 use erars_ui::VirtualConsole;
 use erars_vm::{console_config, FunctionDic, SystemFunctions, TerminalVm, VmContext};
@@ -577,6 +581,16 @@ pub fn run_script(
         // `VmContext::new` a little further down, so the flag is captured
         // here for the end-of-load report below.
         let display_report = config.display_report;
+
+        // Emuera's `checkScript` call graph (`GameProc/ErbLoader.cs:604-756`)
+        // feeds exactly three things: the report's called-function count and
+        // the two warning keys. All three default to off — report `NO`
+        // (`Config/ConfigData.cs:73`), both keys `IGNORE` (`:77-78`) — so with
+        // no `emuera.config` the compiler is told not to collect call sites
+        // either, and the whole feature costs nothing.
+        let need_call_graph = config.display_report
+            || config.function_not_found_warning != DisplayWarningFlag::Ignore
+            || config.function_not_called_warning != DisplayWarningFlag::Ignore;
         let start_message = info.replace.start_message.clone();
 
         // Sort the header files for the same reason the ERB list is sorted
@@ -666,7 +680,8 @@ pub fn run_script(
                     !(config.ignore_case && !config.compati_function_no_ignore_case),
                 )
                 .with_warn_back_compatibility(config.warn_back_compatibility)
-                .with_allow_full_space(config.system_allow_full_space);
+                .with_allow_full_space(config.system_allow_full_space)
+                .with_call_graph(need_call_graph);
 
             log::debug!("Parse And Compile {}", erb.display());
 
@@ -758,7 +773,10 @@ pub fn run_script(
         ctx.var.reserve_local_functions(funcs.len());
         let min_level = ctx.config.display_warning_level;
         let func_count = funcs.len();
-        for (_, func) in funcs {
+
+        let mut graph_input = Vec::new();
+
+        for (_, mut func) in funcs {
             let already_defined = function_dic.get_func_opt(func.header.name).is_some();
             let (register, diagnostics) = registration_diagnostics(
                 func.header.name.resolve(),
@@ -785,12 +803,61 @@ pub fn run_script(
                 continue;
             }
 
+            if need_call_graph {
+                // A `Depth = 0` label: an event function, one of Emuera's
+                // system labels, or an expression function
+                // (`GameProc/LogicalLineParser.cs:172`, `:360-365`).
+                let name = func.header.name;
+                let is_root = name.resolve().parse::<erars_ast::EventType>().is_ok()
+                    || call_graph::is_system_label_name(name.resolve())
+                    || func.header.infos.iter().any(|i| {
+                        matches!(i, erars_ast::FunctionInfo::Function | erars_ast::FunctionInfo::FunctionS)
+                    });
+
+                graph_input.push((name, func.header.file_path, is_root, std::mem::take(&mut func.calls)));
+            }
+
             function_dic.insert_compiled_func(
                 &mut ctx.var,
                 &ctx.header_info.default_local_size,
                 func,
             );
         }
+
+        let call_analysis = if need_call_graph {
+            let nodes: Vec<call_graph::GraphNode<'_>> = graph_input
+                .iter()
+                .map(|(name, file_path, is_root, calls)| call_graph::GraphNode {
+                    name: *name,
+                    file_path: *file_path,
+                    is_root: *is_root,
+                    calls,
+                })
+                .collect();
+
+            let analysis = call_graph::analyze(&nodes, &ctx.config);
+
+            for (level, file, line, message) in &analysis.diagnostics {
+                if *level < min_level {
+                    continue;
+                }
+                let message = if *line > 0 {
+                    format!("{}:{line}: {message}", file.resolve())
+                } else if file.resolve().is_empty() {
+                    message.clone()
+                } else {
+                    format!("{}: {message}", file.resolve())
+                };
+                if error_to_stderr {
+                    eprintln!("{message}");
+                }
+                log::warn!("{message}");
+            }
+
+            Some(analysis)
+        } else {
+            None
+        };
 
         check_time!("Parse/Compile ERB", @ctx ctx);
 
@@ -808,12 +875,14 @@ pub fn run_script(
         // field's doc comment) — not a raw re-read-and-`str::lines()` of
         // each file, which would also count comments and blank lines
         // Emuera's own parser already dropped before its counter saw them.
-        // The third figure needs a load-time call graph erars does not
-        // build yet (the function-registration work is a separate session's
-        // scope), so this reports only the two counts already on hand.
+        // The third figure is Emuera's `usedLabelCount`: how many functions
+        // the load-time call graph reached.
         if display_report {
             let total_lines = total_line_count.load(Ordering::Relaxed);
-            tx.print_line(format!("총 줄 수:{total_lines}, 전체 함수 수:{func_count}"));
+            let called = call_analysis.as_ref().map_or(0, |a| a.called_count);
+            tx.print_line(format!(
+                "총 줄 수:{total_lines}, 전체 함수 수:{func_count}, 피호출 함수 수:{called}"
+            ));
         } else {
             tx.print_line(start_message);
         }

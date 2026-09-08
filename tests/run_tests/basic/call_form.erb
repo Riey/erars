@@ -1,5 +1,10 @@
 @SYSTEM_TITLE
 CALLFORM FOO_{123}, 345
+; Emuera trims the outer spaces/tabs of a FORM call target
+; (`ArgumentBuilder.cs:586` -> `LexicalAnalyzer.cs:1270-1274`), so the very
+; common `CALLFORM NAME , arg` layout names `@NAME`, not `@"NAME "`.
+CALLFORM FOO_123 , 346
+CALLFORM 	FOO_{12}3	, 347
 
 @FOO_123(ARG)
-PRINTFORM FOO_{ARG}
+PRINTFORML FOO_{ARG}

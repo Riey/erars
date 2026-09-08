@@ -1345,9 +1345,25 @@ impl Default for TextDrawingMode {
 }
 
 /// `ロード時に引数を解析する` — Emuera `ReduceArgumentOnLoadFlag`
-/// (`Config/ConfigCode.cs`, item at `Config/ConfigData.cs:86`): whether the
-/// loader resolves call arguments as it reads, never (`NO`), only for
-/// functions it sees called once (`ONCE`), or always (`YES`).
+/// (`Config/ConfigCode.cs:15-21`, item at `Config/ConfigData.cs:74`, default
+/// `NO`): whether every instruction's arguments are parsed while the loader
+/// reads (`YES`), left for first execution (`NO`), or parsed only when the
+/// scripts changed since the last run (`ONCE` — `Config/Config.cs:303-317`
+/// compares an `mtime` key over every `*.ERB`/`*.CSV` against the one saved
+/// last time; it is a "re-analyse on source change" mode, not a per-function
+/// one).
+///
+/// NOT WIRED, and deliberately so: this is a *when*, not a *whether*. erars
+/// has no lazy argument parsing at all — the compiler reduces every
+/// instruction's arguments to bytecode before the VM ever runs, which is
+/// `YES`'s behaviour permanently. The checks the key's own documentation
+/// frames as its benefit are not skippable here, and the call-argument
+/// binding against the callee's parameters that Emuera performs at load runs
+/// unconditionally there too: `CALL` carries `FORCE_SETARG`
+/// (`GameProc/Function/Instraction.Child.cs:2251`), so `setArgument` parses
+/// it whatever this flag says (`GameProc/ErbLoader.cs:876`). Honouring `NO`
+/// would mean *deferring* work erars already did, which no game can observe
+/// except as later error reporting.
 #[derive(
     Clone, Copy, Debug, Default, PartialEq, Eq, EnumString, Display, Serialize, Deserialize,
 )]
@@ -2483,6 +2499,10 @@ pub struct ParserContext<'p> {
     debug_mode: bool,
     /// See [`ParserContext::with_ignore_string_set`].
     ignore_string_set: bool,
+    /// Whether compiled functions carry their call sites
+    /// ([`crate::CompiledFunction::calls`]). On by default; the loader turns
+    /// it off when nothing consumes the call graph.
+    collect_calls: bool,
     /// Emuera's `Config.ICFunction`, inverted: `true` means function and
     /// attribute names are matched case-*sensitively*. See
     /// [`ParserContext::with_case_sensitive_functions`].
@@ -2520,6 +2540,7 @@ impl<'p> ParserContext<'p> {
             ban_percent: Cell::new(false),
             debug_mode: false,
             ignore_string_set: false,
+            collect_calls: true,
             case_sensitive_functions: false,
             warn_back_compatibility: true,
             leveled_warnings: RefCell::default(),
@@ -2556,6 +2577,12 @@ impl<'p> ParserContext<'p> {
     /// (`GameProc/Function/ArgumentBuilder.cs:777-779`).
     pub fn with_ignore_string_set(mut self, ignore_string_set: bool) -> Self {
         self.ignore_string_set = ignore_string_set;
+        self
+    }
+
+    /// See [`Self::collect_calls`].
+    pub fn with_call_graph(mut self, collect_calls: bool) -> Self {
+        self.collect_calls = collect_calls;
         self
     }
 
@@ -4165,6 +4192,7 @@ impl<'p> ParserContext<'p> {
                     self.hoist_var_decls(pp);
                 }
                 let mut compiler = Compiler::new();
+                compiler.collect_calls = self.collect_calls;
                 // A label erars cannot read is the one case Emuera also treats
                 // as poisoning the load: `InvalidLabelLine` sets `noError`
                 // (`GameProc/ErbLoader.cs:366`), which is what refuses to start
@@ -4193,6 +4221,7 @@ impl<'p> ParserContext<'p> {
                                 },
                                 goto_labels: compiler.goto_labels,
                                 body: compiler.out.into_boxed_slice(),
+                                calls: compiler.calls,
                             });
                         }
                     };

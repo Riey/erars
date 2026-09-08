@@ -11,6 +11,40 @@ pub struct CompiledFunction {
     pub header: FunctionHeader,
     pub goto_labels: HashMap<StrKey, u32>,
     pub body: Box<[Instruction]>,
+    /// Every `CALL`/`JUMP`-family statement this function contains, in source
+    /// order — the raw material for the loader's call graph.
+    ///
+    /// Emuera collects the same facts in `setJumpTo`
+    /// (`GameProc/ErbLoader.cs:1430-1470`), which reads
+    /// `func.Argument.IsConst` off the already-parsed `CALL` argument
+    /// (`GameProc/Function/Instraction.Child.cs:2259-2264`). Collecting them
+    /// here rather than re-deriving them from the instruction stream is both
+    /// exact and free: the compiler is the last place that still knows whether
+    /// the call target was a literal, since a compiled `LoadStr` for the
+    /// target is indistinguishable from one pushed by an argument.
+    ///
+    /// Deliberately *not* part of [`erars_vm::FunctionBody`]: it is consumed
+    /// once, at load, and keeping it would cost permanent RSS for every one of
+    /// a corpus's call sites (`eramegaten_p_kr` alone compiles 125,549
+    /// functions).
+    pub calls: Vec<CallSite>,
+}
+
+/// One `CALL`/`JUMP`-family statement found while compiling.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CallSite {
+    /// The target function name when it is a literal, `None` when it is a
+    /// form/expression. Emuera's `!func.Argument.IsConst` sets `useCallForm`
+    /// and gives up on the whole uncalled-function check
+    /// (`GameProc/ErbLoader.cs:667-676`), because a computed target may name
+    /// anything.
+    pub target: Option<StrKey>,
+    /// Source line, for the diagnostic.
+    pub line: u32,
+    /// A `TRY*` form. Emuera raises no not-found warning for these
+    /// (`Instraction.Child.cs:2270`, `!func.Function.IsTry()`): failing to
+    /// find the function is their documented purpose.
+    pub is_try: bool,
 }
 
 /// Everything one ERB file yielded.
@@ -52,6 +86,15 @@ pub struct Compiler {
     /// `ErbLoader.noError` alone). Drained by the caller, which turns each
     /// position into a source span.
     pub warnings: Vec<(String, ScriptPosition)>,
+    /// See [`CompiledFunction::calls`].
+    pub calls: Vec<CallSite>,
+    /// Whether to fill [`Self::calls`] at all. The loader turns it off when
+    /// every consumer of the call graph is at its default
+    /// (`crates/erars-loader/src/lib.rs`, `need_call_graph`), which is what
+    /// keeps a game with no `emuera.config` from paying even the per-function
+    /// `Vec` this would otherwise allocate — measurably, on a
+    /// 125,549-function corpus.
+    pub collect_calls: bool,
     current_pos: ScriptPosition,
     /// See [`CompiledErb::line_count`]: one per [`Self::push_stmt_with_pos`]
     /// call, including recursive ones for nested block bodies.
@@ -66,6 +109,8 @@ impl Compiler {
             continue_marks: Vec::new(),
             break_marks: Vec::new(),
             warnings: Vec::new(),
+            calls: Vec::new(),
+            collect_calls: true,
             current_pos: ScriptPosition::default(),
             line_count: 0,
         }
@@ -491,6 +536,30 @@ impl Compiler {
     }
 
     #[inline]
+    /// Records one `CALL`/`JUMP`-family call site. `is_try` mirrors Emuera's
+    /// `IsTry()` set, which in the AST is exactly "has a catch body" — plain
+    /// `TRYCALL` parses with an empty one
+    /// (`crates/erars-compiler/src/parser.rs:3284-3288`).
+    fn record_call(&mut self, name: &Expr, is_try: bool) {
+        if !self.collect_calls {
+            return;
+        }
+
+        // The same literal test `push_name_expr` uses to emit a constant
+        // target, and the same one Emuera reads as `Argument.IsConst`.
+        let target = match name {
+            Expr::String(key) => Some(key.to_global()),
+            Expr::FormText(form) if form.other.is_empty() => Some(form.first.to_global()),
+            _ => None,
+        };
+
+        self.calls.push(CallSite {
+            target,
+            line: self.current_pos.line,
+            is_try,
+        });
+    }
+
     pub fn push_stmt_with_pos(&mut self, stmt: StmtWithPos) -> CompileResult<()> {
         self.line_count += 1;
         self.push(Instruction::report_position(stmt.1));
@@ -747,6 +816,7 @@ impl Compiler {
                 is_jump,
                 is_method,
             } => {
+                self.record_call(&name, catch.is_some());
                 self.push_name_expr(name)?;
                 let count = self.push_opt_list(args, |idx, out| {
                     out.push(Instruction::load_default_argument(idx as u32));
@@ -798,6 +868,9 @@ impl Compiler {
                 let mut hits = Vec::with_capacity(candidates.len());
 
                 for (name, args) in candidates {
+                    // A candidate list is a `TRY*LIST`: missing candidates are
+                    // the point (`GameProc/ErbLoader.cs:1330-1385`).
+                    self.record_call(&name, true);
                     self.push_name_expr(name)?;
                     let count = self.push_opt_list(args, |idx, out| {
                         out.push(Instruction::load_default_argument(idx as u32));
@@ -933,6 +1006,7 @@ pub fn compile(func: Function) -> CompileResult<CompiledFunction> {
         header: func.header,
         goto_labels: compiler.goto_labels,
         body: compiler.out.into_boxed_slice(),
+        calls: compiler.calls,
     })
 }
 
