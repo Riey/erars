@@ -32,8 +32,11 @@ use hashbrown::HashMap;
 pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
     let target = resolve_game_path(target_path);
     let target_path = target.to_str().unwrap_or(target_path);
+    // The config the run actually used, not a re-read of the files: what got
+    // compiled is what must be identified.
+    let fingerprint = cache_fingerprint(target_path, &ctx.config)?;
     let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);
-    erars_bytecode::write_to(&mut out, &vm.dic)?;
+    erars_bytecode::write_to(&mut out, &vm.dic, fingerprint)?;
     let local_infos: HashMap<StrKey, Vec<(StrKey, &VariableInfo)>> =
         ctx.var.local_infos().collect();
     rmp_serde::encode::write(&mut out, &(&*ctx.header_info, local_infos)).unwrap();
@@ -114,6 +117,97 @@ fn first_match(target_path: &str, relative: &str) -> Option<PathBuf> {
     .ok()?
     .flatten()
     .find(|path| path.is_file())
+}
+
+/// Identity of everything a compiled `game.era` was built *from*: the config
+/// and the source files. Stored in the cache by `--save` and re-checked by
+/// `--load`.
+///
+/// `VERSION_MAGIC` alone was the only identity token the cache had, and it
+/// names the *format*, not the inputs. So a `game.era` compiled with, say,
+/// `文字列変数の代入に文字列式を強制する:NO` was silently reused by a run that
+/// set it to `YES` — and that key decides what parses at all. The same holds
+/// for `全角スペースをホワイトスペースに含める` (lexing),
+/// `ユーザー関数の全ての引数の省略を許可する` /
+/// `ユーザー関数の引数に自動的にTOSTRを補完する` (call binding),
+/// `キャラクタ変数の引数を補完しない` (variable resolution) and
+/// `システム関数の上書きを許可する` (name resolution): each changes parse
+/// output, and the cache accepted the mismatch and ran the wrong program.
+///
+/// DELIBERATE: the whole `EraConfig` is hashed, not a hand-picked list of the
+/// parse-affecting keys. The list would be right today and rot the moment a
+/// key lands whose reach is not obvious — and its failure mode when it rots
+/// is the silent misread this function exists to close, whereas the failure
+/// mode of hashing too much is a spurious cache miss that recompiles. The
+/// corpus load this protects is ~1.2 s. Display and runtime keys therefore
+/// invalidate the cache too; that is the cheap direction of the tradeoff.
+///
+/// Source identity follows Emuera's `getUpdateKey` (`Config/Config.cs:321-330`,
+/// which mixes each `*.ERB`/`*.CSV` file's last-write time), with two
+/// deliberate strengthenings: erars also mixes each path and length, so
+/// adding, deleting or renaming a file invalidates the cache even if every
+/// surviving mtime is untouched, and `*.ERH` is included — headers decide
+/// `#DIM` shapes and are as parse-affecting as any script. Emuera's own key
+/// is an order-insensitive xor of mtimes alone, which a rename does not move.
+pub fn cache_fingerprint(target_path: &str, config: &EraConfig) -> anyhow::Result<u64> {
+    // FNV-1a, written out rather than taken from `DefaultHasher`, whose
+    // output std explicitly does not promise to be stable across releases —
+    // an unstable hash would silently invalidate every cache on a toolchain
+    // bump, which is safe but needlessly expensive, and would make this
+    // function untestable against a fixed value.
+    fn mix(state: &mut u64, bytes: &[u8]) {
+        for b in bytes {
+            *state ^= *b as u64;
+            *state = state.wrapping_mul(0x100000001b3);
+        }
+    }
+
+    let mut state = 0xcbf29ce484222325u64;
+    mix(&mut state, serde_yaml::to_string(config)?.as_bytes());
+
+    let target = resolve_game_path(target_path);
+    let root = target.to_str().unwrap_or(target_path);
+    let subdir = if config.search_subdirectory { "/**" } else { "" };
+    let match_options = glob::MatchOptions {
+        case_sensitive: false,
+        require_literal_leading_dot: true,
+        require_literal_separator: true,
+    };
+
+    let mut sources = Vec::new();
+    for pattern in [
+        format!("{root}/CSV{subdir}/*.CSV"),
+        format!("{root}/ERB{subdir}/*.ERB"),
+        format!("{root}/ERB{subdir}/*.ERH"),
+    ] {
+        for path in glob::glob_with(&pattern, match_options)?.flatten() {
+            let meta = match path.metadata() {
+                Ok(meta) if meta.is_file() => meta,
+                // A path that vanished between the glob and the stat, or is a
+                // directory named like a script: the compile pass would not
+                // read it either.
+                _ => continue,
+            };
+            let mtime = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map_or(0, |d| d.as_nanos() as u64);
+            sources.push((path.to_string_lossy().to_lowercase(), mtime, meta.len()));
+        }
+    }
+    // The globs walk deterministically, but sort anyway: the fingerprint must
+    // not depend on directory-enumeration order, which is a filesystem
+    // property rather than a property of the sources.
+    sources.sort_unstable();
+
+    for (path, mtime, len) in &sources {
+        mix(&mut state, path.as_bytes());
+        mix(&mut state, &mtime.to_le_bytes());
+        mix(&mut state, &len.to_le_bytes());
+    }
+
+    Ok(state)
 }
 
 /// Where save files live: `sav/` under the game root only when
@@ -218,7 +312,26 @@ pub unsafe fn load_script(
         .map(&file)
         .context("mmap bytecode file")?;
     let mut file_bytes = &*file;
-    let dic = erars_bytecode::read_from(&mut file_bytes)?;
+
+    // A cache built from other inputs is not this game. Refusing here is the
+    // whole point: every parse-affecting config key and every source edit
+    // used to be invisible to `--load`, which ran the stale program without
+    // a word (see `cache_fingerprint`).
+    //
+    // Checked before `read_from`, which installs the file's identifier table
+    // into the process-global interner: a stale cache must be refused without
+    // having overwritten global state with its contents first.
+    let stored = erars_bytecode::read_header(&mut &*file)?;
+    let expected = cache_fingerprint(target_path, &config)?;
+    if stored != expected {
+        anyhow::bail!(
+            "game.era is stale: it was compiled from a different config or different \
+             source files (fingerprint {stored:016x}, current {expected:016x}). \
+             Rebuild it with --save, or run without --load."
+        );
+    }
+
+    let (dic, _) = erars_bytecode::read_from(&mut file_bytes)?;
 
     log::info!("Load game data");
     // `rmp_serde`'s default 1024-level nesting-depth guard

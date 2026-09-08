@@ -34,17 +34,20 @@ fn every_spent_magic_is_rejected_and_current_format_round_trips() {
     // decode this tail as garbage `FunctionDic` content instead of refusing
     // to load it. That silent-misread is exactly the failure mode the
     // magic check exists to turn into a clean, up-front rejection.
-    for spent_magic in [11u8, 12, 13, 14] {
+    // 15 joined them when 16 added the cache-identity fingerprint word.
+    //
+    // The rejection is now a clean `InvalidData` error rather than a panic:
+    // a stale cache is an ordinary thing to find on disk, and a panic under
+    // `--quite` printed nothing at all.
+    for spent_magic in [11u8, 12, 13, 14, 15] {
         let mut stale = vec![2u8, 3, 2, 3, 0, 0, 0, spent_magic];
         stale.extend_from_slice(&[0u8; 64]);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| unsafe {
-            read_from(&stale[..])
-        }));
-        assert!(
-            result.is_err(),
-            "a file written with spent VERSION_MAGIC {spent_magic} must be rejected, not misread"
-        );
+        let result = unsafe { read_from(&stale[..]) };
+        let err = result
+            .err()
+            .unwrap_or_else(|| panic!("spent VERSION_MAGIC {spent_magic} must be rejected, not misread"));
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     }
 
     // `FunctionDic::new()` reaches for the process-global interner; nothing
@@ -72,17 +75,21 @@ fn every_spent_magic_is_rejected_and_current_format_round_trips() {
     dic.normal.insert(fn_name, body.clone());
 
     let mut buf = Vec::new();
-    write_to(&mut buf, &dic).expect("write_to");
+    write_to(&mut buf, &dic, 0xfeed_beef_dead_1234).expect("write_to");
 
     // The current magic must be present and distinct from every spent one.
     assert_eq!(&buf[..7], &[2, 3, 2, 3, 0, 0, 0]);
     let current_magic = buf[7];
     assert!(
-        ![11, 12, 13, 14].contains(&current_magic),
+        ![11, 12, 13, 14, 15].contains(&current_magic),
         "current VERSION_MAGIC ({current_magic}) reuses a value this arc already spent"
     );
 
-    let dic2 = unsafe { read_from(&buf[..]).expect("read_from") };
+    let (dic2, fingerprint) = unsafe { read_from(&buf[..]).expect("read_from") };
+    assert_eq!(
+        fingerprint, 0xfeed_beef_dead_1234,
+        "the cache-identity fingerprint must survive the round trip verbatim"
+    );
     let body2 = dic2
         .normal
         .get(&fn_name)
