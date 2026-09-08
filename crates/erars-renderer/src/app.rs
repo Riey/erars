@@ -53,6 +53,9 @@ pub struct AppConfig {
     pub use_bitmap_strikes: bool,
     /// `emuera.config` `ボタンの途中で行を折りかえさない` (`ButtonWrap`).
     pub button_wrap: bool,
+    /// `emuera.config` `ver1739以前の非ボタン折り返しを再現する`
+    /// (`CompatiLinefeedAs1739`).
+    pub compati_linefeed_as_1739: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -339,6 +342,7 @@ impl App {
     fn geometry(&self) -> Geometry {
         Geometry::new(self.surface_size().0.max(1), self.metrics())
             .with_button_wrap(self.cfg.button_wrap)
+            .with_compati_linefeed_as_1739(self.cfg.compati_linefeed_as_1739)
     }
 
     fn view(&self) -> View {
@@ -534,7 +538,9 @@ impl App {
         if self.current_req.is_some() {
             if self.strip_dirty || self.strip.is_none() {
                 let line = input_line(&self.input, self.frame.fore_color.0);
-                let g = Geometry::new(win_w.max(1), m).with_button_wrap(self.cfg.button_wrap);
+                let g = Geometry::new(win_w.max(1), m)
+                    .with_button_wrap(self.cfg.button_wrap)
+                    .with_compati_linefeed_as_1739(self.cfg.compati_linefeed_as_1739);
                 // Not `layout`: sweeping here would evict the log's clusters
                 // (they are shaped in `relayout`, not per frame).
                 self.strip = Some(layout_no_sweep(&[line], &g, &mut self.shaper));

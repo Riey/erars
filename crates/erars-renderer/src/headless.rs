@@ -182,7 +182,7 @@ pub fn render_frame(
     input: Option<&str>,
     hover: Option<usize>,
 ) -> Result<Rendered, RenderError> {
-    render_frame_opts(shaper, frame, content_w, height, input, hover, true, false)
+    render_frame_opts(shaper, frame, content_w, height, input, hover, true, false, false)
 }
 
 /// [`render_frame`] with the `--no-bitmap-strikes` switch.
@@ -195,6 +195,7 @@ pub fn render_frame_opts(
     hover: Option<usize>,
     use_bitmap_strikes: bool,
     button_wrap: bool,
+    compati_linefeed_as_1739: bool,
 ) -> Result<Rendered, RenderError> {
     let (device, queue) = request_device().ok_or(RenderError::NoAdapter)?;
     render_frame_on(
@@ -208,6 +209,7 @@ pub fn render_frame_opts(
         hover,
         use_bitmap_strikes,
         button_wrap,
+        compati_linefeed_as_1739,
     )
 }
 
@@ -230,6 +232,7 @@ pub fn render_frame_on(
     hover: Option<usize>,
     use_bitmap_strikes: bool,
     button_wrap: bool,
+    compati_linefeed_as_1739: bool,
 ) -> Result<Rendered, RenderError> {
     let content_w = content_w.max(1);
     let height = height.max(1);
@@ -242,7 +245,9 @@ pub fn render_frame_on(
         });
     }
     let m = *shaper.metrics();
-    let g = Geometry::new(content_w, m).with_button_wrap(button_wrap);
+    let g = Geometry::new(content_w, m)
+        .with_button_wrap(button_wrap)
+        .with_compati_linefeed_as_1739(compati_linefeed_as_1739);
     let mut raster = GlyphRaster::new(device, use_bitmap_strikes);
     let hl = frame.hl_color.0;
 
@@ -563,7 +568,7 @@ mod tests {
         input: Option<&str>,
         hover: Option<usize>,
     ) -> Rendered {
-        render_frame_on(&dev.0, &dev.1, shaper, fr, w, h, input, hover, true, false)
+        render_frame_on(&dev.0, &dev.1, shaper, fr, w, h, input, hover, true, false, false)
             .expect("render within the adapter's texture limits")
     }
 
@@ -1220,7 +1225,7 @@ mod tests {
         let max = dev.0.limits().max_texture_dimension_2d;
 
         let too_wide =
-            render_frame_on(&dev.0, &dev.1, &mut shaper, &fr, max + 1, 64, None, None, true, false);
+            render_frame_on(&dev.0, &dev.1, &mut shaper, &fr, max + 1, 64, None, None, true, false, false);
         let Err(err) = too_wide else {
             panic!("a frame past the adapter's ceiling must be rejected, not rendered")
         };

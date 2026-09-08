@@ -1048,6 +1048,7 @@ fn tui_png_korean() {
         None,
         true,
         false,
+        false,
     )
     .expect("headless render");
     assert_eq!((img.width, img.height), (760, 480));
