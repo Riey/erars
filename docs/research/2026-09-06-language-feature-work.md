@@ -623,3 +623,46 @@ on `master` via the separate direct commit §4 describes, and an untracked draft
 corrected `master` content — an earlier, superseded revision (the very "first pass" §3.1 and §6.2
 above cite as containing false positives), not unmerged work. `git worktree remove --force` for
 both, then `git branch -d` for all three. Roster after cleanup: no worktrees, `master` only.
+
+## 8. Wave-2 corrections: `auto_save` corpus verification and a perf finding it exposed
+
+Two corrections to the wave-1/wave-2 `auto_save` wiring (`crates/erars-vm/src/terminal_vm/executor.rs`,
+the `BeginType::Shop` handler), requested after the initial report: real-corpus replay evidence
+(not just the new unit test) for the default-behaviour claim, and an explicit code comment
+justifying the native-vs-Emuera save-format choice at the autosave call site.
+
+**Default-preservation replay (`eramegaten_p_kr`, `--use-input`/`--exit-when-input-exhausted`,
+deepest available RON replay from a concurrent session, 10 game-days).** Built two release
+`erars-stdio` binaries — one from `master` before this arc's autosave commits, one after — and ran
+the identical replay against a scratch copy of the corpus with fresh `Data/sav/`. Console output
+(`sorted diff` to normalize warning-line reordering) was byte-identical between the two binaries
+except for warning-count reordering; the tail (post-`[LOOK]` gameplay through the crash both
+binaries still hit at the same script line, an unrelated pre-existing issue) matched exactly. The
+`after` binary additionally wrote `Data/sav/save99.rsav.gz` (autosave slot) where the `before`
+binary wrote nothing there — confirming the feature fires without changing any other observable
+behaviour, i.e. the default (`auto_save: true`, matching real Emuera's own default per
+`ConfigData.cs:60`) is additive-only against this corpus. Per-run wall time for the autosave write
+itself measured at ~750ms extra (alternating-order timing to control for cache effects: `before`
+~470ms, `after` ~1220-1280ms, 4 runs each) for this corpus's single `BEGIN SHOP` call.
+
+**`eraTHYMKR` surfaced a real perf issue the eramegaten replay didn't.** `eraTHYMKR` calls
+`BEGIN SHOP` from `EVENT_TURNEND.ERB:496` — unconditionally, every game turn, not from a
+player-driven shop menu action like eramegaten's script does. Replaying
+`bench-inputs/eraTHYMKR_ordinary_play.ron` (previously ~130ms) against the `after` binary took
+**92.6 seconds** — because the corpus's own `@SYSTEM_AUTOSAVE` override
+(`ERB/SYS/SAVELOAD.erb:216-233`) calls real `SAVEDATA` once per turn (rotating across 10 slots via
+`GLOBAL:0 % 10`), and each `SAVEDATA` call in erars costs roughly **900ms** despite the resulting
+`.rsav.gz` files being tiny (~42KB, confirmed via `ls -la Data/sav/`). The `@SYSTEM_AUTOSAVE`
+function body itself (`SAVEINFO_EX`, a few string concatenations and one `GETTIME` call — no loops,
+no array scans) rules out ERB-side cost; the ~900ms is native, inside
+`VariableStorage::get_serializable` and/or `save::write_save_data`
+(`crates/erars-vm/src/save.rs`), i.e. **pre-existing, orthogonal to this arc's wiring, and merely
+newly *reachable at high frequency*** because nothing in either corpus previously called `SAVEDATA`
+100+ times in a single session. Output correctness is unaffected — the replay still completes and
+the tail is unchanged — so this is a latent performance defect, not a behaviour bug, and is
+**out of scope for this config-wiring session** to fix (`erars-vm`'s save path is a live area:
+another wave-2 session owns `erars-vm/src/save/emuera`). Flagging it here since `auto_save` is the
+first config key whose *correct* wiring makes real per-turn `SAVEDATA` calls a realistic corpus
+pattern rather than a rare menu action, and a future session should profile
+`get_serializable`/`write_save_data` before shipping any other feature that increases `SAVEDATA`
+call frequency.

@@ -1062,6 +1062,22 @@ pub fn run_begin(
                 try_call!(vm, "SAVEINFO", tx, ctx);
                 ctx.put_form_enabled = false;
                 let description = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
+                // DECISION: this writes erars's own native `.rsav.gz` slot
+                // format, not the Emuera-compatible writer
+                // (`crate::save::emuera::write`). Real Emuera's own
+                // `beginAutoSave`/`endAutoSaveCallSaveInfo` always write
+                // through its *own* save format — there is no separate
+                // "compat" writer to choose between on that engine — so
+                // there is no cross-engine behaviour this call needs to
+                // match. `SystemSaveInBinary`/`SystemSaveInUTF8` govern only
+                // the explicit `SAVEDATA_EMUERA`/`SAVEGLOBAL_EMUERA`
+                // commands (`crates/erars-vm/src/terminal_vm/executor.rs:
+                // 4580-4603`), which exist specifically to interoperate with
+                // real Emuera's `.sav` files; autosave has no such
+                // interoperability requirement, and erars's native format is
+                // the default for every other save path in this engine.
+                // Keeping autosave on the native writer is therefore the
+                // consistent choice, not an oversight.
                 let sav = ctx.var.get_serializable(&ctx.header_info, description);
                 if let Err(err) = crate::save::write_save_data(&ctx.sav_dir, AUTO_SAVE_SLOT, &sav)
                 {
