@@ -2519,6 +2519,12 @@ pub struct ParserContext<'p> {
     /// back-compatibility warning is level 0, so it cannot ride that channel.
     /// Drained by [`Self::parse_and_compile`].
     leveled_warnings: RefCell<Vec<(String, std::ops::Range<usize>, u8)>>,
+    /// Lines that failed to parse *inside* a block body and were replaced with
+    /// Emuera's `InvalidLine` stand-in, so the enclosing function still
+    /// registers (`GameProc/ErbLoader.cs:403-407`, `:423-427`,
+    /// `GameProc/LogicalLine.cs:74-85`). Drained by
+    /// [`Self::parse_and_compile`] into the file's error list.
+    recovered_errors: RefCell<Vec<(String, std::ops::Range<usize>)>>,
     /// `emuera.config` `全角スペースをホワイトスペースに含める`
     /// (`SystemAllowFullSpace`, default `true`): see the field of the same
     /// name on [`erars_lexer::Preprocessor`].
@@ -2544,6 +2550,7 @@ impl<'p> ParserContext<'p> {
             case_sensitive_functions: false,
             warn_back_compatibility: true,
             leveled_warnings: RefCell::default(),
+            recovered_errors: RefCell::default(),
             allow_full_space: true,
         }
     }
@@ -2684,6 +2691,54 @@ impl<'p> ParserContext<'p> {
         ret
     }
 
+    /// Parses one line of a block body, recovering the way Emuera does.
+    ///
+    /// Emuera pairs block openers up in a later pass, so a line it cannot read
+    /// inside an `IF`/`FOR`/`SELECTCASE` body is just an `InvalidLine` and the
+    /// enclosing function still registers and still runs — the line only
+    /// throws if it is reached (`GameProc/ErbLoader.cs:403-407`, `:423-427`,
+    /// `GameProc/LogicalLine.cs:74-85`). erars parses those bodies
+    /// recursively, so without this the failure propagates out of the whole
+    /// construct and the function is dropped: erars would not know the
+    /// function exists at all. That silent loss is real - eramegaten's
+    /// `@EVENT_5` and `@GOUSEI_CONDITION` both disappeared this way over one
+    /// mistyped line each.
+    ///
+    /// A failure that already consumed the lines *after* this one (a nested
+    /// block opener that failed mid-body) still propagates: there is no line
+    /// left to resume from.
+    fn parse_stmt_recovering(
+        &self,
+        line: EraLine,
+        pp: &mut Preprocessor,
+        b: &Bump,
+    ) -> ParserResult<Option<StmtWithPos>> {
+        let pos = pp.script_pos();
+        let before = pp.left_text().len();
+        match self.parse_stmt(line, pp, b) {
+            Ok(stmt) => Ok(stmt),
+            Err(err) if pp.left_text().len() == before => {
+                let stmt = Stmt::Command(
+                    BuiltinCommand::Throw,
+                    vec![Some(Expr::str(&err.0))],
+                );
+                self.recovered_errors.borrow_mut().push(err);
+                Ok(Some(StmtWithPos(stmt, pos)))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    /// Turns any recovered body line back into a hard error, for the
+    /// all-or-nothing entry points (tests, single statements) that have no
+    /// error list to report it through.
+    fn reject_recovered(&self) -> ParserResult<()> {
+        match self.recovered_errors.borrow_mut().drain(..).next() {
+            Some(err) => Err(err),
+            None => Ok(()),
+        }
+    }
+
     fn read_body_until(
         &self,
         end: InstructionCode,
@@ -2698,7 +2753,7 @@ impl<'p> ParserContext<'p> {
                     break Ok(out);
                 }
                 Some(line) => {
-                    out.extend(self.parse_stmt(line, pp, b)?);
+                    out.extend(self.parse_stmt_recovering(line, pp, b)?);
                 }
                 None => {
                     error!(pp.span(), format!("Block doesn't end with {end}"));
@@ -2812,7 +2867,7 @@ impl<'p> ParserContext<'p> {
                     break Ok((try_nom!(pp, self::expr::expr(self)(args)).1, out));
                 }
                 Some(line) => {
-                    out.extend(self.parse_stmt(line, pp, b)?);
+                    out.extend(self.parse_stmt_recovering(line, pp, b)?);
                 }
                 None => {
                     error!(pp.span(), format!("Block doesn't end with {end}"));
@@ -3458,7 +3513,7 @@ impl<'p> ParserContext<'p> {
                         let Some(body) = pp.next_line(b)? else {
                             error!(pp.span(), "No body statement in SIF");
                         };
-                        let Some(body) = self.parse_stmt(body, pp, b)? else {
+                        let Some(body) = self.parse_stmt_recovering(body, pp, b)? else {
                             error!(pp.span(), "No body statement in SIF");
                         };
                         Stmt::Sif(cond, Box::new(body))
@@ -3508,7 +3563,7 @@ impl<'p> ParserContext<'p> {
                                     break;
                                 }
                                 Some(line) => {
-                                    block.extend(self.parse_stmt(line, pp, b)?);
+                                    block.extend(self.parse_stmt_recovering(line, pp, b)?);
                                 }
                                 None => break,
                             }
@@ -3546,7 +3601,7 @@ impl<'p> ParserContext<'p> {
                                     args: _,
                                 }) => break,
                                 Some(line) => {
-                                    body.extend(self.parse_stmt(line, pp, b)?);
+                                    body.extend(self.parse_stmt_recovering(line, pp, b)?);
                                 }
                                 None => error!(pp.span(), "Unexpected EOF after SELECTCASE"),
                             }
@@ -4283,10 +4338,15 @@ impl<'p> ParserContext<'p> {
                                     } else {
                                         failed = true;
                                     }
+                                    errors.extend(self.recovered_errors.borrow_mut().drain(..));
                                     errors.push(err);
                                     continue 'inner;
                                 }
                             };
+                            // Lines inside this construct's body that failed
+                            // and became `InvalidLine` stand-ins: reported
+                            // once each, like any other unreadable line.
+                            errors.extend(self.recovered_errors.borrow_mut().drain(..));
                             if let Err(err) = compiler.push_stmt_with_pos(stmt) {
                                 let span = line_span(compiler.current_pos())
                                     .unwrap_or_else(|| pp.span());
@@ -4409,6 +4469,11 @@ impl<'p> ParserContext<'p> {
             }
         };
 
+        // `parse` is all-or-nothing: a body line that [`Self::
+        // parse_stmt_recovering`] turned into an `InvalidLine` stand-in for
+        // the loader must still be an error here.
+        self.reject_recovered()?;
+
         Ok(out)
     }
 }
@@ -4442,6 +4507,8 @@ impl<'p> ParserContext<'p> {
             b.reset();
         }
 
+        self.reject_recovered()?;
+
         Ok(body)
     }
 
@@ -4455,7 +4522,10 @@ impl<'p> ParserContext<'p> {
         }
         match pp.next_line(&b)? {
             Some(line) => match self.parse_stmt(line, &mut pp, &b)? {
-                Some(stmt) => Ok(stmt),
+                Some(stmt) => {
+                    self.reject_recovered()?;
+                    Ok(stmt)
+                }
                 None => error!(pp.span(), "No stmt"),
             },
             None => error!(pp.span(), "No stmt"),
