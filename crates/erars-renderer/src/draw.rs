@@ -1164,11 +1164,7 @@ mod tests {
             CellMetrics::from_primary(&primary, 18, 19, 1.0)
         };
         let mut shaper = Shaper::new(chain, WidthTable::new(Language::Korean.encoding()), m);
-        let g = Geometry {
-            content_w: 760,
-            drawable_w: 760 - m.shift,
-            m,
-        };
+        let g = Geometry::new(760, m);
         let line = ConsoleLine {
             align: Alignment::Left,
             button_start: None,

@@ -4,7 +4,9 @@
 //! * A cluster of `n` cells occupies `[x, x + n·half_w)` on its row; the font
 //!   that draws it never moves it.
 //! * Wrapping is character-granular at `drawable_w = content_w − shift`
-//!   (Emuera `PointX + Width > DrawableWidth`, ButtonWrap=false).
+//!   (Emuera `PointX + Width > DrawableWidth`) by default (`ButtonWrap=NO`);
+//!   with `ButtonWrap=YES` a button that would split moves whole to the next
+//!   row instead, unless it is already alone on an empty row.
 //! * Alignment is Emuera's C# integer arithmetic on `content_w` (`WindowX`).
 //! * DRAWLINE repeats its string until it reaches `drawable_w`, trims, and is
 //!   laid out as ordinary text *after* the parts already on the line.
@@ -34,6 +36,12 @@ pub struct Geometry {
     /// `content_w − m.shift` (Emuera `DrawableWidth`): rows wrap here.
     pub drawable_w: u32,
     pub m: CellMetrics,
+    /// `emuera.config` `ボタンの途中で行を折りかえさない` (`ButtonWrap`,
+    /// `ConfigData.cs:81`; default `false`). `false` keeps the current
+    /// character-granular split; `true` moves a button that would overflow
+    /// the row to a fresh row as a whole unit, unless it is already first on
+    /// an empty row (then it must still split — `PrintStringBuffer.cs:213`).
+    pub button_wrap: bool,
 }
 
 impl Geometry {
@@ -42,7 +50,15 @@ impl Geometry {
             content_w,
             drawable_w: content_w.saturating_sub(m.shift),
             m,
+            button_wrap: false,
         }
+    }
+
+    /// Set the `ButtonWrap` config flag (default `false`, matching current
+    /// behaviour when unset).
+    pub fn with_button_wrap(mut self, button_wrap: bool) -> Self {
+        self.button_wrap = button_wrap;
+        self
     }
 }
 
@@ -548,11 +564,24 @@ impl<'a> LineBuilder<'a> {
 
     /// Character-granular wrapping: `x + w > drawable_w` with `x > 0` finishes
     /// the row and the cluster starts the next one (a full-width cluster moves
-    /// whole; the first cluster of a row is always placed).
+    /// whole; the first cluster of a row is always placed). With
+    /// `g.button_wrap` and a button fragment already open on this row
+    /// (`start > 0`, i.e. something precedes it), the whole fragment moves to
+    /// the next row instead of splitting
+    /// (`GameView/PrintStringBuffer.cs:210-229`: `getDivideIndex` is skipped
+    /// and the button is reinserted whole when `ButtonWrap` is on, the
+    /// button is a real button, and the line already holds something). A
+    /// button alone on an empty row (`start == 0`) still splits — moving it
+    /// again would not free any space.
     fn place(&mut self, c: &Cluster, style: &TextStyle, out: &mut Layout) {
         let w = c.cells as u32 * self.g.m.half_w;
         if self.x > 0 && self.x as u32 + w > self.g.drawable_w {
-            self.break_row(out);
+            match self.frag {
+                Some((_, start)) if self.g.button_wrap && start > 0 => {
+                    self.wrap_button_to_next_row(start, out)
+                }
+                _ => self.break_row(out),
+            }
         }
         let button = match (self.button, self.frag) {
             (Some(_), Some((i, _))) => Some(i),
@@ -580,6 +609,78 @@ impl<'a> LineBuilder<'a> {
             glyphs: Arc::clone(&c.glyphs),
         });
         self.x += w as i32;
+    }
+
+    /// `g.button_wrap`'s whole-button move: pull every cluster / image of
+    /// the fragment open since `start` off this row, close it out at `start`
+    /// (no `ButtonRegion` yet — the fragment is still open, just relocated),
+    /// and re-place them at the head of the next row so the pending cluster
+    /// that triggered the wrap lands right after them.
+    fn wrap_button_to_next_row(&mut self, start: i32, out: &mut Layout) {
+        let carry_w = self.x - start;
+        // A run rect spanning into the fragment cannot stay on the row that
+        // is losing it: close the part before `start` here (if any) and let
+        // the run resume at the fragment's new position on the next row.
+        if let Some(run) = &mut self.run {
+            if let Some(rs) = run.start {
+                if rs < start {
+                    let w = (start - rs) as u32;
+                    if run.style.contains(FontStyle::UNDERLINE) {
+                        self.rects.push(Rect {
+                            kind: RectKind::Underline,
+                            x: rs,
+                            dy: self.rules.ul_dy,
+                            h: self.rules.ul_h,
+                            w,
+                            color: run.color,
+                            button: None,
+                        });
+                    }
+                    if run.style.contains(FontStyle::STRIKELINE) {
+                        self.rects.push(Rect {
+                            kind: RectKind::Strike,
+                            x: rs,
+                            dy: self.rules.st_dy,
+                            h: self.rules.st_h,
+                            w,
+                            color: run.color,
+                            button: None,
+                        });
+                    }
+                    run.start = Some(0);
+                } else {
+                    run.start = Some(rs - start);
+                }
+            }
+        }
+        let cluster_split = self
+            .clusters
+            .iter()
+            .position(|pc| pc.x >= start)
+            .unwrap_or(self.clusters.len());
+        let mut carried_clusters = self.clusters.split_off(cluster_split);
+        let image_split = self
+            .images
+            .iter()
+            .position(|pi| pi.x >= start)
+            .unwrap_or(self.images.len());
+        let mut carried_images = self.images.split_off(image_split);
+        // Finish the row without the fragment: clear it first so
+        // `end_fragment` (called by `break_row`) does not emit a spurious
+        // `ButtonRegion` for content that is moving, not ending.
+        let frag = self.frag.take();
+        self.x = start;
+        self.break_row(out);
+        for pc in &mut carried_clusters {
+            pc.x -= start;
+        }
+        for pi in &mut carried_images {
+            pi.x -= start;
+        }
+        self.clusters = carried_clusters;
+        self.images = carried_images;
+        self.x = carry_w;
+        self.frag = frag.map(|(i, _)| (i, 0));
     }
 
     /// One rect per styled run per row, spanning its cluster boxes.
@@ -749,11 +850,13 @@ fn emit_div(
             content_w: w,
             drawable_w: w,
             m: g.m,
+            button_wrap: g.button_wrap,
         },
         None => Geometry {
             content_w: 0,
             drawable_w: u32::MAX,
             m: g.m,
+            button_wrap: g.button_wrap,
         },
     };
     let first = out.rows.len();
@@ -1212,6 +1315,11 @@ mod tests {
         layout_snapshot(&layout(lines, &geometry(content_w), &mut sh), FG)
     }
 
+    fn snap_g(lines: &[ConsoleLine], g: &Geometry) -> String {
+        let mut sh = shaper();
+        layout_snapshot(&layout(lines, g, &mut sh), FG)
+    }
+
     #[test]
     fn empty_line_is_one_row() {
         k9::snapshot!(
@@ -1618,6 +1726,46 @@ row 1 line 0+ x0=0 w=9
   0:1 "k" btn=1
 btn 0 row=0 x=18 w=72 gen=3 value=Int(1)
 btn 1 row=1 x=0 w=9 gen=3 value=Int(1)
+"#
+        );
+    }
+
+    /// Same case as [`button_fragments_across_a_wrap`], but with `ButtonWrap`
+    /// on: the button no longer splits between `c` and `k`; the whole 9-char
+    /// `"[1] click"` moves to a fresh row instead, since something ("ab")
+    /// already precedes it on row 0
+    /// (`GameView/PrintStringBuffer.cs:210-229`: `ButtonWrap`, a real button,
+    /// and a non-empty `lineButtonList` all gate the whole-unit move; a
+    /// button already alone on an empty row still splits — see
+    /// [`full_width_cluster_that_does_not_fit_moves_whole`] and
+    /// [`underlined_button_gets_one_rect_per_row`], where the button is the
+    /// row's first content and `ButtonWrap` is unset). One `ButtonRegion`
+    /// results, not two.
+    #[test]
+    fn button_wrap_moves_the_whole_button_instead_of_splitting_it() {
+        k9::snapshot!(
+            snap_g(
+                &[line(
+                    Alignment::Left,
+                    vec![text("ab"), button("[1] click", 3, Value::Int(1))]
+                )],
+                &geometry(93).with_button_wrap(true)
+            ),
+            r#"
+row 0 line 0 x0=0 w=18
+  0:1 "a"
+  9:1 "b"
+row 1 line 0+ x0=0 w=81
+  0:1 "[" btn=0
+  9:1 "1" btn=0
+  18:1 "]" btn=0
+  27:1 " " btn=0
+  36:1 "c" btn=0
+  45:1 "l" btn=0
+  54:1 "i" btn=0
+  63:1 "c" btn=0
+  72:1 "k" btn=0
+btn 0 row=1 x=0 w=81 gen=3 value=Int(1)
 "#
         );
     }
