@@ -22,10 +22,14 @@ impl Drop for ScratchDir {
 }
 
 fn fixture_dir(name: &str) -> ScratchDir {
+    fixture_dir_with_erb(name, "@SYSTEM_TITLE\nPRINTL a\n")
+}
+
+fn fixture_dir_with_erb(name: &str, erb: &str) -> ScratchDir {
     let dir = std::env::temp_dir()
         .join(format!("erars-display-report-test-{name}-{}", std::process::id()));
     std::fs::create_dir_all(dir.join("ERB")).unwrap();
-    std::fs::write(dir.join("ERB/MAIN.ERB"), "@SYSTEM_TITLE\nPRINTL a\n").unwrap();
+    std::fs::write(dir.join("ERB/MAIN.ERB"), erb).unwrap();
     ScratchDir(dir)
 }
 
@@ -58,4 +62,28 @@ fn display_report_on_shows_a_load_summary_instead() {
     let text = console_text(&tx);
     assert!(!text.contains("Now Loading..."), "the loading message must not appear when the report does, got: {text:?}");
     assert!(text.contains("함수"), "expected a function-count report line, got: {text:?}");
+}
+
+#[test]
+fn display_report_counts_non_comment_lines_like_emuera_not_raw_source_lines() {
+    // 3 real statements (`PRINTL a/b/c`); everything else — the function
+    // label, two `;` comments, and a blank line — is source text Emuera's
+    // own parser drops before its `enabledLineCount` counter ever sees it
+    // (`GameProc/ErbLoader.cs:29,452`; see `CompiledErb::line_count`'s doc
+    // comment). A raw `str::lines()` count of the file would be 7, not 3.
+    let dir = fixture_dir_with_erb(
+        "count",
+        "@SYSTEM_TITLE\n; comment one\nPRINTL a\n\n; comment two\nPRINTL b\nPRINTL c\n",
+    );
+    let mut config = EraConfig::default();
+    config.display_report = true;
+    let (_vm, _ctx, tx) =
+        run_script(dir.0.to_str().unwrap(), Box::new(NullSystemFunctions), config, false, false, false)
+            .expect("compile failed");
+    let text = console_text(&tx);
+    assert!(
+        text.contains("줄 수:3,"),
+        "expected the report to count 3 non-comment statement lines (not 7 raw source lines \
+         or 0 from an unrelated pass), got: {text:?}"
+    );
 }
