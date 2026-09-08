@@ -2529,6 +2529,11 @@ pub struct ParserContext<'p> {
     /// (`SystemAllowFullSpace`, default `true`): see the field of the same
     /// name on [`erars_lexer::Preprocessor`].
     allow_full_space: bool,
+    /// `FORM中の三連記号を展開しない` — Emuera `SystemIgnoreTripleSymbol`,
+    /// default `false` (`Config/ConfigData.cs:110`; the name is negated, so
+    /// `false` means expansion is *on*). See
+    /// [`ParserContext::with_ignore_triple_symbol`].
+    ignore_triple_symbol: bool,
 }
 
 impl<'p> ParserContext<'p> {
@@ -2552,6 +2557,7 @@ impl<'p> ParserContext<'p> {
             leveled_warnings: RefCell::default(),
             recovered_errors: RefCell::default(),
             allow_full_space: true,
+            ignore_triple_symbol: false,
         }
     }
 
@@ -2626,6 +2632,23 @@ impl<'p> ParserContext<'p> {
     pub fn with_allow_full_space(mut self, allow_full_space: bool) -> Self {
         self.allow_full_space = allow_full_space;
         self
+    }
+
+    /// `FORM中の三連記号を展開しない` — Emuera `SystemIgnoreTripleSymbol`,
+    /// default `false` (`Config/ConfigData.cs:110`). When `false` (the
+    /// default), a run of three identical `*`/`+`/`=`/`/`/`$` characters
+    /// inside a FORM string expands to a shorthand character-name lookup
+    /// (`Sub/LexicalAnalyzer.cs:1203-1218`, `GameData/StrForm.cs:60-83`);
+    /// when `true` the run is left as literal text.
+    pub fn with_ignore_triple_symbol(mut self, ignore_triple_symbol: bool) -> Self {
+        self.ignore_triple_symbol = ignore_triple_symbol;
+        self
+    }
+
+    /// Whether FORM triple-symbol expansion is disabled, i.e. Emuera's
+    /// `Config.SystemIgnoreTripleSymbol`.
+    pub fn ignore_triple_symbol(&self) -> bool {
+        self.ignore_triple_symbol
     }
     /// The preprocessor for one ERB of this game.
     ///
@@ -4207,9 +4230,10 @@ impl<'p> ParserContext<'p> {
     /// also treats that way: `InvalidLabelLine` sets `noError`
     /// (`GameProc/ErbLoader.cs:366`).
     ///
-    /// DELIBERATE: erars reports an unreadable line and still starts the game;
-    /// Emuera refuses to start unless `解釈不可能な行があっても実行する` is on.
-    /// See `docs/research/2026-09-03-emuera-command-gap.md` §5.
+    /// `run_script`'s end-of-load path now mirrors that: with
+    /// `解釈不可能な行があっても実行する:NO` (the default) it aborts the load
+    /// after collecting every diagnostic, exactly like Emuera's title-screen
+    /// refusal (`crates/erars-loader/src/lib.rs`, `CompatiErrorLine`).
     pub fn parse_and_compile<'s>(
         &self,
         pp: &mut Preprocessor<'s>,

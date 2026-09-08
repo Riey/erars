@@ -457,6 +457,24 @@ exactly as an enum variant's absence is not evidence of missing behavior.
     not implement eramaker's triple-symbol FORM shorthand at all, config aside. Wiring this key
     means implementing that expansion first, then gating it behind the (default-on) switch — a
     small parser feature, not a config plumbing change.
+
+    **Status note (added 2026-09-08, wave-1 config session):** all three keys in the two bullets
+    above are now wired. `button_wrap` reads `Layout::Rules::button_wrap` in
+    `erars-renderer/src/layout.rs`'s `LineBuilder` wrap logic (`button_wrap`/`with_button_wrap`,
+    consulted where a button fragment would overflow the row); `system_allow_full_space` gates
+    U+3000 whitespace treatment in `erars-lexer/src/lib.rs`'s `Lexer::allow_full_space` (`skip_ws`
+    and the `Preprocessor` path), sourced from `EraConfig::system_allow_full_space` at both parser
+    entry points. `system_ignore_triple_symbol` got the missing FORM-shorthand expansion itself —
+    a `FormType::TripleSymbol(u8)` variant threaded through
+    `erars-compiler/src/parser/expr.rs`'s `find_form_delim`/`parse_form_normal_str`/`form_str` —
+    gated on a new `ParserContext::ignore_triple_symbol` field (default `false`, matching Emuera's
+    own default, `Config/ConfigData.cs:110`) sourced from `EraConfig::system_ignore_triple_symbol`
+    at both the loader (`erars-loader/src/lib.rs`) and runtime `STRFORM` (`erars-vm/src/
+    terminal_vm.rs`) `ParserContext` construction sites. All three covered by tests that fail with
+    the gate removed: `erars-renderer/src/layout.rs`'s `button_wrap_moves_the_whole_button_
+    instead_of_splitting_it`, `erars-compiler/tests/preprocessor.rs`'s
+    `full_width_indent_breaks_the_line_when_disallowed`, and
+    `crates/erars-vm/tests/triple_symbol.rs`.
   - **Needs a headless-specific design decision, not just a wire-up, because Emuera's own response
     is a modal dialog (1):** `infinite_loop_alert_time` (`無限ループ警告までのミリ秒数` — if no
     *input round-trip* happens for this many milliseconds, show an interactive "this looks like

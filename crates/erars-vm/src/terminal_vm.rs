@@ -119,7 +119,8 @@ impl TerminalVm {
                     let parser_ctx = ParserContext::new(
                         &*ctx.header_info,
                         ctx.var.interner().get_or_intern_static("FORMS.ERB"),
-                    );
+                    )
+                    .with_ignore_triple_symbol(ctx.config.system_ignore_triple_symbol);
                     // `STRFORM` hands user data straight to this path, so a
                     // malformed form string has to be an error, not a panic —
                     // Emuera reports `InvalidFormString`

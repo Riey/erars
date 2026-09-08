@@ -42,6 +42,16 @@ pub struct Geometry {
     /// the row to a fresh row as a whole unit, unless it is already first on
     /// an empty row (then it must still split — `PrintStringBuffer.cs:213`).
     pub button_wrap: bool,
+    /// `emuera.config` `ver1739以前の非ボタン折り返しを再現する`
+    /// (`CompatiLinefeedAs1739`, `ConfigData.cs:101`; default `false`). Only
+    /// changes anything when `button_wrap` is also `true`: it extends
+    /// `button_wrap`'s whole-unit move from buttons to *non*-button text
+    /// runs too (`GameView/PrintStringBuffer.cs:213`:
+    /// `!buttonList[i].IsButton && !Config.CompatiLinefeedAs1739` is the
+    /// third `||` arm that forces a split — set this to suppress it), so a
+    /// pre-1.739 script relying on non-button runs never splitting mid-word
+    /// on this row still lays out the same way.
+    pub compati_linefeed_as_1739: bool,
 }
 
 impl Geometry {
@@ -51,6 +61,7 @@ impl Geometry {
             drawable_w: content_w.saturating_sub(m.shift),
             m,
             button_wrap: false,
+            compati_linefeed_as_1739: false,
         }
     }
 
@@ -58,6 +69,13 @@ impl Geometry {
     /// behaviour when unset).
     pub fn with_button_wrap(mut self, button_wrap: bool) -> Self {
         self.button_wrap = button_wrap;
+        self
+    }
+
+    /// Set the `CompatiLinefeedAs1739` config flag (default `false`, matching
+    /// current behaviour when unset).
+    pub fn with_compati_linefeed_as_1739(mut self, compati_linefeed_as_1739: bool) -> Self {
+        self.compati_linefeed_as_1739 = compati_linefeed_as_1739;
         self
     }
 }
@@ -448,6 +466,11 @@ struct LineBuilder<'a> {
     button: Option<(u32, &'a Value)>,
     /// This row's fragment of that button: `(index into Layout::buttons, start x)`.
     frag: Option<(usize, i32)>,
+    /// `g.compati_linefeed_as_1739` only: this row's open non-button text
+    /// fragment (start x), mirroring `frag` for plain runs. There is no
+    /// `Layout::buttons` index to carry — plain text never gets a
+    /// `ButtonRegion` — so this is a bare `i32`, not a tuple.
+    plain_frag: Option<i32>,
     images: Vec<PlacedImage>,
     sink: RowSink<'a>,
     /// The `<div>` parts met so far, laid out by [`Self::finish`].
@@ -474,6 +497,7 @@ impl<'a> LineBuilder<'a> {
             run: None,
             button: None,
             frag: None,
+            plain_frag: None,
             images: Vec::new(),
             sink,
             pending: Vec::new(),
@@ -580,7 +604,17 @@ impl<'a> LineBuilder<'a> {
                 Some((_, start)) if self.g.button_wrap && start > 0 => {
                     self.wrap_button_to_next_row(start, out)
                 }
-                _ => self.break_row(out),
+                _ => match self.plain_frag {
+                    Some(start)
+                        if self.button.is_none()
+                            && self.g.button_wrap
+                            && self.g.compati_linefeed_as_1739
+                            && start > 0 =>
+                    {
+                        self.wrap_plain_to_next_row(start, out)
+                    }
+                    _ => self.break_row(out),
+                },
             }
         }
         let button = match (self.button, self.frag) {
@@ -592,7 +626,18 @@ impl<'a> LineBuilder<'a> {
                 self.frag = Some((i, self.x));
                 Some(i)
             }
-            (None, _) => None,
+            (None, _) => {
+                // `frag`/`button` track button fragments only — a non-button
+                // cluster never gets a `ButtonRegion`. `plain_frag` is the
+                // equivalent bookkeeping `compati_linefeed_as_1739` needs for
+                // its whole-run move, tracked separately so it can never leak
+                // a stray index into `Rect::button` (`flush_run_rects` reads
+                // `frag`, not `plain_frag`).
+                if self.g.compati_linefeed_as_1739 && self.plain_frag.is_none() {
+                    self.plain_frag = Some(self.x);
+                }
+                None
+            }
         };
         if let Some(run) = &mut self.run {
             if run.start.is_none() {
@@ -617,6 +662,32 @@ impl<'a> LineBuilder<'a> {
     /// and re-place them at the head of the next row so the pending cluster
     /// that triggered the wrap lands right after them.
     fn wrap_button_to_next_row(&mut self, start: i32, out: &mut Layout) {
+        // Finish the row without the fragment: clear it first so
+        // `end_fragment` (called by `break_row`) does not emit a spurious
+        // `ButtonRegion` for content that is moving, not ending.
+        let frag = self.frag.take();
+        self.carry_fragment_to_next_row(start, out);
+        self.frag = frag.map(|(i, _)| (i, 0));
+    }
+
+    /// Same case as [`Self::wrap_button_to_next_row`], but with
+    /// `compati_linefeed_as_1739` extending `button_wrap`'s whole-unit move
+    /// to a non-button text run instead of a button: there is no
+    /// `ButtonRegion` bookkeeping to preserve across the move, only
+    /// `plain_frag`'s start x.
+    fn wrap_plain_to_next_row(&mut self, start: i32, out: &mut Layout) {
+        self.carry_fragment_to_next_row(start, out);
+        self.plain_frag = Some(0);
+    }
+
+    /// Shared by [`Self::wrap_button_to_next_row`] and
+    /// [`Self::wrap_plain_to_next_row`]: pull every cluster / image of the
+    /// fragment open since `start` off this row, close the row at `start`,
+    /// and re-place them at the head of the next row so the pending cluster
+    /// that triggered the wrap lands right after them. The caller restores
+    /// whichever fragment-tracking field applies (`frag` vs. `plain_frag`)
+    /// once this returns.
+    fn carry_fragment_to_next_row(&mut self, start: i32, out: &mut Layout) {
         let carry_w = self.x - start;
         // A run rect spanning into the fragment cannot stay on the row that
         // is losing it: close the part before `start` here (if any) and let
@@ -665,10 +736,6 @@ impl<'a> LineBuilder<'a> {
             .position(|pi| pi.x >= start)
             .unwrap_or(self.images.len());
         let mut carried_images = self.images.split_off(image_split);
-        // Finish the row without the fragment: clear it first so
-        // `end_fragment` (called by `break_row`) does not emit a spurious
-        // `ButtonRegion` for content that is moving, not ending.
-        let frag = self.frag.take();
         self.x = start;
         self.break_row(out);
         for pc in &mut carried_clusters {
@@ -680,7 +747,6 @@ impl<'a> LineBuilder<'a> {
         self.clusters = carried_clusters;
         self.images = carried_images;
         self.x = carry_w;
-        self.frag = frag.map(|(i, _)| (i, 0));
     }
 
     /// One rect per styled run per row, spanning its cluster boxes.
@@ -719,6 +785,11 @@ impl<'a> LineBuilder<'a> {
     }
 
     fn begin_button(&mut self, input_gen: u32, value: &'a Value) {
+        // A button starting ends any open `compati_linefeed_as_1739` plain
+        // run — Emuera's own button-splitting chunks a string at the same
+        // boundary, so a button and the plain text around it are never the
+        // same fragment.
+        self.plain_frag = None;
         self.button = Some((input_gen, value));
     }
 
@@ -779,6 +850,7 @@ impl<'a> LineBuilder<'a> {
             images: std::mem::take(&mut self.images),
         });
         self.logical_start = false;
+        self.plain_frag = None;
         self.x = 0;
     }
 
@@ -851,12 +923,14 @@ fn emit_div(
             drawable_w: w,
             m: g.m,
             button_wrap: g.button_wrap,
+            compati_linefeed_as_1739: g.compati_linefeed_as_1739,
         },
         None => Geometry {
             content_w: 0,
             drawable_w: u32::MAX,
             m: g.m,
             button_wrap: g.button_wrap,
+            compati_linefeed_as_1739: g.compati_linefeed_as_1739,
         },
     };
     let first = out.rows.len();
@@ -1766,6 +1840,87 @@ row 1 line 0+ x0=0 w=81
   63:1 "c" btn=0
   72:1 "k" btn=0
 btn 0 row=1 x=0 w=81 gen=3 value=Int(1)
+"#
+        );
+    }
+
+    /// `compati_linefeed_as_1739=false` (the default): `button_wrap` alone
+    /// only protects *buttons* from splitting — a plain (non-button) run
+    /// still wraps character-granularly, same as with `button_wrap` off
+    /// (`GameView/PrintStringBuffer.cs:213`'s `!IsButton &&
+    /// !CompatiLinefeedAs1739` arm forces the split whenever the flag is
+    /// unset).
+    #[test]
+    fn button_wrap_alone_still_splits_plain_text_mid_word() {
+        k9::snapshot!(
+            snap_g(
+                &[line(
+                    Alignment::Left,
+                    vec![
+                        button("[0]", 1, Value::Int(0)),
+                        text("cdefghijk"),
+                    ]
+                )],
+                &geometry(93).with_button_wrap(true)
+            ),
+            r#"
+row 0 line 0 x0=0 w=90
+  0:1 "[" btn=0
+  9:1 "0" btn=0
+  18:1 "]" btn=0
+  27:1 "c"
+  36:1 "d"
+  45:1 "e"
+  54:1 "f"
+  63:1 "g"
+  72:1 "h"
+  81:1 "i"
+row 1 line 0+ x0=0 w=18
+  0:1 "j"
+  9:1 "k"
+btn 0 row=0 x=0 w=27 gen=1 value=Int(0)
+"#
+        );
+    }
+
+    /// `compati_linefeed_as_1739=true` extends `button_wrap`'s whole-unit
+    /// move to the plain-text run that follows the button: it moves whole to
+    /// the next row instead of splitting mid-word, exactly like a button
+    /// would (`GameView/PrintStringBuffer.cs:213`'s third `||` arm is
+    /// suppressed once this config is on). Same input as
+    /// [`button_wrap_alone_still_splits_plain_text_mid_word`], only the flag
+    /// differs.
+    #[test]
+    fn compati_linefeed_as_1739_moves_plain_text_whole_like_a_button() {
+        k9::snapshot!(
+            snap_g(
+                &[line(
+                    Alignment::Left,
+                    vec![
+                        button("[0]", 1, Value::Int(0)),
+                        text("cdefghijk"),
+                    ]
+                )],
+                &geometry(93)
+                    .with_button_wrap(true)
+                    .with_compati_linefeed_as_1739(true)
+            ),
+            r#"
+row 0 line 0 x0=0 w=27
+  0:1 "[" btn=0
+  9:1 "0" btn=0
+  18:1 "]" btn=0
+row 1 line 0+ x0=0 w=81
+  0:1 "c"
+  9:1 "d"
+  18:1 "e"
+  27:1 "f"
+  36:1 "g"
+  45:1 "h"
+  54:1 "i"
+  63:1 "j"
+  72:1 "k"
+btn 0 row=0 x=0 w=27 gen=1 value=Int(0)
 "#
         );
     }
