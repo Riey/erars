@@ -2499,6 +2499,10 @@ pub struct ParserContext<'p> {
     /// back-compatibility warning is level 0, so it cannot ride that channel.
     /// Drained by [`Self::parse_and_compile`].
     leveled_warnings: RefCell<Vec<(String, std::ops::Range<usize>, u8)>>,
+    /// `emuera.config` `全角スペースをホワイトスペースに含める`
+    /// (`SystemAllowFullSpace`, default `true`): see the field of the same
+    /// name on [`erars_lexer::Preprocessor`].
+    allow_full_space: bool,
 }
 
 impl<'p> ParserContext<'p> {
@@ -2519,6 +2523,7 @@ impl<'p> ParserContext<'p> {
             case_sensitive_functions: false,
             warn_back_compatibility: true,
             leveled_warnings: RefCell::default(),
+            allow_full_space: true,
         }
     }
 
@@ -2582,6 +2587,12 @@ impl<'p> ParserContext<'p> {
         self.case_sensitive_functions
     }
 
+    /// `emuera.config` `SystemAllowFullSpace` (default `true`, so unset
+    /// matches erars's prior unconditional behaviour).
+    pub fn with_allow_full_space(mut self, allow_full_space: bool) -> Self {
+        self.allow_full_space = allow_full_space;
+        self
+    }
     /// The preprocessor for one ERB of this game.
     ///
     /// Everything it needs — the rename table, the `#DEFINE` names `[IF]`
@@ -2589,7 +2600,13 @@ impl<'p> ParserContext<'p> {
     /// to assemble it.
     pub fn preprocessor<'s>(&'s self, s: &'s str) -> Preprocessor<'s> {
         let header = self.header.as_ref();
-        Preprocessor::new_erb(&header.rename, &header.macros, self.debug_mode, s)
+        Preprocessor::new_erb(
+            &header.rename,
+            &header.macros,
+            self.debug_mode,
+            self.allow_full_space,
+            s,
+        )
     }
 
     /// Intern an identifier through the calling thread's memo.

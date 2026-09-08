@@ -5,7 +5,7 @@ fn lex_test() {
     let rename = Default::default();
     let macros = Default::default();
     let mut pp =
-        Preprocessor::new_erb(&rename, &macros, false, include_str!("../ERB/SYSTEM.ERB"));
+        Preprocessor::new_erb(&rename, &macros, false, true, include_str!("../ERB/SYSTEM.ERB"));
 
     let mut b = Bump::new();
 
