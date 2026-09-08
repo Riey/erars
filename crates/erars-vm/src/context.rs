@@ -12,6 +12,95 @@ use crate::{ArgVec, SystemFunctions, VariableStorage, VmVariable};
 
 use super::UniformVariable;
 
+/// Emuera's infinite-loop watchdog.
+///
+/// Emuera counts executed lines and, every 10,000 of them, compares wall clock
+/// against `InfiniteLoopAlertTime` — "reading the time is itself expensive, so
+/// once per 10,000 lines or so" is its own comment
+/// (`GameProc/Process.ScriptProc.cs:20-24`).
+///
+/// The reset is on *input*, not on the `WAIT` family, whatever
+/// `docs/research/2026-09-06-language-feature-work.md` §6.2 used to say.
+/// `UpdateCheckInfiniteLoopState` (`GameProc/Process.cs:304-307`) has exactly
+/// two callers: `DoScript` (`Process.cs:266-270`), which the console
+/// re-enters after every answer (`GameView/EmueraConsole.cs:787`), and
+/// `EmueraConsole.Await` (`GameView/EmueraConsole.cs:553`), reached only from
+/// `AWAIT` (`GameProc/Function/Instraction.Child.cs:1668`).
+/// `WAIT`/`FORCEWAIT`/`TWAIT` go through `WaitInput`, which does not reset —
+/// they reset only transitively, by forcing an input round-trip. Wiring this
+/// against "no `WAIT` for N ms" would fire where Emuera does not and stay
+/// silent where it does.
+///
+/// The default is 5000 ms (`Config/ConfigData.cs:71`), so this is armed
+/// unless a game asks for `0`.
+///
+/// DELIBERATE: on trigger Emuera opens a modal "無限ループの可能性がありま
+/// す … 強制終了しますか?" dialog and aborts only if the user says yes
+/// (`GameProc/Process.cs:331-344`). A headless build has nobody to ask, and
+/// killing a long-but-correct script is far worse than a warning nobody
+/// reads, so erars logs and always continues — Emuera's own "No" branch,
+/// which resets the clock and the counter (`:341-343`).
+#[derive(Debug)]
+pub(crate) struct LoopAlert {
+    /// `InfiniteLoopAlertTime` in milliseconds; 0 disables the watchdog.
+    limit_ms: u32,
+    /// Instructions still to run before the next clock read. erars has no
+    /// line table at run time, so it counts instructions; the poll interval
+    /// is Emuera's. Counting *down* keeps the per-instruction cost to one
+    /// decrement and one branch, with the disabled key never re-reached
+    /// after the first poll (`countdown` is then parked at `u32::MAX`).
+    countdown: u32,
+    start: std::time::Instant,
+}
+
+impl LoopAlert {
+    const POLL: u32 = 10_000;
+
+    pub fn new(limit_ms: u32) -> Self {
+        Self {
+            limit_ms,
+            countdown: if limit_ms == 0 { u32::MAX } else { Self::POLL },
+            start: std::time::Instant::now(),
+        }
+    }
+
+    /// Emuera's `UpdateCheckInfiniteLoopState` (`Process.cs:304-307`).
+    pub fn reset(&mut self) {
+        if self.limit_ms != 0 {
+            self.countdown = Self::POLL;
+            self.start = std::time::Instant::now();
+        }
+    }
+
+    /// One executed instruction. Returns the elapsed milliseconds of a
+    /// triggered episode, at most once per episode: a trigger restarts the
+    /// clock, exactly as Emuera's "No" branch does (`Process.cs:341-343`), so
+    /// a tight loop warns once per `limit_ms` rather than once per poll.
+    #[inline]
+    pub fn tick(&mut self) -> Option<u128> {
+        if self.countdown > 0 {
+            self.countdown -= 1;
+            return None;
+        }
+        self.poll()
+    }
+
+    #[inline(never)]
+    fn poll(&mut self) -> Option<u128> {
+        if self.limit_ms == 0 {
+            self.countdown = u32::MAX;
+            return None;
+        }
+        self.countdown = Self::POLL;
+        let elapsed = self.start.elapsed().as_millis();
+        if elapsed < self.limit_ms as u128 {
+            return None;
+        }
+        self.start = std::time::Instant::now();
+        Some(elapsed)
+    }
+}
+
 pub struct VmContext {
     pub var: VariableStorage,
     pub header_info: Arc<HeaderInfo>,
@@ -32,6 +121,11 @@ pub struct VmContext {
     /// Emuera `EmueraConsole.isTimeout` — read by `ISTIMEOUT`, maintained in
     /// [`VmContext::input_redraw`].
     pub(crate) is_timeout: bool,
+
+    /// Emuera's infinite-loop watchdog (`無限ループ警告までのミリ秒数`,
+    /// `InfiniteLoopAlertTime`, default 5000 ms —
+    /// `Config/ConfigData.cs:71`). See [`LoopAlert`].
+    pub(crate) loop_alert: LoopAlert,
 
     /// Emuera `Program.DebugMode`, the `-Debug` command line argument
     /// (`Program.cs:219-220`). `@DEBUG` is gated on it
@@ -84,6 +178,7 @@ impl VmContext {
             prev_skipdisp: None,
             put_form_enabled: false,
             is_timeout: false,
+            loop_alert: LoopAlert::new(config.infinite_loop_alert_time),
             debug_mode: false,
             reboot_requested: false,
             call_train_running: false,
@@ -186,6 +281,11 @@ impl VmContext {
         tx: &mut VirtualConsole,
         req: erars_ui::InputRequest,
     ) -> Result<Option<Value>> {
+        // Emuera resets the watchdog by re-entering `DoScript` after the
+        // console hands an answer back (`Process.cs:266-270` from
+        // `GameView/EmueraConsole.cs:787`); erars owns the input loop, so the
+        // reset belongs here.
+        self.loop_alert.reset();
         let expiry = req.timeout.as_ref().map(|t| (t.timeout, t.default_value.clone()));
 
         loop {
@@ -246,6 +346,7 @@ impl VmContext {
 
     /// [`SystemFunctions::input_int_redraw`] behind the image publish.
     pub fn input_int_redraw(&mut self, tx: &mut VirtualConsole) -> Result<i64> {
+        self.loop_alert.reset();
         let painted = self.graphics.publish(&tx.images);
         self.system.input_int_redraw(tx, painted)
     }
@@ -256,6 +357,7 @@ impl VmContext {
         tx: &mut VirtualConsole,
         req: erars_ui::InputRequest,
     ) -> Result<erars_ui::MouseKeyEvent> {
+        self.loop_alert.reset();
         let painted = self.graphics.publish(&tx.images);
         self.system.input_mouse_key(tx, req, painted)
     }

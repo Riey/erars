@@ -459,13 +459,55 @@ exactly as an enum variant's absence is not evidence of missing behavior.
     small parser feature, not a config plumbing change.
   - **Needs a headless-specific design decision, not just a wire-up, because Emuera's own response
     is a modal dialog (1):** `infinite_loop_alert_time` (`無限ループ警告までのミリ秒数` — if no
-    `WAIT`-family command executes for this many milliseconds, show an interactive "this looks like
-    an infinite loop, continue?" dialog; `0` disables the feature). The *trigger* — a wall-clock
-    watchdog on time-since-last-`WAIT`, confirmed absent from erars: no `infinite_loop`/`watchdog`
-    hits anywhere in the VM — is genuine engine timing logic a headless build could implement. The
-    *response* is not: there is no user to click "continue" in `erars-stdio`. Wiring this requires
-    picking a headless equivalent (log-and-continue? log-and-abort? make it configurable?) before
-    there is anything to implement, which is a design call, not a mechanical port.
+    *input round-trip* happens for this many milliseconds, show an interactive "this looks like
+    an infinite loop, continue?" dialog; `0` disables the feature, and the default is 5000 ms,
+    not `0`). **This entry originally said "no `WAIT`-family command executes for this many
+    milliseconds" and "time-since-last-`WAIT`" — both wrong, corrected 2026-09-08 against the
+    C# source; see the DONE note below.** The *trigger* — a wall-clock watchdog, confirmed
+    absent from erars: no `infinite_loop`/`watchdog` hits anywhere in the VM — is genuine engine
+    timing logic a headless build could implement. The *response* is not: there is no user to
+    click "continue" in `erars-stdio`. Wiring this requires picking a headless equivalent
+    (log-and-continue? log-and-abort? make it configurable?) before there is anything to
+    implement, which is a design call, not a mechanical port.
+
+    **DONE 2026-09-08.** The trigger is implemented and the headless response is
+    log-and-continue, never abort. Two corrections to the description above, both from the
+    C# source:
+    - **The reset is not the `WAIT` family.** `UpdateCheckInfiniteLoopState`
+      (`GameProc/Process.cs:304-307`) has exactly two callers: `DoScript`
+      (`Process.cs:266-270`), which the console re-enters after *every* input
+      (`GameView/EmueraConsole.cs:787`), and `EmueraConsole.Await`
+      (`:553`), reached only from `AWAIT`
+      (`GameProc/Function/Instraction.Child.cs:1668`). `WAIT`/`FORCEWAIT`/`TWAIT` reset it
+      only transitively, by asking for input. erars mirrors this: `VmContext::input_redraw`,
+      `input_int_redraw`, `input_mouse_key` and `AWAIT` reset, nothing else does.
+    - **The default is 5000 ms, not `0`** (`Config/ConfigData.cs:71`), and erars' `EraConfig`
+      already carried that default while having no watchdog — i.e. erars was hardcoded to the
+      *non-default* (disabled) side. Both branches now exist and `0` genuinely disables.
+      A default-config game therefore gains one possible new log line, and nothing else: the
+      response is a `log::warn!`, so no script can observe it and no run can be aborted by it.
+      Neither corpus triggers it (measured, 6 runs of eramegaten and eraTHYMKR each: zero
+      warnings, output identical to master).
+
+    The poll interval is Emuera's own 10,000 executed lines, whose comment says outright that
+    reading the clock is too expensive to do more often
+    (`GameProc/Process.ScriptProc.cs:20-24`); erars counts instructions rather than lines,
+    having no line table at run time, so it polls strictly more often than Emuera in terms of
+    script lines. The per-instruction cost is one decrement and one branch
+    (`LoopAlert::tick`, `crates/erars-vm/src/context.rs`).
+
+    Measured against clean `master` 1435fad, release binaries, runs interleaved master/branch to
+    spread thermal drift, `game.era` deleted before each run. Pure instruction dispatch — a
+    20-million-iteration bare `WHILE LOCAL += 1`, ~100M instructions, 12 samples each: master
+    median 3264 ms (p25 3247, p75 3328), watchdog armed at the 5000 default 3219 ms (p25 3215,
+    p75 3242), key at `0` 3212 ms (p25 3209, p75 3243). Armed measures **1.4% faster** than
+    master, so the decrement is below what code layout does to this loop; the ~3% seen while
+    developing belonged to the first shape (limit compare + increment + interval compare) and is
+    gone. Whole-run corpora, 15 samples each: eraTHYMKR master median 1050 ms (p25 1041, p75
+    1066) vs armed 1061 ms (p25 1042, p75 1068); eramegaten master 1199 ms (p25 1183, p75 1236)
+    vs armed 1226 ms (p25 1190, p75 1239). Those runs are load-dominated and their quartiles
+    overlap; the `[Parse/Compile ERB]` phase alone, which this change does not touch, measures
+    149.0 ms vs 149.5 ms over 12 interleaved samples, which is where that spread lives.
   - **Real, unimplemented engine semantics with a reasonably well-scoped wiring point (22),
     grouped by the subsystem each would touch:**
     - *Loader/startup behavior*: `auto_save` (`オートセーブを行なう` — autosave on `BEGIN SHOP`,

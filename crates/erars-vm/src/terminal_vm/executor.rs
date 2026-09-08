@@ -4431,6 +4431,11 @@ fn run_builtin_command(
 
             ctx.redraw(tx)?;
 
+            // `EmueraConsole.Await` calls `UpdateCheckInfiniteLoopState`
+            // (`GameView/EmueraConsole.cs:553`): a script that yields with
+            // `AWAIT` is not looping away from the user.
+            ctx.loop_alert.reset();
+
             if let Some(ms) = ms.filter(|&ms| ms > 0) {
                 std::thread::sleep(std::time::Duration::from_millis(ms as u64));
             }
