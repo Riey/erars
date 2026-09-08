@@ -33,7 +33,12 @@ compile_error!("Doesn't support big endian");
 // Reverting `d0f1162`/`75a7315` (see docs/research/2026-09-05-bytecode-dispatch-optimization.md
 // §17) restored the pre-P1v2 on-disk layout but bumped to 15 rather than
 // rolling back to 11 or 12 for exactly this reason.
-const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 15];
+//
+// 15 (`cc0a35f`-era, the interner's move off `lasso`) is likewise spent: 16
+// adds a cache-identity fingerprint word right after the magic, so a 15 file
+// read by this code would take the first eight bytes of the identifier block
+// as a fingerprint and then misparse everything after it.
+const VERSION_MAGIC: &[u8] = &[2, 3, 2, 3, 0, 0, 0, 16];
 
 fn write_function_body<W: Write + WriteBytesExt>(mut out: W, body: &FunctionBody) -> Result<()> {
     unsafe {
@@ -197,14 +202,47 @@ fn write_interner<W: Write + WriteBytesExt>(mut out: W, interner: &Interner) -> 
     Ok(())
 }
 
-pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionDic> {
+/// Reads just the header: validates `VERSION_MAGIC` and returns the
+/// cache-identity fingerprint the file was written with (see
+/// `erars_loader::cache_fingerprint`). Comparing that fingerprint is the
+/// caller's job — this crate knows the file format, not what the file was
+/// built from.
+///
+/// Separate from `read_from` so a caller can reject a stale cache *before*
+/// decoding it. That ordering is load-bearing, not tidiness:
+/// `read_from` installs the file's identifier table into the process-global
+/// interner (`update_interner` → `Interner::restore`, which requires an
+/// untouched interner), so deciding staleness afterwards would mean having
+/// already overwritten global state with the stale file's contents.
+///
+/// A magic mismatch is an `InvalidData` error, not a panic. A stale
+/// `game.era` is an ordinary thing to find on disk — every spent magic value
+/// names caches that still exist — and the caller can regenerate or report
+/// it, which a panic through `--quite` (no logger, no stderr hook) turned
+/// into a bare exit status 101 instead.
+pub fn read_header<R: Read + ReadBytesExt>(mut read: R) -> Result<u64> {
     let mut buf = vec![0u8; VERSION_MAGIC.len()];
 
     read.read_exact(&mut buf)?;
 
     if buf != VERSION_MAGIC {
-        panic!("Invalid file: VERSION MAGIC mismatched")
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "game.era was written by a different erars build (format {:?}, expected {:?}); \
+                 delete it and rebuild with --save",
+                buf.last(),
+                VERSION_MAGIC.last(),
+            ),
+        ));
     }
+
+    read.read_u64::<LE>()
+}
+
+/// Reads a compiled dictionary back, together with its fingerprint.
+pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<(FunctionDic, u64)> {
+    let fingerprint = read_header(&mut read)?;
 
     let interner = read_interner(&mut read)?;
     update_interner(interner);
@@ -258,12 +296,18 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
 
     dic.rebuild_method_overrides();
 
-    Ok(dic)
+    Ok((dic, fingerprint))
 }
 
-pub fn write_to<W: Write + WriteBytesExt>(mut out: W, dic: &FunctionDic) -> Result<()> {
+/// `fingerprint` identifies what this dictionary was compiled *from* — the
+/// config and the source files. It is stored, never interpreted here.
+pub fn write_to<W: Write + WriteBytesExt>(
+    mut out: W,
+    dic: &FunctionDic,
+    fingerprint: u64,
+) -> Result<()> {
     out.write_all(VERSION_MAGIC)?;
-
+    out.write_u64::<LE>(fingerprint)?;
     write_interner(&mut out, dic.interner)?;
 
     write_literals(&mut out)?;

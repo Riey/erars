@@ -314,7 +314,8 @@ fn main() {
 
     bench("bytecode write_to (Vec)", rounds, || {
         let mut out = Vec::with_capacity(64 * 1024 * 1024);
-        erars_bytecode::write_to(&mut out, &dic).unwrap();
+        // Fingerprint is a stored word; any value benchmarks the same.
+        erars_bytecode::write_to(&mut out, &dic, 0).unwrap();
         std::hint::black_box(out.len())
     });
 
