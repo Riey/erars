@@ -550,6 +550,28 @@ exactly as an enum variant's absence is not evidence of missing behavior.
       that makes `ARG`/`ARGS`/private parameters omittable regardless comes from
       `GameProc/ErbLoader.cs:578-590` (`canDef`).
 
+      **Source note (added 2026-09-08, wave-1 config session — `sort_with_filename` left
+      deliberately unwired):** `erars-loader/src/lib.rs` already sorts both the ERB and ERH file
+      lists by lowercased filename unconditionally, before compiling — this is not currently
+      gated on the `sort_with_filename` field at all. Reading the surrounding code and history
+      showed this sort is load-bearing independent of the config key: without it, feeding an
+      unsorted directory-enumeration iterator into rayon's `par_bridge` makes duplicate-function
+      "which definition wins" and event-function registration order depend on thread-scheduling
+      timing rather than file order — a real nondeterminism bug the sort fixes. `NO` per
+      `config.md` (line 213) documents "raw OS enumeration order" (.NET
+      `Directory.GetFiles`/`FindNextFile`, filesystem-dependent) as the unwired default; erars's
+      actual file-walking goes through the `glob` crate, which — confirmed by reading
+      `glob-0.3.1/src/lib.rs:877` (`children.sort_by(|p1, p2| p1.file_name().cmp(&p2.file_name()))`)
+      in the vendored cargo registry — already imposes its own case-sensitive alphabetical sort at
+      every directory level. So "raw enumeration order" is not reachable through erars's own
+      file-listing path regardless of this key; the two ends of the switch collapse to
+      case-sensitive-glob-order (`NO`, unreachable as a distinct behavior) vs.
+      case-insensitive-sort-order (`YES`, what the code unconditionally does today). Gating the
+      existing sort on the field would therefore be a straight regression for `NO` (reintroducing
+      the documented `par_bridge` race for the — undocumented, no-`emuera.config` — default case)
+      with no reachable behavioral difference to show for `YES`. Left unwired; this is a genuine
+      case where the two observable end states are not the two the key's own semantics describe.
+
   **Net for §4: the real, engine-relevant residual is 26 keys (28 minus the 2 host-only), of which
   2 are a small "read an existing branch" change, 1 needs a small new parser feature before the
   switch means anything, 1 needs a design decision before it's a wiring problem at all, and 22 are

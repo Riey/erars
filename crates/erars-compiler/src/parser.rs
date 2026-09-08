@@ -4144,6 +4144,7 @@ impl<'p> ParserContext<'p> {
         let mut out = Vec::new();
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
+        let mut line_count = 0usize;
 
         // `ScriptPosition::line` is 1-based — the lexer increments `line_pos`
         // before it hands the line over (`erars-lexer/src/lib.rs:295`) and the
@@ -4182,6 +4183,7 @@ impl<'p> ParserContext<'p> {
                             infos.extend(
                                 self.local_dims.borrow_mut().drain(..).map(FunctionInfo::Dim),
                             );
+                            line_count += compiler.line_count;
                             out.push(CompiledFunction {
                                 header: FunctionHeader {
                                     file_path: self.file_path,
@@ -4297,6 +4299,7 @@ impl<'p> ParserContext<'p> {
             functions: out,
             errors,
             warnings,
+            line_count,
         })
     }
 

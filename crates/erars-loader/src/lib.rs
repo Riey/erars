@@ -7,7 +7,7 @@ use std::{
     fs::File,
     io::BufWriter,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{atomic::{AtomicUsize, Ordering}, Arc},
     time::Instant,
 };
 
@@ -650,6 +650,11 @@ pub fn run_script(
             .collect::<Vec<_>>();
         work.sort_by_key(|&(idx, _, len)| (std::cmp::Reverse(len), idx));
 
+        // Emuera's `enabledLineCount` (`GameProc/ErbLoader.cs:753`) is
+        // accumulated for free from the parse each ERB already needs — no
+        // second pass over the file text. Workers race on this during
+        // `par_bridge`, hence the atomic.
+        let total_line_count = AtomicUsize::new(0);
         let compile_one = |erb: &Path| -> Vec<CompiledFunction> {
             let source = read_file(erb).unwrap();
             let ctx = ParserContext::new(header_info.clone(), StrKey::new(erb.to_str().unwrap()))
@@ -684,6 +689,7 @@ pub fn run_script(
                         }
                         report_warning!("W2000", "Parse erb", erb, source.clone(), err, span);
                     }
+                    total_line_count.fetch_add(erb_out.line_count, Ordering::Relaxed);
                     erb_out.functions
                 }
                 Err((err, span)) => {
@@ -794,15 +800,19 @@ pub fn run_script(
         // message instead (`起動時簡略表示`, default `"Now Loading..."`) —
         // the two are mutually exclusive, never both.
         //
-        // Real Emuera's own end-of-load report additionally counts how many
-        // of those functions were ever called (`非コメント行数:{0}, 全関数
-        // 合計:{1}, 被呼出関数合計:{2}`, `GameProc/ErbLoader.cs:753`). That
-        // third figure needs a load-time call graph erars does not build yet
-        // (the function-registration work is a separate session's scope), so
-        // this reports only the two counts already on hand.
+        // Real Emuera's own end-of-load report is `非コメント行数:{0}, 全関数
+        // 合計:{1}, 被呼出関数合計:{2}` (`GameProc/ErbLoader.cs:753`).
+        // `total_line_count` is the first figure done right: it is
+        // `CompiledErb::line_count` summed across every file, which counts
+        // the same population Emuera's `enabledLineCount` does (see that
+        // field's doc comment) — not a raw re-read-and-`str::lines()` of
+        // each file, which would also count comments and blank lines
+        // Emuera's own parser already dropped before its counter saw them.
+        // The third figure needs a load-time call graph erars does not
+        // build yet (the function-registration work is a separate session's
+        // scope), so this reports only the two counts already on hand.
         if display_report {
-            let total_lines: usize =
-                erbs.iter().map(|erb| read_file(erb).map_or(0, |s| s.lines().count())).sum();
+            let total_lines = total_line_count.load(Ordering::Relaxed);
             tx.print_line(format!("총 줄 수:{total_lines}, 전체 함수 수:{func_count}"));
         } else {
             tx.print_line(start_message);
