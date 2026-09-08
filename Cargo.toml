@@ -42,6 +42,7 @@ erars-lexer = { path = "./crates/erars-lexer" }
 erars-compiler = { path = "./crates/erars-compiler" }
 erars-ui = { path = "./crates/erars-ui" }
 erars-vm = { path = "./crates/erars-vm" }
+erars-loader = { path = "./crates/erars-loader" }
 
 serde.workspace = true
 anyhow.workspace = true

@@ -153,7 +153,7 @@ fn sav_path(target_path: &str, config: &EraConfig) -> PathBuf {
 /// (`DefinedNameType.SystemVariable`/`SystemInstrument`) is always level 1 and
 /// never refused, whatever `AllowFunctionOverloading` says
 /// (`GameData/IdentifierDictionary.cs:241-248`).
-fn registration_diagnostics(
+pub fn registration_diagnostics(
     name: &str,
     already_defined: bool,
     config: &EraConfig,

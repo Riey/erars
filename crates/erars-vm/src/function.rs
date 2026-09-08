@@ -8,7 +8,7 @@ use erars_ast::StrKey;
 use erars_compiler::DefaultLocalVarSize;
 use hashbrown::HashMap;
 
-use erars_ast::{Event, EventFlags, EventType, Expr, FunctionInfo, VariableInfo};
+use erars_ast::{BuiltinMethod, Event, EventFlags, EventType, Expr, FunctionInfo, VariableInfo};
 use erars_compiler::{CompiledFunction, Instruction};
 use itertools::Itertools;
 
@@ -110,6 +110,22 @@ pub struct FunctionDic {
     /// dictionary read back from `game.era` needs no flag.
     #[derivative(Debug = "ignore", PartialEq = "ignore")]
     pub compati_call_event: bool,
+    /// In-expression functions a user-defined function overrides.
+    ///
+    /// Emuera resolves an expression call through
+    /// `IdentifierDictionary.GetFunctionMethod`
+    /// (`GameData/IdentifierDictionary.cs:578-613`): the *user* non-event
+    /// label is tried before `methodDic`, and it wins only when it is
+    /// `IsMethod` — declared `#FUNCTION`/`#FUNCTIONS`. A user function of the
+    /// same name *without* `#FUNCTION` deliberately does not override the
+    /// builtin (`:601`, 「#FUNCTIONが定義されていない関数は組み込み関数を上書き
+    /// しない方向に」).
+    ///
+    /// Filled at registration so the hot expression path pays nothing when it
+    /// is empty, which is every game that overrides nothing — both corpora
+    /// included.
+    #[derivative(Debug = "ignore", PartialEq = "ignore")]
+    pub method_overrides: Vec<(BuiltinMethod, StrKey)>,
 }
 
 impl FunctionDic {
@@ -119,6 +135,7 @@ impl FunctionDic {
             normal: HashMap::new(),
             event: EnumMap::default(),
             compati_call_event: false,
+            method_overrides: Vec::new(),
         }
     }
 
@@ -268,7 +285,38 @@ impl FunctionDic {
             }
             self.insert_event(Event { ty, flags }, body);
         } else {
+            // `システム関数の上書きを許可する`: a `#FUNCTION`/`#FUNCTIONS`
+            // function whose name is an in-expression function overrides it
+            // for every expression call site
+            // (`GameData/IdentifierDictionary.cs:585-599`). Registration is
+            // the only place that knows both facts, and when overloading is
+            // refused the function is never registered at all, so the table
+            // simply stays empty (`erars-loader`'s
+            // `registration_diagnostics`).
+            if body.is_function || body.is_functions {
+                if let Ok(meth) = func.header.name.resolve().parse::<BuiltinMethod>() {
+                    self.method_overrides.push((meth, func.header.name.to_global()));
+                }
+            }
             self.insert_func(func.header.name, body);
+        }
+    }
+
+    /// Recomputes [`Self::method_overrides`] from the registered functions.
+    ///
+    /// The table is a pure function of `normal`: a `#FUNCTION`/`#FUNCTIONS`
+    /// body under a builtin in-expression name. When overloading is refused
+    /// the function is never registered, so a dictionary read back from
+    /// `game.era` reproduces the same table without storing it.
+    pub fn rebuild_method_overrides(&mut self) {
+        self.method_overrides.clear();
+        for (name, body) in self.normal.iter() {
+            if !(body.is_function || body.is_functions) {
+                continue;
+            }
+            if let Ok(meth) = name.resolve().parse::<BuiltinMethod>() {
+                self.method_overrides.push((meth, name.to_global()));
+            }
         }
     }
 

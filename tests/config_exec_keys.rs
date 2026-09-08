@@ -80,10 +80,24 @@ fn run(script: &str, config: EraConfig) -> (bool, String) {
 
     let mut dic = FunctionDic::new();
     for func in program {
+        let func = compile(func).unwrap();
+        // The real load-time gate: `システム関数の上書きを許可する:NO` refuses
+        // the definition outright, so the function is never registered
+        // (`erars-loader`'s `registration_diagnostics`). Running it here keeps
+        // "refused" and "registered but not overriding" distinguishable from
+        // the call site.
+        let (register, _) = erars_loader::registration_diagnostics(
+            func.header.name.resolve(),
+            dic.normal.contains_key(&func.header.name),
+            &ctx.config,
+        );
+        if !register {
+            continue;
+        }
         dic.insert_compiled_func(
             &mut ctx.var,
             &ctx.header_info.default_local_size,
-            compile(func).unwrap(),
+            func,
         );
     }
 
@@ -449,4 +463,57 @@ fn back_compat_warning_is_on_by_default() {
 fn back_compat_warning_off_suppresses_it() {
     let warnings = sif_warnings(false);
     assert!(warnings.is_empty(), "{warnings:?}");
+}
+
+/// Expression-call resolution order: a user function declared
+/// `#FUNCTION`/`#FUNCTIONS` is reached instead of the in-expression function
+/// of the same name.
+///
+/// `IdentifierDictionary.GetFunctionMethod`
+/// (`GameData/IdentifierDictionary.cs:578-613`) tries the user label
+/// (`labelDic.GetNonEventLabel`) *before* `methodDic`, and returns
+/// `UserDefinedMethodTerm` when the label `IsMethod`. This is the behaviour
+/// `システム関数の上書きを許可する` (default YES) claims: erars used to decide
+/// `Expr::BuiltinMethod` vs `Expr::Method` at parse time
+/// (`crates/erars-compiler/src/parser/expr.rs:624`), so the builtin shadowed
+/// the user function at every call site and the key asserted an override that
+/// never happened.
+#[test]
+fn user_function_overrides_the_builtin_method() {
+    let (ok, out) = run(
+        "@SYSTEM_TITLE\nPRINTFORML {MAX(1, 2)}\n\n@MAX(A, B)\n#FUNCTION\n#DIM A\n#DIM B\nRETURNF 99\n",
+        config_with(|_| {}),
+    );
+    assert!(ok, "VM error:\n{out}");
+    assert_eq!(out, "99");
+}
+
+/// The other half of the same source line (`:601`): a user function of a
+/// builtin name that is *not* `#FUNCTION` deliberately does not override it —
+/// 「#FUNCTIONが定義されていない関数は組み込み関数を上書きしない方向に」. So
+/// "registered" alone must not be enough to win the call site.
+#[test]
+fn non_function_user_label_does_not_override_the_builtin() {
+    let (ok, out) = run(
+        "@SYSTEM_TITLE\nPRINTFORML {MAX(1, 2)}\n\n@MAX(A, B)\n#DIM A\n#DIM B\nRETURN 99\n",
+        config_with(|_| {}),
+    );
+    assert!(ok, "VM error:\n{out}");
+    assert_eq!(out, "2");
+}
+
+/// With `システム関数の上書きを許可する:NO` the definition is refused at load
+/// time (level 2, `GameData/IdentifierDictionary.cs:228-240` +
+/// `GameProc/LogicalLineParser.cs:311-312`), so the builtin still answers the
+/// call. "Refused" and "registered but shadowed" are indistinguishable from
+/// the call site, which is why the override table is built *at registration*
+/// rather than probed per call.
+#[test]
+fn overloading_refused_leaves_the_builtin_in_place() {
+    let (ok, out) = run(
+        "@SYSTEM_TITLE\nPRINTFORML {MAX(1, 2)}\n\n@MAX(A, B)\n#FUNCTION\n#DIM A\n#DIM B\nRETURNF 99\n",
+        config_with(|c| c.allow_function_overloading = false),
+    );
+    assert!(ok, "VM error:\n{out}");
+    assert_eq!(out, "2");
 }
