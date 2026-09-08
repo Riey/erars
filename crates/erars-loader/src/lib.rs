@@ -14,7 +14,7 @@ use std::{
 };
 
 use codespan_reporting::{
-    diagnostic::{Diagnostic, Label},
+    diagnostic::{Diagnostic, Label, Severity},
     term::{
         termcolor::{ColorChoice, StandardStream, WriteColor},
         Config,
@@ -775,6 +775,11 @@ pub fn run_script(
         let func_count = funcs.len();
 
         let mut graph_input = Vec::new();
+        // `CompatiErrorLine` also covers a refused function registration
+        // (`GameProc/ErbLoader.cs:366` sets `noError = false` there too) —
+        // tracked here, checked after the loop alongside the "E2000" parse
+        // diagnostics below.
+        let mut had_rejected_registration = false;
 
         for (_, mut func) in funcs {
             let already_defined = function_dic.get_func_opt(func.header.name).is_some();
@@ -800,6 +805,7 @@ pub fn run_script(
             }
 
             if !register {
+                had_rejected_registration = true;
                 continue;
             }
 
@@ -921,6 +927,29 @@ pub fn run_script(
         }
 
         check_time!("Report errors", @ctx ctx);
+
+        // `CompatiErrorLine` (`解釈不能な行があっても実行する`, default `false`
+        // — `ConfigData.cs:93`). Unlike the CSV/ERH failures collected above
+        // (always fatal in real Emuera too, `GameProc/Process.cs:166`), an
+        // "E2000" diagnostic is specifically an unparseable ERB *line* that
+        // Emuera's own loader still skips and keeps compiling past
+        // (`GameProc/ErbLoader.cs:355,368,407,428` set `noError = false` on
+        // exactly this case while registering every function it could still
+        // parse). With the flag off, real Emuera refuses to leave the title
+        // screen over that (`GameProc/Process.SystemProc.cs:152-160`); erars
+        // mirrors that here by aborting the load instead of silently running
+        // with functions missing their unparseable lines.
+        if !ctx.config.compati_error_line
+            && (had_rejected_registration
+                || diagnostics
+                    .iter()
+                    .any(|d| d.severity == Severity::Error && d.code.as_deref() == Some("E2000")))
+        {
+            anyhow::bail!(
+                "ERBコードに解釈不可能な行があるため終了します \
+                 (互換性オプション「解釈不能な行があっても実行する」で継続できます)"
+            );
+        }
     }
 
     let vm = TerminalVm::new(function_dic, ctx.header_info.clone());

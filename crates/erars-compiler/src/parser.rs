@@ -4207,9 +4207,10 @@ impl<'p> ParserContext<'p> {
     /// also treats that way: `InvalidLabelLine` sets `noError`
     /// (`GameProc/ErbLoader.cs:366`).
     ///
-    /// DELIBERATE: erars reports an unreadable line and still starts the game;
-    /// Emuera refuses to start unless `解釈不可能な行があっても実行する` is on.
-    /// See `docs/research/2026-09-03-emuera-command-gap.md` §5.
+    /// `run_script`'s end-of-load path now mirrors that: with
+    /// `解釈不可能な行があっても実行する:NO` (the default) it aborts the load
+    /// after collecting every diagnostic, exactly like Emuera's title-screen
+    /// refusal (`crates/erars-loader/src/lib.rs`, `CompatiErrorLine`).
     pub fn parse_and_compile<'s>(
         &self,
         pp: &mut Preprocessor<'s>,

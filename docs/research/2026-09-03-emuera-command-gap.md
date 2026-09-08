@@ -469,7 +469,7 @@ granularity and one in the consequence.
 |---|---|---|
 | a line whose parse already consumed the lines after it — a block opener such as `IF` or `FOR`, which erars parses recursively where Emuera pairs it up in a later pass — leaves nowhere safe to resume, so **the whole enclosing function is dropped**: its remaining lines are only scanned for the next `@label` and it never registers, so calling it fails as an unknown function | `parser.rs:3246-3264` with `finish!` at `:3186-3204` | every line is `InvalidLine`d individually and the function still exists |
 | a `#DIM`/`#DIMS` erars cannot read means the function's local does not exist, so the same whole-function drop applies; Emuera keeps the function and invalidates each line that mentions the name | `push_info`'s `Err` shape, `parser.rs:3238-3244` | `ErbLoader.cs` sharp-line pass |
-| **erars reports every unreadable line and still starts the game.** With `解釈不可能な行があっても実行する:NO` — the default (`Config/ConfigData.cs:106`) and what eraMegaten ships (`eramegaten_p_kr/emuera.config:49`) — each `InvalidLine` clears Emuera's `noError` flag and `Process.SystemProc.cs:173-186` refuses to start at all | `compile_one`, `crates/erars-loader/src/lib.rs:450-477` (`report_error!` per line, the file's other functions still register) | refuses to start |
+| **erars now matches Emuera here.** With `解釈不可能な行があっても実行する:NO` — the default (`Config/ConfigData.cs:106`) and what eraMegaten ships (`eramegaten_p_kr/emuera.config:49`, though the checkout's copy is gitignored so the game currently loads with the same default anyway) — each unreadable line clears `noError`/`compati_error_line`'s gate and the load aborts once diagnostics are reported, instead of starting with the bad function dropped. Wired 2026-09-08 (`EraConfigKey::CompatiErrorLine`, `run_script`'s end-of-load check, `crates/erars-loader/src/lib.rs:941-947`); verified against a scratch copy of `eramegaten_p_kr` — it now fails to load by default with `ERBコードに解釈不可能な行があるため終了します`, matching real Emuera's own refusal, where it previously started successfully despite the six `E2000` lines this doc's own §6.1 catalogues | `compile_one`, `crates/erars-loader/src/lib.rs:450-477` (`report_error!` per line, the file's other functions still register); the abort check at `:941-947` | refuses to start |
 
 What is *not* a divergence, and is worth stating because it looks like one:
 
@@ -1100,7 +1100,7 @@ but do not change behaviour. Grouped by why:
 | `読み込み順をファイル名順にソートする` | erars always sorts: parallel load returns functions in completion order otherwise, so which duplicate definition wins would depend on thread timing (`crates/erars-loader/src/lib.rs:216-219`) |
 | `オートセーブを行なう`, `無限ループ警告時間`, `ロード時の情報表示`, `ロード時に引数を解析する` | load-time UI and timing, no erars analogue |
 | `呼ばれない関数を無視する`, `関数が見つからない警告`, `関数が呼ばれない警告`, `後方互換性の警告`, `関数の上書きを許可する`, `関数の上書き警告`, `通常関数の上書き警告` | erars' diagnostic set is the one in §5.12/§6, not Emuera's whitelist of load-time advisories |
-| `解釈不可能な行があっても実行する` | erars is always lenient — §5.7 |
+| `解釈不可能な行があっても実行する` | wired 2026-09-08 — see §5.7/§6.1 for the corpus-observed effect |
 | `RANDの互換性`, `TIMESを厳密に計算しない`, `TARGETを設定しない` | numeric/dispatch compatibility shims for pre-1.7 scripts; erars implements the modern behaviour only |
 | `セーブデータをバイナリ形式で保存する`, `セーブデータをUTF-8で保存する` | erars' save format is its own (`crates/erars-vm/src/save.rs`); it is neither Emuera's binary nor its text form |
 | `改行を1739として扱う`, `ONEINPUTで2文字以上の入力を許可する`, `ボタンの折り返し`, `キーマクロを使用する` | frontend input/layout details owned by `erars-renderer` |
@@ -1265,6 +1265,15 @@ ships, with no user config and nothing assembled by hand. Every one of the 19 is
 game's own source, not an erars gap. They are enumerated here because "6 remaining errors" is
 otherwise indistinguishable from "6 unimplemented features".
 
+**Correction (2026-09-08, `compati_error_line` wired):** the "exits 0" measurement above predates
+`解釈不可能な行があっても実行する`/`CompatiErrorLine` being read at the end-of-load check
+(`crates/erars-loader/src/lib.rs:941-947`). With that key now wired, the same command with no user
+config exits non-zero: `Failed to load /home/riey/repos/eramegaten_p_kr/Data: ERBコードに解釈不可能
+な行があるため終了します`, matching real Emuera's own refusal to start this corpus (§6.1). The 19
+diagnostics themselves, and everything they say about the game's own source, are unaffected — only
+whether the load is allowed to proceed afterward changed. Reproducing §6.2-§6.4's numbers now needs
+an explicit `emuera.config` with `解釈不可能な行があっても実行する:YES` beside `Data/`.
+
 **The game directory is `Data`, not the repository root.** Emuera anchors everything on one
 directory: `Program.cs:57-63` derives `CsvDir`, `ErbDir`, `DatDir`, `DebugDir` and `ContentDir` from
 `WorkingDir` (`ExeDir` in the desktop build, the lines it replaced are still there commented out),
@@ -1288,8 +1297,12 @@ Reproducing the numbers needs **no user config**, because a game can ship its ow
 Emuera rejects all six as well. It reports each one, clears `noError`
 (`GameProc/ErbLoader.cs:403-407`, `:423-427`) and then **refuses to start the game**, because the
 shipped `eramegaten_p_kr/emuera.config:49` sets `解釈不可能な行があっても実行する:NO`
-(`GameProc/Process.SystemProc.cs:173-186`). erars reports the line, keeps the rest of the file — the
-enclosing function is dropped where the failure consumed following lines, §5.7 — and starts.
+(`GameProc/Process.SystemProc.cs:173-186`). erars now matches this: with `CompatiErrorLine` wired
+(2026-09-08) and no override, the load aborts the same way once all six are reported — see the
+correction note above §6.1. §6.2-§6.4 below still hold, but only when `emuera.config` sets
+`解釈不可能な行があっても実行する:YES` to keep loading past these lines, exactly as
+`compati_error_line_on_keeps_loading_past_an_unparseable_line` in
+`crates/erars-loader/tests/compati_error_line.rs` exercises.
 
 | Game source | Defect | Why Emuera also refuses |
 |---|---|---|
@@ -1322,7 +1335,9 @@ lines.
 
 ### 6.4 Where the game stops
 
-Loading succeeds and the title sequence runs to `タイトル表示/PRINT_TITLE.ERB:67`,
+(With `解釈不可能な行があっても実行する:YES` set, per the §6.1 correction note — otherwise the load
+aborts before reaching this point.) Loading succeeds and the title sequence runs to
+`タイトル表示/PRINT_TITLE.ERB:67`,
 `TITLE_NO = TITLE_LIST:(RAND:CNT_TITLE_PICTURE)`. `CNT_TITLE_PICTURE` is counted at `:20-51` by
 `GCREATEFROMFILE` over `Data/resources/タイトル画像/`, which the repository does not ship — it is
 `.gitignore`d and `追加画像について.MD` points at an external download
