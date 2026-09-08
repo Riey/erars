@@ -2481,6 +2481,8 @@ pub struct ParserContext<'p> {
     /// and whether `DEBUGPRINT`/`ASSERT` lines are compiled at all — because
     /// Emuera fixes it from the command line before any script is read.
     debug_mode: bool,
+    /// See [`ParserContext::with_ignore_string_set`].
+    ignore_string_set: bool,
 }
 
 impl<'p> ParserContext<'p> {
@@ -2497,6 +2499,7 @@ impl<'p> ParserContext<'p> {
             is_arg: Cell::new(false),
             ban_percent: Cell::new(false),
             debug_mode: false,
+            ignore_string_set: false,
         }
     }
 
@@ -2505,6 +2508,15 @@ impl<'p> ParserContext<'p> {
     /// `Program.cs:219-220`).
     pub fn with_debug(mut self, debug_mode: bool) -> Self {
         self.debug_mode = debug_mode;
+        self
+    }
+
+    /// `文字列変数の代入に文字列式を強制する` — Emuera `SystemIgnoreStringSet`,
+    /// default `false` (`Config/ConfigData.cs:115`). When set, a plain `=` on a
+    /// string variable is refused at parse time and the script must use `'=`
+    /// (`GameProc/Function/ArgumentBuilder.cs:777-779`).
+    pub fn with_ignore_string_set(mut self, ignore_string_set: bool) -> Self {
+        self.ignore_string_set = ignore_string_set;
         self
     }
 
@@ -3584,6 +3596,19 @@ impl<'p> ParserContext<'p> {
                             // introduced by list-based RHS parsing here).
                             // `form_assign_expr` (`FormStrType::Normal`) has
                             // no comma stop, so the whole literal survives.
+                            //
+                            // `文字列変数の代入に文字列式を強制する`
+                            // (`SystemIgnoreStringSet`) refuses this form
+                            // outright and demands `'=`
+                            // (`GameProc/Function/ArgumentBuilder.cs:777-779`:
+                            // `文字列代入は禁止されています（'=を用いるかコン
+                            // フィグオプションを変えてください)`).
+                            if self.ignore_string_set {
+                                error!(
+                                    pp.span(),
+                                    "文字列代入は禁止されています（'=を用いるかコンフィグオプションを変えてください)".to_string()
+                                );
+                            }
                             let rhs = try_nom!(pp, self::expr::form_assign_expr(self)(rhs)).1;
                             Stmt::Assign(var, None, rhs)
                         } else {

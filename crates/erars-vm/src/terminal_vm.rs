@@ -42,6 +42,34 @@ enum InstructionWorkflow {
     GotoLabel { label: StrKey, is_try: bool },
 }
 
+/// Emuera's call-time argument type check
+/// (`GameProc/Process.CalledFunction.cs:199-219`).
+///
+/// A string passed where an int is expected is always an error; an int passed
+/// where a *string* is expected is an error too, unless
+/// `ユーザー関数の引数に自動的にTOSTRを補完する` (`CompatiFuncArgAutoConvert`,
+/// default `false` per `Config/ConfigData.cs:109`) is on, in which case Emuera
+/// wraps the argument in `TOSTR` — which for an integer is exactly its decimal
+/// spelling.
+fn convert_arg(
+    value: Value,
+    is_str_param: bool,
+    auto_convert: bool,
+    label: FunctionIdentifier,
+    var_idx: &StrKey,
+) -> Result<Value> {
+    match value {
+        Value::Int(i) if is_str_param => {
+            ensure!(
+                auto_convert,
+                "\"{label}\"의 인수 {var_idx}를 정수형에서 문자열형으로 변환할 수 없습니다(설정 \"ユーザー関数の引数に自動的にTOSTRを補完する\"로 무시할 수 있습니다)"
+            );
+            Ok(Value::String(i.to_string()))
+        }
+        value => Ok(value),
+    }
+}
+
 impl TerminalVm {
     pub fn new(function_dic: FunctionDic, header: Arc<HeaderInfo>) -> Self {
         Self {
@@ -171,8 +199,22 @@ impl TerminalVm {
 
         let mut args = args.iter().cloned();
 
+        // `ユーザー関数の全ての引数の省略を許可する` / `ユーザー関数の引数に
+        // 自動的にTOSTRを補完する`, both `false` by default
+        // (`Config/ConfigData.cs:108-109`). Read once: the loop below holds a
+        // `&mut` borrow of `ctx.var` while it needs them.
+        let arg_optional = ctx.config.compati_func_arg_optional;
+        let arg_auto_convert = ctx.config.compati_func_arg_auto_convert;
+
         for FunctionArgDef(var_idx, arg_indices, default_value) in body.args().iter() {
+            // Emuera gives an implicit `0`/`""` default to exactly `ARG`,
+            // `ARGS` and private variables (`GameProc/ErbLoader.cs:580-590`,
+            // `canDef`), which in erars are precisely the function's local
+            // variables; a global parameter has no default at all, so omitting
+            // it is what `CompatiFuncArgOptional` is about.
+            let has_implicit_default = ctx.var.is_local_var(label, *var_idx);
             let (info, var) = ctx.var.get_maybe_local_var(label, *var_idx)?;
+            let is_str = info.is_str;
             if info.is_ref {
                 ensure!(arg_indices.is_empty(), "Can't use index for ref var");
                 ensure!(
@@ -188,6 +230,10 @@ impl TerminalVm {
                             std::mem::transmute((var_ref.name.to_u32(), var_ref.func_name.to_u32()))
                         };
                     }
+                    // `"@X"の N番目の引数は参照渡しのため省略できません`
+                    // (`GameProc/Process.CalledFunction.cs:170-173`): a
+                    // reference parameter is never optional, whatever
+                    // `CompatiFuncArgOptional` says.
                     _ => bail!("Invalid arg for ref var"),
                 }
             } else {
@@ -197,6 +243,7 @@ impl TerminalVm {
                 let arg = match args.next() {
                     Some(LocalValue::VarRef(var_ref)) => {
                         let src = ctx.read_var_ref(&var_ref)?;
+                        let src = convert_arg(src, is_str, arg_auto_convert, label, var_idx)?;
                         let (_info, var) =
                             ctx.var.get_maybe_local_var(label, *var_idx).context("Set argument")?;
                         var.assume_normal()
@@ -204,12 +251,28 @@ impl TerminalVm {
                             .with_context(|| format!("Set argument {var_idx}"))?;
                         continue;
                     }
-                    Some(LocalValue::Value(v)) => Some(v),
+                    Some(LocalValue::Value(v)) => {
+                        Some(convert_arg(v, is_str, arg_auto_convert, label, var_idx)?)
+                    }
                     Some(LocalValue::InternedStr(s)) => Some(Value::String(s.to_string())),
-                    None => default_value.clone().map(|v| match v {
-                        InlineValue::Int(i) => Value::Int(i),
-                        InlineValue::String(s, _) => Value::String(s.resolve().into()),
-                    }),
+                    // An empty slot (`LocalValue::Omitted`, pushed by
+                    // `LoadDefaultArgument`) and a call that ran out of
+                    // arguments are the same case in Emuera: `term == null`
+                    // (`GameProc/Process.CalledFunction.cs:188-198`).
+                    Some(LocalValue::Omitted) | None => match default_value.clone() {
+                        Some(InlineValue::Int(i)) => Some(Value::Int(i)),
+                        Some(InlineValue::String(s, _)) => Some(Value::String(s.resolve().into())),
+                        None if has_implicit_default => None,
+                        // `CompatiFuncArgOptional`: leave the callee's variable
+                        // at whatever it held before the call
+                        // (`UserDefinedFunctionArgument.SetTransporter`'s
+                        // `if (Arguments[i] == null) continue;`,
+                        // `GameProc/Process.CalledFunction.cs:36-37`).
+                        None if arg_optional => continue,
+                        None => bail!(
+                            "\"{label}\"의 인수 {var_idx}는 생략할 수 없습니다(설정 \"ユーザー関数の全ての引数の省略を許可する\"로 무시할 수 있습니다)"
+                        ),
+                    },
                 };
 
                 var.set_or_default(idx, arg).context("Set argument")?;

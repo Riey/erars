@@ -534,6 +534,22 @@ exactly as an enum variant's absence is not evidence of missing behavior.
       plain `=` on a string variable to a genuine string expression, presumably rejecting what
       today silently coerces; touches the same plain-`=`-on-string path §2.2 above fixed).
 
+      **Source note (added 2026-09-08, while wiring these four keys):**
+      `docs/research/emuera-wiki/config.md` has **no heading at all** for
+      `キャラクタ変数の引数を補完しない` (`SystemNoTarget`) or
+      `文字列変数の代入に文字列式を強制する` (`SystemIgnoreStringSet`) — the wiki page simply does
+      not document them, so there is no wording to look for. The authority for both is real
+      Emuera's C# source: defaults in `Config/ConfigData.cs:114` and `:115` (both `false`);
+      `SystemNoTarget`'s behaviour in `GameData/Variable/VariableParser.cs:108-137` (with the key
+      on, a character variable missing its character index is refused instead of resolving through
+      `TARGET`); `SystemIgnoreStringSet`'s in `GameProc/Function/ArgumentBuilder.cs:777-779` (with
+      the key on, plain `=` on a string variable is rejected **at parse time** and the script must
+      use `'=`). The two `Compati*` call-argument keys above *are* documented
+      (`config.md:294-306`), both defaulting to `NO`, with the errors they suppress raised in
+      `GameProc/Process.CalledFunction.cs:191-198` and `:199-219`; the implicit `0`/`""` default
+      that makes `ARG`/`ARGS`/private parameters omittable regardless comes from
+      `GameProc/ErbLoader.cs:578-590` (`canDef`).
+
   **Net for §4: the real, engine-relevant residual is 26 keys (28 minus the 2 host-only), of which
   2 are a small "read an existing branch" change, 1 needs a small new parser feature before the
   switch means anything, 1 needs a design decision before it's a wiring problem at all, and 22 are

@@ -97,6 +97,13 @@ impl VmContext {
 
         ret.init_variable().unwrap();
 
+        // `キャラクタ変数の引数を補完しない` (`Config/ConfigData.cs:114`,
+        // default `false`) is consulted on every character-variable access, so
+        // the storage keeps its own copy instead of reaching back for the
+        // config. Set after `init_variable`, which is engine start-up rather
+        // than script code and must not be subject to it.
+        ret.var.no_target = ret.config.system_no_target;
+
         ret
     }
 
@@ -328,6 +335,7 @@ impl VmContext {
             LocalValue::Value(v) => Ok(v),
             LocalValue::InternedStr(s) => Ok(self.var.resolve_key(s).into()),
             LocalValue::VarRef(r) => self.read_var_ref(&r),
+            LocalValue::Omitted => bail!("Omitted argument used as a value"),
         }
     }
 
@@ -490,6 +498,7 @@ impl VmContext {
                     let var = self.var.index_maybe_local_var(var.func_name, var.name, &var.idxs)?;
                     ret.push(var.1.get(var.2)?);
                 }
+                LocalValue::Omitted => bail!("Omitted argument used as a value"),
                 LocalValue::InternedStr(s) => {
                     ret.push(self.var.resolve_key(s).into());
                 }
@@ -532,6 +541,10 @@ impl VmContext {
         self.stack.push(LocalValue::Value(value.into()));
     }
 
+    pub fn push_omitted(&mut self) {
+        self.stack.push(LocalValue::Omitted);
+    }
+
     pub fn pop(&mut self) -> Result<LocalValue> {
         if let Some(last_stack) = self.call_stack.last() {
             if last_stack.stack_base >= self.stack.len() {
@@ -551,6 +564,7 @@ impl VmContext {
             LocalValue::Value(v) => Ok(v),
             LocalValue::VarRef(var_ref) => self.read_var_ref(&var_ref),
             LocalValue::InternedStr(s) => Ok(Value::String(self.var.resolve_key(s).into())),
+            LocalValue::Omitted => bail!("Omitted argument used as a value"),
         }
     }
 
@@ -575,6 +589,7 @@ impl VmContext {
             LocalValue::InternedStr(s) => return Ok(s.to_global()),
             LocalValue::Value(v) => v,
             LocalValue::VarRef(var_ref) => self.read_var_ref(&var_ref)?,
+            LocalValue::Omitted => bail!("Omitted argument used as a value"),
         };
 
         match value {
@@ -647,6 +662,18 @@ pub enum LocalValue {
     Value(Value),
     InternedStr(StrKey),
     VarRef(VariableRef),
+    /// A positional argument the call left empty, for a parameter that has no
+    /// default value and is not `ARG`/`ARGS`/a private variable.
+    ///
+    /// Emuera's `Def[i]` is `null` for exactly that shape
+    /// (`GameProc/ErbLoader.cs:580-590`: only `ARG`, `ARGS` and private
+    /// variables get the implicit `0`/`""`), and its call binder then either
+    /// refuses the call or leaves the callee's variable untouched depending on
+    /// `CompatiFuncArgOptional` (`GameProc/Process.CalledFunction.cs:191-198`,
+    /// with `UserDefinedFunctionArgument.SetTransporter`'s
+    /// `if (Arguments[i] == null) continue;` at `:36-37` performing the
+    /// "untouched" half). Only `TerminalVm::call_internal` ever reads it.
+    Omitted,
 }
 
 impl<T> From<T> for LocalValue

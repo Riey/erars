@@ -578,7 +578,8 @@ pub fn run_script(
         let compile_one = |erb: &Path| -> Vec<CompiledFunction> {
             let source = read_file(erb).unwrap();
             let ctx = ParserContext::new(header_info.clone(), StrKey::new(erb.to_str().unwrap()))
-                .with_debug(debug_mode);
+                .with_debug(debug_mode)
+                .with_ignore_string_set(config.system_ignore_string_set);
 
             log::debug!("Parse And Compile {}", erb.display());
 

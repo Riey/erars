@@ -220,6 +220,14 @@ pub struct VariableStorage {
     local_variables: HashMap<StrKey, LocalVarTable>,
     known_variables: EnumMap<KnownVariableNames, StrKey>,
     event_keys: EnumMap<EventType, StrKey>,
+    /// `キャラクタ変数の引数を補完しない` — Emuera `SystemNoTarget`, default
+    /// `false` (`Config/ConfigData.cs:114`). When set, a character variable
+    /// accessed without its character index is an error rather than an
+    /// implicit `TARGET` (`GameData/Variable/VariableParser.cs:108-137`).
+    /// Set by [`crate::VmContext::new`] from the game's config; a
+    /// [`VariableStorage`] built directly (tooling, save fixtures) keeps
+    /// Emuera's default.
+    pub no_target: bool,
 }
 
 impl VariableStorage {
@@ -250,6 +258,7 @@ impl VariableStorage {
                 v => interner.get_or_intern_static(<&str>::from(v)),
             },
             interner,
+            no_target: false,
         }
     }
 
@@ -1028,6 +1037,14 @@ impl VariableStorage {
             .is_some_and(|(info, _)| info.is_chara && info.calculate_single_idx(args).0.is_none());
 
         let target = if needs_target {
+            // `キャラクタ変数の引数を補完しない`: Emuera refuses the access
+            // instead of substituting `TARGET`
+            // (`GameData/Variable/VariableParser.cs:112-113`, `:131-132` —
+            // `キャラクタ変数Xの引数は省略できません(コンフィグにより禁止が
+            // 選択されています)`).
+            if self.no_target {
+                bail!("Variable {name:?}: 캐릭터 변수의 인수는 생략할 수 없습니다(설정 \"キャラクタ変数の引数を補完しない\")");
+            }
             let target_key = self.known_key(KnownVariableNames::Target);
             Some(self.read_int(target_key, &[])?)
         } else {
@@ -1077,6 +1094,11 @@ impl VariableStorage {
             .is_some_and(|(info, _)| info.is_chara && info.calculate_single_idx(args).0.is_none());
 
         let target = if needs_target {
+            // Same `SystemNoTarget` refusal as `index_var`
+            // (`GameData/Variable/VariableParser.cs:112-113`).
+            if self.no_target {
+                bail!("Variable {name:?}@{func_name:?}: 캐릭터 변수의 인수는 생략할 수 없습니다(설정 \"キャラクタ変数の引数を補完しない\")");
+            }
             let target_key = self.known_key(KnownVariableNames::Target);
             Some(self.read_int(target_key, &[])?)
         } else {

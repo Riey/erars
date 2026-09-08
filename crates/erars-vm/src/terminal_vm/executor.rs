@@ -578,11 +578,21 @@ pub(super) fn run_instruction(
                             InlineValue::Int(i) => ctx.push(*i),
                             InlineValue::String(s, _) => ctx.push_strkey(*s),
                         },
-                        None => match ctx.var.get_maybe_local_var(target_func_name, arg.0)?.0.is_str
-                        {
-                            true => ctx.push(String::new()),
-                            false => ctx.push(0i64),
-                        },
+                        // No declared default: only `ARG`/`ARGS`/private
+                        // variables — erars's function locals — get Emuera's
+                        // implicit `0`/`""` (`GameProc/ErbLoader.cs:580-590`).
+                        // For anything else the slot stays *omitted*, and
+                        // `call_internal` applies `CompatiFuncArgOptional` to
+                        // it (`GameProc/Process.CalledFunction.cs:188-198`).
+                        None if !ctx.var.is_local_var(target_func_name, arg.0) => {
+                            ctx.push_omitted()
+                        }
+                        None => {
+                            match ctx.var.get_maybe_local_var(target_func_name, arg.0)?.0.is_str {
+                                true => ctx.push(String::new()),
+                                false => ctx.push(0i64),
+                            }
+                        }
                     }
                 }
                 None => ctx.push(0i64),
