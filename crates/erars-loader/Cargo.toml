@@ -8,6 +8,7 @@ license = "GPL-3.0-or-later"
 erars-ast = { path = "../erars-ast" }
 erars-bytecode = { path = "../erars-bytecode" }
 erars-compiler = { path = "../erars-compiler" }
+erars-lexer = { path = "../erars-lexer" }
 erars-lint = { path = "../erars-lint" }
 erars-reader = { path = "../erars-reader" }
 erars-ui = { path = "../erars-ui" }

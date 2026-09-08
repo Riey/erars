@@ -402,3 +402,51 @@ fn ignore_case_off_wins_over_the_compat_key() {
         );
     }
 }
+
+/// `eramaker互換性に関する警告を表示する` (`WarnBackCompatibility`, default
+/// **YES**, `Config/ConfigData.cs:86`).
+///
+/// It gates exactly the warnings Emuera raises with `isBackComp: true`
+/// (`GameData/ParserMediator.cs:128`), and a search of the whole C# source
+/// finds exactly one such call: the level-0 `SIF` warning at
+/// `GameProc/Function/Instraction.Child.cs:1795`. None of the other compat
+/// keys wired so far emit a warning at all — they raise hard errors — so this
+/// one warning is the key's entire scope.
+///
+/// Level 0 is *below* the default `表示する最低警告レベル` of 1
+/// (`Config/ConfigData.cs:72`), so the loader drops it unless the level is
+/// lowered; this test reads the parser's own warning list, where the level is
+/// still attached.
+const SIF_BACK_COMPAT: &str = "\
+@SYSTEM_TITLE
+SIF 1
+
+\tPRINTFORML body
+";
+
+fn sif_warnings(warn_back_compatibility: bool) -> Vec<(String, u8)> {
+    erars_ast::init_interner();
+    let ctx = test_util::get_ctx("SIF_BACK_COMPAT.ERB")
+        .with_warn_back_compatibility(warn_back_compatibility);
+    let erb = ctx
+        .parse_and_compile(
+            &mut ctx.preprocessor(SIF_BACK_COMPAT),
+            &mut erars_compiler::Bump::new(),
+        )
+        .unwrap();
+    erb.warnings.into_iter().map(|(msg, _, level)| (msg, level)).collect()
+}
+
+#[test]
+fn back_compat_warning_is_on_by_default() {
+    let warnings = sif_warnings(true);
+    assert_eq!(warnings.len(), 1, "{warnings:?}");
+    assert_eq!(warnings[0].1, 0, "Emuera raises this at level 0");
+    assert!(warnings[0].0.contains("SIF"), "{warnings:?}");
+}
+
+#[test]
+fn back_compat_warning_off_suppresses_it() {
+    let warnings = sif_warnings(false);
+    assert!(warnings.is_empty(), "{warnings:?}");
+}
