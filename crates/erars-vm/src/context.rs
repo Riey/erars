@@ -17,13 +17,22 @@ use super::UniformVariable;
 /// Emuera counts executed lines and, every 10,000 of them, compares wall clock
 /// against `InfiniteLoopAlertTime` — "reading the time is itself expensive, so
 /// once per 10,000 lines or so" is its own comment
-/// (`GameProc/Process.ScriptProc.cs:20-24`). The clock and the counter are
-/// reset when the engine re-enters script execution after a console
-/// round-trip (`GameProc/Process.cs:266-270`, reached from
-/// `GameView/EmueraConsole.cs:787` after every input) and by `AWAIT`
-/// (`GameProc/Function/Instraction.Child.cs:1668` →
-/// `EmueraConsole.Await` → `Process.cs:304-307`). `WAIT`/`FORCEWAIT`/`TWAIT`
-/// reset it only transitively, by asking for input.
+/// (`GameProc/Process.ScriptProc.cs:20-24`).
+///
+/// The reset is on *input*, not on the `WAIT` family, whatever
+/// `docs/research/2026-09-06-language-feature-work.md` §6.2 used to say.
+/// `UpdateCheckInfiniteLoopState` (`GameProc/Process.cs:304-307`) has exactly
+/// two callers: `DoScript` (`Process.cs:266-270`), which the console
+/// re-enters after every answer (`GameView/EmueraConsole.cs:787`), and
+/// `EmueraConsole.Await` (`GameView/EmueraConsole.cs:553`), reached only from
+/// `AWAIT` (`GameProc/Function/Instraction.Child.cs:1668`).
+/// `WAIT`/`FORCEWAIT`/`TWAIT` go through `WaitInput`, which does not reset —
+/// they reset only transitively, by forcing an input round-trip. Wiring this
+/// against "no `WAIT` for N ms" would fire where Emuera does not and stay
+/// silent where it does.
+///
+/// The default is 5000 ms (`Config/ConfigData.cs:71`), so this is armed
+/// unless a game asks for `0`.
 ///
 /// DELIBERATE: on trigger Emuera opens a modal "無限ループの可能性がありま
 /// す … 強制終了しますか?" dialog and aborts only if the user says yes
