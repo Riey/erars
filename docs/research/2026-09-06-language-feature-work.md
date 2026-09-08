@@ -583,7 +583,30 @@ exactly as an enum variant's absence is not evidence of missing behavior.
       reports the error and keeps loading regardless of this flag — i.e. erars is hardcoded to the
       *non-default* `YES` behavior, the opposite direction from the `button_wrap`/`system_allow_
       full_space` cases above. Wiring this means *adding* a startup-abort path, not just reading an
-      existing one), `compati_function_no_ignore_case` (`関数・属性については大文字小文字を無視し
+      existing one),
+
+    **DONE 2026-09-08.** Wired, and then corrected: the first wiring (the other session's
+    `d66f166`) aborted on *every* `E2000`, which refused to boot eramegaten under its own shipped
+    config — the corpus's six malformed Korean-translation FORM lines are argument-class, not
+    line-shape, and Emuera boots them. The abort is now scoped to Emuera's actual
+    `noError = false` class. Real Emuera sets `noError = false` in exactly four places, all
+    line-*shape* failures (`ErbLoader.cs:355` a `#` `ParseSharpLine` could not read, `:368` an
+    `@` `InvalidLabelLine`, `:407` a label/`$` `InvalidLine`, `:428` a statement `ParseLine`
+    could not recognise); it is what refuses the title screen when the flag is off
+    (`Process.SystemProc.cs:152-160`). An *argument*/expression failure inside a well-formed
+    statement never touches `noError`: reduction is gated on `Config.NeedReduceArgumentOnLoad ||
+    AnalysisMode || IsForceSetArg()` (`ErbLoader.cs:876`), and the argument builder's failure
+    path (`ArgumentBuilder.assignwarn`/`warn`) sets `line.IsError`/`line.ErrMes` — throw-if-
+    reached, never a boot refusal — so even `ロード時に引数を解析する:YES` does not refuse this
+    corpus; it only marks the lines and runs. erars reaches the same outcome by recovering an
+    expression failure to a `THROW` stand-in and excluding the argument-class messages from the
+    abort (`is_argument_class_failure`, `crates/erars-loader/src/lib.rs`: the `Expression
+    parsing failed` funnels `try_nom!` at `parser.rs:120,131`, plus `assign_stmt_from_list`'s
+    empty/blank RHS at `:80,89`). Verified: eramegaten and eraTHYMKR both boot under their own
+    `解釈不可能な行があっても実行する:NO` configs (byte-identical output to the pre-`d66f166`
+    build on the corpus replays), and a genuinely unrecognisable line still aborts with the flag
+    off and loads with it on (`crates/erars-loader/tests/compati_error_line.rs`).
+      `compati_function_no_ignore_case` (`関数・属性については大文字小文字を無視し
       ない` — case-sensitivity for function names/attributes specifically, independent of the
       already-wired blanket `ignore_case`; touches the same identifier-matching path `ignore_case`
       does, but scoped to function/attribute lookups only), `compati_linefeed_as_1739` (`ver1739
