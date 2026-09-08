@@ -4234,6 +4234,17 @@ impl<'p> ParserContext<'p> {
     /// `解釈不可能な行があっても実行する:NO` (the default) it aborts the load
     /// after collecting every diagnostic, exactly like Emuera's title-screen
     /// refusal (`crates/erars-loader/src/lib.rs`, `CompatiErrorLine`).
+    ///
+    /// The abort is scoped to the line-*shape* class — the four
+    /// `ErbLoader.noError = false` sites (`#` `:355`, `@` `:368`, label/`$`
+    /// `:407`, statement shape `:428`). An *argument*/expression failure
+    /// inside an otherwise well-formed statement ("Expression parsing failed",
+    /// or `assign_stmt_from_list`'s empty/blank RHS) reports and recovers to
+    /// a `THROW` stand-in but does not abort — Emuera reduces arguments only
+    /// behind `ロード時に引数を解析する` (`ErbLoader.cs:876`) and its argument
+    /// builder marks `IsError` without touching `noError`, so such a line
+    /// never refuses a boot under any `解釈不可能な行` setting. See the
+    /// `CompatiErrorLine` check in the loader for the classification.
     pub fn parse_and_compile<'s>(
         &self,
         pp: &mut Preprocessor<'s>,

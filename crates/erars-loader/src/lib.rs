@@ -1043,21 +1043,70 @@ pub fn run_script(
         check_time!("Report errors", @ctx ctx);
 
         // `CompatiErrorLine` (`解釈不能な行があっても実行する`, default `false`
-        // — `ConfigData.cs:93`). Unlike the CSV/ERH failures collected above
-        // (always fatal in real Emuera too, `GameProc/Process.cs:166`), an
-        // "E2000" diagnostic is specifically an unparseable ERB *line* that
-        // Emuera's own loader still skips and keeps compiling past
-        // (`GameProc/ErbLoader.cs:355,368,407,428` set `noError = false` on
-        // exactly this case while registering every function it could still
-        // parse). With the flag off, real Emuera refuses to leave the title
-        // screen over that (`GameProc/Process.SystemProc.cs:152-160`); erars
-        // mirrors that here by aborting the load instead of silently running
-        // with functions missing their unparseable lines.
+        // — `ConfigData.cs:93`). Real Emuera sets `ErbLoader.noError = false`
+        // in exactly four places, all of them *line-shape* failures:
+        // a `#` line `ParseSharpLine` could not read (`ErbLoader.cs:355`),
+        // an `@` label that became an `InvalidLabelLine` (`:368`), a label/`$`
+        // line that became an `InvalidLine` (`:407`), and a statement whose
+        // shape `ParseLine` could not recognise (`:428`). `noError = false`
+        // is then what refuses to leave the title screen when the flag is off
+        // (`GameProc/Process.SystemProc.cs:152-160`).
+        //
+        // An *argument*/expression failure inside an otherwise well-formed
+        // statement is a different class: Emuera reduces each instruction's
+        // arguments only when `Config.NeedReduceArgumentOnLoad ||
+        // Program.AnalysisMode || func.Function.IsForceSetArg()`
+        // (`ErbLoader.cs:876-878`), and the argument builder's failure path
+        // (`ArgumentBuilder.assignwarn`/`warn`) sets `line.IsError`/`line.ErrMes`
+        // — a throw-if-reached marker — and calls `ParserMediator.Warn`, but
+        // never touches `noError`. So even with `ロード時に引数を解析する:YES`,
+        // Emuera does not refuse to boot a game whose statement *shapes* are
+        // fine but whose arguments fail to parse; it marks those lines and
+        // runs (the game throws only if a marked line is reached). eramegaten's
+        // six malformed Korean-translation FORM lines are this class, which is
+        // why it boots under its own shipped config (`emuera.config:34`
+        // `ロード時に引数を解析する:NO`, `:49` `解釈不可能な行があっても実行する:NO`).
+        //
+        // erars parses a statement's shape and its arguments atomically, so it
+        // cannot keep the two classes apart the way Emuera's passes do. It
+        // reaches Emuera's outcome by a different route: an expression failure
+        // is recovered to a `THROW` stand-in (`Compiler::push_invalid_line`,
+        // `parse_stmt_recovering`), which throws only if execution reaches the
+        // line — the deferred-until-reached behaviour Emuera gets from not
+        // reducing the argument at load or from marking the line `IsError`.
+        //
+        // `is_argument_class_failure` is the faithful marker of that class. It
+        // lists the messages Emuera would defer or mark-`IsError` without ever
+        // touching `noError`, which in erars all come from argument parsers
+        // whose statement *shape* was already recognised: the nom-expression
+        // funnels (`try_nom!`, `crates/erars-compiler/src/parser.rs:120,131`,
+        // which wrap every `expr::*` argument parser and nothing else) and the
+        // assignment-RHS list (`assign_stmt_from_list`, ::80,89). A line-shape
+        // failure (`[lexer] Unknown line`, a malformed `@`/`#`, a broken
+        // block), or a refused function registration (`ErbLoader.cs:368`),
+        // has a different message and still aborts. Resolved this way in the
+        // loader rather than tagged on `ParserError` because erars's parser
+        // returns one `ParserError` tuple for both classes and the lexer its
+        // own `(String, Range)`; threading a class flag through all of it is
+        // heavier than this one, exhaustively-commented predicate, and the
+        // two messages it matches are the funnels' literal outputs, not free
+        // text. Matching is the conservative direction for anything unknown:
+        // an unlisted class-2 line aborts (loudly, and only when the flag is
+        // off) rather than silently running a program with a broken line.
+        fn is_argument_class_failure(diag: &Diagnostic<StrKey>) -> bool {
+            diag.labels.iter().any(|l| {
+                l.message.starts_with("Expression parsing failed")
+                    || l.message == "대입할 값이 없습니다"
+                    || l.message == "배치 대입 목록 중간에 값이 생략되었습니다"
+            })
+        }
         if !ctx.config.compati_error_line
             && (had_rejected_registration
-                || diagnostics
-                    .iter()
-                    .any(|d| d.severity == Severity::Error && d.code.as_deref() == Some("E2000")))
+                || diagnostics.iter().any(|d| {
+                    d.severity == Severity::Error
+                        && d.code.as_deref() == Some("E2000")
+                        && !is_argument_class_failure(d)
+                }))
         {
             anyhow::bail!(
                 "ERBコードに解釈不可能な行があるため終了します \
