@@ -29,12 +29,21 @@ use erars_ui::VirtualConsole;
 use erars_vm::{console_config, FunctionDic, SystemFunctions, TerminalVm, VmContext};
 use hashbrown::HashMap;
 
-pub fn save_script(vm: TerminalVm, ctx: VmContext, target_path: &str) -> anyhow::Result<()> {
+/// `debug_mode` must be the exact same value passed to [`run_script`] for
+/// this `vm`/`ctx`: it is not recorded on either, so the caller is the only
+/// source of truth for what the compile that produced them actually used
+/// (see [`cache_fingerprint`]).
+pub fn save_script(
+    vm: TerminalVm,
+    ctx: VmContext,
+    target_path: &str,
+    debug_mode: bool,
+) -> anyhow::Result<()> {
     let target = resolve_game_path(target_path);
     let target_path = target.to_str().unwrap_or(target_path);
     // The config the run actually used, not a re-read of the files: what got
     // compiled is what must be identified.
-    let fingerprint = cache_fingerprint(target_path, &ctx.config)?;
+    let fingerprint = cache_fingerprint(target_path, &ctx.config, debug_mode)?;
     let mut out = BufWriter::new(File::create(Path::new(target_path).join("game.era"))?);
     erars_bytecode::write_to(&mut out, &vm.dic, fingerprint)?;
     let local_infos: HashMap<StrKey, Vec<(StrKey, &VariableInfo)>> =
@@ -119,9 +128,9 @@ fn first_match(target_path: &str, relative: &str) -> Option<PathBuf> {
     .find(|path| path.is_file())
 }
 
-/// Identity of everything a compiled `game.era` was built *from*: the config
-/// and the source files. Stored in the cache by `--save` and re-checked by
-/// `--load`.
+/// Identity of everything a compiled `game.era` was built *from*: the config,
+/// `debug_mode`, and the source files. Stored in the cache by `--save` and
+/// re-checked by `--load`.
 ///
 /// `VERSION_MAGIC` alone was the only identity token the cache had, and it
 /// names the *format*, not the inputs. So a `game.era` compiled with, say,
@@ -133,6 +142,15 @@ fn first_match(target_path: &str, relative: &str) -> Option<PathBuf> {
 /// `キャラクタ変数の引数を補完しない` (variable resolution) and
 /// `システム関数の上書きを許可する` (name resolution): each changes parse
 /// output, and the cache accepted the mismatch and ran the wrong program.
+///
+/// `debug_mode` (Emuera's `-DEBUG`, `Program.cs:82-88`) is the same hazard
+/// though it is not an `EraConfig` field: it is a separate parameter to
+/// [`run_script`], threaded into every `ParserContext::with_debug`, and it
+/// decides whether `[IF_DEBUG]`/`[IF_NDEBUG]` regions and the `DEBUGPRINT`
+/// family compile at all. A cache built with `--debug` and loaded without it
+/// (or the reverse) changes parse output exactly like the config keys above,
+/// so it is mixed into the fingerprint alongside them rather than left as the
+/// one remaining silent-misread path.
 ///
 /// DELIBERATE: the whole `EraConfig` is hashed, not a hand-picked list of the
 /// parse-affecting keys. The list would be right today and rot the moment a
@@ -149,7 +167,11 @@ fn first_match(target_path: &str, relative: &str) -> Option<PathBuf> {
 /// surviving mtime is untouched, and `*.ERH` is included — headers decide
 /// `#DIM` shapes and are as parse-affecting as any script. Emuera's own key
 /// is an order-insensitive xor of mtimes alone, which a rename does not move.
-pub fn cache_fingerprint(target_path: &str, config: &EraConfig) -> anyhow::Result<u64> {
+pub fn cache_fingerprint(
+    target_path: &str,
+    config: &EraConfig,
+    debug_mode: bool,
+) -> anyhow::Result<u64> {
     // FNV-1a, written out rather than taken from `DefaultHasher`, whose
     // output std explicitly does not promise to be stable across releases —
     // an unstable hash would silently invalidate every cache on a toolchain
@@ -164,6 +186,7 @@ pub fn cache_fingerprint(target_path: &str, config: &EraConfig) -> anyhow::Resul
 
     let mut state = 0xcbf29ce484222325u64;
     mix(&mut state, serde_yaml::to_string(config)?.as_bytes());
+    mix(&mut state, &[debug_mode as u8]);
 
     let target = resolve_game_path(target_path);
     let root = target.to_str().unwrap_or(target_path);
@@ -294,10 +317,16 @@ pub fn registration_diagnostics(
 }
 
 /// SAFETY: Any reference to interner is not exist
+///
+/// `debug_mode` must be the exact same value the caller would pass to
+/// [`run_script`] for this game: the cache does not carry it back out, so
+/// this is the only source of truth [`cache_fingerprint`] has to check
+/// against.
 pub unsafe fn load_script(
     target_path: &str,
     system: Box<dyn SystemFunctions>,
     config: EraConfig,
+    debug_mode: bool,
 ) -> anyhow::Result<(TerminalVm, VmContext, VirtualConsole)> {
     let target = resolve_game_path(target_path);
     let target_path = target.to_str().unwrap_or(target_path);
@@ -322,7 +351,7 @@ pub unsafe fn load_script(
     // into the process-global interner: a stale cache must be refused without
     // having overwritten global state with its contents first.
     let stored = erars_bytecode::read_header(&mut &*file)?;
-    let expected = cache_fingerprint(target_path, &config)?;
+    let expected = cache_fingerprint(target_path, &config, debug_mode)?;
     if stored != expected {
         anyhow::bail!(
             "game.era is stale: it was compiled from a different config or different \

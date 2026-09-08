@@ -68,7 +68,7 @@ fn spawn_vm(
             let system_back = system.clone();
             let system = Box::new(system);
             let ret = if load {
-                unsafe { load_script(&target_path, system, config) }
+                unsafe { load_script(&target_path, system, config, debug) }
             } else {
                 run_script(&target_path, system, config, false, lint, debug)
             };

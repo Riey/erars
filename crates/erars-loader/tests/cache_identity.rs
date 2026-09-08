@@ -55,8 +55,8 @@ fn a_cache_is_not_reused_across_a_parse_affecting_config_change() {
     // The two configs must be distinguishable at all, or nothing below means
     // anything.
     assert_ne!(
-        cache_fingerprint(&path, &permissive).unwrap(),
-        cache_fingerprint(&path, &strict).unwrap(),
+        cache_fingerprint(&path, &permissive, false).unwrap(),
+        cache_fingerprint(&path, &strict, false).unwrap(),
         "a parse-affecting key must change the cache fingerprint"
     );
 
@@ -70,7 +70,7 @@ fn a_cache_is_not_reused_across_a_parse_affecting_config_change() {
         false,
     )
     .expect("compile failed");
-    save_script(vm, ctx, &path).expect("save_script");
+    save_script(vm, ctx, &path, false).expect("save_script");
     assert!(std::path::Path::new(&path).join("game.era").exists());
 
     // The accept side: the cache just written must fingerprint-match the
@@ -83,12 +83,12 @@ fn a_cache_is_not_reused_across_a_parse_affecting_config_change() {
     .expect("header reads back");
     assert_eq!(
         stored,
-        cache_fingerprint(&path, &permissive).unwrap(),
+        cache_fingerprint(&path, &permissive, false).unwrap(),
         "an unchanged cache must be accepted, not refused"
     );
 
     // Flipping the key must refuse the cache rather than run it.
-    let flipped = unsafe { load_script(&path, Box::new(NullSystemFunctions), strict) };
+    let flipped = unsafe { load_script(&path, Box::new(NullSystemFunctions), strict, false) };
     let err = flipped
         .err()
         .expect("a cache compiled under a different parse-affecting config must be refused")
@@ -106,10 +106,70 @@ fn a_cache_is_not_reused_across_a_parse_affecting_config_change() {
         "@SYSTEM_TITLE\nLOCALS = hello\nPRINTL done\nPRINTL and more\n",
     )
     .unwrap();
-    let edited = unsafe { load_script(&path, Box::new(NullSystemFunctions), permissive) };
+    let edited = unsafe { load_script(&path, Box::new(NullSystemFunctions), permissive, false) };
     let err = edited
         .err()
         .expect("a cache compiled from since-edited sources must be refused")
         .to_string();
     assert!(err.contains("stale"), "got: {err:?}");
+}
+
+/// `debug_mode` is Emuera's `-DEBUG` (`Program.cs:82-88`): not an `EraConfig`
+/// field, but a separate parameter threaded into every `ParserContext` via
+/// `with_debug`, deciding whether `[IF_DEBUG]`/`[IF_NDEBUG]` and the
+/// `DEBUGPRINT` family compile at all. A cache compiled with `--debug` and
+/// loaded without it (or the reverse) must be refused exactly like a
+/// parse-affecting config change — this was the one hazard `cache_fingerprint`
+/// left open.
+#[test]
+fn a_cache_is_not_reused_across_a_debug_mode_change() {
+    let dir = fixture("debug-flip", "@SYSTEM_TITLE\nPRINTL done\n");
+    let path = dir.0.to_str().unwrap().to_owned();
+    let config = EraConfig::default();
+
+    // The two debug modes must be distinguishable at all, or nothing below
+    // means anything.
+    assert_ne!(
+        cache_fingerprint(&path, &config, true).unwrap(),
+        cache_fingerprint(&path, &config, false).unwrap(),
+        "debug_mode must change the cache fingerprint"
+    );
+
+    // Compile and cache with `--debug`.
+    let (vm, ctx, _tx) = run_script(
+        &path,
+        Box::new(NullSystemFunctions),
+        config.clone(),
+        false,
+        false,
+        true,
+    )
+    .expect("compile failed");
+    save_script(vm, ctx, &path, true).expect("save_script");
+    assert!(std::path::Path::new(&path).join("game.era").exists());
+
+    // The accept side: the cache just written must fingerprint-match the
+    // debug_mode it was written with.
+    let stored = erars_bytecode::read_header(
+        &std::fs::read(std::path::Path::new(&path).join("game.era")).unwrap()[..],
+    )
+    .expect("header reads back");
+    assert_eq!(
+        stored,
+        cache_fingerprint(&path, &config, true).unwrap(),
+        "an unchanged cache (same debug_mode) must be accepted, not refused"
+    );
+
+    // Loading the same cache without `--debug` must be refused, not silently
+    // reused: a run without `--debug` never compiled the `DEBUGPRINT`/
+    // `[IF_DEBUG]` bodies the cache may contain.
+    let mismatched = unsafe { load_script(&path, Box::new(NullSystemFunctions), config, false) };
+    let err = mismatched
+        .err()
+        .expect("a cache compiled with --debug must be refused when loaded without it")
+        .to_string();
+    assert!(
+        err.contains("stale"),
+        "the refusal must say the cache is stale, got: {err:?}"
+    );
 }
