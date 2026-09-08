@@ -267,6 +267,14 @@ pub struct Preprocessor<'s> {
     /// Emuera's `-DEBUG`: decides `[IF_DEBUG]`/`[IF_NDEBUG]` and whether
     /// `;#;` is a marker or a comment.
     debug_mode: bool,
+    /// `emuera.config` `全角スペースをホワイトスペースに含める`
+    /// (`SystemAllowFullSpace`, default `true`): whether U+3000 IDEOGRAPHIC
+    /// SPACE counts as whitespace (`Sub/LexicalAnalyzer.cs:749-752,789-792`,
+    /// `Config/ConfigData.cs:112`). Only threaded for an ERB body — an ERH
+    /// (`new_erh`) keeps the always-on behaviour, matching `debug_mode`
+    /// above, which is likewise an ERB-only concern despite
+    /// `HeaderFileLoader.cs:93,105` sharing the same `SkipWhiteSpace`.
+    allow_full_space: bool,
     /// Reading an ERH, where a line not starting with `#` is an error.
     is_header: bool,
     pp: PpState,
@@ -291,22 +299,24 @@ impl<'s> Preprocessor<'s> {
         rename: &'s HashMap<String, String>,
         macros: &'s HashMap<String, String>,
         debug_mode: bool,
+        allow_full_space: bool,
         s: &'s str,
     ) -> Self {
-        Self::new_impl(rename, Some(macros), debug_mode, false, s)
+        Self::new_impl(rename, Some(macros), debug_mode, allow_full_space, false, s)
     }
 
     /// An ERH. Emuera reads headers with a loader of their own
     /// (`GameProc/HeaderFileLoader.cs:96-133`) that accepts `#` lines and
     /// nothing else, so no directive is interpreted here.
     pub fn new_erh(rename: &'s HashMap<String, String>, s: &'s str) -> Self {
-        Self::new_impl(rename, None, false, true, s)
+        Self::new_impl(rename, None, false, true, true, s)
     }
 
     fn new_impl(
         rename: &'s HashMap<String, String>,
         macros: Option<&'s HashMap<String, String>>,
         debug_mode: bool,
+        allow_full_space: bool,
         is_header: bool,
         s: &'s str,
     ) -> Self {
@@ -324,6 +334,7 @@ impl<'s> Preprocessor<'s> {
                 false => find_open(s).unwrap_or(usize::MAX),
             },
             debug_mode,
+            allow_full_space,
             is_header,
             pp: PpState::default(),
             warnings: Vec::new(),
@@ -405,11 +416,15 @@ impl<'s> Preprocessor<'s> {
 
         loop {
             match chars.next() {
+                Some(' ' | '\t' | '\r') => {}
                 // U+3000 IDEOGRAPHIC SPACE is whitespace to Emuera whenever
                 // `SystemAllowFullSpace` is on, which is its default
-                // (`Sub/LexicalAnalyzer.cs:749-752`,
-                // `Config/ConfigData.cs:112`).
-                Some(' ' | '\t' | '\r' | '\u{3000}') => {}
+                // (`Sub/LexicalAnalyzer.cs:749-752,789-792`,
+                // `Config/ConfigData.cs:112`). Off, `SkipWhiteSpace` simply
+                // stops here (`:790-792`) and falls to the `Some(ch)` arm
+                // below, which does the same "leave it for the next token"
+                // thing for any other non-whitespace character.
+                Some('\u{3000}') if self.allow_full_space => {}
                 Some('\n') => {
                     self.line_pos += 1;
                 }
@@ -759,7 +774,9 @@ impl<'s> Preprocessor<'s> {
     /// it applies between a directive's two identifiers.
     fn skip_directive_ws<'a>(&self, mut s: &'a str) -> &'a str {
         loop {
-            s = s.trim_start_matches([' ', '\t', '\u{3000}']);
+            s = s.trim_start_matches(|c| {
+                c == ' ' || c == '\t' || (c == '\u{3000}' && self.allow_full_space)
+            });
 
             match utils::marker_len(s.as_bytes(), self.debug_mode) {
                 Some(len) => s = &s[len..],

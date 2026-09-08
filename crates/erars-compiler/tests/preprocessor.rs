@@ -78,6 +78,19 @@ fn body_len(src: &str, debug_mode: bool) -> usize {
     ctx(debug_mode).parse_function_str(src).unwrap().body.len()
 }
 
+/// A context like `ctx`, but for `emuera.config`'s
+/// `全角スペースをホワイトスペースに含める` (`SystemAllowFullSpace`) instead of
+/// `-DEBUG`.
+fn ctx_full_space(allow_full_space: bool) -> ParserContext<'static> {
+    init();
+
+    let mut info = HeaderInfo::default();
+    info.merge_header("#DEFINE TRUE 1").unwrap();
+    info.merge_header("#DEFINE EMPTY_MACRO").unwrap();
+
+    ParserContext::new(Arc::new(info), StrKey::new("test.erb")).with_allow_full_space(allow_full_space)
+}
+
 // ---------------------------------------------------------------------------
 // `[…]` regions: what survives
 // ---------------------------------------------------------------------------
@@ -567,4 +580,39 @@ fn a_flag_rejected_outside_an_event_function_is_never_set() {
         warnings("@MAIN\n#LATER\n#FUNCTION\nPRINTL a\n"),
         [("이벤트 함수 이외에서 #LATER 지정은 동작하지 않습니다".to_string(), 2)]
     );
+}
+
+// ---------------------------------------------------------------------------
+// `SystemAllowFullSpace` (`emuera.config` `全角スペースをホワイトスペースに含
+// める`).
+
+/// Default `true`: U+3000 IDEOGRAPHIC SPACE is whitespace, so it is skipped
+/// like any other indent and `PRINTL` is still recognised as the line's
+/// instruction (`Sub/LexicalAnalyzer.cs:749-752`, `Config/ConfigData.cs:112`).
+#[test]
+fn full_width_indent_is_skipped_by_default() {
+    let src = "@MAIN\n\u{3000}PRINTL a\nPRINTL b\n";
+    assert_eq!(ctx_full_space(true).parse_function_str(src).unwrap().body.len(), 2);
+}
+
+/// `NO`: U+3000 is no longer whitespace, so the leading ideographic space on
+/// the first line is never consumed before the instruction word is looked
+/// up — the fast-path instruction dispatch (`erars_lexer::Preprocessor::
+/// next_line`) sees an empty identifier and, since the line does not fit any
+/// of the non-instruction line shapes it falls back to, the line is rejected
+/// outright rather than silently reinterpreted or merged with its neighbour.
+#[test]
+fn full_width_indent_breaks_the_line_when_disallowed() {
+    let src = "@MAIN\n\u{3000}PRINTL a\nPRINTL b\n";
+    let err = ctx_full_space(false).parse_function_str(src).unwrap_err();
+    assert!(err.0.contains("Unknown line"), "unexpected error: {err:?}");
+}
+
+/// A plain half-width indent is unaffected either way — only the ideographic
+/// space is gated by this key.
+#[test]
+fn half_width_indent_is_unaffected_by_the_config() {
+    let src = "@MAIN\n  PRINTL a\nPRINTL b\n";
+    assert_eq!(ctx_full_space(true).parse_function_str(src).unwrap().body.len(), 2);
+    assert_eq!(ctx_full_space(false).parse_function_str(src).unwrap().body.len(), 2);
 }

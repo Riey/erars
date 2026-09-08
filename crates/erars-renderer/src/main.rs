@@ -109,6 +109,7 @@ fn headless_shot(
     (w, h): (u32, u32),
     path: &str,
     use_bitmap_strikes: bool,
+    button_wrap: bool,
     skip: u32,
 ) {
     let mut frame = ConsoleFrame::default();
@@ -173,6 +174,7 @@ fn headless_shot(
         input,
         None,
         use_bitmap_strikes,
+        button_wrap,
     );
     match shot {
         Ok(img) => match headless::write_png(path, &img) {
@@ -226,6 +228,7 @@ fn main() {
         default_fg: config.fore_color,
         init_size,
         use_bitmap_strikes: !args.no_bitmap_strikes,
+        button_wrap: config.button_wrap,
     };
     // Fonts: configured family → <game>/font → ERARS_FONT_DIR → per-language
     // CJK monospace → bundled Noto Sans Mono; metrics at scale 1.0 (the
@@ -242,6 +245,7 @@ fn main() {
             init_size,
             &path,
             app_cfg.use_bitmap_strikes,
+            app_cfg.button_wrap,
             args.headless_shot_skip,
         );
         return;

@@ -502,7 +502,12 @@ pub fn run_script(
 
         check_time!("Merge chara CSV");
 
-        tx.print_line(info.replace.start_message.clone());
+        // `ロード時にレポートを表示する` — Emuera DisplayReport
+        // (`Config/ConfigData.cs:73`, default `NO`). `config` moves into
+        // `VmContext::new` a little further down, so the flag is captured
+        // here for the end-of-load report below.
+        let display_report = config.display_report;
+        let start_message = info.replace.start_message.clone();
 
         // Sort the header files for the same reason the ERB list is sorted
         // below: Emuera loads them in filename order (`Config.GetFiles` feeding
@@ -578,7 +583,8 @@ pub fn run_script(
         let compile_one = |erb: &Path| -> Vec<CompiledFunction> {
             let source = read_file(erb).unwrap();
             let ctx = ParserContext::new(header_info.clone(), StrKey::new(erb.to_str().unwrap()))
-                .with_debug(debug_mode);
+                .with_debug(debug_mode)
+                .with_allow_full_space(config.system_allow_full_space);
 
             log::debug!("Parse And Compile {}", erb.display());
 
@@ -667,6 +673,7 @@ pub fn run_script(
         }
 
         ctx.var.reserve_local_functions(funcs.len());
+        let func_count = funcs.len();
         for (_, func) in funcs {
             function_dic.insert_compiled_func(
                 &mut ctx.var,
@@ -676,6 +683,26 @@ pub fn run_script(
         }
 
         check_time!("Parse/Compile ERB", @ctx ctx);
+
+        // `ロード時にレポートを表示する` (`docs/research/emuera-wiki/config.md`,
+        // `docs/research/emuera-wiki/replace.md:22-23`): ON prints a summary
+        // once loading finishes; OFF prints `_replace.csv`'s configured
+        // message instead (`起動時簡略表示`, default `"Now Loading..."`) —
+        // the two are mutually exclusive, never both.
+        //
+        // Real Emuera's own end-of-load report additionally counts how many
+        // of those functions were ever called (`非コメント行数:{0}, 全関数
+        // 合計:{1}, 被呼出関数合計:{2}`, `GameProc/ErbLoader.cs:753`). That
+        // third figure needs a load-time call graph erars does not build yet
+        // (the function-registration work is a separate session's scope), so
+        // this reports only the two counts already on hand.
+        if display_report {
+            let total_lines: usize =
+                erbs.iter().map(|erb| read_file(erb).map_or(0, |s| s.lines().count())).sum();
+            tx.print_line(format!("총 줄 수:{total_lines}, 전체 함수 수:{func_count}"));
+        } else {
+            tx.print_line(start_message);
+        }
 
         let mut diagnostics = diagnostics.into_inner();
         let mut files = files.into_inner();

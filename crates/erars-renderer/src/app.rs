@@ -51,6 +51,8 @@ pub struct AppConfig {
     pub init_size: (u32, u32),
     /// `false` with `--no-bitmap-strikes`.
     pub use_bitmap_strikes: bool,
+    /// `emuera.config` `ボタンの途中で行を折りかえさない` (`ButtonWrap`).
+    pub button_wrap: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +338,7 @@ impl App {
 
     fn geometry(&self) -> Geometry {
         Geometry::new(self.surface_size().0.max(1), self.metrics())
+            .with_button_wrap(self.cfg.button_wrap)
     }
 
     fn view(&self) -> View {
@@ -531,7 +534,7 @@ impl App {
         if self.current_req.is_some() {
             if self.strip_dirty || self.strip.is_none() {
                 let line = input_line(&self.input, self.frame.fore_color.0);
-                let g = Geometry::new(win_w.max(1), m);
+                let g = Geometry::new(win_w.max(1), m).with_button_wrap(self.cfg.button_wrap);
                 // Not `layout`: sweeping here would evict the log's clusters
                 // (they are shaped in `relayout`, not per frame).
                 self.strip = Some(layout_no_sweep(&[line], &g, &mut self.shaper));
