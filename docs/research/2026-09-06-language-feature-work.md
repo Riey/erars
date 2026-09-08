@@ -475,6 +475,15 @@ exactly as an enum variant's absence is not evidence of missing behavior.
     instead_of_splitting_it`, `erars-compiler/tests/preprocessor.rs`'s
     `full_width_indent_breaks_the_line_when_disallowed`, and
     `crates/erars-vm/tests/triple_symbol.rs`.
+
+    **Correction 2026-09-08 (this session, docs-only pass).** The claim above is wrong on two
+    counts, confirmed against `GameData/StrForm.cs:32-44` (real Emuera): it names only 2 of the
+    shorthand's 5 triple-symbol forms (`***`/`+++`/`===`/`///`/`$$$`), and even for the two it
+    names, the target is wrong — `+++` expands to `CALLNAME:MASTER`, not `CALLNAME:ASSI`. Only
+    the analysis prose was wrong; the wiring above already implements the correct 5-symbol set,
+    per `triple_symbol_expr` (`crates/erars-compiler/src/parser/expr.rs:648-655`), matching
+    `StrForm.Initialize`: `***` → `NAME:TARGET`, `+++` → `CALLNAME:MASTER`, `===` →
+    `CALLNAME:PLAYER`, `///` → `NAME:ASSI`, `$$$` → `CALLNAME:TARGET`.
   - **Needs a headless-specific design decision, not just a wire-up, because Emuera's own response
     is a modal dialog (1):** `infinite_loop_alert_time` (`無限ループ警告までのミリ秒数` — if no
     *input round-trip* happens for this many milliseconds, show an interactive "this looks like
@@ -535,6 +544,13 @@ exactly as an enum variant's absence is not evidence of missing behavior.
       path), `sort_with_filename` (`読み込み順をファイル名順にソートする` — sort the CSV/ERB file
       list by name before loading instead of raw directory-enumeration order; touches the file-list
       collection step in `erars-loader/src/lib.rs`, a small, mechanical change).
+
+      **DONE 2026-09-08.** `auto_save` is wired (`crates/erars-vm/src/terminal_vm/executor.rs`'s
+      `BeginType::Shop` handler fires `SYSTEM_AUTOSAVE`, matching Emuera's own default,
+      `ConfigData.cs:60`; real-corpus replay evidence and a perf finding it exposed are in §8
+      below), and so is `display_report` (`erars-loader/src/lib.rs` gates the end-of-load
+      total-lines/functions summary vs. the `_replace.csv` loading message on it).
+      `sort_with_filename` was found already-moot instead — see the source note below.
     - *Load-time argument-diagnostics cluster (the wiki marks three of these "only meaningful when
       `reduce_argument_on_load` is active", so they are one feature, not four)*: `reduce_argument_
       on_load` (`ロード時に引数を解析する` — NO/ONCE/YES: whether call-argument shapes are resolved
@@ -577,6 +593,15 @@ exactly as an enum variant's absence is not evidence of missing behavior.
       same registration path), `warn_back_compatibility` (`eramaker互換性に関する警告を表示する` —
       a general on/off banner for warnings tied to the other `Compati*` quirks below; wiring it
       means gating those warnings' emission on this flag once they exist).
+
+      **DONE 2026-09-08.** All four keys in this cluster are wired: `erars-loader` registers
+      user functions against `FunctionDic` gated on `allow_function_overloading` (default
+      `YES`, refusing a collision when `NO`), and emits the two override diagnostics on the
+      same registration path — `warn_function_overloading` for an allowed override,
+      `warn_normal_function_overloading` for a duplicate non-event function — with
+      `warn_back_compatibility` gating their emission as the general `Compati*` banner
+      (`crates/erars-compiler/src/parser.rs`, `erars-loader/src/lib.rs`'s registration
+      diagnostics).
     - *Compat/parsing quirks*: `compati_error_line` (`解釈不能な行があっても実行する` — **note the
       polarity**: real Emuera's *default* is `NO`, meaning it refuses to start at the title screen
       on any unparseable line; erars's loader (`erars-loader/src/lib.rs:590-610`) unconditionally
@@ -614,16 +639,46 @@ exactly as an enum variant's absence is not evidence of missing behavior.
       scripts; not obsolete per the wiki, still a live key, but a legacy-version compatibility
       toggle neither corpus needs — touches `erars-renderer/src/layout.rs`'s wrap algorithm, same
       area as `button_wrap`).
+
+      **DONE 2026-09-08.** Both wired: `compati_function_no_ignore_case` scopes the
+      already-wired case-insensitive `ignore_case` blanket to function/attribute lookups only;
+      `compati_linefeed_as_1739` extends `button_wrap`'s whole-unit move to the plain-text run
+      that follows a button, gated in `erars-renderer/src/layout.rs`'s wrap algorithm and
+      covered by `compati_linefeed_as_1739_moves_plain_text_whole_like_a_button`
+      (`erars-renderer/src/layout.rs`).
     - *RNG*: `compati_rand` (`擬似変数RANDの仕様をeramakerに合わせる` — eramaker's `RAND` has
       documented quirks erars's current `rng().gen_range(0..max)` doesn't reproduce: accepts
       negative arguments, never returns ≥ 32767, and has a measurable bias once the range exceeds
       1000; wiring this means implementing eramaker's actual generator as a second mode next to the
       one `crates/erars-vm/src/terminal_vm/executor.rs`'s `Rand` arm already uses, not a parameter
       tweak on the existing one).
+
+      **DONE 2026-09-08, and two corrections to the description above.** Wired in
+      `crates/erars-vm/src/terminal_vm/executor.rs`'s `BuiltinVar`/`Rand` arm: gated on
+      `ctx.config.compati_rand`, `0` → `0`, a negative argument is negated, otherwise the
+      result is `next_rand(32768) % i.abs()` — `CompatiRandToken.GetIntValue`
+      (`GameData/Variable/VariableToken.cs:1466-1479`). First correction: the generator this
+      draws from is no longer `rng().gen_range(0..max)` — a separate arc (`feat(vm): make
+      RAND bit-compatible with real Emuera's SFMT-19937`, `7fee88e`, 2026-09-07, the day
+      *before* this key was wired) replaced it with `EmuRandom`
+      (`crates/erars-vm/src/emuera_rand.rs`), Emuera's actual SFMT-19937 generator, bit-exact
+      including its seeding and its bounded draw's plain-modulo bias. Second correction:
+      wiring `compati_rand` therefore was not "implementing eramaker's actual generator as a
+      second mode" — the generator was already exact by the time this key was wired; eramaker's
+      difference from the default `RandToken` is only in the *reduction*, a second bounded-draw
+      formula (`GetNextRand(32768) % i`) over that same generator, not a different generator
+      and not a tweak of the existing one.
     - *Save format*: `system_save_in_binary`/`system_save_in_utf8` (binary vs. eramaker-compatible
       text save format, and SJIS vs. UTF-8 text encoding when saving as text — the wiki notes
       binary mode forces UTF-8 regardless of the UTF-8 flag's own setting; touches `erars-vm/src/
       save.rs`'s serialization, the same file §6.1's `DELDATA` fix lives in).
+
+      **DONE, but before this session.** Both wired by a separate save-export arc (`feat(save):
+      opt-in export of save files in real Emuera's own format`, `f7d7d30`, 2026-09-07) — a day
+      *after* this residual was counted at 26 (the count below is corrected accordingly) and a
+      day *before* this session's config-keys work started: `executor.rs`'s
+      `SaveDataEmuera`/`SaveGlobalEmuera` feed `save::emuera::write`'s encoding/binary
+      selection from `system_save_in_binary`/`system_save_in_utf8`.
     - *Call-argument semantics*: `compati_func_arg_optional` (`ユーザー関数の全ての引数の省略を許可
       する` — let a call omit non-`ARG`/`ARGS`/private-variable parameters, leaving the callee's
       variable at whatever it held before the call rather than erroring; touches call-argument
@@ -637,6 +692,18 @@ exactly as an enum variant's absence is not evidence of missing behavior.
       executor), `system_ignore_string_set` (`文字列変数の代入に文字列式を強制する` — restrict
       plain `=` on a string variable to a genuine string expression, presumably rejecting what
       today silently coerces; touches the same plain-`=`-on-string path §2.2 above fixed).
+
+      **Source note (added 2026-09-08, this session): `times_not_rigorous_calculation` is also
+      wired**, and was not covered by the "while wiring these four keys" note below (that note's
+      "four keys" are the other three named in this bullet plus the two `Compati*` call-argument
+      keys two bullets up — `times_not_rigorous_calculation` predates it, wired separately).
+      `InstructionType::Times` in `crates/erars-vm/src/terminal_vm/executor.rs` reads
+      `ctx.config.times_not_rigorous_calculation`: `false` (Emuera's default,
+      `Config/ConfigData.cs:96`) truncates the integer operand through `f64` before multiplying,
+      matching real Emuera's own approximate/lossy `TIMES` (`GameProc/Function/
+      Instraction.Child.cs:901-904`); `true` multiplies the exact integer precision instead
+      (`:906-917`), i.e. the "decimal" path above where a `f32`/`f64` payload-size constraint
+      would apply is the arithmetic-precision *default*, not a config-gated opt-in.
 
       **Source note (added 2026-09-08, while wiring these four keys):**
       `docs/research/emuera-wiki/config.md` has **no heading at all** for
@@ -691,6 +758,20 @@ exactly as an enum variant's absence is not evidence of missing behavior.
   session's replay depth (`eramegaten_p_kr` and `eraTHYMKR` both ship `emuera.config` files that
   only ever set keys already in the wired-11 list, per `todo.md §4`'s own `●meg`/`●thy` usage
   columns — no corpus script in this project currently depends on any of the 26).
+
+  **Status note (added 2026-09-08, this session, docs-only pass): the 26-key count above is
+  stale — verified key-by-key against the current tree, not trusted from reports.** Of the 26,
+  24 are now wired and only 2 remain: `sort_with_filename` and `reduce_argument_on_load`, both
+  already documented above as deliberate non-wirings (a moot config switch and a no
+  lazy-parse-to-defer mismatch, respectively), not new residual work. Wired since this count
+  was written: the 2 "read an existing branch" keys and the 1 parser-feature key
+  (`button_wrap`, `system_allow_full_space`, `system_ignore_triple_symbol`), the 1
+  design-decision key (`infinite_loop_alert_time`), and 20 of the 22 "genuine unimplemented"
+  keys — every one except the 2 named above (see each key's own DONE note above for the
+  specific commit). `system_save_in_binary`/`system_save_in_utf8` in particular were wired
+  *before* this session's config-keys work even started, by a separate save-export arc
+  (`f7d7d30`, 2026-09-07) — this count was already 2 keys stale the day after it was written,
+  on top of everything this session closed.
 - **§5 (5 debug console commands):** confirmed still host/UI work, not a VM gap — `erars-stdio` has
   no interactive debug console to attach `@REBOOT`/`@OUTPUT`/`@EXIT`/`@CONFIG`/`@DEBUG` to.
   **Residual: none for the VM; out of scope for a headless engine, unchanged from `todo.md`.**
