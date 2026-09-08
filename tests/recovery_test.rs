@@ -86,10 +86,12 @@ LOCAL = ))
 }
 
 #[test]
-fn a_bad_line_inside_a_block_drops_only_its_function() {
-    // A block opener parses its own body, so by the time the inner line fails
-    // the following lines are gone and there is no safe place to resume. Only
-    // this function is skipped; the file's other functions still register.
+fn a_bad_line_inside_a_block_keeps_its_function() {
+    // Emuera pairs block openers up in a later pass, so an unreadable line in
+    // an `IF` body is an `InvalidLine` like any other and `@SECOND` still
+    // registers and still runs — only the bad line throws, and only if it is
+    // reached. erars parses the body recursively, so it has to put the line
+    // back together itself (`ParserContext::parse_stmt_recovering`).
     let erb = compile(
         "\
 @FIRST
@@ -105,8 +107,34 @@ LOCAL = 3
 ",
     );
 
-    assert_eq!(names(&erb), ["FIRST", "THIRD"]);
+    assert_eq!(names(&erb), ["FIRST", "SECOND", "THIRD"]);
     assert_eq!(erb.errors.len(), 1, "{:?}", erb.errors);
+    // The one unreadable line, and nothing else in `@SECOND`, throws.
+    assert_eq!(throws(&erb.functions[1].body), 1);
+}
+
+#[test]
+fn a_bad_line_in_a_nested_block_keeps_its_function_too() {
+    // The failure is two constructs deep, inside a `SELECTCASE` arm's `SIF`
+    // body — the exact shape of eramegaten's `@GOUSEI_CONDITION`.
+    let erb = compile(
+        "\
+@FIRST
+SELECTCASE 1
+	CASE 1
+		SIF 1
+			LOCALS += @\"unterminated
+		LOCAL = 2
+ENDSELECT
+
+@SECOND
+LOCAL = 3
+",
+    );
+
+    assert_eq!(names(&erb), ["FIRST", "SECOND"]);
+    assert_eq!(erb.errors.len(), 1, "{:?}", erb.errors);
+    assert_eq!(throws(&erb.functions[0].body), 1);
 }
 
 #[test]

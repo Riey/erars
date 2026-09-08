@@ -749,6 +749,46 @@ and this is markup malformed per that documented grammar, not an erars defect. N
 read-only `eramegaten_p_kr` source; a disposable `/tmp` scratch copy with both typos corrected was
 used to keep driving the corpus further (reaches the shop/hub screen past this function).
 
+**A fourth corpus-typo cluster, found 2026-09-08 by the new load-time call graph:** every one of
+`eramegaten_p_kr`'s six remaining `E2000` parse failures is a Korean-translation typo in a FORM
+string, and each was checked against Emuera's own lexer rather than assumed. Two rules settle all
+six (`Sub/LexicalAnalyzer.cs`):
+- A `%…%` interpolation's contents are lexed by a full `Analyse(st, LexEndWith.Percent, …)` pass
+  (`:1191`), so a `"` inside the region is an ordinary string literal needing its own closing quote
+  (`:961-967`) — it does **not** end the FORM string. A `"` only ends one at the top level, and
+  only when `endWith == DoubleQuotation` (`:1165-1169`).
+- That region ends at a `%` **only at bracket nesting zero** (`:885-890`). Inside an unbalanced
+  `(`, a `%` is the modulo operator, and if no closing `%` is found before the line ends Emuera
+  throws `'%'が使われましたが対応する'%'が見つかりません` (`:1192`).
+
+So each of these is rejected by real Emuera too:
+- `RPG/…/EVENT5_大魔宮.ERB:751` — `@"%CALLNAME:LOCAL, "는")% …"`: the `)` drives nesting to −1, so
+  the following `%` is modulo, no closing `%` remains, and the alignment argument `"는")` is a
+  string where `StrForm` demands an integer (`GameData/StrForm.cs:120` →
+  `ExpressionParser.ReduceIntegerTerm`, `GameData/Expression/ExpressionParser.cs:156-157`).
+  Intended text was plainly `%CALLNAME:LOCAL%는`.
+- `ＳＨＯＰ関連/116_アイテム合成.ERB:371` — `解説文 += @"{引数} 이상` has no closing `"`; the `@"`
+  lexer path requires one (`:977-979`). Compare `:375`, the same line written correctly.
+- `RPG/スキル関係/52_アシストスキル/SKILL5620_コンバート.ERB:87`,
+  `RPG/スキル関係/31_敵専用/SKILL2575_砂漠の風.ERB:111` — `%조사처리(CALLNAME:POS(ARG:1)%,"는")%`:
+  the `%` sits *inside* the call's parentheses, so it lexes as modulo with no right operand. The
+  `%` belongs after the `)`.
+- `口上/悪魔汎用会話口上/TALK_PUB324_男_シニカル.ERB:245` — a doubled `%%`, leaving `%」` opening a
+  region that never closes.
+- `RPG/スキル関係/SKILL_ACTION_EXTRA.ERB:688` — `%조사처리(ARGS:0%,"을")`: both mistakes at once.
+
+`eraTHYMKR` has zero. Nothing was patched: the corpora are read-only and the grammar is right.
+
+**What was an erars bug is the blast radius.** Four of those six lines sit inside a block, and
+until 2026-09-08 a block-body parse failure dropped the *whole enclosing function*: `@EVENT_5` and
+`@GOUSEI_CONDITION` existed in the shipping source but not in erars's dictionary, so calls to them
+failed at run time with "function does not exist" and nothing at load time said why. Emuera keeps
+the function and replaces just the line with an `InvalidLine` (`GameProc/ErbLoader.cs:403-407`,
+`:423-427`, `GameProc/LogicalLine.cs:74-85`); erars now does the same inside block bodies
+(`ParserContext::parse_stmt_recovering`, `crates/erars-compiler/src/parser.rs`), which registers
+4 more of eramegaten's functions (125,549 → 125,553) and takes its call-graph not-found warnings
+from 4 to 0. The two corpus replays are otherwise byte-identical to before.
+
 **The publish/redraw ordering is enforced by the type system, not by this document.**
 `SystemFunctions::redraw` and its three `input_*` siblings take a `graphics::Painted<'_>` by value;
 the only thing that can construct one is `GraphicsStore::publish`, whose field is private to
