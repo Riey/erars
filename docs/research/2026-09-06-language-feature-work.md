@@ -466,6 +466,36 @@ exactly as an enum variant's absence is not evidence of missing behavior.
     *response* is not: there is no user to click "continue" in `erars-stdio`. Wiring this requires
     picking a headless equivalent (log-and-continue? log-and-abort? make it configurable?) before
     there is anything to implement, which is a design call, not a mechanical port.
+
+    **DONE 2026-09-08.** The trigger is implemented and the headless response is
+    log-and-continue, never abort. Two corrections to the description above, both from the
+    C# source:
+    - **The reset is not the `WAIT` family.** `UpdateCheckInfiniteLoopState`
+      (`GameProc/Process.cs:304-307`) has exactly two callers: `DoScript`
+      (`Process.cs:266-270`), which the console re-enters after *every* input
+      (`GameView/EmueraConsole.cs:787`), and `EmueraConsole.Await`
+      (`:553`), reached only from `AWAIT`
+      (`GameProc/Function/Instraction.Child.cs:1668`). `WAIT`/`FORCEWAIT`/`TWAIT` reset it
+      only transitively, by asking for input. erars mirrors this: `VmContext::input_redraw`,
+      `input_int_redraw`, `input_mouse_key` and `AWAIT` reset, nothing else does.
+    - **The default is 5000 ms, not `0`** (`Config/ConfigData.cs:71`), and erars' `EraConfig`
+      already carried that default while having no watchdog — i.e. erars was hardcoded to the
+      *non-default* (disabled) side. Both branches now exist and `0` genuinely disables.
+      A default-config game therefore gains one possible new log line, and nothing else: the
+      response is a `log::warn!`, so no script can observe it and no run can be aborted by it.
+      Neither corpus triggers it (measured, 6 runs of eramegaten and eraTHYMKR each: zero
+      warnings, output identical to master).
+
+    The poll interval is Emuera's own 10,000 executed lines, whose comment says outright that
+    reading the clock is too expensive to do more often
+    (`GameProc/Process.ScriptProc.cs:20-24`); erars counts instructions rather than lines,
+    having no line table at run time, so it polls strictly more often than Emuera in terms of
+    script lines. The per-instruction cost is one decrement and one branch
+    (`LoopAlert::tick`, `crates/erars-vm/src/context.rs`) — measured on a 20-million-iteration
+    bare `WHILE` loop, medians over 7 runs: master 3306 ms, watchdog armed 3346 ms, watchdog
+    disabled 3396 ms. Armed and disabled are indistinguishable from master and from each other,
+    so the overhead is inside the noise of a workload that is nothing *but* instruction
+    dispatch.
   - **Real, unimplemented engine semantics with a reasonably well-scoped wiring point (22),
     grouped by the subsystem each would touch:**
     - *Loader/startup behavior*: `auto_save` (`オートセーブを行なう` — autosave on `BEGIN SHOP`,

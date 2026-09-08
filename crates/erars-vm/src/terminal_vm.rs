@@ -91,6 +91,18 @@ impl TerminalVm {
 
         while let Some(inst) = insts.get(cursor).copied() {
             use InstructionWorkflow::*;
+            // Emuera polls its watchdog once per 10,000 executed lines
+            // because reading the clock is not free
+            // (`GameProc/Process.ScriptProc.cs:20-24`); `LoopAlert::tick` is
+            // that counter, and with the key at 0 it is one integer compare.
+            if let Some(elapsed) = ctx.loop_alert.tick() {
+                log::warn!(
+                    "무한 루프 가능성: {func}에서 마지막 입력으로부터 {elapsed}ms 경과했습니다 \
+                     (설정 \"無限ループ警告までのミリ秒数\"; 실행은 계속됩니다)",
+                    func = ctx.var.resolve_key(func_name),
+                );
+            }
+
 
             log::trace!(
                 "[{func_name}] `{inst:?}[{cursor}]`, stack: {stack:?}, call_stack: {call_stack:?}",
