@@ -567,6 +567,23 @@ pub(super) fn run_instruction(
         }
         InstructionType::BuiltinMethod => {
             let meth = inst.as_builtin_method().unwrap();
+            // A `#FUNCTION` user function of the same name is reached instead
+            // of the builtin (`GameData/IdentifierDictionary.cs:585-599`).
+            // The `is_empty` guard keeps every other game — including both
+            // corpora, which override nothing — at zero added cost: no hash,
+            // no name resolution, no map probe.
+            if !vm.dic.method_overrides.is_empty() {
+                if let Some(&(_, name)) =
+                    vm.dic.method_overrides.iter().find(|(m, _)| *m == meth)
+                {
+                    let c = ctx.pop_int()? as u32;
+                    let args = ctx.take_list(c).collect::<Vec<_>>();
+                    match vm.call(name, &args, tx, ctx)? {
+                        Workflow::Return => return Ok(InstructionWorkflow::Normal),
+                        other => return Ok(other.into()),
+                    }
+                }
+            }
             return run_builtin_method(meth, func_name, vm, tx, ctx);
         }
         InstructionType::BuiltinCommand => {

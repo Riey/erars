@@ -942,6 +942,7 @@ dependencies = [
  "erars-ast",
  "erars-compiler",
  "erars-lexer",
+ "erars-loader",
  "erars-ui",
  "erars-vm",
  "flexi_logger 0.25.6",

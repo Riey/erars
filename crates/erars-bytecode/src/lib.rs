@@ -243,15 +243,20 @@ pub unsafe fn read_from<R: Read + ReadBytesExt>(mut read: R) -> Result<FunctionD
         }
     }
 
-    let dic = FunctionDic {
+    let mut dic = FunctionDic {
         interner: get_interner(),
         event,
         normal,
+        // `システム関数の上書きを許可する`'s effect is recomputed below: the
+        // override table is a pure function of the registered functions.
+        method_overrides: Vec::new(),
         // `イベント関数のCALLを許可する` is applied while functions are
         // registered, so a dictionary read back from `game.era` already has
         // whatever entries it produced.
         compati_call_event: false,
     };
+
+    dic.rebuild_method_overrides();
 
     Ok(dic)
 }
