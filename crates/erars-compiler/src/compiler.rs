@@ -62,6 +62,18 @@ pub struct CompiledErb {
     /// `表示する最低警告レベル` drops anything below its value before it is
     /// ever printed (`GameData/ParserMediator.cs:26`).
     pub warnings: Vec<ParserWarning>,
+    /// Emuera's `enabledLineCount`: incremented once per non-comment,
+    /// non-blank logical line that reaches `ErbLoader.addLine`
+    /// (`GameProc/ErbLoader.cs:29`, `:452`), which is every line
+    /// `LogicalLineParser.ParseLine` returns non-null for. erars's analogue
+    /// is a `StmtWithPos` reaching [`Compiler::push_stmt_with_pos`], which
+    /// fires exactly once per parsed line including nested `SIF`/`FOR`/
+    /// `REPEAT`/`WHILE`/`TRY` bodies (each of those is its own source line
+    /// and its own recursive `push_stmt_with_pos` call), so it counts the
+    /// same population Emuera does — not raw `str::lines()`, which would
+    /// also include comments and blanks Emuera's parser already dropped
+    /// before `addLine` ever sees them.
+    pub line_count: usize,
 }
 
 pub struct Compiler {
@@ -84,6 +96,9 @@ pub struct Compiler {
     /// 125,549-function corpus.
     pub collect_calls: bool,
     current_pos: ScriptPosition,
+    /// See [`CompiledErb::line_count`]: one per [`Self::push_stmt_with_pos`]
+    /// call, including recursive ones for nested block bodies.
+    pub line_count: usize,
 }
 
 impl Compiler {
@@ -97,6 +112,7 @@ impl Compiler {
             calls: Vec::new(),
             collect_calls: true,
             current_pos: ScriptPosition::default(),
+            line_count: 0,
         }
     }
 
@@ -545,6 +561,7 @@ impl Compiler {
     }
 
     pub fn push_stmt_with_pos(&mut self, stmt: StmtWithPos) -> CompileResult<()> {
+        self.line_count += 1;
         self.push(Instruction::report_position(stmt.1));
         self.current_pos = stmt.1;
         self.push_stmt(stmt.0)

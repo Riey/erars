@@ -22,10 +22,10 @@ impl Drop for ScratchDir {
 }
 
 fn fixture_dir(name: &str) -> ScratchDir {
-    write_fixture(name, "@SYSTEM_TITLE\nPRINTL a\n")
+    fixture_dir_with_erb(name, "@SYSTEM_TITLE\nPRINTL a\n")
 }
 
-fn write_fixture(name: &str, erb: &str) -> ScratchDir {
+fn fixture_dir_with_erb(name: &str, erb: &str) -> ScratchDir {
     let dir = std::env::temp_dir()
         .join(format!("erars-display-report-test-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -75,7 +75,7 @@ fn display_report_on_shows_a_load_summary_instead() {
 /// that the loader walks them.
 #[test]
 fn display_report_counts_the_called_functions() {
-    let dir = write_fixture(
+    let dir = fixture_dir_with_erb(
         "called",
         "@SYSTEM_TITLE\nCALL A\n\n@A\nCALL B\n\n@B\nRETURN 0\n\n@DEAD\nRETURN 0\n",
     );
@@ -89,6 +89,30 @@ fn display_report_counts_the_called_functions() {
     assert!(text.contains("피호출 함수 수:3"), "got: {text:?}");
 }
 
+#[test]
+fn display_report_counts_non_comment_lines_like_emuera_not_raw_source_lines() {
+    // 3 real statements (`PRINTL a/b/c`); everything else — the function
+    // label, two `;` comments, and a blank line — is source text Emuera's
+    // own parser drops before its `enabledLineCount` counter ever sees it
+    // (`GameProc/ErbLoader.cs:29,452`; see `CompiledErb::line_count`'s doc
+    // comment). A raw `str::lines()` count of the file would be 7, not 3.
+    let dir = fixture_dir_with_erb(
+        "count",
+        "@SYSTEM_TITLE\n; comment one\nPRINTL a\n\n; comment two\nPRINTL b\nPRINTL c\n",
+    );
+    let mut config = EraConfig::default();
+    config.display_report = true;
+    let (_vm, _ctx, tx) =
+        run_script(dir.0.to_str().unwrap(), Box::new(NullSystemFunctions), config, false, false, false)
+            .expect("compile failed");
+    let text = console_text(&tx);
+    assert!(
+        text.contains("줄 수:3,"),
+        "expected the report to count 3 non-comment statement lines (not 7 raw source lines \
+         or 0 from an unrelated pass), got: {text:?}"
+    );
+}
+
 /// A computed target (`CALLFORM`) sets Emuera's `useCallForm`, which abandons
 /// the uncalled-function *check* (`GameProc/ErbLoader.cs:667-676`) but does
 /// **not** raise `usedLabelCount`: that counter is only incremented inside the
@@ -98,7 +122,7 @@ fn display_report_counts_the_called_functions() {
 /// treated as a literal, `A0` would be reached and the count would be 2.
 #[test]
 fn display_report_counts_every_function_when_a_target_is_computed() {
-    let dir = write_fixture(
+    let dir = fixture_dir_with_erb(
         "callform",
         "@SYSTEM_TITLE\nCALLFORM A{0}\n\n@A0\nRETURN 0\n\n@DEAD\nRETURN 0\n",
     );

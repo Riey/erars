@@ -803,6 +803,11 @@ fn run_train_commands(
 
 const SAVE_COUNT: u32 = 20;
 
+/// Emuera's reserved autosave slot (`AutoSaveIndex`,
+/// `GameProc/Process.SystemProc.cs:805`): outside the visible `SAVE_COUNT`
+/// range on both engines, so it never collides with a player's own save.
+const AUTO_SAVE_SLOT: u32 = 99;
+
 fn print_sav_data_list(savs: &SaveList, tx: &mut VirtualConsole) {
     for i in 0..SAVE_COUNT {
         match savs.get(&i) {
@@ -1031,6 +1036,43 @@ pub fn run_begin(
         }
         BeginType::Shop => {
             call_event!(vm, EventType::Shop, tx, ctx);
+
+            // Emuera `endCallEventShop`/`beginAutoSave`/`endAutoSaveCallSaveInfo`
+            // (`Process.SystemProc.cs:625-663`): right after EVENTSHOP returns,
+            // autosave fires when `Config.AutoSave` is on and the BEGIN SHOP
+            // dispatch was reached from the outer Normal state
+            // (`state.calledWhenNormal`, `Process.State.cs:257,268-271`). erars's
+            // `Workflow::Begin` always unwinds the whole call stack back to
+            // `TerminalVm::start`'s dispatch loop (`terminal_vm.rs:353`) before
+            // `run_begin` runs again, so every `BeginType::Shop` call reaching
+            // this point is structurally equivalent to Emuera's
+            // `calledWhenNormal = true` case — erars has no nested/reentrant
+            // BEGIN dispatch to gate on, so that half of the condition is
+            // always true here.
+            if ctx.config.auto_save && !try_call!(vm, "SYSTEM_AUTOSAVE", tx, ctx) {
+                // No `@SYSTEM_AUTOSAVE` override (`beginAutoSave`,
+                // `Process.SystemProc.cs:637-644`): save to Emuera's own
+                // reserved autosave slot (`AutoSaveIndex = 99`,
+                // `:805`), after letting `SAVEINFO` customize the default
+                // timestamp description (`vEvaluator.SAVEDATA_TEXT =
+                // DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss") + " "`, `:642`).
+                *ctx.var.ref_str("SAVEDATA_TEXT", &[])? =
+                    get_times(time::OffsetDateTime::now_local()?) + " ";
+                ctx.put_form_enabled = true;
+                try_call!(vm, "SAVEINFO", tx, ctx);
+                ctx.put_form_enabled = false;
+                let description = std::mem::take(ctx.var.ref_str("SAVEDATA_TEXT", &[])?);
+                let sav = ctx.var.get_serializable(&ctx.header_info, description);
+                if let Err(err) = crate::save::write_save_data(&ctx.sav_dir, AUTO_SAVE_SLOT, &sav)
+                {
+                    // `endAutoSaveCallSaveInfo`'s failure path (`:653-657`):
+                    // Emuera reports the error and moves on to the shop rather
+                    // than aborting the script.
+                    log::error!("autosave failed: {err}");
+                    tx.print_line("オートセーブ中に予期しないエラーが発生しました".into());
+                    tx.print_line("オートセーブをスキップします".into());
+                }
+            }
 
             loop {
                 try_call!(vm, "SHOW_SHOP", tx, ctx);
