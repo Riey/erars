@@ -114,6 +114,65 @@ macro_rules! get_arg {
     };
 }
 
+/// Emuera `TimesNotRigorousCalculation:true` — `GameProc/Function/Instraction.Child.cs:901-904`.
+/// Both operands are `double`s before the multiply, so an `arg` above 2^53
+/// silently loses low bits before `factor` is ever applied.
+fn times_non_rigorous(arg: i64, factor: f64) -> i64 {
+    (arg as f64 * factor) as i64
+}
+
+/// Emuera `TimesNotRigorousCalculation:false` (the default) —
+/// `GameProc/Function/Instraction.Child.cs:906-917`. Real Emuera multiplies
+/// through a 96-bit-integer `decimal`, which holds any `i64` `arg` exactly;
+/// only `factor` (already-rounded to the `NotNan<f32>` instruction payload,
+/// docs/research/2026-09-06-language-feature-work.md §5.1) contributes
+/// rounding. `factor as f64` is an exact widening of that `f32`, and every
+/// finite `f64` is itself an exact `mantissa * 2^exp2` rational, so
+/// multiplying `arg` against the integer mantissa in `i128` before applying
+/// the power-of-two scale reproduces `decimal`'s no-precision-loss-on-`arg`
+/// guarantee without a 128-bit decimal type. On the rare overflow past
+/// `i64::MAX`/`MIN`, Emuera falls back to the `double` path
+/// (`:912-916`, `(Int64)((double)d)` inside its own `unchecked` block); this
+/// mirrors that by delegating to `times_non_rigorous`.
+fn times_rigorous(arg: i64, factor: f64) -> i64 {
+    if arg == 0 || factor == 0.0 || !factor.is_finite() {
+        return if factor.is_finite() { 0 } else { times_non_rigorous(arg, factor) };
+    }
+
+    let bits = factor.to_bits();
+    let factor_neg = bits >> 63 == 1;
+    let exp_bits = ((bits >> 52) & 0x7FF) as i32;
+    let frac = bits & 0xF_FFFF_FFFF_FFFF;
+    let (mantissa, exp2): (u64, i32) = if exp_bits == 0 {
+        // Subnormal: value = frac * 2^-1074.
+        (frac, -1074)
+    } else {
+        // Normal: value = (2^52 + frac) * 2^(exp_bits - 1023 - 52).
+        ((1u64 << 52) | frac, exp_bits - 1075)
+    };
+
+    let arg_neg = arg < 0;
+    // 64-bit `arg` magnitude times a 53-bit mantissa fits well inside i128.
+    let product_mag: u128 = arg.unsigned_abs() as u128 * mantissa as u128;
+    let scaled_mag: u128 = if exp2 >= 0 {
+        match product_mag.checked_shl(exp2 as u32) {
+            Some(v) => v,
+            None => return times_non_rigorous(arg, factor), // overflow: mirror Emuera's fallback
+        }
+    } else {
+        let shift = (-exp2) as u32;
+        // Right shift on a non-negative magnitude truncates toward zero,
+        // matching `decimal`'s `(Int64)d` cast.
+        if shift >= 128 { 0 } else { product_mag >> shift }
+    };
+
+    if scaled_mag > i64::MAX as u128 {
+        return times_non_rigorous(arg, factor); // overflow: mirror Emuera's fallback
+    }
+    let result = scaled_mag as i64;
+    if arg_neg != factor_neg { -result } else { result }
+}
+
 pub(super) fn run_instruction(
     vm: &TerminalVm,
     func_name: StrKey,
@@ -364,7 +423,20 @@ pub(super) fn run_instruction(
         InstructionType::Times => {
             let t = inst.as_times().unwrap();
             let arg = ctx.pop_int()?;
-            let ret = (arg as f64 * t.into_inner() as f64) as i64;
+            let ret = if ctx.config.times_not_rigorous_calculation {
+                // Emuera `TimesNotRigorousCalculation:true`
+                // (`GameProc/Function/Instraction.Child.cs:901-904`): both
+                // operands truncate to `double` before multiplying.
+                times_non_rigorous(arg, t.into_inner() as f64)
+            } else {
+                // Emuera's default (`TimesNotRigorousCalculation:false`,
+                // `:906-917`): the integer operand is multiplied through
+                // `decimal` — 96 bits of exact integer precision, so unlike
+                // the `double` path above it never rounds `arg` before the
+                // multiply. `times_rigorous` reproduces that guarantee with
+                // exact `i128` arithmetic instead of a decimal type.
+                times_rigorous(arg, t.into_inner() as f64)
+            };
             ctx.push(ret);
         }
         InstructionType::UnaryOperator => {
@@ -5135,3 +5207,4 @@ fn pow_i64(x: i64, y: i64) -> Result<i64> {
         Ok(0)
     }
 }
+
