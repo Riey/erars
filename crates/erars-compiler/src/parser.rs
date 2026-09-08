@@ -2487,6 +2487,18 @@ pub struct ParserContext<'p> {
     /// attribute names are matched case-*sensitively*. See
     /// [`ParserContext::with_case_sensitive_functions`].
     case_sensitive_functions: bool,
+    /// `eramaker互換性に関する警告を表示する` — Emuera
+    /// `WarnBackCompatibility`, default `true` (`Config/ConfigData.cs:86`).
+    /// It gates exactly the warnings raised with `isBackComp: true`
+    /// (`GameData/ParserMediator.cs:128`), of which real Emuera has exactly
+    /// one: the level-0 `SIF` warning at
+    /// `GameProc/Function/Instraction.Child.cs:1795`.
+    warn_back_compatibility: bool,
+    /// Warnings raised while parsing a statement, with Emuera's own level.
+    /// `Preprocessor::warn` is fixed at level 1 (`pp_warnings`), and a
+    /// back-compatibility warning is level 0, so it cannot ride that channel.
+    /// Drained by [`Self::parse_and_compile`].
+    leveled_warnings: RefCell<Vec<(String, std::ops::Range<usize>, u8)>>,
     /// `emuera.config` `全角スペースをホワイトスペースに含める`
     /// (`SystemAllowFullSpace`, default `true`): see the field of the same
     /// name on [`erars_lexer::Preprocessor`].
@@ -2509,6 +2521,8 @@ impl<'p> ParserContext<'p> {
             debug_mode: false,
             ignore_string_set: false,
             case_sensitive_functions: false,
+            warn_back_compatibility: true,
+            leveled_warnings: RefCell::default(),
             allow_full_space: true,
         }
     }
@@ -2519,6 +2533,21 @@ impl<'p> ParserContext<'p> {
     pub fn with_debug(mut self, debug_mode: bool) -> Self {
         self.debug_mode = debug_mode;
         self
+    }
+
+    /// `eramaker互換性に関する警告を表示する` — Emuera
+    /// `WarnBackCompatibility`, default `true` (`Config/ConfigData.cs:86`).
+    /// Turning it off suppresses the warnings Emuera raises with
+    /// `isBackComp: true` (`GameData/ParserMediator.cs:128`).
+    pub fn with_warn_back_compatibility(mut self, warn: bool) -> Self {
+        self.warn_back_compatibility = warn;
+        self
+    }
+
+    /// Records one warning at `span` with Emuera's own level, for the levels
+    /// [`Preprocessor::warn`]'s fixed level 1 cannot express.
+    fn warn_at(&self, message: String, span: std::ops::Range<usize>, level: u8) {
+        self.leveled_warnings.borrow_mut().push((message, span, level));
     }
 
     /// `文字列変数の代入に文字列式を強制する` — Emuera `SystemIgnoreStringSet`,
@@ -3379,6 +3408,26 @@ impl<'p> ParserContext<'p> {
 
                     SIF => {
                         let cond = try_nom!(pp, self::expr::expr(self)(args)).1;
+                        // 「SIF文の次の行が空行またはコメント行です(eramaker:
+                        // SIF文は意味を失います)」 — level 0, and the only
+                        // `isBackComp` warning real Emuera has, so
+                        // `WarnBackCompatibility` gates exactly this
+                        // (`GameProc/Function/Instraction.Child.cs:1795`,
+                        // `GameData/ParserMediator.cs:128`). erars binds `SIF`
+                        // to the next *statement*, skipping blank and comment
+                        // lines, which is what Emuera does too — the warning
+                        // is about eramaker, where the blank line ends the
+                        // `SIF`.
+                        if self.warn_back_compatibility {
+                            let next = pp.left_text().lines().next().unwrap_or("").trim();
+                            if next.is_empty() || next.starts_with(';') {
+                                self.warn_at(
+                                    "SIF문 다음 행이 빈 행 또는 주석 행입니다(eramaker: SIF문은 의미를 잃습니다)".into(),
+                                    pp.span(),
+                                    0,
+                                );
+                            }
+                        }
                         let Some(body) = pp.next_line(b)? else {
                             error!(pp.span(), "No body statement in SIF");
                         };
@@ -4229,16 +4278,20 @@ impl<'p> ParserContext<'p> {
             // A file with no function at all still had its `[…]` directives
             // read, so its warnings have to come out here too.
             None => {
+                let mut warnings = pp_warnings(pp);
+                warnings.extend(self.leveled_warnings.borrow_mut().drain(..));
                 return Ok(CompiledErb {
-                    warnings: pp_warnings(pp),
+                    warnings,
                     ..CompiledErb::default()
                 })
             }
         };
 
         // The `[…]` preprocessor's own level-1 warnings, collected while the
-        // lines above were read.
+        // lines above were read, plus the statement warnings that carry their
+        // own Emuera level (see `ParserContext::warn_at`).
         warnings.extend(pp_warnings(pp));
+        warnings.extend(self.leveled_warnings.borrow_mut().drain(..));
 
         Ok(CompiledErb {
             functions: out,

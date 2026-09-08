@@ -125,6 +125,76 @@ fn sav_path(target_path: &str, config: &EraConfig) -> PathBuf {
     }
 }
 
+/// Emuera's three function-registration diagnostics for one `@label`, and
+/// whether the function is registered at all.
+///
+/// - `システム関数の上書きを許可する` (`AllowFunctionOverloading`) defaults
+///   **YES** (`Config/ConfigData.cs:87`), unlike every other compat key here.
+///   A user function whose name is one of Emuera's *in-expression* functions
+///   (`DefinedNameType.SystemMethod`) warns at level 1 「Emueraの式中関数を
+///   上書きします」 when overloading is allowed and at level 2 「Emueraの式中
+///   関数名として使われています」 when it is not
+///   (`GameData/IdentifierDictionary.cs:228-240`). Level >= 2 turns the label
+///   into an `InvalidLabelLine` (`GameProc/LogicalLineParser.cs:311-312`), so
+///   `NO` *refuses* the definition — that refusal is the only new behaviour
+///   here, since erars had no reject-on-collision path at all.
+/// - `システム関数が上書きされたとき警告を表示する`
+///   (`WarnFunctionOverloading`, default YES, `Config/ConfigData.cs:88`) gates
+///   the whole check (`GameData/IdentifierDictionary.cs:207`), but is forced
+///   on whenever overloading is refused (`Config/Config.cs:88-92`) — `NO`
+///   can never be silent.
+/// - `同名の非イベント関数が複数定義されたとき警告する`
+///   (`WarnNormalFunctionOverloading`, default NO, `Config/ConfigData.cs:92`)
+///   warns at level 1 when a *non-event* function of this name already
+///   exists; event functions are excluded because multiple definitions are
+///   their whole purpose (`GameProc/ErbLoader.cs:375-382`).
+///
+/// A name that matches a system *variable* or *instruction*
+/// (`DefinedNameType.SystemVariable`/`SystemInstrument`) is always level 1 and
+/// never refused, whatever `AllowFunctionOverloading` says
+/// (`GameData/IdentifierDictionary.cs:241-248`).
+fn registration_diagnostics(
+    name: &str,
+    already_defined: bool,
+    config: &EraConfig,
+) -> (bool, Vec<(u8, String)>) {
+    let mut out = Vec::new();
+    let warn_overloading = !config.allow_function_overloading || config.warn_function_overloading;
+    let is_event = name.parse::<erars_ast::EventType>().is_ok();
+    let is_system_method = name.parse::<erars_ast::BuiltinMethod>().is_ok();
+    let is_system_name = name.parse::<erars_ast::BuiltinVariable>().is_ok()
+        || name.parse::<erars_lexer::InstructionCode>().is_ok();
+
+    if warn_overloading && is_system_method && !config.allow_function_overloading {
+        out.push((
+            2,
+            format!("함수명 {name}은 Emuera의 식중 함수명으로 사용되고 있습니다"),
+        ));
+        // Refused. Note erars, unlike Emuera's `noError = false`
+        // (`GameProc/ErbLoader.cs:366`), does not abort start-up over a
+        // rejected label — the same pre-existing divergence
+        // `compati_error_line` covers.
+        return (false, out);
+    }
+
+    if warn_overloading {
+        if is_system_method {
+            out.push((1, format!("함수명 {name}은 Emuera의 식중 함수를 덮어씁니다")));
+        } else if is_system_name {
+            out.push((
+                1,
+                format!("함수명 {name}은 Emuera의 변수 혹은 명령으로 사용되고 있습니다"),
+            ));
+        }
+    }
+
+    if config.warn_normal_function_overloading && !is_event && already_defined {
+        out.push((1, format!("함수 @{name}은 이미 정의되어 있습니다")));
+    }
+
+    (true, out)
+}
+
 /// SAFETY: Any reference to interner is not exist
 pub unsafe fn load_script(
     target_path: &str,
@@ -590,6 +660,7 @@ pub fn run_script(
                 .with_case_sensitive_functions(
                     !(config.ignore_case && !config.compati_function_no_ignore_case),
                 )
+                .with_warn_back_compatibility(config.warn_back_compatibility)
                 .with_allow_full_space(config.system_allow_full_space);
 
             log::debug!("Parse And Compile {}", erb.display());
@@ -679,8 +750,35 @@ pub fn run_script(
         }
 
         ctx.var.reserve_local_functions(funcs.len());
+        let min_level = ctx.config.display_warning_level;
         let func_count = funcs.len();
         for (_, func) in funcs {
+            let already_defined = function_dic.get_func_opt(func.header.name).is_some();
+            let (register, diagnostics) = registration_diagnostics(
+                func.header.name.resolve(),
+                already_defined,
+                &ctx.config,
+            );
+
+            for (level, message) in diagnostics {
+                // `ParserMediator.Warn` drops anything below the configured
+                // level before it reaches the console
+                // (`GameData/ParserMediator.cs:126`), and the label-name
+                // diagnostics go through it
+                // (`GameProc/LogicalLineParser.cs:308-314`).
+                if level < min_level {
+                    continue;
+                }
+                if error_to_stderr {
+                    eprintln!("{message}");
+                }
+                log::warn!("{message}");
+            }
+
+            if !register {
+                continue;
+            }
+
             function_dic.insert_compiled_func(
                 &mut ctx.var,
                 &ctx.header_info.default_local_size,
@@ -789,7 +887,88 @@ impl WriteColor for LogWriter {
 
 #[cfg(test)]
 mod tests {
-    use super::load_config;
+    use super::{load_config, registration_diagnostics};
+    use erars_compiler::EraConfig;
+
+    /// The `システム関数の上書きを許可する` / `システム関数が上書きされたとき警告を
+    /// 表示する` / `同名の非イベント関数が複数定義されたとき警告する` matrix, on
+    /// the one axis that matters: whether the function is registered, and at
+    /// which level it is reported.
+    #[test]
+    fn function_overloading_matrix() {
+        // Default (`AllowFunctionOverloading:YES`, `WarnFunctionOverloading:YES`):
+        // a user function named after an in-expression function is registered
+        // and reported at level 1.
+        let mut config = EraConfig::default();
+        assert!(config.allow_function_overloading, "default is YES");
+        assert!(config.warn_function_overloading, "default is YES");
+        assert!(!config.warn_normal_function_overloading, "default is NO");
+        assert!(config.warn_back_compatibility, "default is YES");
+
+        let (register, diags) = registration_diagnostics("TOSTR", false, &config);
+        assert!(register, "YES registers the override");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].0, 1);
+        assert!(diags[0].1.contains("덮어씁니다"), "{diags:?}");
+
+        // `NO` refuses the definition, at level 2.
+        config.allow_function_overloading = false;
+        let (register, diags) = registration_diagnostics("TOSTR", false, &config);
+        assert!(!register, "NO must refuse the definition");
+        assert_eq!(diags[0].0, 2);
+
+        // ... and cannot be silenced: `WarnFunctionOverloading` is forced on
+        // when overloading is refused (`Config/Config.cs:88-92`).
+        config.warn_function_overloading = false;
+        let (register, diags) = registration_diagnostics("TOSTR", false, &config);
+        assert!(!register);
+        assert_eq!(diags.len(), 1, "NO is never silent: {diags:?}");
+
+        // With overloading allowed, turning the warning off silences it while
+        // still registering.
+        config.allow_function_overloading = true;
+        let (register, diags) = registration_diagnostics("TOSTR", false, &config);
+        assert!(register);
+        assert!(diags.is_empty(), "{diags:?}");
+    }
+
+    /// A name that is a system *variable* or *instruction* is level 1 and
+    /// never refused, even with `AllowFunctionOverloading:NO`
+    /// (`GameData/IdentifierDictionary.cs:241-248`).
+    #[test]
+    fn system_variable_name_is_never_refused() {
+        let mut config = EraConfig::default();
+        config.allow_function_overloading = false;
+        // `WAIT` is an instruction (`erars-lexer/src/inst.rs:29`), not an
+        // in-expression function. `PRINT` is not in this table: the lexer
+        // decodes the whole `PRINT*` family by prefix, not as one name.
+        let (register, diags) = registration_diagnostics("WAIT", false, &config);
+        assert!(register, "a system instruction name is not refused");
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].0, 1);
+    }
+
+    /// `同名の非イベント関数が複数定義されたとき警告する`: only fires for
+    /// non-event functions, only when already defined, only when on.
+    #[test]
+    fn duplicate_function_warning_is_gated_and_skips_events() {
+        let mut config = EraConfig::default();
+        let plain = |c: &EraConfig, already| registration_diagnostics("MY_FUNC", already, c).1;
+
+        assert!(plain(&config, true).is_empty(), "default NO warns nothing");
+
+        config.warn_normal_function_overloading = true;
+        assert!(plain(&config, false).is_empty(), "not a duplicate");
+        let diags = plain(&config, true);
+        assert_eq!(diags.len(), 1, "{diags:?}");
+        assert_eq!(diags[0].0, 1);
+        assert!(diags[0].1.contains("이미 정의"), "{diags:?}");
+
+        // An event function legitimately has many definitions.
+        let (register, diags) = registration_diagnostics("EVENTFIRST", true, &config);
+        assert!(register);
+        assert!(diags.is_empty(), "event functions are excluded: {diags:?}");
+    }
 
     /// Emuera applies `csv/_default.config`, then the user's `emuera.config`,
     /// then `csv/_fixed.config` onto one `ConfigData`

@@ -1083,6 +1083,7 @@ dependencies = [
  "erars-ast",
  "erars-bytecode",
  "erars-compiler",
+ "erars-lexer",
  "erars-lint",
  "erars-reader",
  "erars-ui",
